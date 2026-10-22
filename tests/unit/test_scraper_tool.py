@@ -10,6 +10,12 @@ from weebot.tools.scraper import ScraperTool
 from weebot.tools.base import ToolResult
 
 
+@pytest.fixture(autouse=True)
+def _scraper_dir(monkeypatch, tmp_path):
+    """SCRAPER_DIR has no default since W1.4 (F15); the CLI path needs one set."""
+    monkeypatch.setenv("SCRAPER_DIR", str(tmp_path))
+
+
 class TestScraperTool:
     """Tests for ScraperTool and registry registration."""
 

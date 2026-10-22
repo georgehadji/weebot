@@ -114,7 +114,19 @@ class FlowRouter:
             # An empty answer is deliberately NOT approval here, though the
             # plan-approval path above accepts it as one. These gates guard
             # untrusted input and stated constraints: silence is not consent.
-            if response in _APPROVE_TOKENS:
+            approved = response in _APPROVE_TOKENS
+            if user_gate == "tool_approval":
+                # ADR-013: "yes" becomes a single-use grant for the exact call
+                # the step paused on, which the re-run step then consumes;
+                # "always" also allowlists a first-time egress host.
+                from weebot.application.services.tool_approval import record_flow_reply
+
+                pending = session.context.get("_tool_approval_pending") or {}
+                approved = record_flow_reply(
+                    session.id, pending, prompt, approve_tokens=_APPROVE_TOKENS
+                )
+                extra_out["_tool_approval_pending"] = None
+            if approved:
                 logger.info("User approved the %s gate — resuming execution", user_gate)
                 # Clear the flag and fall through to the ordinary resume logic
                 # below rather than returning ExecutingState here. Approval

@@ -75,10 +75,6 @@ class BashTool(BaseTool):
                 "type": "boolean",
                 "description": "Route through WSL2 bash instead of PowerShell (default false)",
             },
-            "security_override": {
-                "type": "string",
-                "description": "Optional: security override token for dangerous commands (requires admin)",
-            },
         },
         "required": ["command"],
     }
@@ -241,15 +237,17 @@ class BashTool(BaseTool):
 
         return True, ""
 
-    async def _validate_security(
-        self, command: str, security_override: str | None = None
-    ) -> tuple[bool, str]:
+    async def _validate_security(self, command: str) -> tuple[bool, str]:
         """
         Multi-layer security validation with fallback.
 
+        An analyzer DANGEROUS verdict is final. The HMAC ``security_override``
+        token that used to bypass it (no nonce, no expiry, reusable forever;
+        F11) was retired by ADR-013: DENY verdicts are never approvable, and
+        ASK verdicts are approved per call through the approval channel.
+
         Args:
             command: Shell command to validate
-            security_override: Optional override token (requires admin)
 
         Returns:
             (is_valid, error_message)
@@ -260,17 +258,6 @@ class BashTool(BaseTool):
                 assessment = self._security_analyzer.analyze(command)
 
                 if assessment.risk_level == CommandRiskLevel.DANGEROUS:
-                    # Check for override token (admin only)
-                    if security_override and self._verify_override_token(
-                        command, security_override
-                    ):
-                        import logging
-
-                        logging.getLogger(__name__).warning(
-                            f"Security override used for dangerous command: {command[:50]}..."
-                        )
-                        return True, ""
-
                     return False, (
                         f"Security Error: {assessment.reason}. "
                         f"Layer {assessment.layer_triggered} triggered. "
@@ -309,34 +296,12 @@ class BashTool(BaseTool):
             # FALLBACK: Use legacy validation
             return self._legacy_validate_no_encoded_commands(command)
 
-    def _verify_override_token(self, command: str, token: str) -> bool:
-        """
-        Verify security override token using HMAC-SHA256.
-
-        The token must be ``hex(HMAC-SHA256(ADMIN_SECRET, command))`` where
-        ``ADMIN_SECRET`` is set via the ``WEEBOT_ADMIN_SECRET`` environment
-        variable.  If no secret is configured, overrides are always rejected.
-        """
-        import hashlib
-        import hmac
-        import os
-
-        secret = os.environ.get("WEEBOT_ADMIN_SECRET")
-        if not secret:
-            return False
-
-        expected = hmac.HMAC(
-            secret.encode("utf-8"), command.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
-        return hmac.compare_digest(expected, token)
-
     async def execute(
         self,
         command: str,
         timeout: float | None = None,
         working_dir: str | None = None,
         use_wsl: bool = False,
-        security_override: str | None = None,
         **kwargs: object,
     ) -> ToolResult:
         """Execute *command* in a sandboxed subprocess.
@@ -346,7 +311,6 @@ class BashTool(BaseTool):
             timeout:     Seconds before the subprocess is killed. Default 30.
             working_dir: Optional working directory. Default: inherited.
             use_wsl:     If True and WSL2 is available, use ``wsl bash -c``.
-            security_override: Optional admin override token for blocked commands.
 
         Returns:
             ToolResult with combined output on success, or an error message.
@@ -379,7 +343,7 @@ class BashTool(BaseTool):
             effective_timeout = min(effective_timeout, 300.0)
 
         # --- Security check: multi-layer analysis (NEW) ---
-        is_valid, error_msg = await self._validate_security(command, security_override)
+        is_valid, error_msg = await self._validate_security(command)
         if not is_valid:
             return ToolResult(output="", error=error_msg)
 
@@ -401,7 +365,8 @@ class BashTool(BaseTool):
                             "command": command[:200],
                             "risk_level": risk_level.value,
                             "allowed": risk_level == RiskLevel.SAFE,
-                            "requires_approval": risk_level == RiskLevel.SUSPICIOUS,
+                            "requires_approval": risk_level
+                            in (RiskLevel.SUSPICIOUS, RiskLevel.DANGEROUS),
                         },
                     )
                 )

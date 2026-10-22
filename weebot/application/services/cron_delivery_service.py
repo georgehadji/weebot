@@ -65,9 +65,9 @@ class CronDeliveryService:
             logger.warning("Cron job %s: no Telegram chat_id configured", job.id)
             return False
 
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        settings = WeebotSettings()
+        settings = get_settings()
         token = settings.telegram_bot_token
         if not token:
             logger.warning("Cron job %s: no TELEGRAM_BOT_TOKEN configured", job.id)
@@ -89,9 +89,9 @@ class CronDeliveryService:
             logger.warning("Cron job %s: no Discord channel_id configured", job.id)
             return False
 
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        settings = WeebotSettings()
+        settings = get_settings()
         token = settings.discord_bot_token
         if not token:
             logger.warning("Cron job %s: no DISCORD_BOT_TOKEN configured", job.id)

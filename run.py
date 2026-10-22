@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # and path validation inconsistently rejects valid workspace paths.
 load_dotenv(override=True)
 
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 # Clear stale bytecode cache to prevent import errors from old .pyc files
 import shutil as _shutil
@@ -60,7 +60,7 @@ def validate_environment() -> None:
     Raises:
         ValueError: If no AI API keys are configured.
     """
-    settings = WeebotSettings()
+    settings = get_settings()
     settings.validate_at_least_one_key()
     print(
         f"weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}"

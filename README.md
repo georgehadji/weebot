@@ -441,7 +441,7 @@ python run_mcp.py
 
 ## Development
 
-- Read `AGENTS.md` for the complete contributor guide, architecture rules, and conventions.
+- Read `CLAUDE.md` for commands, architecture rules, and conventions; see `docs/ENTRY_POINTS.md`, `docs/SECURITY_MODEL.md` and `docs/DEPLOYMENT.md` for detail.
 - Follow the Clean Architecture dependency rule for all new code.
 - Add unit tests for domain and application changes; integration tests for new adapters and flows.
 - Run `make check` before opening a PR: it runs tests, architecture gates, and import-linting.

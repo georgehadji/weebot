@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import PrivateAttr
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.tool_config import ToolConfig, resolve_setting
+from weebot.config.tool_config import ToolConfig, require_setting, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +64,7 @@ class BerbTool(BaseTool):
             self._tool_config, "berb_api_url", "BERB_API_URL", "http://localhost:8004"
         ).rstrip("/")
         api_key = resolve_setting(self._tool_config, "berb_api_key", "BERB_API_KEY")
-        berb_dir = resolve_setting(
-            self._tool_config, "berb_dir", "BERB_DIR", "E:\\Documents\\Vibe-Coding\\Berb"
-        )
+        berb_dir = resolve_setting(self._tool_config, "berb_dir", "BERB_DIR")
 
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -86,6 +84,7 @@ class BerbTool(BaseTool):
         try:
             # Nested try/except with CLI (Method 1) as DEFAULT and API (Method 2) as FALLBACK
             try:
+                cwd = require_setting(berb_dir, "BERB_DIR", "the Berb CLI")
                 # Construct CLI arguments: python -m berb run --topic "<topic>"
                 cli_args = [sys.executable, "-m", "berb", "run", "--topic", topic]
                 if auto_approve:
@@ -93,13 +92,13 @@ class BerbTool(BaseTool):
                 if from_stage:
                     cli_args.extend(["--from-stage", from_stage])
 
-                logger.info("Executing default headless CLI run of Berb in %s", berb_dir)
+                logger.info("Executing default headless CLI run of Berb in %s", cwd)
                 logger.info("CLI command: %s", " ".join(cli_args))
 
                 # Execute subprocess asynchronously
                 process = await asyncio.create_subprocess_exec(
                     *cli_args,
-                    cwd=berb_dir,
+                    cwd=cwd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -125,7 +124,7 @@ class BerbTool(BaseTool):
                     "status": "success",
                     "message": f"Successfully completed academic research run for topic: '{topic}'",
                     "summary": logs_out[-2000:] if len(logs_out) > 2000 else logs_out,
-                    "artifacts_dir": str(Path(berb_dir) / "artifacts"),
+                    "artifacts_dir": str(Path(cwd) / "artifacts"),
                 }
             except Exception as cli_exc:
                 logger.warning("Berb CLI execution failed: %s. Falling back to API...", cli_exc)
@@ -144,7 +143,9 @@ class BerbTool(BaseTool):
                 or result.get("message")
                 or "Berb academic research run completed successfully."
             )
-            artifacts_dir = result.get("artifacts_dir") or str(Path(berb_dir) / "artifacts")
+            artifacts_dir = result.get("artifacts_dir") or (
+                str(Path(berb_dir) / "artifacts") if berb_dir else "(not reported by the Berb API)"
+            )
 
             summary = (
                 f"Berb Academic Research Output:\n\n"

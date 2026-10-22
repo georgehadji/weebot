@@ -134,8 +134,14 @@ class TaskRunner:
         except Exception:
             logger.debug("Failed to publish session presence for %s", session.id, exc_info=True)
 
-    async def _start_direct(self, session: Session, flow_factory: FlowFactory) -> Session:
-        """Internal direct task creation (bypasses queue)."""
+    async def _start_direct(
+        self, session: Session, flow_factory: FlowFactory, prompt: str | None = None
+    ) -> Session:
+        """Internal direct task creation (bypasses queue).
+
+        *prompt* is the text the flow runs with; None means the task
+        (``context["last_prompt"]``). A resume passes the user's answer.
+        """
         session = session.set_status(SessionStatus.RUNNING)
         await self._state_repo.save_session(session)
         await self._publish_presence(session)
@@ -147,7 +153,7 @@ class TaskRunner:
             self._retry_counts[session_id] = self._max_session_retries
 
         task = asyncio.create_task(
-            self._run_flow_bounded(session_id, flow_factory(session)),
+            self._run_flow_bounded(session_id, flow_factory(session), prompt),
             name=f"weebot-session-{session_id}",
         )
         self._tasks[session_id] = task
@@ -203,7 +209,9 @@ class TaskRunner:
     def max_concurrent_flows(self) -> int:
         return self._max_concurrent_flows
 
-    async def _run_flow_bounded(self, session_id: str, flow: BaseFlow) -> None:
+    async def _run_flow_bounded(
+        self, session_id: str, flow: BaseFlow, prompt: str | None = None
+    ) -> None:
         """Run *flow* once a flow slot is free.
 
         The flow object is built before this is scheduled -- in _start_direct,
@@ -227,9 +235,9 @@ class TaskRunner:
                 self._max_concurrent_flows,
             )
         async with self._flow_slots:
-            await self._run_flow(session_id, flow)
+            await self._run_flow(session_id, flow, prompt)
 
-    async def _run_flow(self, session_id: str, flow: BaseFlow) -> None:
+    async def _run_flow(self, session_id: str, flow: BaseFlow, prompt: str | None = None) -> None:
         """Internal runner that persists events and handles completion."""
         session = await self._state_repo.load_session(session_id)
         if session is None:
@@ -244,7 +252,8 @@ class TaskRunner:
             logger.debug("Failed to increment session metrics", exc_info=True)
 
         try:
-            async for event in flow.run(session.context.get("last_prompt", "")):
+            run_prompt = prompt if prompt is not None else session.context.get("last_prompt", "")
+            async for event in flow.run(run_prompt):
                 session = session.add_event(event)
                 await self._state_repo.save_session(session)
                 # Only publish from the runner when the flow has no event_bus of its
@@ -273,7 +282,7 @@ class TaskRunner:
                 if factory:
                     reloaded = await self._state_repo.load_session(session_id)
                     if reloaded:
-                        await self._start_direct(reloaded, factory)
+                        await self._start_direct(reloaded, factory, prompt)
                         return
             try:
                 session = session.set_status(SessionStatus.FAILED)
@@ -329,7 +338,10 @@ class TaskRunner:
         session = session.add_user_message(answer)
         session = session.set_status(SessionStatus.RUNNING)
         await self._state_repo.save_session(session)
-        await self.start_session(session, flow_factory)
+        # The answer, not last_prompt: FlowRouter reads it as the reply to the
+        # pending plan review or gate. Running the task text again would be
+        # taken as a plan-change request.
+        await self._start_direct(session, flow_factory, prompt=answer)
 
         return session
 

@@ -38,6 +38,10 @@ class ToolConfig:
     scraper_api_url: str | None = None  # env: SCRAPER_API_URL
     scraper_api_key: str | None = None  # env: SCRAPER_API_KEY
     scraper_dir: str | None = None  # env: SCRAPER_DIR
+    moli_path: str | None = None  # env: MOLI_PATH — moli.exe for the moli_fetch tool
+    agent_reach_path: str | None = None  # env: AGENT_REACH_PATH — agent-reach.exe
+    camofox_path: str | None = None  # env: CAMOFOX_PATH — camofox-browser package folder
+    remotion_host: str | None = None  # env: REMOTION_HOST — folder with Remotion installed
 
     def __post_init__(self):
         if not (30 <= self.max_tool_timeout <= 3600):
@@ -66,3 +70,10 @@ def resolve_setting(
         if value is not None:
             return value
     return os.getenv(env_var, default)
+
+
+def require_setting(value: str | None, env_var: str, purpose: str) -> str:
+    """Return *value*, or raise a clear error naming *env_var* when it is unset."""
+    if not value:
+        raise RuntimeError(f"{env_var} is not set; {purpose} needs it")
+    return value

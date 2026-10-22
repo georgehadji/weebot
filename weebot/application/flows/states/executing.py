@@ -22,6 +22,7 @@ from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
 from weebot.application.flows.collaborators.user_pause import pause_for_user
+from weebot.application.services.tool_approval import mark_tool_approval_pending
 
 logger = logging.getLogger(__name__)
 
@@ -473,12 +474,8 @@ class ExecutingState(FlowState):
                 hitl_paused = True
             elif isinstance(event, ToolApprovalEvent):
                 hitl_paused = True
-                logger.info(
-                    "Tool '%s' requires approval (risk=%s): %s",
-                    event.tool_name,
-                    event.risk_level,
-                    event.reason,
-                )
+                # ADR-013: record what a "yes" approves; FlowRouter grants it.
+                context._session = mark_tool_approval_pending(context._session, event)
             elif isinstance(event, ErrorEvent):
                 execution_failed = True
             # Reconstruct shutdown signals from the serialised events

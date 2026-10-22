@@ -208,50 +208,23 @@ async def build_tools_json(tool_discovery: Any | None = None, role: str | None =
         return json.dumps({"tools": [], "error": _INTERNAL_ERROR}, indent=2)
 
 
-def build_costs_json(cascade_tracker: Any | None = None) -> str:
-    """Return current-session cost and cascade statistics as a JSON string.
+async def build_costs_json(event_store: Any | None = None, window_hours: int = 24) -> str:
+    """Return LLM spend for the last *window_hours* as a JSON string.
 
-    Args:
-        cascade_tracker: Optional :class:`~weebot.core.model_cascade_tracker.ModelCascadeTracker`
-                         instance.  When provided, live cascade data is returned;
-                         when omitted a static stub is returned.
+    Answers through ``GetCostSummaryHandler``, the same query as CLI ``costs``
+    and the ops API (W4.2, F23). It used to read a cascade tracker that no
+    caller ever passed, so it always returned a stub of zeros.
     """
-    if cascade_tracker is None:
-        return json.dumps(
-            sanitize_json_fields(
-                {
-                    "total_decisions": 0,
-                    "per_tier": {},
-                    "total_cost_estimate": 0.0,
-                    "avg_latency_ms": 0.0,
-                    "cascade_hit_rate": 1.0,
-                    "recent_decisions": [],
-                    "note": "Pass cascade_tracker= to WeebotMCPServer for live cost data.",
-                }
-            ),
-            indent=2,
-        )
+    from weebot.application.cqrs.handlers.active_queries import GetCostSummaryHandler
+    from weebot.application.cqrs.queries import GetCostSummaryQuery
 
-    try:
-        summary = cascade_tracker.summary()
-        recent = cascade_tracker.recent(20)
-        summary["recent_decisions"] = [
-            {
-                "model_name": d.model_name,
-                "tier": d.tier.value,
-                "outcome": d.outcome.value,
-                "latency_ms": d.latency_ms,
-                "token_count": d.token_count,
-                "cost_estimate": d.cost_estimate,
-                "error_message": d.error_message,
-                "timestamp": d.timestamp.isoformat(),
-            }
-            for d in recent
-        ]
-        return json.dumps(sanitize_json_fields(summary), indent=2)
-    except Exception as exc:
-        _log.exception("Failed to build costs resource payload: %s", exc)
-        return json.dumps({"error": _INTERNAL_ERROR, "total_decisions": 0}, indent=2)
+    result = await GetCostSummaryHandler(event_store).handle(
+        GetCostSummaryQuery(window_hours=window_hours)
+    )
+    if not result.success:
+        _log.warning("costs resource: %s", result.error)
+        return json.dumps({"error": _INTERNAL_ERROR, "calls": 0}, indent=2)
+    return json.dumps(sanitize_json_fields(result.data), indent=2)
 
 
 def build_routing_json(

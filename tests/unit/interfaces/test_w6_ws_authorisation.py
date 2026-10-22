@@ -37,6 +37,17 @@ class TestEnvTemplateDoesNotWeakenDefaults:
             "weebot/interfaces/web/auth.py:223 defaults to on"
         )
 
+    def test_egress_enforcement_is_not_disabled_by_the_template(self):
+        # Regenerating the template from scripts/generate_config_reference.py
+        # reverted this and the setting above to "false" on 2026-10-22.
+        env = (self._repo_root() / ".env.example").read_text(encoding="utf-8")
+        match = re.search(r"^WEEBOT_EGRESS_ENFORCE=(\S*)", env, re.MULTILINE)
+
+        assert match is not None, "the template no longer documents this setting"
+        assert match.group(1).lower() not in ("false", "0", "no"), (
+            "the shipped template turns EgressGuard into detect-only"
+        )
+
     def test_the_code_default_is_still_on(self):
         """If this flips, the template check above stops meaning anything."""
         source = (

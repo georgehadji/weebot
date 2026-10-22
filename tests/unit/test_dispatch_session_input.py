@@ -30,6 +30,11 @@ def _make_ctx(status: SessionStatus, text: str = "hello") -> SessionInputContext
     task_runner.start_session = AsyncMock(
         side_effect=lambda s, f: s.set_status(SessionStatus.RUNNING)
     )
+    task_runner.resume_session = AsyncMock(
+        side_effect=lambda sid, answer, f: session.add_user_message(answer).set_status(
+            SessionStatus.RUNNING
+        )
+    )
 
     tools = MagicMock()
     tools.teardown = AsyncMock()
@@ -86,6 +91,9 @@ async def test_resume_strategy_appends_user_message_and_sets_running():
     assert result.session.status == SessionStatus.RUNNING
     user_messages = [e for e in result.session.events if getattr(e, "role", None) == "user"]
     assert any(m.message == "yes proceed" for m in user_messages)
+    # The flow must actually resume (B2c): it used to only store the answer.
+    ctx.task_runner.resume_session.assert_awaited_once()
+    assert ctx.task_runner.resume_session.await_args.args[:2] == ("sess-1", "yes proceed")
 
 
 @pytest.mark.asyncio

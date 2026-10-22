@@ -25,7 +25,9 @@ RUN pip install --no-cache-dir \
     python-dotenv
 
 # ── Create a non-root user for tool execution ─────────────────────────
-RUN useradd --create-home --shell /bin/bash weebot
+# uid 1000 is fixed: DockerLinuxSandbox runs with --user 1000:1000 (ADR-014).
+RUN useradd --create-home --uid 1000 --shell /bin/bash weebot \
+    && mkdir -p /home/weebot/.cache/pip && chown -R weebot:weebot /home/weebot/.cache
 USER weebot
 WORKDIR /home/weebot
 

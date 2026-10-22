@@ -76,6 +76,8 @@ class CascadeExecutor:
         acr_router=None,  # Optional AdaptiveCapabilityRouter for outcome recording
         # Credit balance + live model list. None: no credit filtering, no rescue.
         provider_account: ProviderAccountPort | None = None,
+        # Awaited with an LLMCallCompleted after each successful call (W4.1, F23).
+        on_call_completed=None,
     ) -> None:
         self._llm = llm
         self._tools = tools
@@ -86,6 +88,7 @@ class CascadeExecutor:
         self._tracker = tracker or ModelCascadeTracker()
         self._acr_router = acr_router  # Optional ACR router for bandit outcome recording
         self._provider_account = provider_account
+        self._on_call_completed = on_call_completed
         # Per-session circuit breaker state
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
@@ -204,6 +207,34 @@ class CascadeExecutor:
         self._tracker.record(decision)
         if self._acr_router is not None:
             self._acr_router.record_cascade_outcome(decision)
+
+    async def _call_completed(
+        self, model_id: str, prompt_tokens: int, completion_tokens: int
+    ) -> None:
+        """Report one successful call; the hook must never fail the call."""
+        if self._on_call_completed is None:
+            return
+        from weebot.domain.models.event import LLMCallCompleted
+
+        try:
+            await self._on_call_completed(
+                LLMCallCompleted(
+                    model=model_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost=_estimate_cost(model_id, prompt_tokens, completion_tokens),
+                )
+            )
+        except Exception:
+            logger.warning("LLMCallCompleted hook failed for %s", model_id, exc_info=True)
+
+    @staticmethod
+    def _usage_tokens(resp: LLMResponse) -> tuple[int, int]:
+        usage = getattr(resp, "usage", None) or {}
+        return (
+            int(usage.get("prompt_tokens", 0) or 0),
+            int(usage.get("completion_tokens", 0) or 0),
+        )
 
     # ── Single model call (with retry + pool) ───────────────────────
 
@@ -335,6 +366,7 @@ class CascadeExecutor:
                     cost_estimate=_estimate_cost(model_id, _prompt_tokens, _completion_tokens),
                     task_category=task_category,
                 )
+                await self._call_completed(model_id, _prompt_tokens, _completion_tokens)
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
@@ -606,6 +638,7 @@ class CascadeExecutor:
                 )
                 if resp and (resp.content or resp.tool_calls):
                     logger.info("Live model rescue SUCCESS with %s", rescue_id)
+                    await self._call_completed(rescue_id, *self._usage_tokens(resp))
                     return resp
             except Exception as exc:
                 logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)

@@ -358,9 +358,9 @@ def _resolve_direct_key(env_var: str) -> str | None:
     field = _SETTINGS_FIELD_MAP.get(env_var)
     if field:
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            val = getattr(WeebotSettings(), field, None)
+            val = getattr(get_settings(), field, None)
             if val and val.strip():
                 return val
         except Exception:

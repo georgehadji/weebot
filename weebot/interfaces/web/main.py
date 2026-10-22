@@ -184,6 +184,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.configure_defaults()
     app.state.container = container
 
+    # ADR-013: in the web process (UI and chat gateways) a tool call that needs
+    # approval pauses the flow and asks. Headless runs here (cron, webhooks)
+    # narrow this to Deny with approval_scope.
+    from weebot.application.ports.event_store_port import EventStorePort
+    from weebot.application.services.tool_approval import (
+        FlowPauseApproval,
+        set_approval_journal,
+        set_process_approval,
+    )
+
+    set_process_approval(FlowPauseApproval())
+    set_approval_journal(container.get(EventStorePort))
+
     # ── Live event fan-out (WebSocket) ─────────────────────────
     # Wired once, here, at the composition root — nothing in application/
     # or the flows knows a WebSocket exists. Without this subscription
@@ -241,9 +254,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.debug("Circuit breaker state restore skipped: %s", exc)
 
     # ── Telegram gateway (long-polling) ─────────────────────────
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _settings = WeebotSettings()
+    _settings = get_settings()
     telegram_adapter = None
     if _settings.telegram_bot_token:
         try:
@@ -453,9 +466,9 @@ def create_app() -> FastAPI:
     )
 
     # API Key authentication middleware (optional) + fail-closed default
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws = WeebotSettings()
+    _ws = get_settings()
 
     if _ws.weebot_api_key:
 
@@ -699,9 +712,9 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _settings = WeebotSettings()
+    _settings = get_settings()
 
     port = int(os.getenv("WEEBOT_PORT", "8000"))
     host = _settings.web_host

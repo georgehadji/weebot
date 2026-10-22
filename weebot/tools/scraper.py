@@ -11,7 +11,7 @@ import asyncio
 from pydantic import PrivateAttr
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.tool_config import ToolConfig, resolve_setting
+from weebot.config.tool_config import ToolConfig, require_setting, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,7 @@ class ScraperTool(BaseTool):
             self._tool_config, "scraper_api_url", "SCRAPER_API_URL", "http://localhost:8000"
         ).rstrip("/")
         api_key = resolve_setting(self._tool_config, "scraper_api_key", "SCRAPER_API_KEY")
-        scraper_dir = resolve_setting(
-            self._tool_config, "scraper_dir", "SCRAPER_DIR", "E:\\Documents\\Vibe-Coding\\Scraper"
-        )
+        scraper_dir = resolve_setting(self._tool_config, "scraper_dir", "SCRAPER_DIR")
 
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -76,13 +74,14 @@ class ScraperTool(BaseTool):
 
         # Subprocess CLI command runner (Method 1)
         async def _run_cli() -> str:
+            cwd = require_setting(scraper_dir, "SCRAPER_DIR", "the Scraper CLI")
             cli_args = [sys.executable, "submit_url.py", url, "--site", site]
-            logger.info("Executing Method 1 (Default Headless CLI) in %s", scraper_dir)
+            logger.info("Executing Method 1 (Default Headless CLI) in %s", cwd)
             logger.info("CLI command: %s", " ".join(cli_args))
 
             process = await asyncio.create_subprocess_exec(
                 *cli_args,
-                cwd=scraper_dir,
+                cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -115,7 +114,7 @@ class ScraperTool(BaseTool):
                 "docker-compose",
                 "up",
                 "-d",
-                cwd=scraper_dir,
+                cwd=require_setting(scraper_dir, "SCRAPER_DIR", "the Scraper docker-compose"),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

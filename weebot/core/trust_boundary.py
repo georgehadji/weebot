@@ -56,6 +56,9 @@ UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
         "browser_inspector",
         "vane_search",
         "web_scraper",
+        "moli_fetch",  # Moli headless browser: arbitrary page text
+        "agent_reach",  # Agent-Reach channels: pages, GitHub, YouTube, search
+        "camofox_browser",  # Camoufox stealth browser: arbitrary page text
         "spacescraper",
         "search_images",
         "weather",

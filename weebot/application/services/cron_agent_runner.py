@@ -61,7 +61,10 @@ class CronAgentRunner:
         """
         from weebot.core.cron_context import cron_job_context
 
-        with cron_job_context():
+        from weebot.application.services.tool_approval import DenyApproval, approval_scope
+
+        # No human answers a cron job: tool-call approvals are refused (ADR-013).
+        with cron_job_context(), approval_scope(approval=DenyApproval()):
             return await self._run(job)
 
     async def _run(self, job: CronJobRecord) -> str:

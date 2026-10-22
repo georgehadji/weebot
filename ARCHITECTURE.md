@@ -227,4 +227,4 @@ Architecture boundaries are enforced at three levels:
 | **Lint (CI)** | `scripts/lint_async_io.py` | Blocking I/O inside async def (open(), sqlite3.connect(), etc.) |
 | **Lint (CI)** | Ruff `B` rules (bugbear) | Mutable defaults, bare except, etc. |
 
-See `AGENTS.md` → Architecture Rules for the full dependency matrix.
+See `.importlinter` (contracts) and `tests/unit/test_architecture_fitness.py` for the full dependency matrix.

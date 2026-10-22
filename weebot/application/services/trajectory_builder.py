@@ -14,6 +14,7 @@ from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
 from weebot.domain.models.event import TrajectoryScored
 from weebot.domain.models.session import Session
 from weebot.domain.models.trajectory import TrajectorySummary
+from weebot.models.structured_output import extract_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,11 @@ class TrajectoryBuilder:
                 temperature=TEMPERATURE_PRECISE,
                 max_tokens=MAX_TOKENS_SHORT,
             )
-            analysis = json.loads(response.content)
+            raw = (response.content or "").strip()
+            if not raw:
+                # json.loads("") reads as "Expecting value: line 1 column 1".
+                raise ValueError("analyst returned an empty reply")
+            analysis = json.loads(extract_json_text(raw))
             _validate_analysis(analysis)
         except Exception as exc:
             logger.warning("Trajectory analysis LLM call failed: %s", exc)

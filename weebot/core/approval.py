@@ -1,16 +1,22 @@
-"""Approval workflow for risky operations.
+"""Approval primitives for risky tool calls.
 
-This module provides an approval workflow for commands that are flagged
-as suspicious or dangerous by the BashGuard.
+``ApprovalManager`` is the session-scoped grant store of ADR-013
+(docs/adr/013-tool-call-approval.md); ``console_approval_callback`` is the
+interactive prompt the Console strategy reuses. The strategies themselves
+live in ``weebot/application/services/tool_approval.py``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
+from typing import Any
 
 from weebot.core.bash_guard import RiskLevel, SafetyCheck
 
@@ -64,7 +70,7 @@ class ApprovalRequest:
             f"║ Command: {self.command[:67]:<67} ║",
             f"║ Risk:    [{risk_color}]{self.risk_level.value.upper():<20}[/{risk_color}] {'':<44} ║",
             "╠" + "═" * 78 + "╣",
-            "║ Safety Concerns:{'':<62} ║",
+            f"║ Safety Concerns:{'':<62} ║",
         ]
 
         for check in self.checks:
@@ -74,7 +80,7 @@ class ApprovalRequest:
         lines.extend(
             [
                 "╠" + "═" * 78 + "╣",
-                "║ Options: [Y] Approve  [N] Deny  [S] Show details  [?] Help{'':<26} ║",
+                f"║ Options: [Y] Approve  [N] Deny  [S] Show details  [?] Help{'':<26} ║",
                 "╚" + "═" * 78 + "╝",
                 "",
             ]
@@ -111,175 +117,66 @@ class ApprovalRequest:
 # Type alias for approval callback
 ApprovalCallback = Callable[[ApprovalRequest], Coroutine[None, None, ApprovalDecision]]
 
+# ADR-013: a grant lasts 10 minutes and is used once.
+GRANT_TTL_SECONDS = 600.0
+
+
+def call_fingerprint(tool_name: str, arguments: Mapping[str, Any]) -> str:
+    """SHA-256 over the tool name and its canonical JSON arguments (ADR-013).
+
+    Any changed character, path or flag gives a new fingerprint, so a grant
+    can only ever authorise the exact call a human saw.
+    """
+    canonical = json.dumps(dict(arguments), sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(f"{tool_name}\0{canonical}".encode()).hexdigest()
+
 
 class ApprovalManager:
-    """Manages approval workflow for risky commands.
+    """Session-scoped store of single-use tool-call grants (ADR-013, decision 2).
 
-    This class handles the approval workflow, including:
-    - Auto-approving safe commands
-    - Blocking blocked commands
-    - Requesting approval for suspicious/dangerous commands
-    - Caching approval decisions per session
+    A human approval becomes a grant for one exact call (``call_fingerprint``)
+    in one session. ``consume`` returns True at most once per grant, and never
+    after ``ttl_seconds``. There is no "approve the whole session" switch and
+    no route by which a DENY verdict reaches this store: only ASK verdicts are
+    offered for approval (``application/services/tool_approval.py``).
 
-    Example:
-        >>> manager = ApprovalManager(auto_approve_safe=True)
-        >>> request = ApprovalRequest(
-        ...     command="rm -rf build/",
-        ...     risk_level=RiskLevel.DANGEROUS,
-        ...     checks=[...]
-        ... )
-        >>> decision = await manager.request_approval(request)
+    This replaces the earlier prompt-and-cache manager, which approved by raw
+    command string, could approve a whole session, and with
+    ``auto_deny_blocked=False`` could approve a BLOCKED command (F07).
     """
 
     def __init__(
         self,
-        auto_approve_safe: bool = True,
-        auto_deny_blocked: bool = True,
-        approval_callback: ApprovalCallback | None = None,
-    ):
-        """Initialize the ApprovalManager.
-
-        Args:
-            auto_approve_safe: Whether to auto-approve SAFE commands
-            auto_deny_blocked: Whether to auto-deny BLOCKED commands
-            approval_callback: Optional callback for approval requests
-        """
-        self.auto_approve_safe = auto_approve_safe
-        self.auto_deny_blocked = auto_deny_blocked
-        self._approval_callback = approval_callback
-        self._session_approvals: dict[str, ApprovalDecision] = {}
-        self._session_whitelist: dict[str, list[str]] = {}  # session -> list of approved commands
-        self._max_sessions = 50  # Evict oldest session when exceeded
-
-    def set_approval_callback(self, callback: ApprovalCallback) -> None:
-        """Set the callback for approval requests.
-
-        The callback will be called when user approval is needed.
-        It should return an ApprovalDecision.
-
-        Args:
-            callback: Async function that takes ApprovalRequest and returns Decision
-        """
-        self._approval_callback = callback
-
-    async def request_approval(self, request: ApprovalRequest) -> ApprovalDecision:
-        """Request approval for a command.
-
-        This method handles the approval logic:
-        1. Auto-approve SAFE commands (if enabled)
-        2. Auto-deny BLOCKED commands (if enabled)
-        3. Check session whitelist
-        4. Call approval callback for SUSPICIOUS/DANGEROUS
-
-        Args:
-            request: The approval request
-
-        Returns:
-            ApprovalDecision
-        """
-        # Auto-approve safe commands
-        if request.risk_level == RiskLevel.SAFE and self.auto_approve_safe:
-            logger.debug(f"Auto-approved safe command: {request.command}")
-            return ApprovalDecision.APPROVED
-
-        # Auto-deny blocked commands
-        if request.risk_level == RiskLevel.BLOCKED and self.auto_deny_blocked:
-            logger.warning(f"Auto-denied blocked command: {request.command}")
-            return ApprovalDecision.DENIED
-
-        # Check session-level pre-approval
-        if request.session_id:
-            # Check if entire session is approved/denied
-            if request.session_id in self._session_approvals:
-                decision = self._session_approvals[request.session_id]
-                logger.debug(f"Using cached session decision: {decision}")
-                return decision
-
-            # Check if this specific command was approved
-            whitelist = self._session_whitelist.get(request.session_id, [])
-            if request.command in whitelist:
-                logger.debug(f"Command in session whitelist: {request.command}")
-                return ApprovalDecision.APPROVED
-
-        # Request approval via callback
-        if self._approval_callback:
-            try:
-                decision = await self._approval_callback(request)
-                logger.info(f"Approval callback returned: {decision}")
-                return decision
-            except Exception as e:
-                logger.error(f"Approval callback failed: {e}")
-                # Fail secure: deny on error
-                return ApprovalDecision.DENIED
-
-        # No callback set - fail secure
-        logger.warning("No approval callback set, denying by default")
-        return ApprovalDecision.DENIED
-
-    def approve_for_session(
-        self, session_id: str, decision: ApprovalDecision = ApprovalDecision.APPROVED
+        ttl_seconds: float = GRANT_TTL_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+        max_sessions: int = 50,
+        on_expired: Callable[[str, str], None] | None = None,
     ) -> None:
-        """Pre-approve all commands for a session.
+        self._ttl = ttl_seconds
+        self._clock = clock
+        self._max_sessions = max_sessions
+        # Called with (session_id, fingerprint); the application journals it.
+        self._on_expired = on_expired
+        self._grants: dict[str, dict[str, float]] = {}  # session -> fingerprint -> expiry
 
-        Args:
-            session_id: The session to approve
-            decision: The decision to apply (default: APPROVED)
-        """
-        # Evict oldest session when at capacity
-        if (
-            session_id not in self._session_approvals
-            and len(self._session_approvals) >= self._max_sessions
-        ):
-            oldest = next(iter(self._session_approvals))
-            del self._session_approvals[oldest]
-            self._session_whitelist.pop(oldest, None)
-        self._session_approvals[session_id] = decision
-        logger.info(f"Set session {session_id} approval to: {decision}")
+    def grant(self, session_id: str, fingerprint: str) -> None:
+        """Record a human approval of one exact call in one session."""
+        if session_id not in self._grants and len(self._grants) >= self._max_sessions:
+            self._grants.pop(next(iter(self._grants)))  # evict the oldest session
+        self._grants.setdefault(session_id, {})[fingerprint] = self._clock() + self._ttl
+        logger.info("approval grant issued: session=%s call=%s", session_id, fingerprint[:12])
 
-    def approve_command_for_session(self, session_id: str, command: str) -> None:
-        """Add a specific command to the session whitelist.
-
-        Args:
-            session_id: The session
-            command: The command to whitelist
-        """
-        if session_id not in self._session_whitelist:
-            self._session_whitelist[session_id] = []
-        if command not in self._session_whitelist[session_id]:
-            self._session_whitelist[session_id].append(command)
-        logger.debug(f"Added command to session {session_id} whitelist: {command}")
-
-    def clear_session_approvals(self, session_id: str) -> None:
-        """Clear all approvals for a session.
-
-        Args:
-            session_id: The session to clear
-        """
-        self._session_approvals.pop(session_id, None)
-        self._session_whitelist.pop(session_id, None)
-        logger.info(f"Cleared all approvals for session: {session_id}")
-
-    def is_approved(self, session_id: str, command: str) -> bool:
-        """Check if a command is approved for a session.
-
-        Args:
-            session_id: The session
-            command: The command to check
-
-        Returns:
-            True if approved
-        """
-        # Check session-level approval
-        if session_id in self._session_approvals:
-            return self._session_approvals[session_id] == ApprovalDecision.APPROVED
-
-        # Check whitelist
-        whitelist = self._session_whitelist.get(session_id, [])
-        return command in whitelist
-
-
-# Global default instance
-default_approval_manager = ApprovalManager()
+    def consume(self, session_id: str, fingerprint: str) -> bool:
+        """True once if an unexpired grant exists for this call; the grant is removed."""
+        expiry = self._grants.get(session_id, {}).pop(fingerprint, None)
+        if expiry is None:
+            return False
+        if self._clock() > expiry:
+            logger.info("approval grant expired: session=%s call=%s", session_id, fingerprint[:12])
+            if self._on_expired is not None:
+                self._on_expired(session_id, fingerprint)
+            return False
+        return True
 
 
 async def console_approval_callback(request: ApprovalRequest) -> ApprovalDecision:
@@ -383,7 +280,7 @@ async def console_approval_callback(request: ApprovalRequest) -> ApprovalDecisio
             return ApprovalDecision.DENIED
 
 
-def auto_approve_callback(request: ApprovalRequest) -> ApprovalDecision:
+async def auto_approve_callback(request: ApprovalRequest) -> ApprovalDecision:
     """Callback that auto-approves everything (use with caution!).
 
     This is useful for automated testing or trusted environments.
@@ -399,7 +296,7 @@ def auto_approve_callback(request: ApprovalRequest) -> ApprovalDecision:
     return ApprovalDecision.APPROVED
 
 
-def auto_deny_callback(request: ApprovalRequest) -> ApprovalDecision:
+async def auto_deny_callback(request: ApprovalRequest) -> ApprovalDecision:
     """Callback that auto-denies everything.
 
     Useful for dry-run mode or highly restrictive environments.

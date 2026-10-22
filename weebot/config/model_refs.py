@@ -22,6 +22,10 @@ Task-specific:
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
@@ -790,7 +794,10 @@ def get_models_for_role_and_task(
                 if tm.id not in combined:
                     combined.append(tm.id)
         except Exception:
-            pass  # graceful fallback — role-only is sufficient
+            # graceful fallback — role-only is sufficient
+            logger.debug(
+                "task models for %r unavailable; using role models only", task_type, exc_info=True
+            )
 
     return combined
 

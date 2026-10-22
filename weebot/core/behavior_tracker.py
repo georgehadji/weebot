@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 # history missing is still not tamper-evident.
 _GIT_LOCK = threading.Lock()
 
+# The same race one step earlier: parallel appends to the daily file overwrote
+# each other on Windows (12 threads, up to 2 entries gone from disk, so no
+# commit could carry them), and `mark_override` rewrites the whole file, which
+# drops an append landing between its read and its write. Per process only.
+_FILE_LOCK = threading.Lock()
+
 
 def _commit(paths: list[str], message: str, *, cwd: Path) -> bool:
     """Stage *paths* and commit them as one unit, serialized per process.
@@ -308,7 +314,7 @@ class LedgerManager:
 
         # Write to file
         md_file = LEDGER_DIR / f"{date_str}.md"
-        with open(md_file, "a", encoding="utf-8") as f:
+        with _FILE_LOCK, open(md_file, "a", encoding="utf-8") as f:
             if md_file.exists() and md_file.stat().st_size > 0:
                 f.write("\n")
             f.write(entry_text + "\n")
@@ -379,28 +385,30 @@ class TrustManager:
         """Mark an entry as overridden."""
         # Find and update entry in ledger
         for md_file in LEDGER_DIR.glob("*.md"):
-            content = md_file.read_text()
-            if timestamp in content:
+            with _FILE_LOCK:
+                content = md_file.read_text()
+                if timestamp not in content:
+                    continue
                 # Add override marker
                 new_content = content.replace(
                     f"[{timestamp}]", f"[OVERRIDE] [{timestamp}]\nREASON     {reason}"
                 )
                 md_file.write_text(new_content)
 
-                # Commit the change
-                if not _commit([md_file.name], f"Override: {timestamp}", cwd=LEDGER_DIR):
-                    logger.warning(
-                        "Override for %s was written but the git commit failed.", timestamp
-                    )
+            # Commit the change
+            if not _commit([md_file.name], f"Override: {timestamp}", cwd=LEDGER_DIR):
+                logger.warning(
+                    "Override for %s was written but the git commit failed.", timestamp
+                )
 
-                # Update trust score
-                trust = self.load()
-                total = trust.total_actions
-                overrides = trust.overrides + 1
-                score = (total - overrides) / total if total > 0 else 0.0
-                self._save(score, total, overrides)
+            # Update trust score
+            trust = self.load()
+            total = trust.total_actions
+            overrides = trust.overrides + 1
+            score = (total - overrides) / total if total > 0 else 0.0
+            self._save(score, total, overrides)
 
-                return True
+            return True
 
         return False
 

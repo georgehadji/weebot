@@ -36,9 +36,9 @@ async def require_webhook_auth(request: Request) -> None:
     2. Global ``weebot_api_key`` → require ``X-API-Key`` header (existing auth).
     3. Neither → allow loopback only (local dev).
     """
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _settings = WeebotSettings()
+    _settings = get_settings()
 
     if _settings.webhook_api_key:
         header_key = request.headers.get("X-Webhook-Key", "")
@@ -97,7 +97,7 @@ async def webhook_run(
     Sessions are persisted so follow-up messages can reference the same
     session_id for continuation.
     """
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
     container: Container | None = getattr(request.app.state, "container", None)
     if container is None:
@@ -119,7 +119,7 @@ async def webhook_run(
         session = Session(id=session_id, user_id="webhook", agent_id="webhook-agent")
 
     # Determine tool role based on exec-tools setting
-    _settings = WeebotSettings()
+    _settings = get_settings()
     tool_role = "admin" if _settings.webhook_allow_exec_tools else "webhook"
     tools = await build_tools(role=tool_role)
     flow = create_flow(
@@ -136,7 +136,12 @@ async def webhook_run(
     tool_count = 0
     event_count = 0
 
-    async for event in flow.run(body.text):
+    from weebot.application.services.tool_approval import DenyApproval, approval_scope
+
+    # A webhook caller cannot answer an approval prompt (ADR-013): Deny.
+    with approval_scope(approval=DenyApproval()):
+        events = [event async for event in flow.run(body.text)]
+    for event in events:
         event_count += 1
         if getattr(event, "type", "") == "message":
             msg = getattr(event, "message", "")

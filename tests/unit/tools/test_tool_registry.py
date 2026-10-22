@@ -102,7 +102,8 @@ class TestSandboxPortInjection:
         for name in ("bash", "python_execute"):
             tool = collection.get_tool(name)
             assert tool is not None, f"{name} should be in the collection"
-            assert tool._sandbox is sentinel, f"{name} did not receive the sandbox"
+            # Since ICM fix plan W3.2 the collection holds GuardedTool decorators.
+            assert tool.inner._sandbox is sentinel, f"{name} did not receive the sandbox"
 
     def test_tools_resolve_own_default_when_no_sandbox_supplied(self):
         registry = RoleBasedToolRegistry()
@@ -112,4 +113,4 @@ class TestSandboxPortInjection:
         bash = collection.get_tool("bash")
         assert bash is not None
         # No sandbox passed — the tool falls back to create_default_sandbox().
-        assert bash._sandbox is not None
+        assert bash.inner._sandbox is not None

@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from weebot.config.settings import WeebotSettings, WORKSPACE_ROOT, LOGS_DIR
+from weebot.config.settings import get_settings, WORKSPACE_ROOT, LOGS_DIR
 from weebot.templates.parser import TemplateParser
 
 # TemplateMarketplace is imported lazily inside the two functions that use it —
@@ -222,7 +222,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
 
     # API keys / settings
     try:
-        settings = WeebotSettings()
+        settings = get_settings()
         providers = settings.available_providers()
         if providers:
             checks.append(

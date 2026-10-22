@@ -11,6 +11,9 @@ import os
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
 import logging
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -40,10 +43,6 @@ def _reset_weebot_logger_level():
     logging.getLogger("weebot").setLevel(logging.NOTSET)
 
 
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
-from typing import Any
-
 # ---------------------------------------------------------------------------
 # Marker registration
 # ---------------------------------------------------------------------------
@@ -56,23 +55,48 @@ from typing import Any
 
 @pytest.fixture(autouse=True)
 def _no_dotenv_settings(monkeypatch):
-    """Stop WeebotSettings from reading the repo-root .env file.
+    """Stop every settings class from reading the repo-root .env file.
 
-    ``dotenv_settings`` is ranked above ``env_settings`` (settings.py:64-69),
-    so a real ``.env`` on disk resolves API keys regardless of what
-    ``clean_env`` below strips from ``os.environ`` — the file is read
-    independently of the process environment. Without this, every test
-    outside ``tests/unit/`` (which already had its own copy of this fixture)
-    silently made live, billed calls whenever a developer's ``.env`` was
-    present.
+    ``dotenv_settings`` is ranked above ``env_settings`` (settings.py:71-76),
+    so a real ``.env`` on disk wins over both ``clean_env`` below and a test's
+    own ``monkeypatch.setenv``. Without this, tests depend on the developer's
+    local settings and can make live, billed calls.
+
+    Patched on pydantic-settings' ``BaseSettings`` rather than on
+    ``WeebotSettings.model_config``: a test that deletes
+    ``weebot.config.settings`` from ``sys.modules`` gets a fresh class whose
+    config points at ``.env`` again, but it still inherits this ``__init__``.
+    ``_env_file`` is pydantic-settings' documented per-instance override;
+    an explicit value passed by a test still wins.
+    """
+    from pydantic_settings import BaseSettings
+
+    original_init = BaseSettings.__init__
+
+    def _init_without_dotenv(self, *args, _env_file=None, **kwargs):
+        original_init(self, *args, _env_file=_env_file, **kwargs)
+
+    monkeypatch.setattr(BaseSettings, "__init__", _init_without_dotenv)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_settings_cache():
+    """Give every test its own ``get_settings()`` instance.
+
+    ``get_settings`` caches one ``WeebotSettings`` per process. Without a
+    reset, the first test to call it fixes the values (and the env vars it
+    saw) for every later test. Cleared before the test, after the ``.env``
+    patch above, so the instance a test builds never read the real ``.env``;
+    and cleared after, so it does not leak.
     """
     try:
-        from weebot.config import settings as settings_module
+        from weebot.config.settings import get_settings
     except Exception:
+        yield
         return
-    new_config = dict(settings_module.WeebotSettings.model_config)
-    new_config["env_file"] = None
-    monkeypatch.setattr(settings_module.WeebotSettings, "model_config", new_config)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)

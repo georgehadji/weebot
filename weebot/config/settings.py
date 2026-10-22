@@ -1,11 +1,18 @@
 """Configuration and constants for weebot Agent."""
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Constants - Use environment variable or current working directory
+# Constants - Use environment variable or current working directory.
+# These are read with os.getenv once, at import, and are deliberately NOT
+# WeebotSettings fields: tools use WORKSPACE_ROOT in class bodies
+# (powershell_tool.py) and at module level, so a settings-backed shim would
+# validate the whole .env at import. Entry points must load_dotenv() before
+# importing weebot (run.py, cli/main.py, run_mcp.py). ICM fix plan W2.4b, option
+# (a); passing the workspace to tools through ToolConfig is planned for Wave 5.
 WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE", os.getcwd()))
 LOGS_DIR = Path(os.getenv("WEEBOT_LOGS_DIR", "logs"))
 LOG_FILE = LOGS_DIR / "agent.log"
@@ -79,17 +86,17 @@ class WeebotSettings(BaseSettings):
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
     reasoner_api_key: str | None = None  # env: REASONER_API_KEY
-    reasoner_dir: str = "E:\\Documents\\Vibe-Coding\\Reasoner"  # env: REASONER_DIR
+    reasoner_dir: str | None = None  # env: REASONER_DIR
 
     # Berb Research API Settings
     berb_api_url: str = "http://localhost:8004"  # env: BERB_API_URL
     berb_api_key: str | None = None  # env: BERB_API_KEY
-    berb_dir: str = "E:\\Documents\\Vibe-Coding\\Berb"  # env: BERB_DIR
+    berb_dir: str | None = None  # env: BERB_DIR
 
     # Scraper (Spacescraper) API Settings
     scraper_api_url: str = "http://localhost:8000"  # env: SCRAPER_API_URL
     scraper_api_key: str | None = None  # env: SCRAPER_API_KEY
-    scraper_dir: str = "E:\\Documents\\Vibe-Coding\\Scraper"  # env: SCRAPER_DIR
+    scraper_dir: str | None = None  # env: SCRAPER_DIR
 
     # Web API Auth
     weebot_api_key: str | None = None  # env: WEEBOT_API_KEY
@@ -167,11 +174,40 @@ class WeebotSettings(BaseSettings):
     )
 
     # Sandbox / code execution
-    sandbox_mode: str = "auto"  # env: SANDBOX_MODE — "auto"|"native"|"docker"|"wsl2"
+    # env: SANDBOX_MODE — "auto"|"docker_first"|"native"|"docker"|"wsl2".
+    # auto: native on Windows, Docker elsewhere. docker_first (ADR-014): Docker
+    # when ready and weebot-tool-env is built, else the platform default.
+    sandbox_mode: str = "auto"
+    # env: SANDBOX_REQUIRE_ISOLATION — refuse sandboxed calls on a backend that
+    # cannot enforce network-off, instead of warning (ADR-014). Off by default.
+    sandbox_require_isolation: bool = False
     bash_timeout: int = 30  # env: BASH_TIMEOUT
     python_timeout: int = 30  # env: PYTHON_TIMEOUT
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
     sandbox_allow_network: bool = False  # env: SANDBOX_ALLOW_NETWORK
+
+    # Tool guard chain (application/services/tool_guards.py). "observe" only
+    # records what the chain would decide; "enforce" refuses DENY and ASK.
+    # ICM fix plan W3.1; the flip to enforce is W3.7, after observe data.
+    shell_guard_mode: str = Field(
+        default="observe",
+        alias="WEEBOT_SHELL_GUARD_MODE",
+        description="Tool guard chain mode: 'observe' (record only) or 'enforce' (refuse).",
+    )
+    intent_review_timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        alias="WEEBOT_INTENT_REVIEW_TIMEOUT_S",
+        description="Seconds the pre-planning intent review may take; on timeout it fails open.",
+    )
+
+    @field_validator("shell_guard_mode")
+    @classmethod
+    def validate_shell_guard_mode(cls, v: str) -> str:
+        normalized = str(v).strip().lower()
+        if normalized not in {"observe", "enforce"}:
+            raise ValueError(f"shell_guard_mode must be 'observe' or 'enforce', got {v!r}")
+        return normalized
 
     @field_validator("daily_ai_budget")
     @classmethod
@@ -193,11 +229,11 @@ class WeebotSettings(BaseSettings):
     @field_validator("sandbox_mode")
     @classmethod
     def validate_sandbox_mode(cls, v: str) -> str:
-        allowed = {"auto", "native", "docker", "wsl2"}
+        allowed = {"auto", "docker_first", "native", "docker", "wsl2"}
         if v.lower() not in allowed:
             raise ValueError(
                 f"sandbox_mode must be one of {allowed}, got '{v}'. "
-                "Set SANDBOX_MODE to 'auto', 'native', 'docker', or 'wsl2'."
+                "Set SANDBOX_MODE to 'auto', 'docker_first', 'native', 'docker', or 'wsl2'."
             )
         return v.lower()
 
@@ -435,6 +471,27 @@ class WeebotSettings(BaseSettings):
     financial_tools_always_ask: bool = Field(
         default=True, description="Financial/payment tools always require user approval."
     )
+    financial_tool_patterns: str = Field(
+        default="*stripe*,*payment*,*invoice*,*refund*,*payout*,*checkout*,*billing*",
+        alias="WEEBOT_FINANCIAL_TOOL_PATTERNS",
+        description="Comma-separated globs (case-insensitive) naming financial/payment tools.",
+    )
+    outbound_tool_patterns: str = Field(
+        default=(
+            "*schedulepost*,*deletepost*,*publish*,*send_email*,*send_mail*,*send_reply*,"
+            "*send_message*,*tweet*,*generate*,*clipping*"
+        ),
+        alias="WEEBOT_OUTBOUND_TOOL_PATTERNS",
+        description=(
+            "Comma-separated globs (case-insensitive) naming tools that publish, send or "
+            "spend (MCP tools are namespaced mcp__<server>__<tool>). They always ask."
+        ),
+    )
+    outbound_ask_in_observe: bool = Field(
+        default=True,
+        alias="WEEBOT_OUTBOUND_ASK_IN_OBSERVE",
+        description="Outbound tools ask through the approval channel even in observe mode.",
+    )
     secret_redaction_enabled: bool = Field(
         default=True, description="Redact secrets (PANs, API keys) in tool output and logs."
     )
@@ -444,35 +501,41 @@ class WeebotSettings(BaseSettings):
 
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""
-        keys = [
-            self.kimi_api_key,
-            self.deepseek_api_key,
-            self.anthropic_api_key,
-            self.openai_api_key,
-            self.openrouter_api_key,
-        ]
-        if not any(keys):
+        if not self.available_providers():
+            env_names = ", ".join(field.upper() for field in _PROVIDER_KEYS.values())
             raise ValueError(
                 "❌ weebot requires at least one AI API key.\n"
-                "   Set one of: KIMI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY,\n"
-                "   OPENROUTER_API_KEY, or OPENAI_API_KEY\n"
+                f"   Set one of: {env_names}\n"
                 "   in .env file or as environment variables."
             )
 
     def available_providers(self) -> list[str]:
         """List available AI providers."""
-        providers = []
-        if self.openrouter_api_key:
-            providers.append("openrouter")
-        if self.kimi_api_key:
-            providers.append("kimi")
-        if self.deepseek_api_key:
-            providers.append("deepseek")
-        if self.anthropic_api_key:
-            providers.append("claude")
-        if self.openai_api_key:
-            providers.append("openai")
-        return providers
+        return [name for name, field in _PROVIDER_KEYS.items() if getattr(self, field)]
+
+
+# Provider name -> WeebotSettings key field. One table for the key check and
+# the provider list, so a provider cannot be counted by one and not the other.
+_PROVIDER_KEYS: dict[str, str] = {
+    "openrouter": "openrouter_api_key",
+    "kimi": "kimi_api_key",
+    "deepseek": "deepseek_api_key",
+    "claude": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "xai": "xai_api_key",
+}
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> WeebotSettings:
+    """The process-wide WeebotSettings, built (and .env read) once.
+
+    Production code calls this instead of ``WeebotSettings()``; the count of
+    direct constructions is ratcheted by ``scripts/lint_settings_construction.py``.
+    A changed ``.env`` takes effect on restart. Tests reset it with
+    ``get_settings.cache_clear()`` (autouse fixture in ``tests/conftest.py``).
+    """
+    return WeebotSettings()
 
 
 def ensure_workspace() -> None:
@@ -481,66 +544,4 @@ def ensure_workspace() -> None:
     LOGS_DIR.mkdir(exist_ok=True)
 
 
-# ========================================================================
-# OSWorld Settings (sandbox adapters for desktop automation benchmark)
-# ========================================================================
-
-
-class OSWorldSettings(BaseSettings):
-    """Configuration for the OSWorld sandbox environment.
-
-    Connects to a KVM/Docker container running an OSWorld-compatible VM.
-    """
-
-    model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    # Sandbox backend type
-    osworld_sandbox_type: str = Field(
-        default="docker",
-        description=(
-            "Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), " "or 'remote' (HTTP API)"
-        ),
-    )
-
-    # Connection
-    osworld_host: str = Field(default="localhost", description="OSWorld VM host address")
-    osworld_port: int = Field(default=8080, description="OSWorld VM API port")
-    osworld_vm_id: str = Field(
-        default="osworld-ubuntu-1", description="OSWorld VM instance identifier"
-    )
-    osworld_api_token: str = Field(default="", description="Auth token for OSWorld API")
-
-    # Timeouts
-    osworld_connect_timeout: int = Field(
-        default=30, ge=1, description="Connection timeout in seconds"
-    )
-    osworld_action_timeout: int = Field(
-        default=15, ge=1, description="Per-action timeout in seconds (click, type, screenshot)"
-    )
-    osworld_boot_timeout: int = Field(
-        default=120, ge=10, description="VM boot/wait timeout in seconds"
-    )
-    osworld_max_retries: int = Field(
-        default=3, ge=0, description="Max retries on transient failures"
-    )
-
-    # Screen calibration
-    osworld_screen_width: int = Field(default=1920, ge=640, description="VM screen width in pixels")
-    osworld_screen_height: int = Field(
-        default=1080, ge=480, description="VM screen height in pixels"
-    )
-    osworld_dpi_scale: float = Field(
-        default=1.0, ge=0.5, le=4.0, description="DPI scaling factor (1.0 = 96dpi)"
-    )
-
-    @property
-    def base_url(self) -> str:
-        return f"http://{self.osworld_host}:{self.osworld_port}"
-
-    @property
-    def screen_resolution(self) -> tuple[int, int]:
-        return (self.osworld_screen_width, self.osworld_screen_height)
+# OSWorldSettings moved to weebot/config/osworld_settings.py (ICM fix plan W2.4).

@@ -250,6 +250,33 @@ class AsyncEventStore(EventStorePort):
             model_breakdown=model_breakdown,
         ).to_dict()
 
+    async def get_cost_window(self, window_hours: int) -> dict[str, Any]:
+        """Sum llm_call_completed rows newer than *window_hours* (W4.2, F23)."""
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            """SELECT model, SUM(cost) AS cost, SUM(tokens_used) AS tokens,
+                      COUNT(*) AS calls
+               FROM events
+               WHERE event_type = 'llm_call_completed'
+                 AND timestamp >= datetime('now', ?)
+               GROUP BY model""",
+            (f"-{int(window_hours)} hours",),
+        )
+        by_model = {
+            row["model"] or "unknown": {
+                "cost": row["cost"] or 0.0,
+                "tokens": row["tokens"] or 0,
+                "calls": row["calls"],
+            }
+            for row in rows
+        }
+        return {
+            "total_cost": sum(m["cost"] for m in by_model.values()),
+            "total_tokens": sum(m["tokens"] for m in by_model.values()),
+            "calls": sum(m["calls"] for m in by_model.values()),
+            "by_model": by_model,
+        }
+
     async def query_recent_events(
         self, event_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:

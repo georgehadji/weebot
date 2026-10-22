@@ -69,11 +69,11 @@ def _get_or_create_adapter(request: Request):
     from weebot.application.di import Container
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
     from weebot.interfaces.gateways.discord import DiscordAdapter
 
     container: Container = request.app.state.container
-    settings = WeebotSettings()
+    settings = get_settings()
 
     if not settings.discord_public_key or not settings.discord_bot_token:
         logger.warning(

@@ -10,6 +10,7 @@ from weebot.domain.models.event import (
     ErrorEvent,
     MessageEvent,
     PlanEvent,
+    PlanReviewEvent,
     StepEvent,
     ThoughtEvent,
     TitleEvent,
@@ -23,6 +24,9 @@ def _format_event(event: AgentEvent) -> str:
         return f"\n[bold cyan]📋 {event.title}[/bold cyan]"
     if isinstance(event, PlanEvent):
         return "[dim]Plan created/updated[/dim]"
+    if isinstance(event, PlanReviewEvent):
+        # The steps follow in the WaitForUserEvent question; one line is enough.
+        return f"[dim]Plan ready for review ({event.step_count} steps)[/dim]"
     if isinstance(event, StepEvent):
         if event.status.value == "completed":
             return f"  ✅ Step {event.step_id}: {event.description} (completed)"

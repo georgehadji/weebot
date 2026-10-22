@@ -1,0 +1,214 @@
+# Plan: fix everything still open
+
+Status: DRAFT for review, written 2026-10-22. Nothing in it has started.
+
+This file only sets the order and lists the work found since the waves were written. Finding details, card links and wave task text stay in `tasks/icm_fix_plan.md` (F-numbers and W-numbers below point there). The rules in its section 1 hold for every task here: a failing test first, ceilings never raised, fail closed, a card update per task, and a human gate per wave.
+
+## What "everything" covers
+
+| Source | Open items |
+|---|---|
+| Findings catalog | F06, F20, F22-F28, F32-F35, F37. F02/F03 close with the W3.7 flip. |
+| Wave 3 leftovers | W3.7 flip, ADR-013 "not done" list, W3.9 "not done" list |
+| Real run, 2026-10-22 | IntentReview timeout, trajectory JSON error, premortem notes not persisted, CLI raw event print (F37) |
+| Test and lint hygiene | 2 Windows baseline failures, 1 flaky ledger test, the Stripe test's `sys.modules` deletion, 3 E402 in `tests/conftest.py`, 1 E501 at `planning.py:286` |
+
+Not covered: Jev (decision 6: skip), and clusters with no map card yet (section 6 of the fix plan). Wave G below covers those if you want them.
+
+## Order
+
+Gate commands for every wave: run `pytest tests/` from Git Bash with `.venv/Scripts` on PATH. Then run each `scripts/lint_*.py` one at a time, not while pytest runs, and then `lint-imports`.
+
+### Wave A: hygiene (S each, about one session)
+The goal is a zero-failure baseline, so later gates mean something.
+
+- A1 **Windows baseline failures.**
+  - `test_output_path.py:16`: compare the path case-insensitively.
+  - `test_behavior_ledger_git.py`: clean up the temp tree with an `onerror` handler that clears the read-only bit on `.git/objects`.
+  - Both are test-side fixes.
+- A2 **Flaky `test_concurrent_appends_are_all_committed`** (1 pass in 3 alone; entries go missing). Reproduce in a loop first and find the cause before changing anything. A likely suspect is concurrent `git` on Windows racing on `index.lock`, which could be a real ledger bug and not only a test bug.
+- A3 **Stripe test reload.** Remove the `sys.modules` deletion in `test_no_secret_with_dev_opt_in_allowed`. `get_settings.cache_clear()` already resets settings per test. The test stays the `.env` check (decision A below).
+- A4 **Lint.** Fix the E402s in `tests/conftest.py:43-45` and the E501 at `planning.py:286`. First measure `ruff check .` across the repo. If it is not zero, record the count and decide whether a ruff ratchet is worth adding, instead of fixing everything at once.
+- A5 **F37.** Trace where `flow run` prints the `PlanReviewEvent` repr, and why `session_id` is empty: `PlanReviewState` yields the event without `_emit`. Then fix it so the event is emitted once and rendered once.
+- A6 **IntentReview timeout.** `_TIMEOUT = 5.0` (`intent_review_service.py:31`) times out on thinking models on every run, and the warning prints an empty message.
+  - Log the exception type (`%r`).
+  - Make the timeout a setting with a default that fits the configured model.
+  - It still fails open.
+- A7 **Trajectory analysis** (`trajectory_builder.py:107`). Parse an empty or non-JSON reply into a validated model (rule 2), and log the raw reply length instead of the JSON error.
+- A8 **Premortem notes persisted** (F36 residual). Emit `PlanEvent(UPDATED)` when `PremortemState` changes the plan, with the same test shape as F36.
+
+Gate: 0 failed.
+
+Wave A result, 2026-10-22 (each task had a failing test before the fix):
+- **A1 DONE.** `test_output_path` compares the path in lower case. `test_behavior_ledger_git` removes `.git` with an `onexc` handler that clears the read-only bit.
+- **A2 DONE, a real ledger bug.** The flaky test hid data loss on disk. Parallel `LedgerManager.append` calls overwrote each other in the daily file (probe: 1-2 of 12 entries missing in 4 of 8 runs), so no commit could carry them.
+  - `mark_override` is a read-modify-write on the same file, so it could also drop an append.
+  - Fix: a `_FILE_LOCK` around the append and around the override's read-modify-write (`core/behavior_tracker.py`). The lock is per process, so a CLI and a web process appending at once can still race.
+  - New repro: `test_concurrent_appends_keep_every_entry_on_disk`, with git stubbed out (failed 3 of 3 before). Both concurrency tests then passed 10 of 10.
+- **A3 DONE.** The Stripe test no longer deletes `weebot.config.settings` from `sys.modules`. Running it before `tests/unit/config/test_get_settings.py` failed 2 tests before and passes after.
+- **A4 DONE, partly.**
+  - Fixed: the E402s in `tests/conftest.py` and the E501 at `planning.py:286`.
+  - Repo-wide `ruff check .` finds 975 errors, mostly E501 (339), W293, E402, F401 and F841. The CI gate (`ruff check weebot/ cli/ --select F821,E9`) passes. The 10 F821s are in `tests/unit/test_cove_regressions.py`, a skip-marked class for the deleted `ResumableTask`. They were not deleted because this folder has no git to restore from.
+  - Recommendation: no blanket ruff ratchet yet. Delete that dead class in a reviewed change.
+- **A5 DONE (F37).**
+  - `PlanReviewState` now emits the `PlanReviewEvent` through `_emit` (stamped, saved, published), and the CLI renders it as one line.
+  - `flow run` and `dream` no longer repeat the question in the `input()` prompt; the subscriber has already printed it.
+  - Test: `tests/unit/fixes/test_f37_plan_review_event.py`. `test_plan_review_state.py`'s mock flow gained an async `_emit`.
+- **A6 DONE.** New setting `WEEBOT_INTENT_REVIEW_TIMEOUT_S` (`intent_review_timeout_s`, default 30, `gt=0`).
+  - `IntentReviewService` reads it when no timeout is passed, which covers both callers (DI and `PlanningState`).
+  - A timeout logs "timed out after Ns"; other errors log with `%r`. It still fails open.
+  - Test: `tests/unit/application/services/test_intent_review_service.py`.
+- **A7 DONE.** `TrajectoryBuilder` parses the reply with the shared `extract_json_text`, so a fenced reply now works, and it names an empty reply. Test: `test_trajectory_builder_reply.py`.
+- **A8 DONE.** `PremortmState` emits `PlanEvent(UPDATED)` before adopting the plan with its risk notes. Test: `tests/unit/fixes/test_premortem_plan_persisted.py`.
+- **Found during the gate: the generated `.env.example` weakened two security defaults.**
+  - `scripts/generate_config_reference.py` listed `WEEBOT_EGRESS_ENFORCE` and `WEEBOT_ENFORCE_SESSION_OWNERSHIP` with default `"false"`, while the code defaults both to on. Regenerating for A6 reverted the hand-fixed template, and `test_w6_ws_authorisation` caught the session-ownership one.
+  - Fixed at the source, in the generator. A new test checks the egress line too.
+  - The generator's list also lacked `WEEBOT_SHELL_GUARD_MODE` (W3.1); it is added. Compared with the earlier template (read from the developer's `.env` copy, secret values not shown), nothing else changed.
+- **Gate:** 5472 passed, **0 failed**, 10 xfailed, 119 skipped. Lints at ceilings (serial); import-linter 9 kept; the CI ruff gate passes. This is the first zero-failure baseline on this machine.
+
+### Wave B: finish the guard stack
+- B1 **F06**, decision 3: wire the `finance`/`payment` categories and `financial_tools_always_ask` into the guard chain as ASK. First list which tools are financial, from the registry and `stripe_*`. M
+- B2 **ADR-013 leftovers:**
+  - Journal `approval_granted`, `approval_denied` and `approval_expired` to the event store.
+  - Add a unit test for the `_base.py` `approval_required` branch.
+  - Do one manual browser round trip: web UI, ask, "yes", re-run.
+  - S-M. A UI renderer for `tool_approval` is optional (decision C).
+- B3 **Observe data.** Collect `tool guard [observe]` lines from real runs; one run exists so far. Summarize them as counts by guard and verdict, plus any DENY that should not be. This runs alongside Waves C-F.
+- B4 **W3.7 flip** to `enforce`, which closes F02 and F03 and turns the last F01 xfail into a plain test. **Needs your go** after B3 (decision B). S
+- B5 **Sandbox leftovers.**
+  - First, a short ADR on workspace mounts.
+  - Then Docker `--read-only` with a tmpfs `/tmp`, and `--user`.
+  - Then make `create_default_sandbox()` follow the Docker-first priority with an availability check (F31 rest).
+  - Then an optional strict mode that refuses network-off on a backend without isolation (F30 rest).
+  - M-L.
+- B6 **MCP per-call network.** The MCP server bypasses `ToolExecutor`, so it never gets per-call network. Document this in `docs/SECURITY_MODEL.md`; no code unless MCP users need it.
+
+Wave B result so far, 2026-10-22 (`shell_guard_mode` stays `observe`):
+- **B1 DONE (F06).** Finding: no built-in tool is financial. One can only arrive from an external MCP server, through three adapters (`MCPToolBridge`, `MCPToolkitAdapter`, `MCPToolRegistryBridge`), and no tool carried a category. So the `finance`/`payment` rule could not fire.
+  - **Design** (user choice, 2026-10-22: name patterns): new setting `WEEBOT_FINANCIAL_TOOL_PATTERNS`, comma-separated case-insensitive globs. The default is `*stripe*,*payment*,*invoice*,*refund*,*payout*,*checkout*,*billing*`. The existing `FINANCIAL_TOOLS_ALWAYS_ASK` (default true) switches it off.
+  - **Mechanism:** `is_financial_tool()` and `FinancialToolAdapter` (guard `financial_policy`, ASK) are in `tool_guards.py`, and the adapter is in the default chain. `guard_tools()` now also wraps financial tools.
+  - **Where tools are wrapped:** the registry (as before); `build_tools()` in `interfaces/factories.py`, which wraps the combined list after MCP, extra and Apify tools join, resolves `guard_tools` through DI (the interfaces layer may not import `tool_guards`) and fails closed if it is missing; and the MCP server's `_register_dynamic_tools`.
+  - **Behaviour:** in observe mode the ASK is logged and the call runs. In enforce mode it goes to the approval channel; headless runs are refused.
+  - **Tests:** `tests/unit/fixes/test_f06_financial_tools_ask.py` (9). `test_mcp_tool_guards.py` now counts only `guard_tools` calls that had tools.
+- **B2a DONE: approval outcomes are journaled.**
+  - `set_approval_journal(store)` writes `approval_granted`, `approval_denied` and `approval_expired` through `EventStorePort.log_event`, best effort, like `DurableEventBus`. The data is tool, guard, fingerprint and channel; no arguments, which may hold secrets.
+  - Expiry comes from a new `on_expired` callback on `ApprovalManager`, so core still imports nothing from application.
+  - Wired in the web lifespan and in CLI `flow`.
+  - Test: `tests/unit/application/services/test_approval_journal.py` (5).
+- **B2b DONE.** `tests/unit/test_executor_tool_approval_pause.py` drives `ExecutorAgent.execute_step` with a tool that answers PENDING. It checks for `ToolApprovalEvent`, then `WaitForUserEvent` with the prompt, then no further LLM turn. A mutation run (data key renamed) makes it fail.
+- **B2c DONE, 2026-10-22: browser round trip.** Backend run with `uvicorn` without reload (`.claude/launch.json`), UI with `npm run dev`; `npm ci` was needed first.
+  - **Result:** task `python_execute` `urllib` GET `https://httpbin.org/get` (new host) in session `7b3c1c44-33bd-4027-bb8f-e18a6b3397d6`.
+    1. The plan review came up and was approved.
+    2. The browser showed "Tool 'python_execute' needs your approval (egress_guard ... httpbin.org)".
+    3. Reply "yes" logged `approval grant issued`, then `approval grant used` for the same fingerprint (`575472bb…`), and the call re-ran and printed 200.
+    4. The event store holds `approval_granted` (channel `flow`) and 23 events for the session, `tool_approval` among them.
+  - **Five real bugs blocked it; each fixed with a failing test first:**
+    1. `POST /api/sessions` returned 500 for every new web session. `_session_to_response` passed the `SessionContext` model to a dict field. It now dumps the model; a dict is also accepted, because `model_copy` skips validation. Test: `tests/unit/interfaces/web/test_session_response.py`.
+    2. A web reply to a WAITING session did nothing: `dispatch_session_input._resume` stored the answer and set RUNNING without running the flow, so no plan review or approval in the web UI could move on. It now calls `TaskRunner.resume_session` (added to `TaskRunnerPort`).
+    3. `TaskRunner.resume_session` ran the flow with `context["last_prompt"]`, the original task, not the answer. FlowRouter would have read the task as a plan-change request. An optional `prompt` now reaches `_run_flow`, retries included. Tests: `tests/unit/test_task_runner_resume.py`, `test_dispatch_session_input.py`.
+    4. `DurableEventBus` journaled nothing: `model_dump()` kept datetime objects and `EventStore.log_event` `json.dumps` them, so every write failed with a warning. Both helpers now use `mode="json"`. Test: `tests/unit/infrastructure/test_durable_event_bus_journal.py`.
+    5. My W3.4 wiring was incomplete: nothing called `ToolExecutor.set_step_context`, so the approval scope had session `""` and Flow pause denied every web approval silently. `ExecutorAgent.execute_step` now passes the step's session. Test: `test_the_step_session_reaches_the_tool_call`.
+  - **Seen, not fixed:**
+    - **The Plan panel shows "Internal server error":** `ops_router` `plan-viz` sent a query through `send()`, which is F22. Fixed in W7.1 (Wave D).
+    - **Python run through the shell is not egress:** the planner once turned the task into PowerShell `python -c "...urlopen..."`, which `EgressGuard` does not classify, because only `python_execute` code is checked (W3.8).
+    - **DPPM made a poor plan:** for a one-line change request it produced a 13-step plan (web search, file writes, bash).
+    - **The old `POST /sessions/{id}/resume` endpoint has the same no-op bug** as item 2. The UI uses `/input`.
+    - **Session `0b52fc54…` is stuck in RUNNING:** it came from the earlier no-op resume.
+- **Gate:** 5487 passed, 0 failed, 10 xfailed. Lints at ceilings (serial); import-linter 9 kept; the CI ruff gate passes.
+
+Wave B, continued 2026-10-22 (user: "Proceed"):
+- **`/resume` endpoint fixed.** `POST /sessions/{id}/resume` now goes through the same dispatch as `/input`, via a shared `_dispatch_input` helper in `routers/sessions.py`, so it resumes the flow. It still refuses a session that is not WAITING with 400. Test: `tests/unit/interfaces/web/test_resume_session_endpoint.py`.
+- **Shell-run Python is egress.** `EgressGuard` classifies `python`/`python3`/`py` with `-c` code that imports a network library, run through `bash` or `powershell`. The recipient is the first URL host, else unknown, which asks. Test: `tests/unit/test_egress_shell_python.py` (5 positive cases failed before the fix; 4 negatives).
+  - Not covered: `python script.py`, whose code is in a file.
+- **B6 DONE.** `docs/SECURITY_MODEL.md` now states:
+  - the sandbox network rules
+  - that MCP gets no per-call network or approvals, and needs `SANDBOX_ALLOW_NETWORK=true` for code that uses the network
+  - what the egress gate classifies, and that fetch URLs are not checked
+  - how approvals resolve per channel, including that the guard chain only logs in observe mode
+
+  The ADR-013 status line is updated for the journaling.
+- **Gate:** 5516 passed, 0 failed, 10 xfailed. Lints at ceilings; import-linter 9 kept; ruff clean on the changed files.
+- **B5 DONE (ADR-014 Approved and implemented, 2026-10-22).**
+  - **Docker layout:** `DockerLinuxSandbox` now runs with `--read-only`, `--user 1000:1000`, `--tmpfs /tmp` (exec, 256 MB), a `weebot-pip-cache` volume, and `PIP_USER=1`/`PYTHONUSERBASE=/tmp/.local` so installs work on a read-only root. `SandboxConfig.workspace_dir` (set by `build_sandbox_config` from `WORKSPACE_ROOT`) is mounted read-only at `/workspace`, with `Output/` read-write. A host cwd maps into `/workspace`, and a cwd outside the workspace goes to `/workspace`.
+  - **Image:** only `weebot-tool-env:latest` is used, with no `python:3.11-slim` fallback. A missing image gives a clear error with the `docker build` command. The Dockerfile pins the `weebot` user to uid 1000.
+  - **Selection:** new `SANDBOX_MODE=docker_first` uses Docker when it is running and the image is built, else the platform default with a warning. `auto` is unchanged.
+  - **Strict mode:** `SANDBOX_REQUIRE_ISOLATION=true` (default false) returns `IsolationRequiredSandbox`, which refuses every call when network-off is requested on a backend without `NETWORK_ISOLATION`.
+  - **Tests:** `tests/unit/infrastructure/sandbox/test_docker_workspace.py` (7) and `test_sandbox_selection.py` (7). `test_docker_image.py`'s two fallback tests now expect no image.
+  - **Ceilings lowered:** `silent_except_handlers` 126 to 125 and `bandit_b110` 64 to 63. The rewritten `_resolve_image` logs instead of `except Exception: pass`.
+  - **Not verified live:** Docker Desktop was not running, so no container was started and the image was not built here.
+  - **Fitness fix:** the sync Docker readiness probe lives in `weebot/infrastructure/sandbox/_docker_probe.py`, because `test_no_blocking_calls_in_async` bans `subprocess.run` in `factory.py`, which has async code.
+  - **Gate** (with the Agent-Reach tool): 5572 passed, 0 failed, 10 xfailed. Lints at ceilings (`bare_env_reads` still 71); import-linter 9 kept.
+
+### Wave C: cost and events (W4.1-W4.3, F23, F24)
+In order: W4.1 `LLMCallCompleted`, W4.2 one cost query, then the W4.3 Valkey fail-fast (decision 4). Turns the F23 and F24 xfails into plain tests.
+
+Wave C result, 2026-10-22 (user: "Start Wave C … one task at a time, each with a failing test first"):
+- **W4.1 DONE.**
+  - **The event:** new domain event `LLMCallCompleted` (session, model, prompt/completion tokens, `estimate_cost` USD).
+  - **Who emits it:** `CascadeExecutor` raises it after every successful call, on both the normal path and `_live_model_rescue`, through a new `on_call_completed` hook. A hook failure is logged and never fails the call.
+  - **Publishing:** `ExecutorAgent._publish_llm_call` stamps the step's session and publishes it as a domain event.
+  - **Storage:** `DurableEventBus` writes `cost`, `model` and `tokens_used` for that event type only.
+  - **Wiring checked:** the flow hands the DI `DurableEventBus` to the executor, and `SessionScopedEventBus` passes domain events through.
+  - **Tests:** `tests/unit/fixes/test_w41_llm_call_completed.py` (5).
+  - **Not covered:** LLM calls outside the executor cascade (planner, verifier, intent review) still emit nothing.
+- **W4.2 DONE.**
+  - **The query:** new `EventStorePort.get_cost_window(window_hours)` sums the `llm_call_completed` rows by model, using SQLite `datetime('now', '-N hours')`.
+  - **The handler:** `GetCostSummaryHandler(event_store)` returns it, and the mediator registration passes the DI event store.
+  - **Callers:**
+    - CLI `costs --days` (1–30) prints a per-model table from that handler instead of the placeholder rows.
+    - MCP `weebot://costs` is now async and uses the same handler. `run_mcp.py` attaches an `EventStore`; before, nothing passed a tracker, so the resource was always a stub.
+  - **Deleted:**
+    - `weebot/infrastructure/event_logging.py` (`EventLogger`) and its example 4. Examples 1–3, which use `EventStore` directly, stay.
+    - The unused DI key `cascade_tracker` and its factory, because `lint_di_wiring` flagged it once the old handler stopped resolving it.
+  - **Tests:** the F23 xfail is now a plain test, plus `test_w42_one_cost_query.py` (4).
+  - **Open (closed by W7.1):** the ops API called `mediator.send` (F22, Wave D).
+- **W4.3 DONE (fail-fast half, per decision 4).**
+  - **DI:** `_create_event_bus` raises `RuntimeError` naming the variable when `WEEBOT_VALKEY_URL` or `WEEBOT_REDIS_URL` is set. Otherwise it builds `DurableEventBus(AsyncEventBus())`.
+  - **Adapter:** `ValkeyEventBus.publish` and `publish_domain_event` now raise when Valkey is connected, instead of sending to unread channels and dropping local delivery.
+  - **Tests:** the F24 xfail is now a plain test, plus `test_w43_valkey_fail_fast.py` (3).
+  - **Not built:** the bridge (reader task with an origin tag) waits until more than one process must share events.
+
+### Wave D: ops API (W7.1, F22)
+After W4.2. Turns the F22 xfail into a plain test.
+
+- **W7.1 DONE (2026-10-22).**
+  - **Router:** `ops_router`'s three endpoints call `mediator.query` and take the mediator and state repo from the lifespan container on `app.state` through `Depends`. No `Container()` per request.
+  - **Import exemption:** `ops_router -> application.di` removed from `.importlinter`; `import_exemptions` 76 to 75.
+  - **Tests:** the F22 xfail is now four plain tests (cost summary, active sessions, plan-viz, plan-viz 404). The fixture fails if a `Container` is built per request.
+  - **Real container:** `configure_defaults` registers all three query handlers.
+  - **Not done:** type-safe dispatch (`send` rejecting a `Query`) stays with F28 in Wave E.
+
+### Wave E: persistence, DI, flow (W5.1-W5.5; F25-F28, F32-F35)
+- **Order:**
+  1. W5.2 (S)
+  2. W5.3, the `Container()` ratchet
+  3. W5.5, the registry
+  4. W5.1, role ports
+  5. W5.4 last, which needs its ADR
+- **Extra acceptance check from the real run:** one `CatalogValidator` line per process, not about 25. That shows F28/F35 are gone at runtime, not only in the ratchet count.
+- Turns the F32 and F33 xfails into plain tests.
+
+### Wave F: model config (W6.1; F20, F18 rest)
+Independent of C-E; it can go anywhere after A.
+
+### Wave G (optional): map the uncovered clusters
+Cards for the other tools, interfaces, browser and domain clusters, following `map/_meta/schema.md`. Each defect found becomes a new F row and a task here. Size depends on how many clusters you want covered.
+
+## Parallel work
+C, D (after W4.2) and F touch separate files from B and can run in their own sessions. E overlaps B in DI and the registry, so it runs after B1 and B2. The B3 observe window keeps running throughout.
+
+## Decisions needed
+
+**DECIDED 2026-10-22: A-D as recommended** (user: "Accept the recommended answers to decisions A-D and start Wave A").
+
+A. **Stripe test (A3):** remove its module reload so it stops leaking a second settings module? It stays the `.env` check. Recommended: yes.
+B. **Observe period before the W3.7 flip:** the original plan said two weeks.
+   - Option 1: two weeks of normal use.
+   - Option 2: a fixed set of about 20 representative tasks, then flip.
+   - Recommended: option 2, since there is little traffic today.
+C. **`weebot-ui` renderer for `tool_approval`:** today the generic `WaitForUserEvent` carries the prompt, which works. Recommended: no, until the UI is reworked.
+D. **Wave G in scope?** Recommended: after Wave E, one cluster at a time, starting with the tools that have no card.
+
+## Size
+
+A: about 1 session. B (without the B3 wait): 2-3. C+D: 2. E: 5+, the largest. F: 1. G: open-ended.

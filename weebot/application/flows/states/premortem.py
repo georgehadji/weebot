@@ -16,7 +16,8 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
-from weebot.domain.models.event import AgentEvent, ThoughtEvent
+from weebot.domain.models.event import AgentEvent, PlanEvent, ThoughtEvent
+from weebot.domain.models.plan import PlanStatus
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +55,19 @@ class PremortmState(FlowState):
         if risks:
             # Inject risk notes into plan message so PlannerAgent / executor can see them
             risk_block = "\n".join(f"⚠ {r}" for r in risks)
-            context._plan = plan.model_copy(
+            noted = plan.model_copy(
                 update={
                     "message": (
                         f"{plan.message or ''}\n\n" f"[Pre-mortem risks]\n{risk_block}"
                     ).strip()
                 }
             )
+            # Persist before adopting, as PlanningState does for DPPM (F36): the
+            # resume after plan review restores the last PlanEvent.
+            plan_event = PlanEvent(status=PlanStatus.UPDATED, plan=noted.model_dump(mode="json"))
+            await context._emit(plan_event)
+            context._plan = noted
+            yield plan_event
             logger.info("Pre-mortem injected %d risks into plan", len(risks))
 
             yield ThoughtEvent(

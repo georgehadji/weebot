@@ -39,6 +39,86 @@ def _egress_blocked_result(name: str, decision) -> ToolResult:
     return ToolResult.error_result(error=message, output=message, tool_name=name)
 
 
+async def _ask_about_egress(session_id: str, name: str, args: dict, decision) -> ToolResult | None:
+    """Route an egress ASK to the approval channel (ADR-013, W3.5).
+
+    None means "approved, run it". The default Deny channel returns the same
+    blocked result as before; Flow pause returns a pending result that
+    ExecutorAgent turns into a ToolApprovalEvent; Console asks on the terminal.
+    A new host with nothing else wrong may be allowlisted for good ("always").
+    """
+    from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
+    from weebot.application.services import tool_approval
+    from weebot.core.approval import call_fingerprint
+    from weebot.core.egress_guard import EgressReason
+
+    first_time_only = decision.reasons == [EgressReason.FIRST_TIME_RECIPIENT]
+    request = ToolCallApproval(
+        session_id=session_id,
+        tool_name=name,
+        arguments=dict(args),
+        fingerprint=call_fingerprint(name, args),
+        guard="egress_guard",
+        reason=decision.summary,
+        allow_always=decision.recipient if first_time_only else None,
+    )
+    outcome = await tool_approval.current_approval().resolve(request)
+    if outcome is ApprovalOutcome.APPROVED:
+        logger.info("egress_guard: approved by a human — %s", decision.summary)
+        return None
+    if outcome is ApprovalOutcome.PENDING:
+        return tool_approval.pending_result(request)
+    logger.warning("egress_guard: blocked outbound tool call — %s", decision.summary)
+    return _egress_blocked_result(name, decision)
+
+
+async def _clear_network_use(
+    guard, session_id: str, name: str, args: dict
+) -> tuple[ToolResult | None, bool]:
+    """Network-off sandbox (W3.9, decision 7): may this download use the network?
+
+    Returns ``(refusal_or_None, network_ok)``. Applies only while
+    ``SANDBOX_ALLOW_NETWORK`` is false and the call reaches the network
+    (``EgressGuard.network_use``). A known host is cleared; detect-only egress
+    mode clears everything; otherwise the first host asks through the ADR-013
+    channel, and "always" allowlists it.
+    """
+    from weebot.config.settings import get_settings
+
+    if get_settings().sandbox_allow_network:
+        return None, False  # the sandbox network is on for every call anyway
+    uses_network, host = guard.network_use(name, args)
+    if not uses_network:
+        return None, False
+    if guard.is_known_recipient(host) or not is_enforcing():
+        return None, True
+
+    from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
+    from weebot.application.services import tool_approval
+    from weebot.core.approval import call_fingerprint
+
+    request = ToolCallApproval(
+        session_id=session_id,
+        tool_name=name,
+        arguments=dict(args),
+        fingerprint=call_fingerprint(name, args),
+        guard="sandbox_network",
+        reason=f"network access to {host or 'an unknown host'} (the sandbox network is off)",
+        allow_always=host,
+    )
+    outcome = await tool_approval.current_approval().resolve(request)
+    if outcome is ApprovalOutcome.APPROVED:
+        return None, True
+    if outcome is ApprovalOutcome.PENDING:
+        return tool_approval.pending_result(request), False
+    message = (
+        f"Network access to {host or 'an unknown host'} needs approval: the sandbox network "
+        "is off (SANDBOX_ALLOW_NETWORK=false). Approve it from the CLI or web UI, or allowlist "
+        "the host."
+    )
+    return ToolResult.error_result(error=message, output=message, tool_name=name), False
+
+
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
 
@@ -244,25 +324,53 @@ class ToolExecutor:
                     f"that cannot verify does not report clean."
                 )
                 return ToolResult.error_result(error=_msg, output=_msg, tool_name=name)
-        else:
+        approved_call = ""
+        network_ok = False  # W3.9: does this call get sandbox network?
+        if guard is not None:
             decision = guard.classify(
                 name, args, untrusted_context_active=self._untrusted_context_active
             )
             if decision.requires_approval:
                 if is_enforcing():
-                    logger.warning(
-                        "egress_guard: blocked outbound tool call — %s", decision.summary
+                    refused = await _ask_about_egress(
+                        self._current_session_id, name, args, decision
                     )
-                    return _egress_blocked_result(name, decision)
-                logger.warning("egress_guard: detect-only mode, allowing — %s", decision.summary)
+                    if refused is not None:
+                        return refused
+                    from weebot.core.approval import call_fingerprint
+
+                    approved_call = call_fingerprint(name, args)
+                else:
+                    logger.warning(
+                        "egress_guard: detect-only mode, allowing — %s", decision.summary
+                    )
+            # Egress that passed (allowlisted, approved, or detect-only) may use
+            # the network; other network use (downloads) is cleared below.
+            network_ok = decision.is_egress
+            if not network_ok:
+                refused, network_ok = await _clear_network_use(
+                    guard, self._current_session_id, name, args
+                )
+                if refused is not None:
+                    return refused
 
         import time as _timer
 
+        from weebot.application.ports.sandbox_port import network_cleared_for_call
+        from weebot.application.services.tool_approval import approval_scope
+
         _t0 = _timer.monotonic()
         try:
-            result = await asyncio.wait_for(
-                self._tools.execute(_name=name, **args), timeout=timeout
-            )
+            # The session and any approval just given travel with the call, so
+            # GuardedTool resolves its own ASK against the same session and does
+            # not ask again for a call a human approved here (ADR-013).
+            with (
+                approval_scope(session_id=self._current_session_id, approved_call=approved_call),
+                network_cleared_for_call() if network_ok else contextlib.nullcontext(),
+            ):
+                result = await asyncio.wait_for(
+                    self._tools.execute(_name=name, **args), timeout=timeout
+                )
         except TimeoutError:
             logger.warning("Tool %s timed out after %.0fs", name, timeout)
             return ToolResult.error_result(

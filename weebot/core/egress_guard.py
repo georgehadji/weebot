@@ -111,6 +111,48 @@ _BASH_EGRESS_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+# python_execute code that imports a network library (ICM fix plan W3.8, F09).
+# The sandbox does not stop it (Sandbox card), so the code itself is the signal.
+_PYTHON_NETWORK_RE = re.compile(
+    r"""
+    ^\s*(?:import|from)\s+
+        (?:requests|httpx|urllib3?|aiohttp|socket|http\.client|ftplib|smtplib|
+           websockets?|paramiko|boto3|pycurl|grpc)\b
+    |
+    __import__\(\s*['"](?:requests|httpx|urllib|socket|http\.client|aiohttp)
+    """,
+    re.VERBOSE | re.MULTILINE,
+)
+
+# The same Python run from a shell: `python -c "import urllib.request; ..."`.
+# Neither _BASH_EGRESS_RE nor the line-anchored pattern above saw it, and a real
+# web run showed the planner picking this form (found in plan B2c).
+_SHELL_PYTHON_NETWORK_RE = re.compile(
+    r"""
+    \b(?:python3?|py)(?:\.exe)?\s+(?:-\w+\s+)*-c\b
+    .*?\b(?:import|from)\s+
+        (?:requests|httpx|urllib3?|aiohttp|socket|http\.client|ftplib|smtplib|
+           websockets?|paramiko|boto3|pycurl|grpc)\b
+    """,
+    re.VERBOSE | re.IGNORECASE | re.DOTALL,
+)
+
+# Shell commands that reach the network without necessarily sending a payload
+# (downloads, package installs, git remotes). Not egress by themselves; used
+# only while the sandbox network is off (W3.9, decision 7) so the first host a
+# call needs is approved before that call gets network.
+_SHELL_NETWORK_RE = re.compile(
+    r"""
+    \b(?P<fetch>curl|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm|Start-BitsTransfer)\b
+    | \b(?P<pypi>pip3?|uv|poetry|pipx)\s+(?:install|add|download|sync)\b
+    | \b(?P<npm>npm|pnpm|yarn|npx)\s+(?:install|i|add|ci|exec|dlx)\b
+    | \bgit\s+(?:clone|fetch|pull|push|ls-remote|submodule)\b
+    | \b(?P<docker>docker)\s+pull\b
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_DEFAULT_HOSTS = {"pypi": "pypi.org", "npm": "registry.npmjs.org", "docker": "docker.io"}
+
 # browser tools indicating form-submit or navigation with POST data.
 # Entries are ``BaseTool.name`` values — the identifier ``classify()`` receives.
 # "browser_tool" is the module file name of the tool registered as
@@ -293,6 +335,31 @@ class EgressGuard:
         decision.requires_approval = bool(decision.reasons)
         return decision
 
+    def network_use(self, tool_name: str, args: dict[str, Any]) -> tuple[bool, str | None]:
+        """Does this shell call reach the network, and which host? (W3.9)
+
+        Covers downloads and package installs that ``classify`` does not treat
+        as egress. Returns ``(uses_network, host)``; host is the first URL
+        host, else the registry the command implies, else None (unknown).
+        """
+        if tool_name.lower() not in ("bash_execute", "powershell", "bash", "shell", "cmd"):
+            return False, None
+        cmd = str(args.get("command", ""))
+        match = _SHELL_NETWORK_RE.search(cmd)
+        if not match:
+            return False, None
+        host = self._extract_host_from_cmd(cmd)
+        if host is None:
+            scp_like = re.search(r"\bgit@([\w.-]+):", cmd)
+            host = scp_like.group(1).lower() if scp_like else None
+        if host is None:
+            kind = next((k for k in _DEFAULT_HOSTS if match.group(k)), None)
+            host = _DEFAULT_HOSTS.get(kind) if kind else None
+        return True, host
+
+    def is_known_recipient(self, stable_id: str | None) -> bool:
+        return bool(stable_id) and self._allowlist.is_known(stable_id)
+
     def approve_recipient(self, stable_id: str) -> None:
         """Persist a recipient as approved (called after human approval)."""
         self._allowlist.approve(stable_id)
@@ -308,10 +375,15 @@ class EgressGuard:
         tool_lower = tool_name.lower()
         if tool_lower in ("bash_execute", "powershell", "bash", "shell", "cmd", "terminal"):
             cmd = str(args.get("command", ""))
-            if _BASH_EGRESS_RE.search(cmd):
+            if _BASH_EGRESS_RE.search(cmd) or _SHELL_PYTHON_NETWORK_RE.search(cmd):
                 recipient = self._extract_host_from_cmd(cmd)
                 return recipient, True
             return None, False
+
+        # camofox_browser: typed text reaches the page (its scripts see each key).
+        # The tool knows the tab's host, the guard does not, so the recipient is unknown.
+        if tool_name == "camofox_browser":
+            return None, str(args.get("action", "")).lower() == "type"
 
         # Browser form-submit actions
         if tool_name in _BROWSER_EGRESS_TOOLS:
@@ -343,6 +415,14 @@ class EgressGuard:
             # destination as first-time and requires approval (fails closed).
             recipient = str((args.get("vars") or {}).get("TO", "")).strip().lower()
             return recipient or None, True
+
+        # python_execute: code that imports a network library (W3.8, F09).
+        # Recipient: the first URL host in the code, else unknown -> approval.
+        if tool_lower in ("python_execute", "python"):
+            code = str(args.get("code", ""))
+            if _PYTHON_NETWORK_RE.search(code):
+                return self._extract_host_from_cmd(code), True
+            return None, False
 
         # Notification / messaging tools always send outbound
         if tool_name in _NOTIFICATION_TOOLS:

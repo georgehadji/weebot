@@ -7,23 +7,18 @@ Optimized model tiers for Weebot based on OpenRouter pricing and capabilities.
 Fetched from: https://openrouter.ai/api/v1/models
 Updated: 2026-06-09
 
-**This is the configuration source only.** The canonical cascade execution
-logic lives in ``CascadeExecutor.call_with_cascade()`` at
-``weebot/application/agents/executor/_cascade.py`` (extracted from the
-former ``ExecutorAgent._call_with_cascade()`` during the executor god-class
-split). That method handles parallel Phase 1 dispatch, sequential Phase 2
-fallback, per-model circuit breakers, and 2s timeouts — all driven by the
-tier constants defined here.
-
-The former ``ModelCascadeService`` in ``model_cascade_integration.py`` was
-removed (2026-04) — it contained a hardcoded placeholder that never called
-a real LLM.  If you need cascade execution, use ``ExecutorAgent`` or
-instantiate an ``OpenRouterAdapter`` directly via the DI container.
+**This is a task-type model catalogue and price fallback, not the cascade's
+tier source.** ``CascadeExecutor.call_with_cascade()``
+(``weebot/application/agents/executor/_cascade.py``) takes its tiers from
+``weebot/config/model_refs.py`` (``MODEL_CASCADE_TIER2/3/4`` and
+``get_model_cascade_for_role``). From this module it uses only
+``estimate_cost``. Other readers: ``context_switcher`` (``select_model_by_tokens``)
+and ``model_refs.get_models_for_role_and_task`` (``get_cascade_for_task``).
 
 Usage:
-    from weebot.core.model_cascade_config import MODEL_CASCADE, get_model_for_task
+    from weebot.core.model_cascade_config import get_models_for_task
 
-    model = get_model_for_task("coding", tier="free")
+    free_coding_models = get_models_for_task("coding", tier="free")
 
 Pricing notes (2026-06-09, per 1M tokens):
   - Models without the :free suffix route to paid endpoints even if they have
@@ -317,7 +312,6 @@ TOKEN_THRESHOLDS = {
     "short_context": 4000,  # < 4K: Full precision standard attention
     "medium_context": 32000,  # 4K-32K: Standard models with good context
     "long_context": 50000,  # 32K-50K: Extended context models
-    "very_long_context": 100000,  # 50K+: Sparse attention / giant-context models
 }
 
 
@@ -328,27 +322,11 @@ def select_model_by_tokens(task_type: str, estimated_tokens: int) -> ModelConfig
         if recommended:
             return recommended
 
-    if estimated_tokens >= TOKEN_THRESHOLDS["medium_context"]:
-        # Prefer recommended (paid) model; fall back to first model with sufficient context
-        models = MODEL_CASCADE.get(task_type, [])
-        recommended = get_recommended_model(task_type)
-        if recommended:
-            return recommended
-        for model in models:
-            if model.context_length >= 128000:
-                return model
-
     recommended = get_recommended_model(task_type)
     if recommended:
         return recommended
 
     return get_recommended_model("coding")
-
-
-def get_model_for_context_size(task_type: str, context_chars: int) -> ModelConfig:
-    """Get appropriate model based on character count."""
-    estimated_tokens = context_chars // 4
-    return select_model_by_tokens(task_type, estimated_tokens)
 
 
 # ============================================================================
@@ -401,47 +379,3 @@ def estimate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> 
                 completion_cost = (completion_tokens / 1_000_000) * model.completion_price
                 return prompt_cost + completion_cost
     return 0.0
-
-
-def get_model_stats() -> dict:
-    """Get statistics about configured models."""
-    stats = {
-        "total_models": 0,
-        "by_tier": {"free": 0, "budget": 0, "standard": 0, "premium": 0},
-        "by_task": {},
-        "recommended": 0,
-    }
-    for task, models in MODEL_CASCADE.items():
-        stats["by_task"][task] = len(models)
-        stats["total_models"] += len(models)
-        for model in models:
-            stats["by_tier"][model.tier] += 1
-            if model.recommended:
-                stats["recommended"] += 1
-    return stats
-
-
-# ============================================================================
-# Phase 4: Cross-Lab Role Model Config
-# ============================================================================
-# Maps functional agent roles to ordered model lists.
-# Design rule: "planner" and "critic" must use models from *different* labs
-# to prevent echo-chamber plan validation.
-#
-# Lab diversity map:
-#   Qwen (Alibaba) · Moonshot · NVIDIA · OpenAI · Meta · Poolside · DeepSeek
-#   NousResearch · Nex AGI · xAI · Google
-#
-# Each entry: [primary, fallback1, fallback2, ...]
-# Falls back to the flow's default model if the role is not configured.
-
-AGENT_ROLES = frozenset(
-    {
-        "planner",  # generates initial plans
-        "critic",  # validates plans (PlanCriticService, MetaCritic)
-        "executor",  # executes steps (ExecutorAgent)
-        "verifier",  # CoVe verification (VerifyingState)
-        "summarizer",  # SummarizingState
-        "subagent",  # lightweight parallel sub-tasks
-    }
-)

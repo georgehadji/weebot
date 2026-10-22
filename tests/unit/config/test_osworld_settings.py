@@ -1,7 +1,7 @@
 """Tests for OSWorldSettings configuration."""
 
 import pytest
-from weebot.config.settings import OSWorldSettings
+from weebot.config.osworld_settings import OSWorldSettings
 
 
 class TestOSWorldSettings:

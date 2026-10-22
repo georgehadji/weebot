@@ -31,9 +31,9 @@ class OpenRouterAdapter(OpenAIAdapter):
         key = api_key
         if not key:
             try:
-                from weebot.config.settings import WeebotSettings
+                from weebot.config.settings import get_settings
 
-                key = WeebotSettings().openrouter_api_key
+                key = get_settings().openrouter_api_key
             except Exception:
                 key = os.getenv("OPENROUTER_API_KEY")
         if not key:

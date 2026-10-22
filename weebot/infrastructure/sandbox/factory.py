@@ -388,18 +388,130 @@ def create_default_sandbox() -> SandboxPort:
     """
     import sys
 
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    settings = WeebotSettings()
+    settings = get_settings()
+    config = build_sandbox_config(settings)
     mode = (settings.sandbox_mode or "auto").lower()
-    if mode != "auto":
+    platform_default = NativeWindowsSandbox if sys.platform == "win32" else DockerLinuxSandbox
+    if mode == "auto":
+        sandbox = platform_default(config)
+    elif mode == "docker_first":
+        # ADR-014, opt-in: the isolating backend when it can actually run.
+        if DOCKER_AVAILABLE and _docker_ready():
+            sandbox = DockerLinuxSandbox(config)
+        else:
+            logger.warning(
+                "SANDBOX_MODE=docker_first: Docker is not running or %s is not built; "
+                "using %s. Build the image with: %s",
+                DockerLinuxSandbox.CUSTOM_IMAGE,
+                platform_default.__name__,
+                DockerLinuxSandbox.BUILD_HINT,
+            )
+            sandbox = platform_default(config)
+    else:
         sandbox_type = MODE_TO_TYPE.get(mode)
         if sandbox_type is None:
             raise ValueError(
                 f"Unknown sandbox_mode '{settings.sandbox_mode}'. "
-                f"Set SANDBOX_MODE to: auto, native, docker, wsl2."
+                f"Set SANDBOX_MODE to: auto, docker_first, native, docker, wsl2."
             )
-        return SandboxFactory().create(sandbox_type)
-    if sys.platform == "win32":
-        return NativeWindowsSandbox()
-    return DockerLinuxSandbox()
+        sandbox = SandboxFactory().create(sandbox_type, config)
+    if (
+        settings.sandbox_require_isolation
+        and not config.allow_network
+        and not sandbox.has_capability(SandboxCapability.NETWORK_ISOLATION)
+    ):
+        return IsolationRequiredSandbox(sandbox)
+    _warn_if_network_off_is_best_effort(sandbox, config)
+    return sandbox
+
+
+def _docker_ready() -> bool:
+    """Docker answers and weebot-tool-env is built (one sync check at startup)."""
+    from weebot.infrastructure.sandbox._docker_probe import docker_ready
+
+    return docker_ready(DockerLinuxSandbox.CUSTOM_IMAGE)
+
+
+class IsolationRequiredSandbox(SandboxPort):
+    """Refuses every call: the backend cannot enforce network-off (ADR-014 strict)."""
+
+    def __init__(self, inner: SandboxPort) -> None:
+        self._inner = inner
+
+    @property
+    def sandbox_type(self) -> SandboxType:
+        return self._inner.sandbox_type
+
+    async def is_available(self) -> bool:
+        return await self._inner.is_available()
+
+    def get_capabilities(self) -> set[SandboxCapability]:
+        return self._inner.get_capabilities()
+
+    def _refusal(self) -> SandboxResult:
+        return SandboxResult(
+            stdout="",
+            stderr=(
+                f"SANDBOX_REQUIRE_ISOLATION=true and {type(self._inner).__name__} cannot "
+                "isolate the network. Use SANDBOX_MODE=docker (or docker_first with "
+                f"{DockerLinuxSandbox.CUSTOM_IMAGE} built), or turn strict mode off."
+            ),
+            returncode=-1,
+            elapsed_ms=0.0,
+            sandbox_type=self._inner.sandbox_type,
+        )
+
+    async def execute(self, command, timeout=None, cwd=None, env=None, memory_limit_mb=None):
+        return self._refusal()
+
+    async def execute_shell(
+        self, script, shell="bash", timeout=None, cwd=None, env=None, memory_limit_mb=None
+    ):
+        return self._refusal()
+
+    async def execute_python(
+        self, code, timeout=None, cwd=None, env=None, memory_limit_mb=None
+    ):
+        return self._refusal()
+
+
+def build_sandbox_config(settings) -> SandboxConfig:
+    """The one SandboxConfig the default sandbox runs with (W3.9, F29).
+
+    ``sandbox_allow_network`` and ``sandbox_max_output_bytes`` had no reader
+    before this: every sandbox ran with ``SandboxConfig()`` defaults, network
+    on. Network is now off unless the setting says otherwise; a single call
+    gets network only when ToolExecutor clears its egress (ADR-013).
+    """
+    return SandboxConfig(
+        max_output_bytes=settings.sandbox_max_output_bytes,
+        allow_network=settings.sandbox_allow_network,
+        # Docker mounts it read-only at /workspace, Output/ writable (ADR-014).
+        # The native backends run in the host folder and ignore it.
+        workspace_dir=_workspace_root(),
+    )
+
+
+def _workspace_root():
+    from weebot.config.settings import WORKSPACE_ROOT
+
+    return WORKSPACE_ROOT
+
+
+_warned_network: set[str] = set()
+
+
+def _warn_if_network_off_is_best_effort(sandbox: SandboxPort, config: SandboxConfig) -> None:
+    if config.allow_network or sandbox.has_capability(SandboxCapability.NETWORK_ISOLATION):
+        return
+    name = type(sandbox).__name__
+    if name not in _warned_network:
+        _warned_network.add(name)
+        logger.warning(
+            "%s cannot isolate the network: 'network off' is best effort (dead proxy "
+            "variables on native Windows, nothing on WSL2); raw sockets still connect. "
+            "Use SANDBOX_MODE=docker for real isolation.",
+            name,
+        )

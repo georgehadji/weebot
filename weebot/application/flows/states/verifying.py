@@ -57,9 +57,9 @@ class VerifyingState(FlowState):
             flow: The PlanActFlow instance (provides llm, session, plan).
             prompt: Not used — verification runs on the flow's current plan/session.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        _settings = WeebotSettings()
+        _settings = get_settings()
 
         # ── Feature toggle ──────────────────────────────────────────
         if not _settings.cove_enabled:

@@ -49,6 +49,11 @@ jobs:
         # while the log reported one. There is no legitimate instance to
         # grandfather, so the ceiling is zero.
         run: make lint-unawaited
+      - name: Entry-file twins match CLAUDE.md
+        # BLOCKING. AGENTS.md, GEMINI.md and QWEN.md are generated from
+        # CLAUDE.md; fix a failure with `make gen-entry-twins`, never by
+        # editing a twin.
+        run: make lint-entry-twins
       - name: Secret scan
         run: bash scripts/check-secrets.sh --ci
       - name: Run architecture fitness tests
@@ -103,6 +108,12 @@ jobs:
         # and a reviewer excused. The count lived only in prose, where every
         # target moved the wrong way (52 -> 35 target -> 67 actual).
         run: python scripts/lint_import_exemptions.py
+
+      - name: Settings-construction ratchet
+        # BLOCKING. Each direct WeebotSettings() re-reads .env and re-validates
+        # every field; one ran per inbound gateway message. Production code
+        # reads get_settings(). ICM fix plan W2.2 (F16).
+        run: python scripts/lint_settings_construction.py
 
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that

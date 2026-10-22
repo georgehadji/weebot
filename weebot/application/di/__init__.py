@@ -127,6 +127,11 @@ class Container(
 
     def configure_defaults(self, *, db_path="./weebot_sessions.db", default_model=None) -> None:
         """Wire all defaults: LLM → OpenRouter, state → SQLite, etc."""
+        from weebot.config.settings import WeebotSettings, get_settings
+
+        # Factories resolve settings here rather than building their own
+        # WeebotSettings(); the instance is the process-wide get_settings() one.
+        self.register(WeebotSettings, get_settings)
         self.register(StateRepositoryPort, lambda: self._create_state_repo(db_path))
         self.register("session_persistence", lambda: self._create_session_persistence_adapter())
         self.register(EventBusPort, self._create_event_bus)
@@ -164,7 +169,6 @@ class Container(
         self.register(SwarmEventBusPort, self._create_swarm_bus)
         self.register(SubAgentFactoryPort, self._create_sub_agent_factory)
         self.register(SubAgentCostTrackerPort, lambda: _lazy_cost_tracker())
-        self.register("cascade_tracker", lambda: self._create_cascade_tracker())
         self.register("soul_provider", lambda: self._create_soul_provider())
         self.register(RerankPort, lambda: self._create_rerank_adapter())
         self.register("skill_retriever", lambda: self._create_skill_retriever())
@@ -271,6 +275,15 @@ class Container(
 
         self.register("build_action_canonicalizer", lambda: _build_action_canonicalizer)
 
+        # Guard-chain wrapping for tool lists assembled in the interfaces layer,
+        # which may not import tool_guards (it reaches weebot.tools) (F06).
+        def _guard_tools_callable():
+            from weebot.application.services.tool_guards import guard_tools
+
+            return guard_tools
+
+        self.register("guard_tools", _guard_tools_callable)
+
         # Environment Contract Layer (Tier 3.2) — loads config/contracts/*.yaml
         # once and hands back a ready ContractLoader. No per-tool-list
         # dependency (unlike the canonicalizer), so this is a plain singleton
@@ -305,9 +318,8 @@ class Container(
         # Global LLM concurrency pool — bounds parallel API calls (WP-8)
         def _create_llm_pool():
             from weebot.application.strategies.llm_pool import LLMPool
-            from weebot.config.settings import WeebotSettings
 
-            _settings = WeebotSettings()
+            _settings = self.get(WeebotSettings)
             return LLMPool(
                 max_concurrent=_settings.llm_max_concurrent_requests,
                 acquire_timeout=_settings.llm_pool_acquire_timeout_s,
@@ -318,12 +330,11 @@ class Container(
         # Credit balance + live model list for the cascade (phase 3.1). These
         # were raw httpx calls to openrouter.ai inside CascadeExecutor.
         def _create_provider_account():
-            from weebot.config.settings import WeebotSettings
             from weebot.infrastructure.adapters.llm.openrouter_account import (
                 OpenRouterAccountAdapter,
             )
 
-            return OpenRouterAccountAdapter(api_key=WeebotSettings().openrouter_api_key)
+            return OpenRouterAccountAdapter(api_key=self.get(WeebotSettings).openrouter_api_key)
 
         self.register(ProviderAccountPort, _create_provider_account)
 
@@ -510,6 +521,7 @@ class Container(
             trajectory_builder=trajectory_builder,
             executor_factory=_executor_factory,
             trajectory_repo=trajectory_repo,
+            event_store=self._maybe_get(EventStorePort),
         )
         return mediator
 

@@ -47,17 +47,17 @@ class FactoriesMixin:
         from weebot.application.ports.event_store_port import EventStorePort
         from weebot.config.secret_accessor import SecretAccessor
 
-        valkey_url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get(
-            "WEEBOT_REDIS_URL"
-        )
-        if valkey_url:
-            from weebot.infrastructure.events.redis_event_bus import ValkeyEventBus
-
-            inner = ValkeyEventBus(valkey_url=valkey_url)
-        else:
-            inner = AsyncEventBus()
+        # Decision 4 (W4.3, F24): ValkeyEventBus publishes to channels that
+        # nothing reads back, so every in-process subscriber (WebSocket fan-out,
+        # journal, approvals) would get nothing. Refuse until a bridge exists.
+        for var in ("WEEBOT_VALKEY_URL", "WEEBOT_REDIS_URL"):
+            if SecretAccessor.get(var):
+                raise RuntimeError(
+                    f"{var} is set, but the Valkey event bus does not deliver events to "
+                    "this process's subscribers yet (F24). Unset it to use the local bus."
+                )
         event_store = self.get(EventStorePort)
-        return DurableEventBus(inner=inner, event_store=event_store)
+        return DurableEventBus(inner=AsyncEventBus(), event_store=event_store)
 
     @staticmethod
     def _create_tracing():
@@ -124,13 +124,13 @@ class FactoriesMixin:
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
 
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
         return TaskRunner(
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
             task_queue=self.get(TaskQueuePort),
-            max_concurrent_flows=WeebotSettings().max_concurrent_flows,
+            max_concurrent_flows=get_settings().max_concurrent_flows,
             # Lazy: the Mediator's factory resolves TaskRunner, so resolving
             # the builder's collaborators here, at construction, would recurse.
             flow_builder=lambda **kwargs: self.get("create_flow")(**kwargs),
@@ -162,12 +162,6 @@ class FactoriesMixin:
         from weebot.infrastructure.adapters.tool_discovery import ToolDiscoveryAdapter
 
         return ToolDiscoveryAdapter()
-
-    @staticmethod
-    def _create_cascade_tracker():
-        from weebot.core.model_cascade_tracker import ModelCascadeTracker
-
-        return ModelCascadeTracker()
 
     @staticmethod
     def _create_rerank_adapter():
@@ -328,9 +322,9 @@ class FactoriesMixin:
 
         # Try to load server configs from WeebotSettings
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            settings = WeebotSettings()
+            settings = get_settings()
             config_path = settings.mcp_servers_config_path
             if config_path:
                 import json
@@ -368,9 +362,9 @@ class FactoriesMixin:
         Returns ``None`` when ``mcp_scoped_aggregation`` is disabled so the
         bridge falls back to registering all external tools.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        settings = WeebotSettings()
+        settings = get_settings()
         if not settings.mcp_scoped_aggregation:
             return None
 
@@ -397,9 +391,9 @@ class FactoriesMixin:
         Returns ``None`` when ``mcp_scope_native_tools`` is disabled so the
         flow keeps all native tools available (backward-compatible).
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        settings = WeebotSettings()
+        settings = get_settings()
         if not settings.mcp_scope_native_tools:
             return None
 

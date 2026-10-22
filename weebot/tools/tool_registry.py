@@ -30,6 +30,9 @@ class RoleBasedToolRegistry:
             "search_images",
             "vane_search",
             "advanced_browser",
+            "moli_fetch",
+            "agent_reach",
+            "camofox_browser",
             "browser_inspector",
             "file_editor",
             "knowledge",
@@ -59,6 +62,7 @@ class RoleBasedToolRegistry:
             "file_editor",
             "python_execute",
             "video_gen",
+            "remotion_video",
             "search_images",
             "atomic_mail",
         ],
@@ -69,7 +73,11 @@ class RoleBasedToolRegistry:
             "vane_search",
             "image_gen",
             "video_gen",
+            "remotion_video",
             "advanced_browser",
+            "moli_fetch",
+            "agent_reach",
+            "camofox_browser",
             "browser_navigator",
             "browser_inspector",
             "dispatch_parallel_tasks",
@@ -111,7 +119,11 @@ class RoleBasedToolRegistry:
             "vane_search",
             "image_gen",
             "video_gen",
+            "remotion_video",
             "advanced_browser",
+            "moli_fetch",
+            "agent_reach",
+            "camofox_browser",
             "browser_navigator",
             "browser_inspector",
             "dispatch_parallel_tasks",
@@ -150,11 +162,13 @@ class RoleBasedToolRegistry:
             "search_images",
             "image_gen",
             "video_gen",
+            "remotion_video",
         ],
         "designer": [
             "search_images",
             "image_gen",
             "video_gen",
+            "remotion_video",
             "file_editor",
             "browser_inspector",
             "web_search",
@@ -614,4 +628,10 @@ class RoleBasedToolRegistry:
                 tools.append(tool)
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)
-        return ToolCollection(*tools)
+        # Every code-running tool goes through the one guard chain (ICM fix
+        # plan W3.2, F01): powershell used to skip BashGuard and the analyzer.
+        # No egress guard here: collections run under ToolExecutor, which
+        # gates egress itself (ADR-013; one approval per call).
+        from weebot.application.services.tool_guards import guard_tools
+
+        return ToolCollection(*guard_tools(tools, include_egress=False))

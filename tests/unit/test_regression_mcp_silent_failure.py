@@ -17,6 +17,23 @@ from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
 
 
 @pytest.mark.asyncio
+async def test_comment_keys_in_the_config_are_not_servers(monkeypatch):
+    """config/templates/mcp_servers.*.json and config/mcp_servers.json carry a
+    top-level "_comment" string; initialize() called .get on it and crashed."""
+    connected: list[str] = []
+
+    async def _connect(self, name, cfg):
+        connected.append(name)
+
+    monkeypatch.setattr(MCPClientManager, "_connect_with_retry", _connect)
+    mgr = MCPClientManager(
+        config={"mcpServers": {"_comment": "notes", "real": {"transport": "sse", "url": "u"}}}
+    )
+    await mgr.initialize()
+    assert connected == ["real"]
+
+
+@pytest.mark.asyncio
 async def test_initialize_raises_when_all_servers_fail():
     """initialize() must raise RuntimeError when every server fails to connect."""
     mgr = MCPClientManager(

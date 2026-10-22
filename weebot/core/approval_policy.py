@@ -167,6 +167,31 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         undo_hint="Note the PID before stopping in case restart is needed.",
     ),
     CommandRule("kill", ApprovalMode.ALWAYS_ASK, undo_hint="Save PID/name before killing."),
+    # Destructive cmdlets that only asked when chained (F05, ICM fix plan W3.3).
+    CommandRule(
+        r"\bset-content\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Set-Content overwrites the file; copy it first.",
+    ),
+    CommandRule(
+        r"\bcopy-item\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Copy-Item overwrites an existing destination.",
+    ),
+    CommandRule(
+        r"\bmove-item\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Note the source path so the move can be reversed.",
+    ),
+    CommandRule(
+        r"\brename-item\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Note the old name so the rename can be reversed.",
+    ),
     # Drive erase / wipe commands
     CommandRule(
         r"\brd\s",
@@ -200,7 +225,9 @@ _FROZEN: bool = True
 class ExecApprovalPolicy:
     """
     Evaluates whether a shell command needs confirmation or should be denied.
-    Rules are checked longest-match first (most specific wins).
+    The command is split into segments; within a segment any matching DENY
+    rule wins, else the longest matching pattern; across segments the
+    strictest decision wins (DENY > ASK > AUTO_APPROVE).
     """
 
     def __init__(self, rules: list[CommandRule] | None = None) -> None:
@@ -261,70 +288,127 @@ class ExecApprovalPolicy:
                     reason=f"Financial tool '{command[:80]}' requires explicit approval.",
                 )
 
-        cmd_lower = command.lower()
+        # ── Pure fold over segments (ICM fix plan W3.3, F04) ──
+        # The command is split on ; && || | & outside quotes and each segment
+        # is judged alone, so an AUTO_APPROVE carve-out (the Output\ rule)
+        # covers only its own segment. The strictest segment wins:
+        # DENY > ASK > AUTO_APPROVE. The chained-keyword check used to
+        # `return` ASK before DENY rules were read, so
+        # `Format-Volume D; rm x` was asked about instead of denied.
+        segments = split_segments(command)
+        chained = len(segments) > 1
+        decisions = [self._evaluate_segment(segment, chained) for segment in segments]
+        worst = max(decisions, key=lambda d: d.rank, default=_NO_MATCH)
 
-        # Find all matching rules, pick the most specific (longest pattern match)
-        matches: list[CommandRule] = []
-        for i, rule in enumerate(self._rules):
-            if rule.is_regex:
-                compiled = self._compiled.get(i)
-                if compiled is None:
-                    continue  # invalid pattern at init time — skip safely
-                if compiled.search(command):
-                    matches.append(rule)
-            else:
-                if rule.pattern.lower() in cmd_lower:
-                    matches.append(rule)
-
-        # ── Defense-in-depth: chained destructive commands ──
-        # Any command containing a command separator (;, &&, |) AND a
-        # destructive keyword is bumped to ALWAYS_ASK regardless of the
-        # longest-match result.  This prevents Output-folder bypass attacks
-        # where a safe-looking rule matches a prefix before a chained
-        # destructive action.
-        _has_separator = bool(re.search(r"[;&|]", command))
-        if _has_separator:
-            for kw in _DESTRUCTIVE_KEYWORDS:
-                if re.search(rf"\b{re.escape(kw)}\b", cmd_lower):
-                    return ApprovalResult(
-                        command=command,
-                        approved=True,
-                        requires_confirmation=True,
-                        undo_hint="Chained destructive command detected.",
-                        reason=f"Command contains separator with destructive keyword '{kw}'.",
-                    )
-
-        if matches:
-            # Most specific = longest pattern
-            best = max(matches, key=lambda r: len(r.pattern))
-            if best.mode in (ApprovalMode.DENY,):
-                return ApprovalResult(
-                    command=command,
-                    approved=False,
-                    requires_confirmation=False,
-                    undo_hint=best.undo_hint,
-                    reason=f"Command denied by policy: {best.pattern}",
-                )
-            if best.mode in (ApprovalMode.FORCE_ALWAYS_ASK, ApprovalMode.ALWAYS_ASK):
-                return ApprovalResult(
-                    command=command,
-                    approved=True,
-                    requires_confirmation=True,
-                    undo_hint=best.undo_hint,
-                    reason="Confirmation required before execution.",
-                )
-            # AUTO_APPROVE
+        if worst.rank == _RANK[ApprovalMode.DENY]:
+            return ApprovalResult(
+                command=command,
+                approved=False,
+                requires_confirmation=False,
+                undo_hint=worst.undo_hint,
+                reason=worst.reason,
+            )
+        if worst.rank == _RANK[ApprovalMode.ALWAYS_ASK]:
             return ApprovalResult(
                 command=command,
                 approved=True,
-                requires_confirmation=False,
-                undo_hint=best.undo_hint,
+                requires_confirmation=True,
+                undo_hint=worst.undo_hint,
+                reason=worst.reason,
             )
-
-        # No rule matched → auto-approve
         return ApprovalResult(
-            command=command, approved=True, requires_confirmation=False, undo_hint=""
+            command=command,
+            approved=True,
+            requires_confirmation=False,
+            undo_hint=worst.undo_hint,
         )
+
+    def _evaluate_segment(self, segment: str, chained: bool) -> _SegmentDecision:
+        """Judge one segment.
+
+        Any DENY rule that matches wins, whatever its length: a longer
+        ASK or AUTO_APPROVE pattern must not mask a denial (F05). Otherwise
+        the longest matching pattern decides, which keeps carve-outs such as
+        the Output\\ rule above the blanket rule they refine. With no rule,
+        a destructive keyword in a chained command still asks.
+        """
+        seg_lower = segment.lower()
+        matches = [
+            rule
+            for i, rule in enumerate(self._rules)
+            if (
+                self._compiled[i].search(segment)
+                if rule.is_regex and i in self._compiled
+                else (not rule.is_regex and rule.pattern.lower() in seg_lower)
+            )
+        ]
+        denies = [r for r in matches if r.mode is ApprovalMode.DENY]
+        if denies or matches:
+            best = max(denies or matches, key=lambda r: len(r.pattern))
+            if best.mode is ApprovalMode.DENY:
+                reason = f"Command denied by policy: {best.pattern}"
+            elif best.mode is ApprovalMode.AUTO_APPROVE:
+                reason = ""
+            else:
+                reason = "Confirmation required before execution."
+            return _SegmentDecision(_RANK[best.mode], reason, best.undo_hint)
+        if chained:
+            for kw in sorted(_DESTRUCTIVE_KEYWORDS):
+                if re.search(rf"\b{re.escape(kw)}\b", seg_lower):
+                    return _SegmentDecision(
+                        _RANK[ApprovalMode.ALWAYS_ASK],
+                        f"Command contains separator with destructive keyword '{kw}'.",
+                        "Chained destructive command detected.",
+                    )
+        return _NO_MATCH
+
+
+@dataclass(frozen=True)
+class _SegmentDecision:
+    rank: int
+    reason: str = ""
+    undo_hint: str = ""
+
+
+_RANK: dict[ApprovalMode, int] = {
+    ApprovalMode.AUTO_APPROVE: 0,
+    ApprovalMode.ALWAYS_ASK: 1,
+    ApprovalMode.FORCE_ALWAYS_ASK: 1,
+    ApprovalMode.DENY: 2,
+}
+_NO_MATCH = _SegmentDecision(_RANK[ApprovalMode.AUTO_APPROVE])
+
+
+def split_segments(command: str) -> list[str]:
+    """Split a command line on ``;`` ``&&`` ``||`` ``|`` ``&`` outside quotes.
+
+    Pure. Returns the non-empty stripped segments; a command with no
+    separator is one segment. Newlines are not separators (multi-line
+    Python passed by python_execute stays one segment, as before).
+    """
+    segments: list[str] = []
+    buf: list[str] = []
+    quote: str | None = None
+    i = 0
+    while i < len(command):
+        ch = command[i]
+        if quote is not None:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+            buf.append(ch)
+        elif ch in ";&|":
+            segments.append("".join(buf))
+            buf = []
+            if command[i : i + 2] in ("&&", "||"):
+                i += 1
+        else:
+            buf.append(ch)
+        i += 1
+    segments.append("".join(buf))
+    return [s.strip() for s in segments if s.strip()]
 
 
 # ── Tool annotation tiers (MCP destructiveHint/readOnlyHint → approval) ─

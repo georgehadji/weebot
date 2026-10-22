@@ -46,6 +46,7 @@ from weebot.domain.models.event import (
     StepEvent,
     StepStatus,
     ThoughtEvent,
+    ToolApprovalEvent,
     ToolEvent,
     ToolStatus,
     WaitForUserEvent,
@@ -298,6 +299,7 @@ class ExecutorAgent:
             provider_account=provider_account,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
+            on_call_completed=self._publish_llm_call,
         )
         self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
@@ -360,6 +362,13 @@ class ExecutorAgent:
             except Exception:
                 pass
         return _load_executor_system_prompt()
+
+    async def _publish_llm_call(self, event: Any) -> None:
+        """Stamp the step's session on an LLMCallCompleted and publish it (W4.1)."""
+        if self._event_bus is None:
+            return
+        event.session_id = getattr(self, "_current_session_id", "") or ""
+        await self._event_bus.publish_domain_event(event)
 
     async def _emit(self, event: AgentEvent) -> None:
         if self._event_bus:
@@ -494,6 +503,9 @@ class ExecutorAgent:
                 _step_span.set_attribute("step.description", step.description[:200])
         self._current_step_id = step.id
         self._current_session_id = session_id or getattr(self, "_current_session_id", "unknown")
+        # The approval scope and audit records read the session from here; it
+        # was never set, so Flow pause denied every web approval (B2c).
+        self._tool_executor.set_step_context(step.id, session_id)
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
@@ -957,6 +969,23 @@ class ExecutorAgent:
                     if result.data.get("awaiting_human"):
                         question = result.data.get("question", "")
                         yield WaitForUserEvent(question=question)
+                        return
+
+                    # ADR-013 flow pause: a guard asked, and a human must answer.
+                    pending = result.data.get("approval_required")
+                    if pending:
+                        yield ToolApprovalEvent(
+                            tool_name=pending.get("tool_name", tool_name),
+                            arguments=pending.get("arguments", {}),
+                            risk_level=pending.get("guard", ""),
+                            reason=pending.get("reason", ""),
+                            prompt=pending.get("prompt", "Allow this command? (yes/no)"),
+                            fingerprint=pending.get("fingerprint", ""),
+                            allow_always=pending.get("allow_always"),
+                        )
+                        # The UI, CLI and SSE render wait_for_user, not
+                        # tool_approval: this is the question a person sees.
+                        yield WaitForUserEvent(question=pending.get("prompt", ""))
                         return
 
                 if tool_name == "terminate":

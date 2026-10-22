@@ -10,6 +10,12 @@ from weebot.tools.berb import BerbTool
 from weebot.tools.base import ToolResult
 
 
+@pytest.fixture(autouse=True)
+def _berb_dir(monkeypatch, tmp_path):
+    """BERB_DIR has no default since W1.4 (F15); the CLI path needs one set."""
+    monkeypatch.setenv("BERB_DIR", str(tmp_path))
+
+
 class TestBerbTool:
     """Tests for BerbTool and registry registration."""
 

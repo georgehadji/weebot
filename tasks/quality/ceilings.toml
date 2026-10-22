@@ -33,8 +33,16 @@
 # each of its four store lookups in `except (KeyError, Exception): pass`, which
 # is how three of the four purges failed unnoticed. Each failure is logged now.
 # (bandit_b110 does not move: bandit's B110 does not match the tuple form.)
+# 129 -> 128 with ICM fix plan W1.5 (F21): get_models_for_role_and_task in
+# config/model_refs.py logs its fallback instead of `except Exception: pass`.
+# 128 -> 127 with W1.6 (F10): the deleted _layer4_semantic_llm_analysis in
+# tools/bash_security.py held one.
+# 127 -> 126 with W3.6 (F10): layer 3 of tools/bash_security.py no longer
+# wraps its base64 decode in `except Exception: pass`.
+# 126 -> 125 with ADR-014: DockerLinuxSandbox._resolve_image logs the failed
+# `docker image inspect` instead of `except Exception: pass`.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 129
+silent_except_handlers = 125
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -65,8 +73,16 @@ bare_env_reads = 71
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
 # body is exactly `pass`/`...` by AST, while B110 is bandit's own detection.
 # The sets overlap heavily but are not equal, so the two move independently.
+# 67 -> 66 with ICM fix plan W1.5 (F21): the same model_refs.py handler as
+# silent_except_handlers 129 -> 128.
+# 66 -> 65 with W1.6 (F10): the same deleted bash_security handler as
+# silent_except_handlers 128 -> 127.
+# 65 -> 64 with W3.6: the same bash_security handler as silent_except_handlers
+# 127 -> 126.
+# 64 -> 63 with ADR-014: the same _resolve_image handler as
+# silent_except_handlers 126 -> 125.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 67
+bandit_b110 = 63
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -81,8 +97,14 @@ bandit_b110 = 67
 # `required_level` without ever reading it; the lookup is now an actual guard.
 # 32 -> 31 with phase 2.3: one was in the dead code deleted there (ruff
 # version unchanged at 0.15.20, so the move is the code, not the tool).
+# 31 -> 28 with ICM fix plan W2.3: three CLI functions built a WeebotSettings
+# and never read it (cli/commands/gateway.py, mcp.py x2); the reads were
+# deleted. Measured 31 before and 28 after with ruff 0.17.1, so the move is
+# the code, not the tool.
+# 28 -> 27 with W3.6: layer 2 of tools/bash_security.py built an `operators`
+# set it never read (ruff 0.17.1 both before and after).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 31
+unused_locals = 27
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
@@ -177,5 +199,25 @@ unregistered_di_keys = 0
 # 80 -> 77 with the same fix: web/main.py takes the gateway store from the
 # container, and dependencies.py resolves stores by port, so neither imports
 # a persistence adapter any more.
+# 77 -> 76 with ICM fix plan W1.6 (F10): bash_security's unwired LLM layer was
+# deleted, so its import of application.services.model_selection is gone.
+# 76 -> 75 with W7.1 (F22): ops_router takes the mediator and state repo from
+# the lifespan container on app.state, so it no longer imports application.di.
 # Measured by: scripts/lint_import_exemptions.py
-import_exemptions = 77
+import_exemptions = 75
+
+# Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
+# (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
+# each call re-reads .env and re-validates, one ran per inbound gateway
+# message. Production code reads get_settings() instead.
+# 43 at the start of Wave 2; 41 when this key was added, because W2.1 moved
+# the two factories in application/di/__init__.py onto Container.get.
+# 41 -> 38 with W2.3 batch 1: gateways/base.py (once per inbound message),
+# flows/states/plan_review.py, flows/states/verifying.py.
+# 38 -> 34 batch 2 (di/_factories.py), -> 23 batch 3 (web app, routers,
+# WhatsApp gateway), -> 13 batch 4 (CLI, run.py, run_mcp.py; three of those
+# were dead reads and were deleted), -> 0 batch 5 (services, core, adapters).
+# At 0 the ratchet is now a ban: any new WeebotSettings() call outside
+# config/settings.py fails it.
+# Measured by: scripts/lint_settings_construction.py
+settings_construction = 0

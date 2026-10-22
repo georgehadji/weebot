@@ -247,9 +247,9 @@ async def broadcast_event(event: BehaviorEvent):
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
     # WebSocket authentication check — three-tier: subprotocol → header → query param
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws_settings = WeebotSettings()
+    _ws_settings = get_settings()
     if _ws_settings.weebot_api_key:
         # 1. Subprotocol (preferred — works in browsers)
         protocols = websocket.headers.get("sec-websocket-protocol", "")
@@ -361,9 +361,9 @@ async def behavior_websocket(websocket: WebSocket):
 async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
     # WebSocket authentication check
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws_settings = WeebotSettings()
+    _ws_settings = get_settings()
     if _ws_settings.weebot_api_key:
         token = websocket.query_params.get("token")
         import hmac as _hmac

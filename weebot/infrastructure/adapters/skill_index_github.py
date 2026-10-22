@@ -56,9 +56,9 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
         self, index_url: str | None = None, http_client: httpx.AsyncClient | None = None
     ) -> None:
         if index_url is None:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            settings = WeebotSettings()
+            settings = get_settings()
             index_url = settings.skillhub_index_url
         self._index_url = index_url
         self._client = http_client or httpx.AsyncClient(timeout=_HTTP_TIMEOUT)

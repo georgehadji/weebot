@@ -81,10 +81,10 @@ class GatewayAdapter(ABC):
         per-user allowlist, if configured for the platform, adds a further
         restriction; an explicit user block always applies.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
         from weebot.domain.models.gateway_session import GatewaySessionKey
 
-        if not WeebotSettings().gateway_auth_enabled:
+        if not get_settings().gateway_auth_enabled:
             return True
         if not self._auth.is_platform_allowed(platform):
             return False

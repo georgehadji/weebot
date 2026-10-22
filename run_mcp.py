@@ -44,10 +44,10 @@ def _try_attach(module_path: str, class_name: str, label: str) -> object | None:
 
 def _build_server():
     """Construct a WeebotMCPServer with optional managers attached."""
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
     from weebot.mcp.server import WeebotMCPServer
 
-    settings = WeebotSettings()
+    settings = get_settings()
     state_repo = _try_attach(
         "weebot.infrastructure.persistence.sqlite_state_repo",
         "SQLiteStateRepository",
@@ -56,9 +56,11 @@ def _build_server():
     scheduler = _try_attach(
         "weebot.infrastructure.scheduling.scheduler", "SchedulingManager", "SchedulingManager"
     )
+    event_store = _try_attach("weebot.infrastructure.event_store", "EventStore", "EventStore")
     return WeebotMCPServer(
         state_manager=state_repo,
         scheduler=scheduler,
+        event_store=event_store,
         composite_tools_enabled=settings.mcp_composite_tools_enabled,
     )
 
@@ -82,9 +84,9 @@ def main() -> None:
 
     # Validate settings
     try:
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        WeebotSettings.validate_at_least_one_key()
+        get_settings().validate_at_least_one_key()
     except ValueError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         sys.exit(1)

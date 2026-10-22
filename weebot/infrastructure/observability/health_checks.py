@@ -148,9 +148,9 @@ class HealthCheckService:
         start_time = time.monotonic()
 
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            settings = WeebotSettings()
+            settings = get_settings()
 
             providers = settings.available_providers()
             if not providers:

@@ -177,3 +177,5 @@ weebot/application/services/model_registry/_catalog.py.tmp
 # egress allowlist defaults to the repo root, so they can land here.
 .*.json.*.tmp
 weebot_egress_allowlist.json
+# Hypothesis example database (property tests).
+.hypothesis/

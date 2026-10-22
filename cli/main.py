@@ -252,19 +252,37 @@ def export(project_id: str, output: str) -> None:
         console.print(f"[red]Session not found: {project_id}[/red]")
 
 
+def _event_store():
+    from weebot.infrastructure.event_store import EventStore
+
+    return EventStore()
+
+
 @cli.command()
-@click.option("--days", default=7, help="Number of days to report")
+@click.option("--days", default=7, type=click.IntRange(1, 30), help="Number of days to report")
 def costs(days: int) -> None:
-    """Show cost report."""
-    table = Table(title=f"Cost Report (Last {days} days)")
-    table.add_column("Date", style="cyan")
-    table.add_column("Cost", style="green")
-    table.add_column("Tokens", style="magenta")
+    """Show LLM spend by model, from the event store (the same query as MCP and ops)."""
+    from weebot.application.cqrs.handlers.active_queries import GetCostSummaryHandler
+    from weebot.application.cqrs.queries import GetCostSummaryQuery
 
-    # Placeholder data
-    table.add_row("Today", "$2.45", "12,340")
-    table.add_row("Yesterday", "$1.23", "8,900")
-
+    result = asyncio.run(
+        GetCostSummaryHandler(_event_store()).handle(GetCostSummaryQuery(window_hours=days * 24))
+    )
+    if not result.success:
+        console.print(f"[red]Cost summary failed: {result.error}[/red]")
+        raise SystemExit(1)
+    data = result.data
+    table = Table(title=f"LLM cost (last {days} days)")
+    table.add_column("Model", style="cyan")
+    table.add_column("Calls", justify="right")
+    table.add_column("Tokens", style="magenta", justify="right")
+    table.add_column("Cost (USD)", style="green", justify="right")
+    for model, row in sorted(data["by_model"].items(), key=lambda kv: -kv[1]["cost"]):
+        table.add_row(model, str(row["calls"]), f"{row['tokens']:,}", f"${row['cost']:.4f}")
+    table.add_row(
+        "Total", str(data["calls"]), f"{data['total_tokens']:,}", f"${data['total_cost']:.4f}",
+        style="bold",
+    )
     console.print(table)
 
 

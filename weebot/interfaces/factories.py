@@ -78,6 +78,60 @@ def _cached(key: str):
         return None
 
 
+_MCP_TOOLKIT: Any = None  # MCPToolkitAdapter, connected once per process
+_MCP_LOCK: Any = None
+
+
+def _resolve_mcp_client() -> Any:
+    """The DI "mcp_client" (MCPClientManager), logging why when it is missing.
+
+    ``_cached`` swallows errors; a ConfigError here (``${POSTIZ_API_KEY}`` unset)
+    must be visible, or the configured server's tools just vanish.
+    """
+    if _cached("mcp_client") is None and _shared_container is not None:
+        try:
+            return _shared_container.get("mcp_client")
+        except Exception as exc:
+            _log.warning("Configured MCP servers not loaded: %s", exc)
+            return None
+    return _cached("mcp_client")
+
+
+async def _configured_mcp_tools() -> list:
+    """Tools of the servers in MCP_SERVERS_CONFIG_PATH (WEEBOT_ENABLE_X_MCP).
+
+    MCPToolRegistryBridge only adds names to roles and the registry cannot
+    build an MCP tool, so this is the path that makes them callable. Connected
+    once per process; a failure is logged and the flow runs without them.
+    """
+    global _MCP_TOOLKIT, _MCP_LOCK
+    import asyncio
+
+    if _MCP_TOOLKIT is not None:
+        return _MCP_TOOLKIT.get_tools()
+    _MCP_LOCK = _MCP_LOCK or asyncio.Lock()
+    async with _MCP_LOCK:
+        if _MCP_TOOLKIT is not None:
+            return _MCP_TOOLKIT.get_tools()
+        manager = _resolve_mcp_client()
+        if manager is None or not getattr(manager, "has_servers", False):
+            return []
+        import importlib as _il
+
+        toolkit_cls = _il.import_module(
+            "weebot.infrastructure.mcp.mcp_toolkit_adapter"
+        ).MCPToolkitAdapter
+        toolkit = toolkit_cls(manager)
+        try:
+            await toolkit.initialize()
+        except Exception as exc:
+            _log.warning("Configured MCP servers not connected: %s", exc)
+            return []
+        _MCP_TOOLKIT = toolkit
+        _log.info("Configured MCP servers connected: %d tools", len(toolkit.get_tools()))
+        return toolkit.get_tools()
+
+
 async def route_and_create_flow(
     query: str,
     session: Session,
@@ -293,6 +347,8 @@ async def build_tools(
             adapter = _mcp_mod.MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())
+    else:
+        combined.extend(await _configured_mcp_tools())
 
     if extra_tools:
         combined.extend(extra_tools)
@@ -317,6 +373,14 @@ async def build_tools(
                 "Apify integration skipped — initialization failed", exc_info=True
             )
 
+    # MCP, extra and Apify tools join after the registry's own guard_tools call,
+    # so wrap again: shell tools are already wrapped and skipped; a financial
+    # tool from an MCP server is wrapped here (F06). Resolved through DI because
+    # this layer may not import tool_guards. Fail closed: no guard, no tools.
+    guard_tools = _cached("guard_tools")
+    if guard_tools is None:
+        raise RuntimeError("tool guard chain unavailable; refusing to build unguarded tools")
+    combined = guard_tools(combined, include_egress=False)
     ToolCollection = _get_tool_collection_cls()
     canonicalizer = _build_action_canonicalizer(combined)
     contract_loader = _cached("contract_loader")

@@ -39,6 +39,20 @@ def _run_async(coro_factory) -> None:
     """
 
     async def _wrapper() -> None:
+        import sys
+
+        if sys.stdin.isatty():
+            # ADR-013: a person at a terminal answers tool-call approvals here.
+            from weebot.application.ports.event_store_port import EventStorePort
+            from weebot.application.services.tool_approval import (
+                ConsoleApproval,
+                set_approval_journal,
+                set_process_approval,
+            )
+
+            set_process_approval(ConsoleApproval())
+            _get_state_repo()  # builds the shared container
+            set_approval_journal(_container.get(EventStorePort))
         try:
             await coro_factory()
         finally:
@@ -104,9 +118,8 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
             if isinstance(event, WaitForUserEvent):
                 # to_thread: a bare input() here would block the event loop,
                 # freezing the runner's own background tasks while it waits.
-                answer = await asyncio.to_thread(
-                    input, f"\n[weebot asks] {event.question}\nYour answer: "
-                )
+                # The subscriber above already printed the question (F37).
+                answer = await asyncio.to_thread(input, "\nYour answer: ")
                 async for resume_event in runner.resume_session(run_session_id, answer):
                     await subscriber.on_event(resume_event)
                 break

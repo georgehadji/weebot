@@ -50,9 +50,9 @@ def read_ponytail_mode() -> str:
 
     # 2. WeebotSettings / environment
     try:
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        settings = WeebotSettings()
+        settings = get_settings()
         if settings.ponytail_mode in _ALLOWED_MODES:
             return settings.ponytail_mode
     except Exception as exc:

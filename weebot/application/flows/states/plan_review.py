@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -54,7 +54,7 @@ def next_state_after_plan(min_steps: int = 1):
     """
     from weebot.application.flows.states.executing import ExecutingState
 
-    settings = WeebotSettings()
+    settings = get_settings()
     if not settings.plan_review_enabled:
         return ExecutingState()
     return PlanReviewState(min_steps=min_steps)
@@ -90,7 +90,13 @@ class PlanReviewState(FlowState):
 
         _log.info("Plan review: presenting %d-step plan '%s' to user", len(plan.steps), plan.title)
 
-        yield PlanReviewEvent(plan_data=plan.model_dump(mode="json"), step_count=len(plan.steps))
+        # Emitted, not only yielded, so it is stamped with the session id, saved
+        # and published like the other plan events (F37).
+        review_event = PlanReviewEvent(
+            plan_data=plan.model_dump(mode="json"), step_count=len(plan.steps)
+        )
+        await context._emit(review_event)
+        yield review_event
 
         # Mark plan as pending approval in session context (extra dict)
         _new_extra = {**context._session.context.extra, "plan_pending_approval": True}

@@ -44,13 +44,20 @@ class MCPClientManager:
         self._max_delay = max_delay
         self._connection_attempts: dict[str, int] = {}
 
+    @property
+    def has_servers(self) -> bool:
+        """At least one configured server entry (``_comment`` strings excluded)."""
+        servers = self._config.get("mcpServers", {})
+        return any(isinstance(v, dict) for v in servers.values())
+
     async def initialize(self) -> None:
         if self._initialized:
             return
         servers = self._config.get("mcpServers", {})
         failed: list[str] = []
         for server_name, server_config in servers.items():
-            if not server_config.get("enabled", True):
+            # Config files carry "_comment" strings next to the server entries.
+            if not isinstance(server_config, dict) or not server_config.get("enabled", True):
                 continue
             try:
                 await self._connect_with_retry(server_name, server_config)

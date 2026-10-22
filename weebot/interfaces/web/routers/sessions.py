@@ -41,7 +41,13 @@ def _session_to_response(session: Session) -> SessionResponse:
         agent_id=session.agent_id,
         status=session.status.value,
         title=session.title,
-        context=session.context,
+        # SessionResponse.context is a dict; the model made every POST a 500.
+        # A dict also occurs: model_copy(update=...) skips validation.
+        context=(
+            session.context
+            if isinstance(session.context, dict)
+            else session.context.model_dump(mode="json")
+        ),
         created_at=session.created_at,
         updated_at=session.updated_at,
         event_count=len(session.events),
@@ -231,15 +237,11 @@ async def resume_session(
             detail=f"Session {session_id} is not waiting for input (status: {session.status.value})",
         )
 
-    # Add user message and update status
-    from weebot.domain.models.event import MessageEvent
-
-    session = session.add_event(MessageEvent(role="user", message=request.answer))
-    session = session.set_status(SessionStatus.RUNNING)
-    await state_repo.save_session(session)
-
+    # Same path as /input: this used to store the answer and set RUNNING with
+    # no flow running (found in plan B2c).
+    result = await _dispatch_input(http_request, session, request.answer, state_repo)
     logger.info("Resumed session %s", session_id)
-    return _session_to_response(session)
+    return _session_to_response(result.session)
 
 
 @router.post("/{session_id}/run", response_model=SessionResponse)
@@ -362,6 +364,34 @@ async def send_session_input(
     never has to branch on session state before deciding which of four
     endpoints to call.
     """
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
+
+    result = await _dispatch_input(
+        http_request,
+        session,
+        request.text,
+        state_repo,
+        model=request.model,
+        client_msg_id=request.client_msg_id,
+    )
+    logger.info("Dispatched %s input for session %s", result.verb, session_id)
+    return {"verb": result.verb, "session": _session_to_response(result.session)}
+
+
+async def _dispatch_input(
+    http_request: Request,
+    session: Session,
+    text: str,
+    state_repo: StateRepositoryPort,
+    *,
+    model: str | None = None,
+    client_msg_id: str | None = None,
+):
+    """Route *text* to the start / resume / steer / chat strategy for *session*."""
     from weebot.application.ports.event_bus_port import EventBusPort
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.steering_port import SteeringPort
@@ -372,18 +402,12 @@ async def send_session_input(
     )
     from weebot.interfaces.factories import build_tools
 
-    session = await state_repo.load_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-
-    await verify_session_ownership(http_request, session.user_id)
-
     container = http_request.app.state.container
     ctx = SessionInputContext(
         session=session,
-        text=request.text,
-        client_msg_id=request.client_msg_id,
-        model=request.model,
+        text=text,
+        client_msg_id=client_msg_id,
+        model=model,
         state_repo=state_repo,
         task_runner=container.get(TaskRunnerPort),
         llm=container.get(LLMPort),
@@ -392,14 +416,10 @@ async def send_session_input(
         build_tools=lambda: build_tools(role="admin"),
         build_chat_flow=container.build_chat_flow,
     )
-
     try:
-        result = await dispatch_session_input(ctx)
+        return await dispatch_session_input(ctx)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except Exception:
-        logger.exception("Failed to dispatch input for session %s", session_id)
+        logger.exception("Failed to dispatch input for session %s", session.id)
         raise HTTPException(status_code=500, detail="Failed to process input") from None
-
-    logger.info("Dispatched %s input for session %s", result.verb, session_id)
-    return {"verb": result.verb, "session": _session_to_response(result.session)}

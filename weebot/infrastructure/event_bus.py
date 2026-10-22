@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from weebot.application.ports.event_bus_port import DomainEventHandler, EventBusPort, EventHandler
-from weebot.domain.models.event import AgentEvent, DomainEvent
+from weebot.domain.models.event import AgentEvent, DomainEvent, LLMCallCompleted
 
 if TYPE_CHECKING:
     from weebot.application.ports.event_store_port import EventStorePort
@@ -231,7 +231,13 @@ class DurableEventBus(EventBusPort):
             if not session_id:
                 session_id = getattr(event, "id", "")  # type: ignore[union-attr]
             event_type = getattr(event, "type", type(event).__name__)  # type: ignore[union-attr]
-            data = event.model_dump() if hasattr(event, "model_dump") else {"raw": str(event)}  # type: ignore[union-attr]
+            # mode="json": the store json.dumps the data, and every event has a
+            # datetime timestamp, so a plain dump failed every write.
+            data = (
+                event.model_dump(mode="json")  # type: ignore[union-attr]
+                if hasattr(event, "model_dump")
+                else {"raw": str(event)}
+            )
             await self._event_store.log_event(
                 session_id=str(session_id), event_type=str(event_type), data=data
             )
@@ -247,9 +253,25 @@ class DurableEventBus(EventBusPort):
         try:
             session_id = getattr(event, "session_id", "")
             event_type = getattr(event, "type", type(event).__name__)
-            data = event.model_dump() if hasattr(event, "model_dump") else {"raw": str(event)}
+            data = (
+                event.model_dump(mode="json")
+                if hasattr(event, "model_dump")
+                else {"raw": str(event)}
+            )
+            # Only LLMCallCompleted fills the cost columns (W4.1, F23); the
+            # store sums them for get_cost_summary.
+            cost_columns: dict[str, Any] = {}
+            if isinstance(event, LLMCallCompleted):
+                cost_columns = {
+                    "cost": event.cost,
+                    "model": event.model,
+                    "tokens_used": event.prompt_tokens + event.completion_tokens,
+                }
             await self._event_store.log_event(
-                session_id=str(session_id or ""), event_type=str(event_type), data=data
+                session_id=str(session_id or ""),
+                event_type=str(event_type),
+                data=data,
+                **cost_columns,
             )
         except Exception:
             logger.warning(

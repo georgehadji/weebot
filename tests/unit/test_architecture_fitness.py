@@ -1008,6 +1008,12 @@ def test_orphan_ports_flagged():
         # and infrastructure/, so application-service implementations read as
         # orphans — same exemption as AuditPort above.
         "OptimizationTarget",
+        # ADR-013 tool-call approval: Deny/Console/FlowPause strategies live in
+        # application/services/tool_approval.py and are chosen per entry point
+        # (set_process_approval / approval_scope), not through the container.
+        "ApprovalPort",
+        "ApprovalOutcome",
+        "ToolCallApproval",
     }
 
     # Get all port class names
