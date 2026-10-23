@@ -6,8 +6,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ENDPOINTS } from "@/lib/endpoints";
+import { authHeaders, withToken } from "@/lib/api";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 
 export interface BehaviorEvent {
   type: "file.created" | "file.modified" | "file.deleted" | "file.moved";
@@ -58,10 +59,10 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
 
     function connect() {
       const wsUrl = sessionId
-        ? `${WS_URL}/behavior/ws/session/${sessionId}`
-        : `${WS_URL}/behavior/ws`;
+        ? `${ENDPOINTS.behaviorWs}/session/${sessionId}`
+        : ENDPOINTS.behaviorWs;
 
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(withToken(wsUrl));
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -163,7 +164,7 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
 }
 
 // Hook for REST API fallback
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_URL = ENDPOINTS.api;
 
 export function useBehaviorREST(sessionId?: string) {
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
@@ -172,7 +173,7 @@ export function useBehaviorREST(sessionId?: string) {
 
   const fetchTrust = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/behavior/trust`);
+      const res = await fetch(`${API_URL}/behavior/trust`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setTrustScore(data);
@@ -190,7 +191,7 @@ export function useBehaviorREST(sessionId?: string) {
         url.searchParams.set("session_id", sessionId);
       }
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setRecentActions(data);
@@ -204,7 +205,7 @@ export function useBehaviorREST(sessionId?: string) {
     try {
       const res = await fetch(`${API_URL}/behavior/override`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ timestamp, reason })
       });
       return res.ok;

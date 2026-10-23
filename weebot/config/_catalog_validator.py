@@ -1,6 +1,6 @@
 """CatalogValidator — startup cross-validation of cascade models against the catalog.
 
-Ensures every model referenced in ``_ROLE_MODEL_CASCADE`` exists in the
+Ensures every model referenced in ``ROLE_MODEL_CONFIG`` exists in the
 model catalog with a matching ``provider`` field. Runs at DI container
 initialization and on demand via ``cli.main doctor --validate-catalog``.
 
@@ -109,7 +109,7 @@ class CatalogValidator:
         from weebot.config.model_catalog import MODELS as _CATALOG
 
         _validator = CatalogValidator()
-        return _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
+        return _validator.validate(role_cascades=_mr.ROLE_MODEL_CONFIG, catalog=_CATALOG)
 
     def validate(
         self, role_cascades: dict[str, list[str]], catalog: dict[str, ModelConfig]
@@ -118,7 +118,7 @@ class CatalogValidator:
 
         Args:
             role_cascades: ``{role_name: [model_id, ...]}`` — the
-                ``_ROLE_MODEL_CASCADE`` from ``model_refs.py``.
+                ``ROLE_MODEL_CONFIG`` from ``model_refs.py``.
             catalog: ``{model_id: ModelConfig}`` — the ``MODELS`` dict
                 from ``model_catalog.py``.
 
@@ -235,5 +235,7 @@ class CatalogValidator:
             return prefix_map[prefix]
         if prefix in direct_providers:
             return prefix
-        # Fallback: return the prefix as-is
-        return prefix
+        # Any other vendor is reached through OpenRouter, which is what the
+        # generated catalog records for it. Returning the bare prefix here made
+        # every new vendor (xiaomi, ...) a false provider mismatch.
+        return "openrouter"

@@ -58,8 +58,6 @@ ignore_imports =
     weebot.tools.apify_presets -> weebot.infrastructure.adapters.apify.apify_service
     # schedule_tool → scheduler → DI → adapters&persistence (transitive).
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
-    # bash_security → model_selection → model_registry → adapter_factory (transitive)
-    weebot.tools.bash_security -> weebot.application.services.model_selection
     # advanced_browser delegates browser operations to the session manager.
     weebot.tools.advanced_browser -> weebot.infrastructure.browser.session_manager
     weebot.tools.advanced_browser -> weebot.infrastructure.browser.playwright_adapter
@@ -137,7 +135,6 @@ ignore_imports =
     weebot.interfaces.web.routers.slack_webhook -> weebot.application.di
     weebot.interfaces.web.routers.whatsapp_webhook -> weebot.application.di
     weebot.interfaces.web.routers.health -> weebot.application.di
-    weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.cqrs.mediator
     # CLI agent_runner -> ToolCollection -> metrics_bridge is the same
     # designated application-model -> infrastructure bridge already
@@ -164,9 +161,7 @@ ignore_imports =
     weebot.interfaces.factories -> weebot.application.di
     weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
     # CLI agent runner resolves services from DI.
-    weebot.interfaces.cli.agent_runner -> weebot.application.di
     # Gateway adapters use DI fallback for SafetyChecker LLMPort.
-    weebot.interfaces.gateways.base -> weebot.application.di
     # Windows-specific interfaces wire native platform adapters.
     weebot.interfaces.windows -> weebot.infrastructure.adapters.windows_desktop
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications

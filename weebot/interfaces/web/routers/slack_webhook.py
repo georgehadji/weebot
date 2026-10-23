@@ -95,11 +95,11 @@ def _get_or_create_adapter(request: Request):
     from weebot.application.di import Container
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
     from weebot.interfaces.gateways.slack import SlackAdapter
 
     container: Container = request.app.state.container
-    settings = WeebotSettings()
+    settings = get_settings()
 
     if not settings.slack_signing_secret or not settings.slack_bot_token:
         logger.warning(

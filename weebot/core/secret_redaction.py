@@ -20,7 +20,7 @@ import math
 import re
 from typing import Any
 
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 
 class SecretRedactor:
@@ -106,7 +106,7 @@ class SecretRedactor:
         `weebot.core.credential_sanitizer.sanitize`.
         """
         try:
-            settings = WeebotSettings()
+            settings = get_settings()
             return cls(
                 enabled=settings.secret_redaction_enabled,
                 entropy_threshold=settings.secret_redaction_entropy_threshold,

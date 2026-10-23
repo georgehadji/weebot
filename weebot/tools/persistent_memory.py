@@ -92,30 +92,25 @@ class PersistentMemoryTool(BaseTool):
         """Initialize the persistent memory tool.
 
         Args:
-            memory: A MemoryPort implementation injected by DI.
-                When None (constructed by RoleBasedToolRegistry),
-                uses the default adapter from the DI container.
+            memory: A MemoryPort implementation, required; the DI tool
+                registry's wiring supplies it.
             state_repo: A StateRepositoryPort used for salience tracking.
-                When None and `memory` is also None (DI fallback), resolved
-                from the same Container. Otherwise lazily constructed on
-                first use — see `_track_salience`.
+                When None, lazily constructed on first use — see
+                `_track_salience`.
             **kwargs: Passed through to BaseTool.
         """
         super().__init__(**kwargs)
-        self._salience_repo: StateRepositoryPort | None = state_repo
+        # Salience lives in the MemoryMetadataStore role (W5.1); a repository
+        # without it falls back to the lazily built SQLite one below.
+        from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
+
+        self._salience_repo = as_role(state_repo, MemoryMetadataStore)
         self._salience_warned = False
         if memory is None:
-            import importlib as _il
-            from weebot.application.ports.state_repo_port import StateRepositoryPort as _SRP
-
-            _c = _il.import_module("weebot.application.di").Container()
-            _c.configure_defaults()
-            memory = _c.get(FileSystemMemoryAdapter)
-            if self._salience_repo is None:
-                try:
-                    self._salience_repo = _c.get(_SRP)
-                except KeyError:
-                    pass
+            raise RuntimeError(
+                "{} needs its MemoryPort collaborator: build it through the DI "
+                "container's tool_registry, whose wiring supplies it (W5.5)".format(self.name)
+            )
         self._memory = memory
 
     async def execute(

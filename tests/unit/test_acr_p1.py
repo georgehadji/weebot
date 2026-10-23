@@ -213,8 +213,10 @@ class TestAdaptiveCapabilityRouter:
         acr = AdaptiveCapabilityRouter(force_acr=False)
         result = acr.route("refactor the database module")
         assert len(result) == 1
-        # For CODING, the static map returns x-ai/grok-build-0.1
-        assert result[0] == "x-ai/grok-build-0.1"
+        # For CODING, the static map returns the coder role's primary.
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG
+
+        assert result[0] == ROLE_MODEL_CONFIG["coder"][0]
 
     def test_acr_enabled_returns_ordered_list(self):
         from weebot.application.services.routing.adaptive_capability_router import (
@@ -290,8 +292,6 @@ class TestQualityProfiles:
         """Verify KwaiPilot KAT-Coder model configurations are present and valid."""
         from weebot.config.capability_profiles import get_profile
         from weebot.config.model_catalog import MODELS
-        from weebot.domain.models.model_config import ModelTier
-        from weebot.domain.models.task_type import TaskType
 
         # Check profiles
         pro_profile = get_profile("kwaipilot/kat-coder-pro-v2.5")
@@ -301,13 +301,9 @@ class TestQualityProfiles:
         assert pro_profile.axes.get("coding") == 9.5
         assert air_profile.axes.get("coding") == 9.0
 
-        # Check catalog. Only Pro is asserted: OpenRouter retired
-        # kwaipilot/kat-coder-air-v2.5, so the catalog refresh dropped it and the
-        # cascades that listed it (as a rung below Pro) no longer reference it.
-        # The capability profile above is deliberately kept -- it costs nothing
-        # and is ready if the model returns.
-        assert "kwaipilot/kat-coder-pro-v2.5" in MODELS
+        # Check catalog. OpenRouter retired both: Air first, then Pro (gone from
+        # the 2026-10-23 refresh), so neither is in the catalog and no cascade
+        # routes to them. The capability profiles above are deliberately kept --
+        # they cost nothing and are ready if the models return.
+        assert "kwaipilot/kat-coder-pro-v2.5" not in MODELS
         assert "kwaipilot/kat-coder-air-v2.5" not in MODELS
-        pro_cfg = MODELS["kwaipilot/kat-coder-pro-v2.5"]
-        assert pro_cfg.tier == ModelTier.STANDARD
-        assert TaskType.CODE_GENERATION in pro_cfg.strengths

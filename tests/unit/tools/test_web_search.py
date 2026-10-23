@@ -97,3 +97,38 @@ def test_to_param_shape():
     assert param["type"] == "function"
     assert param["function"]["name"] == "web_search"
     assert "query" in param["function"]["parameters"]["required"]
+
+
+@pytest.mark.asyncio
+async def test_enough_results_from_the_first_engine_skip_the_others():
+    """All three engines ran in series on every search, whatever the first
+    returned: a 20 s Perplexity budget, then DuckDuckGo, then Bing."""
+    tool = WebSearchTool()
+    enough = [{"title": f"t{i}", "url": f"https://x/{i}", "snippet": "s"} for i in range(5)]
+    ddg = AsyncMock(return_value=[])
+    bing = AsyncMock(return_value=[])
+    with (
+        patch.object(tool, "_search_perplexity", AsyncMock(return_value=enough)),
+        patch.object(tool, "_search_duckduckgo", ddg),
+        patch.object(tool, "_search_bing", bing),
+    ):
+        result = await tool.execute(query="q", num_results=5)
+    assert result.error is None
+    ddg.assert_not_called()
+    bing.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_too_few_results_still_try_the_next_engine():
+    tool = WebSearchTool()
+    one = [{"title": "t", "url": "https://x/1", "snippet": "s"}]
+    more = [{"title": f"d{i}", "url": f"https://d/{i}", "snippet": "s"} for i in range(5)]
+    bing = AsyncMock(return_value=[])
+    with (
+        patch.object(tool, "_search_perplexity", AsyncMock(return_value=one)),
+        patch.object(tool, "_search_duckduckgo", AsyncMock(return_value=more)),
+        patch.object(tool, "_search_bing", bing),
+    ):
+        result = await tool.execute(query="q", num_results=5)
+    assert "https://d/0" in result.output
+    bing.assert_not_called()

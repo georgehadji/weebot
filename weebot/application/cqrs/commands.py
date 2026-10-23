@@ -41,6 +41,12 @@ class ExecuteStepCommand(Command):
         "through to ExecutorAgent.execute_step(user_input=...), "
         "which previously never received it.",
     )
+    step_context: Any = Field(
+        default=None,
+        exclude=True,
+        description="The flow's StepExecutionContext (ADR-015). In process only: "
+        "excluded from dumps; without it the step runs on container singletons.",
+    )
 
 
 class UpdatePlanCommand(Command):

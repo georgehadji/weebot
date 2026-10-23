@@ -1,0 +1,37 @@
+{
+  "_comment": "External MCP servers for Weebot. Loaded when WEEBOT_ENABLE_X_MCP=1 and MCP_SERVERS_CONFIG_PATH points here. Dollar-brace variable references come from .env; an unset one stops start-up (fail closed), and that includes any written inside these comments. Tools arrive as mcp__<server>__<tool>: their output is untrusted, and publish/send/delete/generate tools always ask (WEEBOT_OUTBOUND_TOOL_PATTERNS).",
+  "postiz": {
+    "_comment": "Self-hosted Postiz (~/postiz/compose, docker compose). API key: Postiz UI > Settings > Public API.",
+    "transport": "streamable-http",
+    "url": "http://localhost:4007/api/mcp",
+    "auth": { "type": "bearer", "token": "${POSTIZ_API_KEY}" },
+    "timeout_seconds": 30
+  },
+  "jira": {
+    "_comment": "Jira Cloud via the community mcp-atlassian server (uvx). Token: id.atlassian.com > Security > API tokens.",
+    "transport": "stdio",
+    "command": "uvx",
+    "args": ["mcp-atlassian"],
+    "env": {
+      "JIRA_URL": "${JIRA_URL}",
+      "JIRA_USERNAME": "${JIRA_USERNAME}",
+      "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+    },
+    "timeout_seconds": 60
+  },
+  "hubspot": {
+    "_comment": "HubSpot CRM via HubSpot's own MCP server (npx). Token: HubSpot Settings > Integrations > Private Apps.",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@hubspot/mcp-server"],
+    "env": { "PRIVATE_APP_ACCESS_TOKEN": "${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}" },
+    "timeout_seconds": 60
+  },
+  "apify": {
+    "_comment": "Apify's hosted MCP server: search the Apify Store and run any Actor (billed to the Apify account). Token: console.apify.com > Settings > API & Integrations. The same key turns on the built-in apify_* preset tools.",
+    "transport": "streamable-http",
+    "url": "https://mcp.apify.com",
+    "auth": { "type": "bearer", "token": "${APIFY_API_KEY}" },
+    "timeout_seconds": 60
+  }
+}

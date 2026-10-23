@@ -98,12 +98,25 @@ async def _start_task(ctx: SessionInputContext) -> SessionInputResult:
 
 
 async def _resume(ctx: SessionInputContext) -> SessionInputResult:
-    """WAITING → answer the pending question and resume PlanActFlow."""
-    from weebot.domain.models.event import MessageEvent
+    """WAITING → answer the pending question and resume PlanActFlow.
 
-    session = ctx.session.add_event(MessageEvent(role="user", message=ctx.text))
-    session = session.set_status(SessionStatus.RUNNING)
-    await ctx.state_repo.save_session(session)
+    This used to store the answer and set RUNNING without running anything, so
+    a web plan review or tool approval never moved on (found in plan B2c).
+    """
+    tools = await ctx.build_tools()
+    try:
+        factory = ctx.task_runner.create_plan_act_factory(
+            llm=ctx.llm,
+            tools=tools,
+            event_bus=ctx.event_bus,
+            model=ctx.model,
+            ponytail_mode=ctx.ponytail_mode,
+            steering=ctx.steering,
+        )
+        session = await ctx.task_runner.resume_session(ctx.session.id, ctx.text, factory)
+    except Exception:
+        await tools.teardown()
+        raise
     return SessionInputResult(session=session, verb="resume")
 
 

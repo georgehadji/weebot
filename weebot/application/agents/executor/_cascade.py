@@ -47,20 +47,25 @@ class CascadeExecutor:
     _TIER3_MODEL: str = MODEL_CASCADE_TIER3
     _TIER4_MODEL: str = MODEL_CASCADE_TIER4
 
-    # OpenRouter credit threshold — below this (in tokens), skip
-    # OpenRouter models to avoid 402 errors that waste cascade timeouts.
-    # Override via OPENROUTER_MIN_CREDITS env var (default: 10000).
-    _OPENROUTER_MIN_CREDITS: int = 10000
+    # OpenRouter balance (USD, as /auth/key reports it) below which the
+    # cascade skips OpenRouter-only models to avoid 402s that waste timeouts.
+    # Override via OPENROUTER_MIN_CREDIT_USD. It used to be 10000 "tokens"
+    # compared with a field OpenRouter does not send, so it always tripped.
+    _OPENROUTER_MIN_CREDIT_USD: float = 0.10
+    # Seconds a Phase 1 probe runs alone before the next one is started.
+    _HEDGE_DELAY_S: float = 20.0
 
     @classmethod
-    def _get_credit_threshold(cls) -> int:
-        """Return the credit threshold, respecting env-var override."""
+    def _get_credit_threshold(cls) -> float:
+        """Return the credit threshold in USD, respecting env-var override."""
         import os as _os
 
         try:
-            return int(_os.environ.get("OPENROUTER_MIN_CREDITS", cls._OPENROUTER_MIN_CREDITS))
+            return float(
+                _os.environ.get("OPENROUTER_MIN_CREDIT_USD", cls._OPENROUTER_MIN_CREDIT_USD)
+            )
         except (TypeError, ValueError):
-            return cls._OPENROUTER_MIN_CREDITS
+            return cls._OPENROUTER_MIN_CREDIT_USD
 
     _TASK_CATEGORY_CACHE: dict[str, str] = {}  # description → category lookup cache
 
@@ -76,16 +81,21 @@ class CascadeExecutor:
         acr_router=None,  # Optional AdaptiveCapabilityRouter for outcome recording
         # Credit balance + live model list. None: no credit filtering, no rescue.
         provider_account: ProviderAccountPort | None = None,
+        # Awaited with an LLMCallCompleted after each successful call (W4.1, F23).
+        on_call_completed=None,
+        pinned_model: str | None = None,  # `flow run --model`: tried before the role cascade
     ) -> None:
         self._llm = llm
         self._tools = tools
         self._agent_role = agent_role
         self._model_provider = model_provider
+        self._pinned_model = pinned_model
         self._llm_pool = llm_pool
         self._on_success = on_success
         self._tracker = tracker or ModelCascadeTracker()
         self._acr_router = acr_router  # Optional ACR router for bandit outcome recording
         self._provider_account = provider_account
+        self._on_call_completed = on_call_completed
         # Per-session circuit breaker state
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
@@ -131,7 +141,7 @@ class CascadeExecutor:
 
     # ── OpenRouter credit pre-check ────────────────────────────────
 
-    async def _remaining_credits(self) -> int | None:
+    async def _remaining_credits(self) -> float | None:
         """Remaining OpenRouter credit, or None when unknown or not wired."""
         if self._provider_account is None:
             return None
@@ -141,10 +151,11 @@ class CascadeExecutor:
     def _is_openrouter_model(model_id: str) -> bool:
         """Return True if the model routes exclusively through OpenRouter.
 
-        Models with a native provider (x-ai, deepseek, moonshotai, minimax)
-        do NOT exclusively use OpenRouter, so they should NOT be filtered.
+        Models with a native adapter (x-ai, deepseek, moonshotai, recraft) do
+        NOT exclusively use OpenRouter, so they should NOT be filtered. minimax
+        is not one: its adapter only reaches OpenRouter (adapter_factory).
         """
-        known_direct = {"x-ai", "deepseek", "moonshotai", "minimax", "recraft"}
+        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft"}
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
@@ -172,7 +183,7 @@ class CascadeExecutor:
         if filtered != model_ids:
             skipped = len(model_ids) - len(filtered)
             logger.info(
-                "OpenRouter credits low (%d — need %d), skipping %d " "OpenRouter-only model(s)",
+                "OpenRouter balance low ($%.2f, need $%.2f), skipping %d OpenRouter-only model(s)",
                 credits,
                 threshold,
                 skipped,
@@ -204,6 +215,34 @@ class CascadeExecutor:
         self._tracker.record(decision)
         if self._acr_router is not None:
             self._acr_router.record_cascade_outcome(decision)
+
+    async def _call_completed(
+        self, model_id: str, prompt_tokens: int, completion_tokens: int
+    ) -> None:
+        """Report one successful call; the hook must never fail the call."""
+        if self._on_call_completed is None:
+            return
+        from weebot.domain.models.event import LLMCallCompleted
+
+        try:
+            await self._on_call_completed(
+                LLMCallCompleted(
+                    model=model_id,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost=_estimate_cost(model_id, prompt_tokens, completion_tokens),
+                )
+            )
+        except Exception:
+            logger.warning("LLMCallCompleted hook failed for %s", model_id, exc_info=True)
+
+    @staticmethod
+    def _usage_tokens(resp: LLMResponse) -> tuple[int, int]:
+        usage = getattr(resp, "usage", None) or {}
+        return (
+            int(usage.get("prompt_tokens", 0) or 0),
+            int(usage.get("completion_tokens", 0) or 0),
+        )
 
     # ── Single model call (with retry + pool) ───────────────────────
 
@@ -335,6 +374,7 @@ class CascadeExecutor:
                     cost_estimate=_estimate_cost(model_id, _prompt_tokens, _completion_tokens),
                     task_category=task_category,
                 )
+                await self._call_completed(model_id, _prompt_tokens, _completion_tokens)
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
@@ -361,13 +401,15 @@ class CascadeExecutor:
             return None
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
-                # Fast-fail errors (401, 403, 404) are recorded as FAILED
-                # but do NOT raise — the cascade must try other models.
+                # Fast-fail errors (401, bad key) do NOT raise — the cascade must
+                # try other models — and fail the same way every time, so this
+                # model is skipped for the rest of the run.
                 logger.warning(
                     "Fast-fail from %s: %s — suppressing to continue cascade",
                     model_id,
                     str(exc)[:200],
                 )
+                self._server_error_models.add(model_id)
             else:
                 if first_error is not None and model_id not in first_error:
                     first_error[model_id] = str(exc)[:300] or type(exc).__name__
@@ -378,16 +420,25 @@ class CascadeExecutor:
                 if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
                     self._server_error_models.add(model_id)
                     logger.debug("Server error from %s — skipping for rest of cascade", model_id)
-                elapsed = (_cascade_time.monotonic() - start) * 1000
-                self._record_decision(
-                    model_name=model_id,
-                    tier=tier,
-                    outcome=CascadeOutcome.FAILED,
-                    latency_ms=elapsed,
-                    error_message=str(exc)[:200],
-                    task_category=task_category,
-                )
+            elapsed = (_cascade_time.monotonic() - start) * 1000
+            self._record_decision(
+                model_name=model_id,
+                tier=tier,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=elapsed,
+                error_message=str(exc)[:200],
+                task_category=task_category,
+            )
             return None
+
+    @staticmethod
+    def _tier_of(model_id: str) -> CascadeTier:
+        """The model's own cost tier, for telemetry and the ACR bandit."""
+        from weebot.config.model_refs import PREMIUM_MODELS
+
+        if ":free" in model_id:
+            return CascadeTier.FREE
+        return CascadeTier.PREMIUM if model_id in PREMIUM_MODELS else CascadeTier.BUDGET
 
     # ── Full cascade orchestration ──────────────────────────────────
 
@@ -443,7 +494,11 @@ class CascadeExecutor:
 
         # ── Credit pre-check: filter OpenRouter models if low credits ──
         all_models = list(
-            dict.fromkeys(m for m in (role_primary, *acr_models, task_model, role_fallback1) if m)
+            dict.fromkeys(
+                m
+                for m in (self._pinned_model, role_primary, *acr_models, task_model, role_fallback1)
+                if m
+            )
         )
         filtered_models = await self.get_credits_and_filter_direct(all_models)
 
@@ -452,9 +507,17 @@ class CascadeExecutor:
             dict.fromkeys(m for m in filtered_models if m not in self._server_error_models)
         )
         if parallel:
-            tasks = {
-                asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel
-            }
+            # Hedge, don't race: a non-streamed request cancelled client-side
+            # still bills (measured: a call cancelled after 3s cost the full
+            # completion), so starting every probe at once paid for all of
+            # them on every call. One probe runs; the next starts when it
+            # fails, or after _HEDGE_DELAY_S without an answer.
+            queue = list(parallel)
+
+            def _launch() -> asyncio.Future:
+                model = queue.pop(0)
+                return asyncio.ensure_future(_try(model, 90.0, tier=self._tier_of(model)))
+
             # Wait for a probe that actually SUCCEEDS, not merely one that
             # finishes first.
             #
@@ -476,18 +539,22 @@ class CascadeExecutor:
             # The cost is latency in exactly the case where escalating was the
             # alternative: worst case is the slowest probe's 90s cap rather than
             # the fastest probe's return.
-            pending = set(tasks.keys())
+            pending = {_launch()}
             winner = None
             try:
                 while pending and winner is None:
                     done, pending = await asyncio.wait(
-                        pending, return_when=asyncio.FIRST_COMPLETED
+                        pending,
+                        timeout=self._HEDGE_DELAY_S if queue else None,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
                     for fut in done:
                         resp = fut.result()
                         if resp is not None:
                             winner = resp
                             break
+                    if winner is None and queue:
+                        pending.add(_launch())  # a failure, or the hedge delay ran out
             finally:
                 # Always, on every exit: a probe left uncancelled runs to
                 # completion and bills. The old drain loop below this was a
@@ -517,9 +584,8 @@ class CascadeExecutor:
             and m not in parallel
             and m not in self._server_error_models
         ]
-        remaining_tiers = [CascadeTier.BUDGET, CascadeTier.PREMIUM]
-        for m, t in zip(remaining, remaining_tiers[: len(remaining)]):
-            resp = await _try(m, 60.0, tier=t)
+        for m in remaining:
+            resp = await _try(m, 60.0, tier=self._tier_of(m))
             if resp is not None:
                 if self._on_success:
                     await self._on_success(resp)
@@ -566,8 +632,10 @@ class CascadeExecutor:
 
         paid_models: list[dict] = []
         free_models: list[dict] = []
+        from weebot.config.model_refs import claude_model_allowed
+
         for m in listings:
-            if not m.supports_tools:
+            if not m.supports_tools or not claude_model_allowed(m.id):
                 continue
             entry = {"id": m.id, "ctx": m.context_length}
             if ":free" in m.id:
@@ -582,7 +650,16 @@ class CascadeExecutor:
             logger.warning("Live model rescue: no models with tools support found")
             return None
 
-        candidates.sort(key=lambda m: m["ctx"], reverse=True)
+        # Cheapest catalog-priced model with a long enough context; unpriced
+        # models last. Sorting by context alone picked premium models.
+        from weebot.config.model_registry import get_model_config
+
+        def _rank(m: dict) -> tuple:
+            cfg = get_model_config(m["id"])
+            cost = cfg.cost_per_1k_tokens if cfg is not None else None
+            return (m["ctx"] < 128_000, cost is None, cost or 0.0, -m["ctx"])
+
+        candidates.sort(key=_rank)
         rescue_id = candidates[0]["id"]
         logger.warning(
             "Live model rescue: trying %s (from %d paid + %d free candidates)",
@@ -606,6 +683,7 @@ class CascadeExecutor:
                 )
                 if resp and (resp.content or resp.tool_calls):
                     logger.info("Live model rescue SUCCESS with %s", rescue_id)
+                    await self._call_completed(rescue_id, *self._usage_tokens(resp))
                     return resp
             except Exception as exc:
                 logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)

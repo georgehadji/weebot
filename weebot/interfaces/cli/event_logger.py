@@ -10,10 +10,12 @@ from weebot.domain.models.event import (
     ErrorEvent,
     MessageEvent,
     PlanEvent,
+    PlanReviewEvent,
     StepEvent,
     ThoughtEvent,
     TitleEvent,
     ToolEvent,
+    VerificationEvent,
     WaitForUserEvent,
 )
 
@@ -23,6 +25,9 @@ def _format_event(event: AgentEvent) -> str:
         return f"\n[bold cyan]📋 {event.title}[/bold cyan]"
     if isinstance(event, PlanEvent):
         return "[dim]Plan created/updated[/dim]"
+    if isinstance(event, PlanReviewEvent):
+        # The steps follow in the WaitForUserEvent question; one line is enough.
+        return f"[dim]Plan ready for review ({event.step_count} steps)[/dim]"
     if isinstance(event, StepEvent):
         if event.status.value == "completed":
             return f"  ✅ Step {event.step_id}: {event.description} (completed)"
@@ -43,7 +48,14 @@ def _format_event(event: AgentEvent) -> str:
         return f"\n[bold red]⚠️ Error: {event.error}[/bold red]"
     if isinstance(event, DoneEvent):
         return "\n[bold green]✨ Done[/bold green]"
-    return str(event)
+    if isinstance(event, VerificationEvent):
+        if (event.answer or "").strip().lower().startswith("unknown"):
+            verdict = "unverifiable"
+        else:
+            verdict = "consistent" if event.consistent else "inconsistent"
+        return f"    [dim]🔎 Check: {event.question} ({verdict})[/dim]"
+    # Never the pydantic repr: an unlisted type prints its name, one line.
+    return f"    [dim]· {getattr(event, 'type', type(event).__name__)}[/dim]"
 
 
 class CLIEventSubscriber:

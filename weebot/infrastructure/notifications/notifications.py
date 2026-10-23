@@ -29,7 +29,6 @@ import sys
 import asyncio
 import logging
 import aiohttp
-from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -39,12 +38,7 @@ from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 logger = logging.getLogger(__name__)
 
 
-class NotificationLevel(Enum):
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
+from weebot.application.ports.notification_port import NotificationLevel  # noqa: E402
 
 
 @dataclass

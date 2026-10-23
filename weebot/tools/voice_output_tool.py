@@ -47,11 +47,10 @@ class VoiceOutputTool(BaseTool):
     def __init__(self, speech: SpeechPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if speech is None:
-            import importlib as _il
-
-            _c = _il.import_module("weebot.application.di").Container()
-            _c.configure_defaults()
-            speech = _c.get(SpeechPort)
+            raise RuntimeError(
+                "{} needs its SpeechPort collaborator: build it through the DI "
+                "container's tool_registry, whose wiring supplies it (W5.5)".format(self.name)
+            )
         object.__setattr__(self, "_speech", speech)
 
     async def health_check(self) -> bool:
@@ -77,6 +76,12 @@ class VoiceOutputTool(BaseTool):
 
         if not output_path:
             output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}.wav")
+        try:
+            from weebot.core.output_path import output_path as _in_project
+
+            output_path = _in_project(output_path)  # writes stay in the project (F50)
+        except ValueError as exc:
+            return ToolResult(error=str(exc), output="")
 
         try:
             audio = await self._speech.synthesize(text, voice=voice or None)

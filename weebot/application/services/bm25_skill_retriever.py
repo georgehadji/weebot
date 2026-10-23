@@ -9,6 +9,7 @@ Maps to LIFE-HARNESS "Procedural Skill Layer" (Section 4.3.2).
 from __future__ import annotations
 
 import logging
+import re
 
 from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
 from weebot.application.skills.skill_registry import SkillRegistry
@@ -24,6 +25,14 @@ except ImportError:
     BM25Okapi = None  # type: ignore[assignment,misc]
     HAS_BM25 = False
     logger.warning("rank_bm25 not installed — BM25SkillRetriever uses word-overlap fallback")
+
+
+_WORD_RE = re.compile(r"[a-z0-9_]+")
+
+
+def _tokenize(text: str) -> list[str]:
+    """Lowercase words; punctuation splits (``"denied",`` matches ``denied``)."""
+    return _WORD_RE.findall(text.lower())
 
 
 class BM25SkillRetriever(SkillRetrieverPort):
@@ -76,7 +85,7 @@ class BM25SkillRetriever(SkillRetrieverPort):
 
         if HAS_BM25 and self._corpus:
             try:
-                tokenized = [doc.split() for doc in self._corpus]
+                tokenized = [_tokenize(doc) for doc in self._corpus]
                 self._bm25 = BM25Okapi(tokenized)
                 logger.info("BM25 index built: %d skills", len(self._corpus))
             except Exception as exc:
@@ -101,7 +110,7 @@ class BM25SkillRetriever(SkillRetrieverPort):
         if not self._corpus:
             return []
 
-        tokens = task.split()
+        tokens = _tokenize(task)
 
         if HAS_BM25 and self._bm25 is not None:
             scores = self._bm25.get_scores(tokens)
@@ -109,8 +118,8 @@ class BM25SkillRetriever(SkillRetrieverPort):
             # Fallback: word-overlap scoring
             scores = []
             for doc in self._corpus:
-                doc_tokens = set(doc.lower().split())
-                overlap = sum(1 for t in tokens if t.lower() in doc_tokens)
+                doc_tokens = set(_tokenize(doc))
+                overlap = sum(1 for t in tokens if t in doc_tokens)
                 scores.append(overlap / max(len(tokens), 1))
 
         # Zip, normalize, sort

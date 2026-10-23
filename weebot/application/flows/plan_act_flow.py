@@ -11,7 +11,6 @@ from collections.abc import AsyncGenerator
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
 from weebot.application.flows.base_flow import BaseFlow
-from weebot.application.flows._checkpoint_scheduler import CheckpointScheduler
 from weebot.application.flows._iteration_context import IterationContext
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.planning import PlanningState
@@ -23,6 +22,7 @@ from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.core import cancel_requests
 from weebot.core.structured_logger import StructuredLogger
 from weebot.application.termination.base import TerminationContext
 from weebot.application.services.memory_compactor import MemoryCompactor
@@ -101,6 +101,9 @@ class PlanActFlow(BaseFlow):
         verifier_llm: LLMPort | None = None,
         workspace_snapshots: Any | None = None,  # WorkspaceSnapshotPort
         knowledge_graph: Any | None = None,
+        idea_gate: Any | None = None,  # IdeaGate, for the post-completion jobs
+        dreamer_agent: Any | None = None,  # DreamerPort
+        event_store: Any | None = None,  # EventStorePort
         behavioral_learner: Any | None = None,
         logger: StructuredLogger | None = None,
         checkpoint_port: CheckpointPort | None = None,
@@ -109,6 +112,7 @@ class PlanActFlow(BaseFlow):
         agent_role: str | None = None,
         session_constraint_extractor: Any | None = None,
         correction_tracker: Any | None = None,
+        persistence_adapter: Any | None = None,  # retrying session saver
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -137,6 +141,9 @@ class PlanActFlow(BaseFlow):
                 verifier_llm=verifier_llm,
                 workspace_snapshots=workspace_snapshots,
                 knowledge_graph=knowledge_graph,
+                idea_gate=idea_gate,
+                dreamer_agent=dreamer_agent,
+                event_store=event_store,
                 behavioral_learner=behavioral_learner,
                 logger=logger,
                 checkpoint_port=checkpoint_port,
@@ -149,6 +156,7 @@ class PlanActFlow(BaseFlow):
                 # create_flow -- could not supply a tracker at all and
                 # ReviewingState's correction loop was unreachable.
                 correction_tracker=correction_tracker,
+                persistence_adapter=persistence_adapter,
             )
 
         self._llm = cfg.llm
@@ -171,6 +179,10 @@ class PlanActFlow(BaseFlow):
         )  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
+        # Post-completion jobs (CompletedState): skill-gap review, dream scan.
+        self._idea_gate = cfg.idea_gate
+        self._dreamer_agent = cfg.dreamer_agent
+        self._event_store = cfg.event_store
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
         self._knowledge_graph = cfg.knowledge_graph
         self._behavioral_learner = cfg.behavioral_learner
@@ -208,7 +220,7 @@ class PlanActFlow(BaseFlow):
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
         self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
         self._tracing_port = cfg.tracing_port
-        self._persistence_adapter = None
+        self._persistence_adapter = cfg.persistence_adapter
 
         # ── Enhancement H1: scoped MCP tool aggregation ─────────────
         self._tool_registry = cfg.tool_registry
@@ -274,7 +286,14 @@ class PlanActFlow(BaseFlow):
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
-        self._executor = ExecutorAgent(**executor_kwargs)
+        # Steps run on ExecuteStepHandler's executor, which gets these settings
+        # through step_execution_context(); this one serves summarize (ADR-015).
+        self._summary_executor = ExecutorAgent(**executor_kwargs)
+        _keys = ("skill_prompt", "skill_retriever", "profile_name", "personality", "agent_role",
+                 "behavioral_learner", "middleware_chain", "trajectory_config", "max_steps")
+        self._step_settings = {k: executor_kwargs.get(k) for k in _keys}
+        self._step_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        self.step_skill_gaps: list = []
 
         # Enhancement 5: subscribe to SkillGapDetected domain events
         if self._event_bus is not None and self._misalignment_journal is not None:
@@ -361,7 +380,7 @@ class PlanActFlow(BaseFlow):
                 signals.append(f"critique_confidence={conf:.2f}")
 
         # Signal 4: heuristic splits applied during plan parsing
-        heuristic_splits = getattr(self._plan, "_heuristic_splits", 0)
+        heuristic_splits = getattr(self._plan, "heuristic_splits", 0)
         if heuristic_splits > 0:
             signals.append(f"heuristic_splits={heuristic_splits}")
 
@@ -457,27 +476,8 @@ class PlanActFlow(BaseFlow):
         # self._session (e.g. PlanReviewState setting WAITING status)
         # since the publisher was first constructed.
         publisher._session = self._session
+        publisher._plan = self._plan  # truth binding and checkpoints read it
         self._session = await publisher.emit(event)
-
-    async def _emit_domain_event(self, event: AgentEvent) -> None:
-        """Publish domain events derived from agent events."""
-        from weebot.domain.models.event import PlanStepCompleted, FactDiscovered
-
-        # Plan step completion
-        if event.type == "step":
-            step_id = getattr(event, "step_id", None) or getattr(event, "id", "unknown")
-            domain_event = PlanStepCompleted(session_id=self._session.id, step_id=str(step_id))
-            await self._event_bus.publish_domain_event(domain_event)
-
-        # Facts discovered (MessageEvent from assistant with new info)
-        if event.type in ("message", "thought") and hasattr(event, "message"):
-            msg = getattr(event, "message", "")
-            if isinstance(msg, str) and len(msg) > 50:
-                from hashlib import md5
-
-                key = md5(msg.encode()).hexdigest()[:12]
-                domain_event = FactDiscovered(session_id=self._session.id, key=key, value=msg[:500])
-                await self._event_bus.publish_domain_event(domain_event)
 
     async def _extract_session_constraints(self, prompt: str) -> None:
         """Extract, persist, and publish any side constraints in *prompt*.
@@ -621,7 +621,7 @@ class PlanActFlow(BaseFlow):
                 logger=self._stdlib_logger,
             )
         self._tools = await self._tool_assembler.assemble(
-            effective_prompt=effective_prompt, tools=self._tools, executor=self._executor
+            effective_prompt=effective_prompt, tools=self._tools, executor=self._summary_executor
         )
 
         # ── Resolve initial state via FlowRouter ───────────────────────────
@@ -631,6 +631,10 @@ class PlanActFlow(BaseFlow):
             extra=self._session.context.extra if self._session.context else {},
         )
         if isinstance(initial_state, ExecutingState):
+            # The step handler reloads the plan from the repo, so routing's
+            # changes (an edited plan file, ICM B2) must be saved first.
+            if self._state_repo is not None:
+                await self._state_repo.save_session(self._session)
             last_plan = self._session.get_last_plan()
             self._plan = last_plan
             self.set_state(initial_state)
@@ -697,6 +701,11 @@ class PlanActFlow(BaseFlow):
 
         while iteration_count <= max_iterations:
             iteration_count += 1
+            if cancel_requests.take(self._session.id):  # `flow cancel` from any process
+                self._session = self._session.set_status(SessionStatus.FAILED)
+                await self._emit(ErrorEvent(error="Cancelled on request (flow cancel)."))
+                yield ErrorEvent(error="Cancelled on request (flow cancel).")
+                break  # through the normal exit: hooks run, the run span ends
 
             current_state_type = type(self._state)
 
@@ -715,7 +724,7 @@ class PlanActFlow(BaseFlow):
 
                 _term_ctx = TerminationContext(
                     iteration=iteration_count,
-                    total_tokens=self._executor.token_usage.get("total_tokens", 0),
+                    total_tokens=self.token_usage.get("total_tokens", 0),
                     elapsed_seconds=_term_time.monotonic() - self._flow_started_at,
                 )
                 for _tc in self._termination_conditions:
@@ -724,10 +733,11 @@ class PlanActFlow(BaseFlow):
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
 
-                        if self._run_span is not None:
-                            self._run_span.end()
+                        self._end_run_span()
+                        # Run CompletedState this pass; it sets the terminal
+                        # status, so the loop ends after it.
                         self.set_state(CompletedState(termination_reason=_result.reason))
-                        return
+                        break
 
             # ── Self-Harness: resolve harness instructions per-step ──
             # Before executing a state, check if we have a resolver and
@@ -741,11 +751,11 @@ class PlanActFlow(BaseFlow):
                     # ExecutorAgent._call_with_cascade() and does not propagate
                     # back.  Phase 7+ may add a post-step callback to track
                     # which model actually responded and re-resolve.
-                    model_id = self._model or self._executor._model or ""
+                    model_id = self._model or self._summary_executor._model or ""
                     resolved_block = self._harness_resolver.resolve_instruction_block(model_id)
                     if resolved_block and resolved_block != self._harness_instruction_block:
                         self._harness_instruction_block = resolved_block
-                        self._executor.set_harness_block(resolved_block)
+                        self._summary_executor.set_harness_block(resolved_block)
                 except Exception as exc:
                     self._stdlib_logger.debug(
                         "Per-step harness resolution failed: %s — using previous block", exc
@@ -787,14 +797,16 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
-                if self._run_span is not None:
-                    self._run_span.end()
+                self._end_run_span()
                 return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
 
             # If we reached COMPLETED state logic or it paused for HITL, we break
-            if self._session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING):
+            # FAILED too: CompletedState ends a run with failed steps that way.
+            if self._session.status in (
+                SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.FAILED
+            ):
                 break
 
             # If we are IDLE after state execution, we might be finished
@@ -822,6 +834,7 @@ class PlanActFlow(BaseFlow):
 
         if iteration_count > max_iterations:
             yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")
+        self._end_run_span()
 
     def _has_unresolved_wait_event(self) -> bool:
         """Check if the last WaitForUserEvent in the session has not been resolved."""
@@ -916,10 +929,29 @@ class PlanActFlow(BaseFlow):
 
     @property
     def token_usage(self) -> dict[str, int]:
-        """Cumulative token usage for this flow's executor."""
-        if self._executor and hasattr(self._executor, "token_usage"):
-            return self._executor.token_usage
-        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        """Cumulative token usage: every step's executor plus the summary one."""
+        total = dict(self._step_token_usage)
+        own = getattr(self._summary_executor, "token_usage", None) or {}
+        for key in total:
+            total[key] += int(own.get(key, 0) or 0)
+        return total
+
+    def step_execution_context(self):
+        """This flow's settings for the executor that runs the next step (ADR-015)."""
+        from weebot.application.models.step_execution_context import StepExecutionContext
+
+        return StepExecutionContext(
+            tools=self._tools,
+            harness_instruction_block=self._harness_instruction_block or None,
+            pinned_model=self._model or None,
+            **self._step_settings,
+        )
+
+    def record_step_usage(self, usage: dict | None, skill_gaps: list | None) -> None:
+        """Add one step's token usage and skill gaps, as ExecuteStepHandler reports them."""
+        for key in self._step_token_usage:
+            self._step_token_usage[key] += int((usage or {}).get(key, 0) or 0)
+        self.step_skill_gaps.extend(skill_gaps or [])
 
     def _get_persistence_adapter(self):
         """Return the session persistence adapter injected at construction time.
@@ -942,19 +974,11 @@ class PlanActFlow(BaseFlow):
             self._awm = AgentWorkflowMemory(llm=self._llm)
         return self._awm
 
-    async def _maybe_save_checkpoint(self) -> None:
-        """Save a flow checkpoint if a CheckpointPort is wired.
-        Delegates to CheckpointScheduler."""
-        if not hasattr(self, "_checkpoint_scheduler"):
-            self._checkpoint_scheduler = CheckpointScheduler(checkpoint_port=self._checkpoint_port)
-        current_state_name = type(self._state).__name__ if self._state else "planning"
-        await self._checkpoint_scheduler.maybe_save(
-            session=self._session, plan=self._plan, current_state_name=current_state_name
-        )
-
-        # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
+    def _end_run_span(self) -> None:
+        """End the plan_act_iteration span once, on whichever exit the run takes."""
         if self._run_span is not None:
             self._run_span.end()
+            self._run_span = None
 
     def _get_tracing_port(self):
         """Return the tracing port injected at construction time, or None."""

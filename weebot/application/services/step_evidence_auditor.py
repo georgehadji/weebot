@@ -21,6 +21,7 @@ from collections.abc import Sequence
 
 from weebot.application.ports.file_storage_port import FileStoragePort
 from weebot.application.ports.step_audit_port import StepAuditPort
+from weebot.application.services.tool_guards import SHELL_TOOLS
 from weebot.domain.models.audit import (
     AuditDimension,
     AuditReport,
@@ -34,7 +35,7 @@ from weebot.domain.models.plan import Step
 _log = logging.getLogger(__name__)
 
 _WRITE_TOOLS = frozenset({"file_editor", "edit_file", "write_file", "create_file"})
-_SHELL_TOOLS = frozenset({"bash", "shell_exec", "powershell"})
+_SHELL_TOOLS = SHELL_TOOLS
 _TEST_KEYWORDS = ("pytest", "npm test", "jest", "cargo test", "go test", "python -m pytest")
 _TEST_FAILURE_MARKERS = ("failed", "error", "assertion error", "test failed")
 _IMAGE_TOOLS = frozenset({"image_gen", "image_generator", "generate_image"})

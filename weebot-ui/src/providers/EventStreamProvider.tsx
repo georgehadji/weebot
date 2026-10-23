@@ -33,6 +33,7 @@ import {
   useState,
 } from "react";
 import { AgentEvent, SessionPresenceEvent } from "@/types/events";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 type Listener = (event: AgentEvent) => void;
 type ConnectionMode = "connecting" | "websocket" | "sse" | "closed";
@@ -67,8 +68,8 @@ function getWsToken(): string | null {
 }
 
 function getStreamUrls(): { ws: string; api: string } {
-  const defaultWs = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
-  const defaultApi = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+  const defaultWs = ENDPOINTS.ws;
+  const defaultApi = ENDPOINTS.api;
   if (typeof window === "undefined") return { ws: defaultWs, api: defaultApi };
   try {
     const configuredWs = localStorage.getItem("weebot_ws_url")?.trim();

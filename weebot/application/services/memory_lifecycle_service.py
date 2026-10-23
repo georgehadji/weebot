@@ -137,15 +137,17 @@ class MemoryLifecycleService:
         """Query low-salience entries, classify tiers, evict COLD past TTL.
 
         Args:
-            repo: An object with ``get_low_salience_entries()`` and
-                  ``delete_memory_entries()`` methods (e.g. SQLiteStateRepository
-                  or InMemoryStateRepository).
+            repo: A StateRepositoryPort that also plays MemoryMetadataStore
+                  (``delete_memory_entries``); otherwise the sweep is a no-op.
 
         Returns:
             Dict with ``checked``, ``evicted`` counts.
         """
         stats: dict = {"checked": 0, "evicted": 0}
-        if repo is None:
+        from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
+
+        if repo is None or as_role(repo, MemoryMetadataStore) is None:
+            # Nothing to evict from: the repository keeps no memory metadata (W5.1).
             return stats
         try:
             low_entries = await repo.get_low_salience_entries(threshold=0.3, limit=100)

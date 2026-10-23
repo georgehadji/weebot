@@ -106,7 +106,10 @@ def _read_ops_file(credential_dir: str, ops_file: str) -> str:
         configured = manifest.get("presets_dir")
         if isinstance(configured, str) and configured:
             presets_dir = configured
-    bundled_path = shared_dir() / presets_dir / ops_file
+    # The docs and the tool's help name presets bare ("list_inbox"); only the
+    # bundled lookup adds ".json", so a credential-dir file needs its exact name.
+    bundled_name = ops_file if ops_file.endswith(".json") else f"{ops_file}.json"
+    bundled_path = shared_dir() / presets_dir / bundled_name
     try:
         return bundled_path.read_text(encoding="utf-8")
     except OSError as err:

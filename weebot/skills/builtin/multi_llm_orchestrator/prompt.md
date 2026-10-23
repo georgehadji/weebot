@@ -28,6 +28,8 @@ You have access to the **Multi-LLM Orchestrator** at `E:\Documents\Vibe-Coding\A
 | "Build an X app" with no existing codebase | Modifying code you've already written |
 | Projects with a budget ($ spend cap) | Tasks under 5 minutes of work |
 
+**If the Orchestrator fails or is unavailable**, build the site or app yourself; do not stop.
+
 **Rule of thumb:** If the user says "build", "create a project", "generate an app", or provides a detailed spec for something new — delegate. If they say "fix", "edit", "change", "add feature to" — build directly.
 
 ---

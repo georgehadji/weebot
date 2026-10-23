@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from weebot.config.api_endpoints import XAI_API_BASE
 
 try:
     import httpx
@@ -148,9 +149,9 @@ class HealthCheckService:
         start_time = time.monotonic()
 
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            settings = WeebotSettings()
+            settings = get_settings()
 
             providers = settings.available_providers()
             if not providers:
@@ -165,30 +166,16 @@ class HealthCheckService:
 
             # Try to check each provider
             provider_status = {}
+            # The SDK each provider's adapter needs. Every provider settings can
+            # name (settings._PROVIDER_KEYS) uses the OpenAI-compatible client
+            # except Claude; an if/elif chain here once missed openrouter and
+            # xai and reported them "unknown", so health always read degraded.
+            import importlib.util
+
             for provider in providers:
-                try:
-                    # Import and check availability
-                    if provider == "openai":
-                        import openai
-
-                        provider_status[provider] = "available"
-                    elif provider == "claude":
-                        import anthropic
-
-                        provider_status[provider] = "available"
-                    elif provider == "kimi":
-                        # Kimi uses OpenAI client
-                        import openai
-
-                        provider_status[provider] = "available"
-                    elif provider == "deepseek":
-                        import openai
-
-                        provider_status[provider] = "available"
-                    else:
-                        provider_status[provider] = "unknown"
-                except ImportError:
-                    provider_status[provider] = "missing_dependency"
+                sdk = "anthropic" if provider == "claude" else "openai"
+                found = importlib.util.find_spec(sdk) is not None
+                provider_status[provider] = "available" if found else "missing_dependency"
 
             latency = (time.monotonic() - start_time) * 1000
 
@@ -253,7 +240,7 @@ class HealthCheckService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    "https://api.x.ai/v1/models", headers={"Authorization": f"Bearer {xai_key}"}
+                    f"{XAI_API_BASE}/models", headers={"Authorization": f"Bearer {xai_key}"}
                 )
             latency = (time.monotonic() - start_time) * 1000
 

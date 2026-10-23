@@ -4,6 +4,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from datetime import UTC
+from weebot.config.constants import DB_SESSIONS_PATH
 
 console = Console()
 
@@ -36,7 +37,7 @@ def benchmark_list(tasks_dir: str) -> None:
 @click.option("--skill-name", default="general", show_default=True)
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--sample", "sample_idx", default=0, type=int, show_default=True)
-@click.option("--db", default="./weebot_sessions.db", show_default=True)
+@click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
 def benchmark_run(
     task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str
 ) -> None:
@@ -72,7 +73,7 @@ def benchmark_run(
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--concurrency", default=4, type=int, show_default=True)
 @click.option("--output", "-o", default="benchmark_results.json", show_default=True)
-@click.option("--db", default="./weebot_sessions.db", show_default=True)
+@click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
 def benchmark_batch(
     tasks_dir: str, skill_name: str, model: str | None, concurrency: int, output: str, db: str
 ) -> None:
@@ -214,7 +215,7 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
     show_default=True,
     help="Number of Self-Harness optimization iterations",
 )
-@click.option("--db", default="./weebot_sessions.db", show_default=True)
+@click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
 def harness_evolve(
     harness_path: str,
     output_dir: str | None,

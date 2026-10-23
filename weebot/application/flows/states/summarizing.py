@@ -47,7 +47,7 @@ class SummarizingState(FlowState):
                 DeprecationWarning,
                 stacklevel=2,
             )
-            async for event in context._executor.summarize():
+            async for event in context._summary_executor.summarize():
                 await context._emit(event)
                 yield event
 

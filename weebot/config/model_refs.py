@@ -1,122 +1,58 @@
-"""Centralized LLM model name references.
+"""Which model serves which role, task and tier: ids only.
 
-9 allowed models — all explicit provider-qualified IDs.
-``openrouter/auto`` is FORBIDDEN.
+This module owns routing. It does not own model facts: price, context window,
+modalities and supported parameters come from the generated OpenRouter catalog
+(``weebot/config/model_catalog.py``, read through
+``weebot.config.model_registry.get_model_config``). Do not quote a token price
+or a context size here; it is a second copy that drifts (W6.1).
 
-Cascade (2-tier direct API + 2-tier OpenRouter):
-  Tier 1: Kimi K2.6 — via KIMI_API_KEY (direct), OpenRouter fallback
-  Tier 2: DeepSeek V4 Flash — via DEEPSEEK_API_KEY (direct), OpenRouter fallback
-  Tier 3: Grok Build 0.1 — fast coding, agentic SWE (OpenRouter)
-  Tier 4: Qwen 3.8 Max — flagship coding, 1M ctx (OpenRouter)
+``openrouter/auto`` is FORBIDDEN. Every text id below must exist in the catalog
+(``tests/unit/test_routed_models_exist.py``).
 
-Task-specific:
-  CODING:        DeepSeek V4 Flash + Grok Build 0.1
-  FILE_OPS:      DeepSeek V4 Flash
-  RESEARCH:      Kimi K2.6 (direct API, structured output)
-  REVIEW:        Grok 4.3 — reasoning, high factual accuracy
-  PLANNING:      Kimi K2.6 (direct API, structured planning)
-  SECURITY:      Grok 4.3 + DeepSeek V4 Flash — reasoning
-  SUMMARIZATION: DeepSeek V4 Flash (fast, cheap)
-  GENERAL:       Kimi K2.6 (direct API preferred)
+Choice, 2026-10-23: value for money per role, scored on the Artificial Analysis
+Intelligence Index (v4.3.2, snapshot 2026-10-17..23) and its per-role component
+(agentic automation, terminal coding, long-context reasoning, factuality,
+writing) against measured cost per task. Ids are plain (no ``:thinking``):
+that suffix forces ``reasoning_effort="max"`` in OpenAIAdapter, the most
+expensive setting, on every call. Fallbacks come from other providers, so one
+provider outage does not take a role down.
 """
 
 from __future__ import annotations
 
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+
 # ========================================================================
-# Executor Cascade (4-tier)
+# Executor cascade tiers
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "z-ai/glm-5.2"
-"""Tier 1: GLM 5.2 — primary executor model.
-1M context, long-horizon agent workflows, project-level SWE, strong coding.
-Routed via OpenRouter (z-ai provider).  $1.20/$4.10 per 1M tokens."""
+MODEL_CASCADE_TIER1: str = "deepseek/deepseek-v4.1-flash-1017"  # user pick, 2026-10-23
+"""Tier 1, the executor workhorse: best agentic-automation score per dollar.
+DeepSeek-direct first when DEEPSEEK_API_KEY is set, OpenRouter fallback."""
 
-# ── Vision-capable models (VLM) ───────────────────────────────────
-MODEL_VISION_PRIMARY: str = "openai/gpt-4o"
-"""Primary VLM: GPT-4o — best multimodal, tool use, 128K context. $2.50/$10.00 per 1M."""
+MODEL_CASCADE_TIER2: str = "minimax/minimax-m3.1-flash"
+"""Tier 2, budget fallback from another provider; strong agentic automation."""
 
-MODEL_VISION_FAST: str = "google/gemini-2.5-flash"
-"""Gemini 2.5 Flash — fast VLM, strong vision, 1M context. Kept for backward compat."""
+MODEL_CASCADE_TIER3: str = "xiaomi/mimo-v2.6-pro"
+"""Tier 3, standard: near-frontier long-context reasoning at a mid price."""
 
-MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct"
-"""Budget VLM: Qwen2.5-VL 72B — open vision model, paid tier via OpenRouter. Use :free suffix only if credit-constrained."""
+MODEL_CASCADE_TIER4: str = "openai/gpt-6.1-sol"
+"""Tier 4, premium: frontier reasoning at a fraction of the top models' cost."""
 
-MODEL_BUDGET: str = "x-ai/grok-build-0.1"
-"""Budget model for non-critical operations (compression, curation, defaults).
-Same as Tier 1 — fast coding model via direct XAI_API_KEY."""
+MODEL_BUDGET: str = "openai/gpt-6-luna"
+"""Budget model for non-critical calls (compression, curation, judging):
+cheapest measured cost per task, strict JSON-schema output."""
 
-MODEL_CASCADE_TIER2: str = "deepseek/deepseek-v4-flash"
-"""Tier 2: DeepSeek V4 Flash — fast fallback.
-Direct API via DEEPSEEK_API_KEY (preferred). OpenRouter fallback.
-Native model ID: ``deepseek-v4-flash`` (stripped by DeepSeekAdapter)."""
+MODEL_VISION_PRIMARY: str = "openai/gpt-5.6-luna"
+"""Vision: image input plus tool use at a budget price."""
 
-MODEL_CASCADE_TIER3: str = "moonshotai/kimi-k2.6"
-"""Tier 3: Kimi K2.6 — structured output, broad knowledge, 256K context."""
-
-MODEL_CASCADE_TIER4: str = "qwen/qwen3.8-max-0902"
-"""Tier 4: Qwen 3.8 Max — flagship agent-centric, coding strength, 1M context."""
-
-# ═══════════════════════════════════════════════════════════════════════
-# Additional model references — added 2026-07-21
-# ═══════════════════════════════════════════════════════════════════════
-
-MODEL_LONGCAT_2: str = "meituan/longcat-2.0"
-"""LongCat 2.0 — back on OpenRouter catalog as of this check. 1M ctx, $0.30/$1.20.
-Coding, repository-level changes, long-horizon problem solving, agentic."""
-
-MODEL_INKLING: str = "thinkingmachines/inkling"
-"""Inkling — verified present on OpenRouter API 2026-08-01. 1M ctx, $1/$4.05.
-Image+audio understanding. General reasoning, coding, agentic, RAG."""
-
-MODEL_INKLING_SMALL: str = "thinkingmachines/inkling-small"
-"""Inkling Small — open-weight multimodal MoE, 12B active / 276B total.
-512K ctx, $0.50/$1.20 per 1M. Text+image+audio input, tools, reasoning.
-Cheaper, more efficient sibling of Inkling. No structured-output support."""
-
-MODEL_QWEN_37_FLASH: str = "qwen/qwen3.7-flash"
-"""Qwen 3.7 Flash — cheapest model in the catalog, $0.03/$0.13 per 1M.
-1M ctx, 64K output, vision-language (text/image/video), tools + structured output.
-Ideal for high-volume routing, classification, and inner-loop decisions."""
-
-MODEL_DEEPSEEK_V4_FLASH_0731: str = "deepseek/deepseek-v4-flash-0731"
-"""DeepSeek V4 Flash 0731 — re-post-trained V4 Flash revision, $0.14/$0.28 per 1M.
-1M ctx, 384K max output (vs 160K on base V4 Flash), same price. Coding, reasoning, agents."""
-
-MODEL_MUSE_SPARK: str = "meta/muse-spark-1.1"
-"""Muse Spark 1.1 — back on OpenRouter catalog as of this check. 1M ctx, $1.25/$4.25.
-Multi-agent orchestration, MCP, zero-shot tool use, structured output. US-only."""
-
-MODEL_KIMI_K3: str = "moonshotai/kimi-k3"
-"""Kimi K3 — back on OpenRouter catalog as of this check. 1M ctx, $3/$15.
-Complex coding, large-repo navigation, tool use, image/log debugging."""
-
-# ═══════════════════════════════════════════════════════════════════════
-# Additional model references — added 2026-07-21
-# ═══════════════════════════════════════════════════════════════════════
-
-MODEL_LAGUNA_XS_21: str = "poolside/laguna-xs-2.1"
-"""Laguna XS 2.1 — Poolside coding agent, 1M ctx, $0.09/$0.18 (OpenRouter, verified).
-Extremely cheap agentic coding."""
-
-MODEL_LAGUNA_S_21: str = "poolside/laguna-s-2.1"
-"""Laguna S 2.1 — back on OpenRouter catalog as of this check, 1M ctx, $0.09/$0.18.
-Larger sibling of Laguna XS 2.1. Agentic coding."""
-
-MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-3.5-flash-lite"
-"""Gemini 3.5 Flash-Lite — back on OpenRouter catalog as of this check, 1M ctx, $0.30/$2.50.
-Upgraded agentic capabilities. Subagents, focused multi-agent tasks."""
-
-MODEL_GEMINI_36_FLASH: str = "google/gemini-3.6-flash"
-"""Gemini 3.6 Flash — back on OpenRouter catalog as of this check, 1M ctx, $1.50/$7.50.
-Coding, agentic workflows, web/app dev. Polished output, fewer edits, reduced token use."""
-
-# ═══════════════════════════════════════════════════════════════════════
+# ========================================================================
 # Verbalized Sampling
-# ═══════════════════════════════════════════════════════════════════════
+# ========================================================================
 MODEL_VS_CAPABLE: str = MODEL_CASCADE_TIER4
-"""VS-capable model: same as Tier 4 (Qwen 3.8 Max). Paper: larger models benefit more."""
-
-MODEL_VS_FALLBACK: str = "x-ai/grok-build-0.1"
-"""VS fallback when Tier 4 unavailable."""
+"""VS-capable model: the premium tier. Paper: larger models benefit more."""
 
 
 def get_vs_model() -> str:
@@ -125,166 +61,115 @@ def get_vs_model() -> str:
 
 
 # ========================================================================
-# Task-specific
-# ========================================================================
-MODEL_PLANNER: str = "z-ai/glm-5.2:thinking"
-"""Planning: GLM 5.2 :thinking — reasoning model (effort=xhigh), 1M context, Design Arena #1 coding. $0.95/$3.00 per 1M."""
-
-MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
-"""Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
-
-MODEL_SUMMARIZE: str = "deepseek/deepseek-v4-flash"
-"""Summary: DeepSeek V4 Flash — fast, cheap, good summarization via DEEPSEEK_API_KEY."""
-
-# ========================================================================
-# Web Search — Perplexity Sonar models (via OpenRouter)
+# Web search — Perplexity Sonar (via OpenRouter)
 # ========================================================================
 MODEL_SEARCH_PERPLEXITY_SONAR: str = "perplexity/sonar"
-"""Primary web search: Sonar — lightweight, fast, search-grounded with citations.
-$1/$1 per 1M tokens, 127K context. Returns search_results + citations alongside prose."""
-
-MODEL_SEARCH_PERPLEXITY_SONAR_FALLBACK: str = "perplexity/sonar-pro"
-"""Fallback web search: Sonar Pro — deeper multi-step queries, 2× citations.
-$3/$15 per 1M tokens, 200K context. Use when Sonar returns insufficient results."""
+"""Web search: search-grounded answers with citations and search_results."""
 
 # ========================================================================
-# KwaiPilot KAT-Coder Models (via OpenRouter)
+# Role -> model cascade (primary, then fallbacks)
 # ========================================================================
-MODEL_KWAIPILOT_KAT_CODER_PRO: str = "kwaipilot/kat-coder-pro-v2.5"
-"""KwaiPilot KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model."""
+# The one role table. It used to be two (`_ROLE_MODEL_CASCADE` for the executor
+# cascade, `ROLE_MODEL_CONFIG` for DI's per-role LLMs, the context switcher,
+# the role model selector and the harness profile resolver), and the two gave
+# `planner`, `executor` and `reviewer` different models.
+_DEEPSEEK = MODEL_CASCADE_TIER1
+_MINIMAX = MODEL_CASCADE_TIER2
+_MIMO_PRO = MODEL_CASCADE_TIER3
+_SOL = MODEL_CASCADE_TIER4
+_LUNA = MODEL_BUDGET
+_ARGON = "google/gemini-4-argon"
+_SONNET = "anthropic/claude-sonnet-5.5"
+_OPUS = "anthropic/claude-opus-5.5"
+_HAIKU = "anthropic/claude-haiku-5.5"
 
-# ========================================================================
-# Per-Agent (Role) Model Selection
-# ========================================================================
-MODEL_ROLE_RESEARCHER: str = "x-ai/grok-build-0.1"
-"""Researcher: Grok Build 0.1 via XAI_API_KEY — fast coding, broad knowledge, source synthesis."""
+# User rule (2026-10-23): of Claude models, only Opus, Sonnet and Haiku 5.5;
+# never Fable. Paths that pick from the live list (the cascade's rescue, the
+# ACR pool) filter through this. Pinned by tests/unit/test_claude_model_rule.py.
+_ALLOWED_CLAUDE = re.compile(r"^(anthropic/)?claude-(opus|sonnet|haiku)-5[.-]5(:[a-z]+)?$")
 
-MODEL_ROLE_ANALYST: str = "deepseek/deepseek-v4-flash"
-"""Analyst: DeepSeek V4 Flash via DEEPSEEK_API_KEY — fast math/reasoning, complex data analysis."""
 
-MODEL_ROLE_CODER: str = "deepseek/deepseek-v4-flash"
-"""Coder: DeepSeek V4 Flash — fast coding, low latency via DEEPSEEK_API_KEY."""
+def claude_model_allowed(model_id: str) -> bool:
+    """False only for a Claude model outside the user's allowed set."""
+    return "claude" not in model_id.lower() or bool(_ALLOWED_CLAUDE.match(model_id.lower()))
+_MIMO_FLASH = "xiaomi/mimo-v2.6-flash"
+_GLM = "z-ai/glm-5.3"
+_GLM_FLASH = "z-ai/glm-5.3-flash"
+_QWEN_FLASH = "qwen/qwen3.8-flash"
 
-MODEL_ROLE_REVIEWER: str = "x-ai/grok-4.3"
-"""Reviewer: Grok 4.3 — highest factual accuracy, reasoning, security audit."""
-
-MODEL_ROLE_ADMIN: str = "x-ai/grok-build-0.1"
-"""Admin: Kimi K2.6 via KIMI_API_KEY — orchestrates sub-agents, decomposes complex tasks."""
-
-MODEL_ROLE_AUTOMATION: str = "deepseek/deepseek-v4-flash"
-"""Automation: DeepSeek V4 Flash via DEEPSEEK_API_KEY — instruction following, reliable execution."""
-
-MODEL_ROLE_DOCUMENTATION: str = "deepseek/deepseek-v4-flash"
-"""Documentation: DeepSeek V4 Flash — fast, cheap, good for writing/formatting."""
-
-# ── Role → Model cascade lookup (primary + 2 fallbacks) ────────────
-
-_ROLE_MODEL_CASCADE: dict[str, list[str]] = {
-    "researcher": [
-        "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
-        "deepseek/deepseek-v4-flash:thinking",  # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
-        "qwen/qwen3.8-max-0902",  # fallback 2: Qwen Max — strong comprehension
-    ],
-    "analyst": [
-        "deepseek/deepseek-v4-flash:thinking",  # primary: DeepSeek V4 Flash :thinking — math/reasoning
-        "moonshotai/kimi-k2.6:thinking",  # fallback 1: Kimi K2.6 :thinking
-        "x-ai/grok-4.3:thinking",  # fallback 2: Grok 4.3 :thinking — factual accuracy
-    ],
-    "coder": [
-        "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro
-        "poolside/laguna-xs-2.1",  # fallback 2: Laguna XS 2.1 — coding
-        "minimax/minimax-m3",  # fallback 4: MiniMax M3 — budget
-        "deepseek/deepseek-v4-flash",  # fallback 4: DeepSeek V4 Flash
-        "moonshotai/kimi-k2.6",  # fallback 5: Kimi K2.6
-        "moonshotai/kimi-k2.7-code",  # fallback 6: Kimi K2.7 Code — complex coding
-    ],
-    "executor": [
-        "z-ai/glm-5.2:thinking",  # primary: GLM 5.2 :thinking
-        "google/gemini-3.5-flash",  # fallback 1: Gemini 3.5 Flash — 1M ctx
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
-        "moonshotai/kimi-k2.6:thinking",  # fallback 4: Kimi K2.6 :thinking — structured + CoT
-    ],
-    "reviewer": [
-        "x-ai/grok-4.3:thinking",  # primary: Grok 4.3 :thinking
-        "google/gemini-2.5-flash",  # fallback 1: Gemini 2.5 Flash — multimodal
-        "deepseek/deepseek-v4-flash:thinking",  # fallback 2: DeepSeek V4 Flash :thinking
-        "moonshotai/kimi-k2.6:thinking",  # fallback 3: Kimi K2.6 :thinking
-    ],
-    "admin": [
-        "x-ai/grok-4.3",  # primary: Grok 4.3 — agentic orchestration
-        "x-ai/grok-build-0.1",  # fallback 1: Grok Build
-        "x-ai/grok-4.3",  # fallback 2: Grok 4.3
-        "moonshotai/kimi-k2.6",  # fallback 3: Kimi K2.6
-    ],
-    "automation": [
-        "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "deepseek/deepseek-v4-flash",  # fallback 3: DeepSeek V4 Flash — instruction following
-        "moonshotai/kimi-k2.6",  # fallback 4: Kimi K2.6
-    ],
-    "documentation": [
-        "deepseek/deepseek-v4-flash",  # primary: DeepSeek V4 Flash — fast, cheap
-        "moonshotai/kimi-k2.6",  # fallback 1: Kimi K2.6
-        "minimax/minimax-m3",  # fallback 2: MiniMax M3
-    ],
-    "product_manager": [
-        "moonshotai/kimi-k2.6",
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "deepseek/deepseek-v4-flash",
-        "minimax/minimax-m3",
-    ],
-    "planner": [
-        "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — structured planning + CoT
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking
-        "x-ai/grok-build-0.1",  # fallback 4: Grok Build — agentic
-    ],
-    "planner_sub": [
-        "moonshotai/kimi-k2.6:thinking",
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5
-        "deepseek/deepseek-v4-flash:thinking",
-        "x-ai/grok-build-0.1",
-    ],
-    "designer": [
-        "deepseek/deepseek-v4-flash",  # primary: fast, cheap
-        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — layout & visual design experts
-        "moonshotai/kimi-k2.6",
-        "minimax/minimax-m3",  # fallback 4: MiniMax M3 — paid, $0.30/$1.20
-    ],
-    "vision": [
-        "openai/gpt-4o",  # primary: best vision + tool use
-        "google/gemini-3.5-flash",  # fallback 1: 1M ctx
-        "qwen/qwen3.7-flash",  # fallback 2: text/image/video, 1M ctx, $0.03/1M
-        "thinkingmachines/inkling-small",  # fallback 3: text/image/audio MoE, 512K ctx
-        "google/gemini-2.5-flash",  # fallback 4: Gemini 2.5 Flash — multimodal
-        "qwen/qwen2.5-vl-72b-instruct",  # fallback 5: budget VLM
-    ],
+ROLE_MODEL_CONFIG: dict[str, list[str]] = {
+    # Reasoning-heavy, one call per plan: quality per dollar at the top end.
+    # Haiku 5.5 first for planner and researcher: on the 2026-10-23 billed
+    # hard-task eval it tied the previous primaries at 3x to 10x lower cost
+    # (tasks/remaining_fix_plan.md); the previous primary is fallback 1. The
+    # coder stays on Sonnet: in multi-step coding runs Haiku went 2/3 (it
+    # rewrote a task's input) against Sonnet's 3/3.
+    "planner": [_HAIKU, _SOL, _ARGON, _MIMO_PRO],
+    "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
+    # Highest volume: the agentic tool loop.
+    "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
+    # Best independent terminal-coding score at half the top model's price.
+    "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
+    # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
+    # Sol (another lab than the Anthropic coder) is fallback 1.
+    "reviewer": [_HAIKU, _SOL, _ARGON, _OPUS],
+    "critic": [_SOL, _ARGON, _OPUS],
+    "verifier": [_DEEPSEEK, _MIMO_FLASH, _HAIKU],
+    "researcher": [_HAIKU, _MIMO_PRO, _SOL, _DEEPSEEK],
+    "analyst": [_SOL, _MIMO_PRO, _ARGON],
+    "dreamer": [_MIMO_PRO, _DEEPSEEK, _SOL],
+    "product_manager": [_MIMO_PRO, _SOL, _HAIKU],
+    "designer": [_MIMO_PRO, _SONNET, _DEEPSEEK],
+    "documentation": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
+    "summarizer": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
+    "automation": [_MINIMAX, _DEEPSEEK, _MIMO_FLASH],
+    "admin": [_MINIMAX, _DEEPSEEK, _MIMO_PRO],
+    "subagent": [_LUNA, _MIMO_FLASH, _HAIKU, _GLM_FLASH],
+    "vision": [MODEL_VISION_PRIMARY, _HAIKU, "google/gemini-3.8-flash", _MIMO_FLASH],
 }
+
+_DEFAULT_ROLE_CASCADE: list[str] = [_DEEPSEEK, _MIMO_PRO, _SOL]
+
+# Priced at the top: the ACR bandit explores these less.
+PREMIUM_MODELS: frozenset[str] = frozenset({_SOL, _ARGON, _SONNET, _OPUS})
 
 
 def get_model_cascade_for_role(role: str | None) -> list[str]:
-    """Return the model cascade (primary + 2 fallbacks) for an agent role.
+    """Return the model cascade (primary, then fallbacks) for an agent role.
 
-    Args:
-        role: Agent role name (e.g. \"coder\", \"researcher\").
-              ``None`` or unknown roles fall back to the default cascade.
-
-    Returns:
-        List of 3 OpenRouter-qualified model IDs: [primary, fallback1, fallback2].
+    ``None`` or an unknown role gets the default cascade: the three tiers above
+    the budget one.
     """
-    if role and role in _ROLE_MODEL_CASCADE:
-        return list(_ROLE_MODEL_CASCADE[role])
-    # Default cascade — prefer xAI (native API key) over OpenRouter models
-    return ["x-ai/grok-build-0.1", "x-ai/grok-4.3", MODEL_CASCADE_TIER1]
+    if role and role in ROLE_MODEL_CONFIG:
+        return list(ROLE_MODEL_CONFIG[role])
+    return list(_DEFAULT_ROLE_CASCADE)
 
+
+# Sub-agent model per AgentTier value ("budget", "standard", "premium"), for a
+# spec that names no model. AgentTier is a str enum, so its members key this.
+SUBAGENT_TIER_MODEL: dict[str, str] = {
+    "budget": MODEL_CASCADE_TIER2,
+    "standard": MODEL_CASCADE_TIER3,
+    "premium": MODEL_CASCADE_TIER4,
+}
+
+# ========================================================================
+# Task -> model cascade (the context switcher)
+# ========================================================================
+# Ids only; the per-task price list that used to sit beside these in
+# core/model_cascade_config.py was a third copy of catalog prices.
+TASK_MODEL_CASCADE: dict[str, list[str]] = {
+    "coding": [_DEEPSEEK, _MINIMAX, _SONNET],
+    # Past the long-context threshold: the best long-context reasoning score
+    # per dollar, with a 1M window.
+    "long_context": [_MIMO_PRO, _DEEPSEEK],
+}
 
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "x-ai/grok-build-0.1"
-MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
+MODEL_DI_DEFAULT: str = MODEL_CASCADE_TIER1
+MODEL_DI_SKILLOPT: str = MODEL_CASCADE_TIER4
 
 # Per-provider defaults: the model a provider's adapter asks for when the caller
 # names none. Each must be a model THAT provider's own API serves, as its bare
@@ -295,41 +180,38 @@ MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 # reorders, so both defaults requested a model their endpoint does not serve.
 # Pinned by tests/unit/test_provider_defaults.py.
 MODEL_FACTORY_OPENAI: str = "gpt-5.4-mini"
-MODEL_FACTORY_ANTHROPIC: str = "claude-sonnet-5"
-MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
-MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6"
+MODEL_FACTORY_ANTHROPIC: str = "claude-sonnet-5.5"
+MODEL_FACTORY_DEEPSEEK: str = MODEL_CASCADE_TIER1
+MODEL_FACTORY_OPENROUTER: str = MODEL_CASCADE_TIER1
 
 # OpenAIAdapter's own default when constructed directly. "OPENAI" here names the
 # OpenAI-compatible protocol, not the vendor: a `vendor/id` default makes the
 # adapter pick OpenRouter's base URL, which serves this ID.
-MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6"
+MODEL_DEFAULT_OPENAI: str = MODEL_CASCADE_TIER1
 
 # ========================================================================
 # Fallback chain
 # ========================================================================
+# Ten models, six labs, cheapest first after the workhorse.
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
-    "z-ai/glm-5.2",
-    "moonshotai/kimi-k2.6",
-    "deepseek/deepseek-v4-flash",
-    "x-ai/grok-build-0.1",
-    "qwen/qwen3.8-max-0902",
-    "x-ai/grok-4.3",
-    "kwaipilot/kat-coder-pro-v2.5",
-    "minimax/minimax-m3",
-    "deepseek/deepseek-v4-flash-0731",  # 1M ctx / 384K out, same price as base V4 Flash
-    "qwen/qwen3.7-flash",  # cheapest fallback of last resort
+    _DEEPSEEK,
+    _MINIMAX,
+    _MIMO_FLASH,
+    _HAIKU,
+    _LUNA,
+    _QWEN_FLASH,
+    _MIMO_PRO,
+    _GLM,
+    _SOL,
+    "deepseek/deepseek-v4-flash",  # previous workhorse, cheapest last resort
 ]
-MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"
+MODEL_FALLBACK_NON_OPENROUTER: str = MODEL_BUDGET
 
 # ========================================================================
 # CQRS / deprecated
 # ========================================================================
-MODEL_COMMAND_DEFAULT: str = "minimax/minimax-m3"
-MODEL_DEPRECATED_AGENT: str = "minimax/minimax-m3"
-MODEL_DEPRECATED_TOOL_AGENT: str = "minimax/minimax-m3"
-MODEL_RTK_CHEAP: str = "minimax/minimax-m3"
-MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
-MODEL_RTK_STANDARD: str = "qwen/qwen3.8-max-0902"
+MODEL_COMMAND_DEFAULT: str = MODEL_BUDGET
+MODEL_DEPRECATED_TOOL_AGENT: str = MODEL_BUDGET
 
 # ========================================================================
 # Image Generation Models (text → image via OpenRouter)
@@ -623,23 +505,8 @@ def get_video_model_for(use_case: str, tier: int = 0) -> str:
 # ========================================================================
 # Mixture-of-Agents
 # ========================================================================
-MODEL_MOA_REFERENCE: list[str] = [
-    "moonshotai/kimi-k2.6",
-    "deepseek/deepseek-v4-flash",
-    "x-ai/grok-build-0.1",
-    "qwen/qwen3.8-max-0902",
-]
-
-# ========================================================================
-# Pricing table
-# ========================================================================
-MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.8-max-0902"
-MODEL_PRICE_CLAUDE_OPUS: str = "x-ai/grok-4.3"
-MODEL_PRICE_CLAUDE_HAIKU: str = "minimax/minimax-m3"
-MODEL_PRICE_GPT4O: str = "qwen/qwen3.8-max-0902"
-MODEL_PRICE_GPT4O_MINI: str = "minimax/minimax-m3"
-MODEL_PRICE_KIMI: str = "minimax/minimax-m3"
-MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
+# Reference models from four labs; the first is also the default aggregator.
+MODEL_MOA_REFERENCE: list[str] = [_MIMO_PRO, _DEEPSEEK, _MINIMAX, _HAIKU]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -676,27 +543,9 @@ def get_harness_for_model(model_id: str) -> str:
     model_file = Path(f"weebot/config/harness/models/{safe_name}.yaml")
     if model_file.exists():
         return str(model_file)
-    return "weebot/config/harness/v0.2.0.yaml"
+    from weebot.config.constants import DEFAULT_HARNESS_VERSION
 
-
-# ========================================================================
-# Free-tier models (canonical list)
-# ========================================================================
-
-
-def get_free_models() -> list[str]:
-    """Return the canonical list of budget (paid) model IDs.
-
-    Previously returned free-tier models; now returns cheapest paid alternatives.
-    Verified against OpenRouter API 2026-06.
-    """
-    return [
-        "deepseek/deepseek-v4-flash",
-        "qwen/qwen3-coder-30b-a3b-instruct",
-        "openai/gpt-4.1-nano",
-        "minimax/minimax-m3",
-        "meta-llama/llama-4-scout",
-    ]
+    return f"weebot/config/harness/{DEFAULT_HARNESS_VERSION}.yaml"
 
 
 # ========================================================================
@@ -756,105 +605,3 @@ def get_rerank_model_for(use_case: str) -> str:
         "knowledge": RERANK_MODEL_FREE,  # knowledge graph FTS5 — high-throughput
     }
     return _rerank_map.get(use_case, RERANK_MODEL_FREE)
-
-
-def get_models_for_role_and_task(
-    role: str, task_type: str = "", cascade: list[str] | None = None
-) -> list[str]:
-    """Return the combined model list for a role + optional task type.
-
-    Merges ``_ROLE_MODEL_CASCADE`` (role-based) and ``MODEL_CASCADE``
-    (task-based) into a single deduplicated list. Role models come first
-    (they're specific to the agent), then task models (general-purpose).
-
-    Args:
-        role: Agent role name (e.g. ``"coder"``, ``"admin"``).
-        task_type: Task category (``"coding"``, ``"research"``, etc.).
-            Empty string skips task-based models.
-        cascade: Optional override list. If provided, returns it directly.
-
-    Returns:
-        Deduplicated list of model IDs, preserving order of first appearance.
-    """
-    if cascade is not None:
-        return list(dict.fromkeys(cascade))
-
-    combined: list[str] = list(_ROLE_MODEL_CASCADE.get(role, []))
-
-    if task_type:
-        try:
-            from weebot.core.model_cascade_config import get_cascade_for_task
-
-            task_models = get_cascade_for_task(task_type)
-            for tm in task_models:
-                if tm.id not in combined:
-                    combined.append(tm.id)
-        except Exception:
-            pass  # graceful fallback — role-only is sufficient
-
-    return combined
-
-
-# ========================================================================
-# ROLE_MODEL_CONFIG — consolidated from weebot.core.model_cascade_config
-# ========================================================================
-# This is the authoritative source for role→model mapping used by
-# context switcher, role model selector, and harness profile resolver.
-# Consumers should import from here, not from model_cascade_config.
-# ========================================================================
-
-ROLE_MODEL_CONFIG: dict[str, list[str]] = {
-    # Z.ai GLM 5.2 :thinking (reasoning xhigh, 1M ctx) → DeepSeek Flash :thinking → Kimi K2.6 :thinking
-    "planner": [
-        "z-ai/glm-5.2:thinking",
-        "deepseek/deepseek-v4-flash:thinking",
-        "moonshotai/kimi-k2.6:thinking",
-    ],
-    # Cross-lab diversity: xAI Grok 4.3 :thinking (xAI lab ≠ Z.ai planner) → DeepSeek :thinking → Grok Build
-    "critic": [
-        "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k2.7-code",  # Kimi K2.7 Code — premium review
-        "google/gemini-2.5-flash",  # Gemini 2.5 Flash — multimodal review
-        "deepseek/deepseek-v4-flash:thinking",
-        "x-ai/grok-build-0.1",
-    ],
-    # GLM 5.2 :thinking (primary, reasoning xhigh) -> DeepSeek Flash :thinking -> Kimi K2.6 :thinking
-    "executor": [
-        "z-ai/glm-5.2:thinking",
-        "google/gemini-3.5-flash",  # Gemini 3.5 Flash — $1.50/1M, 1M ctx, agentic
-        "deepseek/deepseek-v4-flash:thinking",
-        "moonshotai/kimi-k2.6:thinking",
-    ],
-    # DeepSeek Flash :thinking (fast CoVe) → Grok 4.3 :thinking (factual) → Qwen Max
-    "verifier": [
-        "deepseek/deepseek-v4-flash:thinking",
-        "x-ai/grok-4.3:thinking",
-        "qwen/qwen3.8-max-0902",
-    ],
-    # DeepSeek Flash (fast, cheap — no thinking needed for summarization)
-    "summarizer": ["deepseek/deepseek-v4-flash", "minimax/minimax-m3", "moonshotai/kimi-k2.6"],
-    # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
-    "subagent": [
-        "qwen/qwen3.7-flash",  # cheapest in catalog — $0.03/$0.13, 1M ctx
-        "openai/gpt-4.1-nano",
-        "poolside/laguna-xs-2.1",  # Laguna XS 2.1 — $0.10/1M coding agent
-        "google/gemini-2.5-flash-lite",  # Gemini 2.5 Flash Lite — subagent
-        "minimax/minimax-m3",  # MiniMax M3 — budget 1M ctx
-        "deepseek/deepseek-v4-flash:thinking",
-        "qwen/qwen3-coder-30b-a3b-instruct",
-    ],
-    # Independent code review: xAI Grok 4.3 :thinking (xAI ≠ Z.ai executor) → DeepSeek :thinking → Grok Build
-    "reviewer": [
-        "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k2.7-code",  # Kimi K2.7 Code — premium review
-        "google/gemini-2.5-flash",  # Gemini 2.5 Flash — multimodal review
-        "deepseek/deepseek-v4-flash:thinking",
-        "x-ai/grok-build-0.1",
-    ],
-    # Kimi K2.6 :thinking (broad knowledge, CoT) → GLM 5.2 :thinking → DeepSeek Flash :thinking
-    "dreamer": [
-        "moonshotai/kimi-k2.6:thinking",
-        "z-ai/glm-5.2:thinking",
-        "deepseek/deepseek-v4-flash:thinking",
-    ],
-}

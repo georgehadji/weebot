@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -52,6 +52,8 @@ def _make_flow(plan=None):
     # would make PlanReviewState's `if context._state_repo:` guard try to
     # await save_session() on a non-awaitable MagicMock.
     flow._state_repo = None
+    # PlanReviewState emits the review event through the pipeline (F37).
+    flow._emit = AsyncMock()
     return flow
 
 

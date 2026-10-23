@@ -134,10 +134,12 @@ class WeebotMCPServer:
         tool_discovery: object | None = None,
         cascade_tracker: object | None = None,
         skill_registry: object | None = None,
+        event_store: object | None = None,
         api_key: str | None = None,
         composite_registry: object | None = None,
         composite_executor: object | None = None,
         composite_tools_enabled: bool = True,
+        rerank: object | None = None,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
@@ -146,6 +148,9 @@ class WeebotMCPServer:
         self._dynamic_tools = dynamic_tools or []
         self._tool_discovery = tool_discovery
         self._cascade_tracker = cascade_tracker
+        self._event_store = event_store
+        # The entry point's reranker (run_mcp.py resolves it from its container).
+        self._rerank = rerank
         self._skill_registry = skill_registry
         self._composite_registry = composite_registry or self._default_composite_registry()
         self._composite_executor = composite_executor or self._default_composite_executor()
@@ -263,7 +268,10 @@ class WeebotMCPServer:
 
     def _register_dynamic_tools(self) -> None:
         """Register tools supplied via MCPToolkitAdapter or other dynamic sources."""
-        for tool in self._dynamic_tools:
+        from weebot.application.services.tool_guards import guard_tools
+
+        # A financial tool asks (F06); the MCP server's channel is Deny.
+        for tool in guard_tools(self._dynamic_tools):
             wrapper = self._wrap_base_tool(tool)
             self._mcp.add_tool(wrapper, name=tool.name, description=tool.description)
 
@@ -377,26 +385,16 @@ class WeebotMCPServer:
         from weebot.tools.web_search import WebSearchTool
         from weebot.tools.file_editor import StrReplaceEditorTool
 
-        _bash_tool = BashTool()
-        _python_tool = PythonExecuteTool()
+        from weebot.application.services.tool_guards import guard_tools
+
+        # The MCP server calls these directly, outside ToolExecutor, so the
+        # guard chain (egress included) is applied here (ICM fix plan W3.2, F09).
+        _bash_tool, _python_tool = guard_tools([BashTool(), PythonExecuteTool()])
         _search_tool = WebSearchTool()
 
-        # Inject reranker into WebSearchTool if available
-        try:
-            from weebot.application.di import Container
-            from weebot.application.ports.rerank_port import RerankPort
-
-            c = Container()
-            c.configure_defaults()
-            rerank = c._maybe_get(RerankPort)
-            if rerank is not None:
-                _search_tool.set_rerank(rerank)
-        except Exception:
-            import logging as _log
-
-            _log.getLogger(__name__).debug(
-                "RerankPort not configured — search results use engine order", exc_info=True
-            )
+        # The reranker the entry point passed; without one, engine order.
+        if self._rerank is not None:
+            _search_tool.set_rerank(self._rerank)
 
         _editor = StrReplaceEditorTool()
 
@@ -558,9 +556,11 @@ class WeebotMCPServer:
             import json as _json
             from datetime import datetime
 
+            from weebot import __version__
+
             return self._tool_success_response(
                 _json.dumps(
-                    {"status": "ok", "version": "1.0.0", "timestamp": datetime.now(UTC).isoformat()}
+                    {"status": "ok", "version": __version__, "timestamp": datetime.now(UTC).isoformat()}
                 )
             )
 
@@ -752,13 +752,12 @@ class WeebotMCPServer:
             "weebot://costs",
             mime_type="application/json",
             description=(
-                "Current-session cost and model cascade statistics. "
-                "Includes per-tier success/failure/circuit_open counts, "
-                "total cost estimate, cascade hit rate, and recent decisions."
+                "LLM spend of the last 24 hours from the event store: total cost, "
+                "tokens and calls, broken down by model."
             ),
         )
-        def costs_resource() -> str:
-            return build_costs_json(cascade_tracker)
+        async def costs_resource() -> str:
+            return await build_costs_json(self._event_store)
 
         @mcp.resource(
             "weebot://routing",

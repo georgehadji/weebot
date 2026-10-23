@@ -64,9 +64,9 @@ class WhatsAppAdapter(GatewayAdapter):
         When no app secret is configured, returns ``False`` (fail closed) unless
         ``WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS`` is explicitly enabled for local dev.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        _settings = WeebotSettings()
+        _settings = get_settings()
         if not self._app_secret:
             if _settings.whatsapp_allow_unsigned_webhooks:
                 logger.warning(

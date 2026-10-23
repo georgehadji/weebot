@@ -110,6 +110,24 @@ def _convert_blocks(blocks: list[Any], target: Provider) -> list[dict[str, Any]]
             converted.append({"type": "text", "text": block.get("text", "")})
         elif btype == "image":
             converted.append(_image_block(block, target))
+        elif btype == "image_url":
+            # Already OpenAI-native (osworld's agent sends these). Turning it
+            # into "[unsupported content block]" text hid every screenshot.
+            url = (block.get("image_url") or {}).get("url", "")
+            m = re.match(r"data:([^;]+);base64,(.*)", url, re.S)
+            if target == "anthropic" and m:
+                converted.append(
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": m.group(1), "data": m.group(2)},
+                    }
+                )
+            elif target == "anthropic":
+                converted.append({"type": "image", "source": {"type": "url", "url": url}})
+            else:
+                converted.append(block)
+        elif btype in ("input_audio", "video_url", "file") and target == "openai":
+            converted.append(block)  # OpenAI-native already
         elif btype == "pdf":
             data = block.get("data", "")
             url = block.get("url", "")

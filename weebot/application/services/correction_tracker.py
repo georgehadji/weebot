@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from weebot.application.ports.state_roles_port import CorrectionStore, as_role
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 from weebot.domain.models.correction import CorrectionRecord
 from weebot.domain.models.plan import Step
@@ -44,7 +45,8 @@ class CorrectionTracker:
     PATTERN_THRESHOLD = 3
 
     def __init__(self, state_repo: Any, llm: Any | None = None) -> None:
-        self._state_repo = state_repo
+        # The CorrectionStore role, or None: then corrections are not kept (W5.1).
+        self._state_repo = as_role(state_repo, CorrectionStore)
         self._llm = llm
 
     async def record_correction(
@@ -58,6 +60,8 @@ class CorrectionTracker:
         threshold, so callers emit exactly one pattern-detected signal per
         threshold crossing rather than once per record.
         """
+        if self._state_repo is None:
+            return None
         category = await self._classify_correction(original_output, corrected_output)
         record = CorrectionRecord(
             session_id=session_id,
@@ -79,6 +83,8 @@ class CorrectionTracker:
 
     async def get_recurring_patterns(self, min_count: int = 3) -> list[dict]:
         """Return correction categories whose count meets or exceeds *min_count*."""
+        if self._state_repo is None:
+            return []
         return await self._state_repo.get_correction_patterns(min_count)
 
     # ── Classification ──────────────────────────────────────────────

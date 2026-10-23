@@ -382,10 +382,9 @@ class PlannerAgent:
                         context_scope=context_scope,
                     )
                 )
-        plan = Plan(
-            title=data.get("title", "Untitled Plan"), message=data.get("message", ""), steps=steps
+        return Plan(
+            title=data.get("title", "Untitled Plan"),
+            message=data.get("message", ""),
+            steps=steps,
+            heuristic_splits=heuristic_splits,
         )
-        # Enhancement 4: Pydantic v2 silently ignores leading-underscore
-        # keys in constructors, so set via object.__setattr__ after creation.
-        object.__setattr__(plan, "_heuristic_splits", heuristic_splits)
-        return plan

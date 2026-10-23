@@ -28,14 +28,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Configuration schema
 # ---------------------------------------------------------------------------
 # Fields: (env_var, type, default, description, sensitivity)
-# This is sourced from WeebotSettings + SecretAccessor + manual audit.
-# In a full implementation, this would introspect pydantic Field(description=...)
-# but the current WeebotSettings uses fields without descriptions on most fields.
+# For a variable that is a WeebotSettings field, the field's default wins over
+# the "default" written here (``resolved_schema``): five of these had drifted
+# from the code. Every variable listed must have a reader
+# (tests/unit/scripts/test_generate_config_reference.py).
 
 CONFIG_SCHEMA: list[dict] = [
     # ── AI Provider API Keys ──────────────────────────────────────
     {"var": "OPENROUTER_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "OpenRouter API key for unified access to 350+ models"},
+    {"var": "OPENROUTER_MIN_CREDIT_USD", "type": "float", "default": "0.10",
+     "desc": "OpenRouter balance (USD) below which the cascade skips OpenRouter-only models"},
     {"var": "DEEPSEEK_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "DeepSeek API key for direct coding/reasoning access"},
     {"var": "KIMI_API_KEY", "type": "str", "default": "", "sensitive": True,
@@ -46,8 +49,6 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "OpenAI API key"},
     {"var": "XAI_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "xAI (Grok) API key for direct access"},
-    {"var": "TOGETHER_API_KEY", "type": "str", "default": "", "sensitive": True,
-     "desc": "Together AI API key"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,
@@ -56,9 +57,9 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "API key for remote SSE MCP transport (required when --allow-remote)"},
     {"var": "WEEBOT_WEBHOOK_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "API key for /api/webhook/run endpoint"},
-    {"var": "WEEBOT_WEB_REQUIRE_AUTH", "type": "bool", "default": "true",
+    {"var": "WEEBOT_WEB_REQUIRE_AUTH", "type": "bool",
      "desc": "When true and no WEEBOT_API_KEY, refuse non-loopback requests with 503"},
-    {"var": "WEEBOT_GATEWAY_AUTH_ENABLED", "type": "bool", "default": "true",
+    {"var": "WEEBOT_GATEWAY_AUTH_ENABLED", "type": "bool",
      "desc": "Enforce chat-level allowlist for Discord/Slack/Telegram gateways"},
 
     # ── Web Server ────────────────────────────────────────────────
@@ -72,7 +73,7 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enable per-principal rate limiting middleware"},
 
     # ── Webhook ──────────────────────────────────────────────────
-    {"var": "WEEBOT_WEBHOOK_ALLOW_EXEC_TOOLS", "type": "bool", "default": "false",
+    {"var": "WEEBOT_WEBHOOK_ALLOW_EXEC_TOOLS", "type": "bool",
      "desc": "Allow bash/powershell/python_execute tools via webhook endpoint (not recommended)"},
 
     # ── Paths ─────────────────────────────────────────────────────
@@ -88,31 +89,56 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "User profile storage directory"},
     {"var": "WEEBOT_BACKUP_DIR", "type": "str", "default": "",
      "desc": "Enable daily online backups to this directory"},
-    {"var": "WEEBOT_BACKUP_RETENTION_DAYS", "type": "int", "default": "30",
-     "desc": "Number of days to retain backups"},
 
     # ── Valkey (Event Bus) ────────────────────────────────────────
     {"var": "VALKEY_PASSWORD", "type": "str", "default": "weebot_default",
      "desc": "Valkey password (set a strong value in production)"},
 
     # ── Sandbox / Execution ───────────────────────────────────────
-    {"var": "BASH_TIMEOUT", "type": "int", "default": "30",
+    {"var": "BASH_TIMEOUT", "type": "int",
      "desc": "Maximum seconds for a single bash command"},
-    {"var": "PYTHON_TIMEOUT", "type": "int", "default": "30",
+    {"var": "PYTHON_TIMEOUT", "type": "int",
      "desc": "Maximum seconds for a single Python execution"},
-    {"var": "SANDBOX_MAX_OUTPUT_BYTES", "type": "int", "default": "65536",
+    {"var": "SANDBOX_MAX_OUTPUT_BYTES", "type": "int",
      "desc": "Maximum bytes of sandbox output before truncation"},
-    {"var": "SANDBOX_ALLOW_NETWORK", "type": "bool", "default": "false",
+    {"var": "SANDBOX_ALLOW_NETWORK", "type": "bool",
      "desc": "Allow network access from sandboxed code execution"},
-    {"var": "WEEBOT_AUTO_APPROVE", "type": "bool", "default": "false",
-     "desc": "Auto-approve all tool executions (dangerous — use only in trusted sandboxed envs)"},
+    {"var": "SANDBOX_MODE", "type": "str",
+     "desc": "auto (native on Windows, Docker elsewhere), docker_first, native, docker, wsl2"},
+    {"var": "SANDBOX_REQUIRE_ISOLATION", "type": "bool",
+     "desc": "Refuse sandboxed calls on a backend that cannot enforce network-off (ADR-014)"},
+    {"var": "WEEBOT_AUTO_APPROVE", "type": "str", "default": "",
+     "desc": "Set to 1 to auto-approve CLI tool approvals (dangerous — trusted sandboxed envs only); any other value asks"},
+    {"var": "WEEBOT_SHELL_GUARD_MODE", "type": "str",
+     "desc": "Tool guard chain mode: 'observe' (record only) or 'enforce' (refuse)"},
+    {"var": "FINANCIAL_TOOLS_ALWAYS_ASK", "type": "bool",
+     "desc": "Financial/payment tools always ask before running (observe mode logs only)"},
+    {"var": "WEEBOT_FINANCIAL_TOOL_PATTERNS", "type": "str",
+     "default": "*stripe*,*payment*,*invoice*,*refund*,*payout*,*checkout*,*billing*",
+     "desc": "Comma-separated globs (case-insensitive) naming financial/payment tools"},
+    {"var": "WEEBOT_OUTBOUND_TOOL_PATTERNS", "type": "str",
+     "default": "*schedulepost*,*deletepost*,*publish*,*send_email*,*send_mail*,"
+                "*send_reply*,*send_message*,*tweet*,*generate*,*clipping*",
+     "desc": "Comma-separated globs naming tools that publish, send or spend; they always ask"},
+    {"var": "WEEBOT_OUTBOUND_ASK_IN_OBSERVE", "type": "bool",
+     "desc": "Outbound tools ask through the approval channel even in observe mode"},
+    {"var": "AGENT_REACH_PATH", "type": "str", "default": "",
+     "desc": "Path to agent-reach.exe for the agent_reach tool (else PATH, else ~/.agent-reach-venv)"},
+    {"var": "MOLI_PATH", "type": "str", "default": "",
+     "desc": "Path to moli.exe for the moli_fetch tool (else PATH, else %LOCALAPPDATA%\\Moli\\bin)"},
+    {"var": "CAMOFOX_PATH", "type": "str", "default": "",
+     "desc": "camofox-browser package folder for camofox_browser (else ~/.camofox-browser)"},
+    {"var": "REMOTION_HOST", "type": "str", "default": "",
+     "desc": "Folder with Remotion installed, for remotion_video (else ~/.weebot-remotion)"},
+    {"var": "WEEBOT_INTENT_REVIEW_TIMEOUT_S", "type": "float",
+     "desc": "Seconds the pre-planning intent review may take; on timeout it fails open"},
 
     # ── Model / LLM ───────────────────────────────────────────────
     {"var": "WEEBOT_MODEL", "type": "str", "default": "",
      "desc": "Override the default model ID for all roles"},
-    {"var": "DAILY_AI_BUDGET", "type": "float", "default": "10.0",
+    {"var": "DAILY_AI_BUDGET", "type": "float",
      "desc": "Maximum daily AI spend in USD"},
-    {"var": "WEEBOT_PONYTAIL_MODE", "type": "str", "default": "off",
+    {"var": "WEEBOT_PONYTAIL_MODE", "type": "str",
      "desc": "Ponytail lazy-senior-dev intensity: off|lite|full|ultra"},
 
     # ── Observability ─────────────────────────────────────────────
@@ -128,17 +154,17 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Run Playwright browser in headless mode"},
 
     # ── Security / Safety ─────────────────────────────────────────
-    {"var": "WEEBOT_EGRESS_ENFORCE", "type": "bool", "default": "false",
+    # Defaults must match the code (egress_guard.py, web/auth.py): both default
+    # on. These said "false", so every regeneration shipped a weaker template.
+    {"var": "WEEBOT_EGRESS_ENFORCE", "type": "bool", "default": "true",
      "desc": "Enforce egress guard (block outbound requests not in allowlist)"},
-    {"var": "WEEBOT_ENFORCE_SESSION_OWNERSHIP", "type": "bool", "default": "false",
+    {"var": "WEEBOT_ENFORCE_SESSION_OWNERSHIP", "type": "bool", "default": "true",
      "desc": "Enforce user_id matching on session access"},
-    {"var": "WEEBOT_ADMIN_SECRET", "type": "str", "default": "", "sensitive": True,
-     "desc": "Administrative secret for privileged operations"},
     {"var": "WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS", "type": "bool", "default": "false",
      "desc": "EXPERIMENTAL: enable raw-SQL migration scripts. Do not enable in production."},
-    {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool", "default": "false",
+    {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
      "desc": "Allow unsigned WhatsApp webhooks (dev only)"},
-    {"var": "STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool", "default": "false",
+    {"var": "STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
      "desc": "Allow unsigned Stripe webhooks (dev only)"},
     {"var": "ATOMICMAIL_TEST_LIVE", "type": "bool", "default": "0",
      "desc": "Enable live-network atomic mail tests (skipped by default in CI)"},
@@ -152,57 +178,27 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Slack bot token for gateway integration"},
     {"var": "SLACK_SIGNING_SECRET", "type": "str", "default": "", "sensitive": True,
      "desc": "Slack signing secret for webhook verification"},
-    {"var": "SIGNAL_ACCOUNT_NUMBER", "type": "str", "default": "",
+    {"var": "SIGNAL_ACCOUNT_NUMBER", "type": "str",
      "desc": "Signal account number for gateway integration"},
 
     # ── Email ─────────────────────────────────────────────────────
-    {"var": "EMAIL_IMAP_SERVER", "type": "str", "default": "",
+    {"var": "EMAIL_IMAP_SERVER", "type": "str",
      "desc": "IMAP server for email gateway"},
-    {"var": "EMAIL_IMAP_USER", "type": "str", "default": "",
+    {"var": "EMAIL_IMAP_USER", "type": "str",
      "desc": "IMAP username for email gateway"},
     {"var": "EMAIL_IMAP_PASSWORD", "type": "str", "default": "", "sensitive": True,
      "desc": "IMAP password for email gateway"},
-    {"var": "EMAIL_SMTP_SERVER", "type": "str", "default": "",
+    {"var": "EMAIL_SMTP_SERVER", "type": "str",
      "desc": "SMTP server for email gateway"},
-    {"var": "EMAIL_SMTP_PORT", "type": "int", "default": "587",
+    {"var": "EMAIL_SMTP_PORT", "type": "int",
      "desc": "SMTP port for email gateway"},
-    {"var": "EMAIL_FROM_ADDRESS", "type": "str", "default": "",
+    {"var": "EMAIL_FROM_ADDRESS", "type": "str",
      "desc": "From address for outgoing email gateway messages"},
-    {"var": "EMAIL_POLL_INTERVAL_SECONDS", "type": "int", "default": "60",
+    {"var": "EMAIL_POLL_INTERVAL_SECONDS", "type": "int",
      "desc": "Email gateway IMAP poll interval"},
 
-    # ── GitNexus ──────────────────────────────────────────────────
-    {"var": "GITNEXUS_PATH", "type": "str", "default": "",
-     "desc": "GitNexus path override"},
-    {"var": "GITNEXUS_SKIP_EMBEDDINGS", "type": "bool", "default": "false",
-     "desc": "Skip GitNexus embeddings"},
-    {"var": "GITNEXUS_FORCE_REINDEX", "type": "bool", "default": "false",
-     "desc": "Force GitNexus reindex on startup"},
-    {"var": "GITNEXUS_MAX_DEPTH", "type": "int", "default": "3",
-     "desc": "GitNexus analysis max depth"},
-    {"var": "GITNEXUS_MIN_CONFIDENCE", "type": "float", "default": "0.7",
-     "desc": "GitNexus minimum confidence threshold"},
-    {"var": "GITNEXUS_TIMEOUT", "type": "int", "default": "120",
-     "desc": "GitNexus operation timeout in seconds"},
-    {"var": "GITNEXUS_MAX_RETRIES", "type": "int", "default": "3",
-     "desc": "GitNexus max retries"},
-    {"var": "GITNEXUS_DEFAULT_REPO_PATH", "type": "str", "default": "",
-     "desc": "Default GitNexus repository path"},
-    {"var": "GITNEXUS_ENABLE_CACHING", "type": "bool", "default": "true",
-     "desc": "Enable GitNexus caching"},
-    {"var": "GITNEXUS_CACHE_TTL", "type": "int", "default": "3600",
-     "desc": "GitNexus cache TTL in seconds"},
-    {"var": "GITNEXUS_AUTO_ANALYZE", "type": "bool", "default": "false",
-     "desc": "Auto-analyze on startup"},
-
-    # ── Speech ────────────────────────────────────────────────────
-    {"var": "WEEBOT_SPEECH_PROVIDER", "type": "str", "default": "openai",
-     "desc": "Speech provider: openai|whisper|openrouter"},
-    {"var": "OPENAI_SPEECH_KEY", "type": "str", "default": "", "sensitive": True,
-     "desc": "OpenAI API key for TTS (separate from OPENAI_API_KEY)"},
-
     # ── MCP ───────────────────────────────────────────────────────
-    {"var": "WEEBOT_MCP_COMPOSITE_TOOLS_ENABLED", "type": "bool", "default": "true",
+    {"var": "WEEBOT_MCP_COMPOSITE_TOOLS_ENABLED", "type": "bool",
      "desc": "Enable composite tools in MCP server"},
     {"var": "WEEBOT_HARNESS_VERSION", "type": "str", "default": "v0.2.0",
      "desc": "Self-harness config version"},
@@ -210,11 +206,11 @@ CONFIG_SCHEMA: list[dict] = [
     # ── Behavior / Memory ─────────────────────────────────────────
     {"var": "WEEBOT_BEHAVIOR_TRACKING", "type": "bool", "default": "true",
      "desc": "Enable agent behavior tracking system"},
-    {"var": "WEEBOT_GATEWAY_SESSION_TTL_SECONDS", "type": "int", "default": "3600",
+    {"var": "WEEBOT_GATEWAY_SESSION_TTL_SECONDS", "type": "int",
      "desc": "Gateway session TTL"},
-    {"var": "WEEBOT_GATEWAY_MAX_SESSIONS_PER_PLATFORM", "type": "int", "default": "50",
+    {"var": "WEEBOT_GATEWAY_MAX_SESSIONS_PER_PLATFORM", "type": "int",
      "desc": "Max concurrent gateway sessions per platform"},
-    {"var": "SIGNAL_CLI_REST_URL", "type": "str", "default": "http://localhost:8080",
+    {"var": "SIGNAL_CLI_REST_URL", "type": "str",
      "desc": "Signal CLI REST API URL"},
 
     # ── PostgreSQL (optional backend) ──────────────────────────────
@@ -319,8 +315,49 @@ def generate_config_md(schema: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def settings_env_names() -> dict[str, str]:
+    """Env-var name -> WeebotSettings field name, aliases included."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from weebot.config.settings import WeebotSettings
+
+    names: dict[str, str] = {}
+    for field_name, info in WeebotSettings.model_fields.items():
+        names[field_name.upper()] = field_name
+        for alias in (info.alias, info.validation_alias):
+            if alias is not None:
+                for name in re.findall(r"[A-Z][A-Z0-9_]+", str(alias)):
+                    names[name] = field_name
+    return names
+
+
+def _format_default(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (list, tuple, set)):
+        return ",".join(str(v) for v in value)
+    return str(value)
+
+
+def resolved_schema() -> list[dict]:
+    """CONFIG_SCHEMA with every settings-backed default read from the settings field."""
+    from weebot.config.settings import WeebotSettings
+
+    fields = settings_env_names()
+    resolved = []
+    for entry in CONFIG_SCHEMA:
+        field_name = fields.get(entry["var"])
+        if field_name is not None and not entry.get("sensitive"):
+            info = WeebotSettings.model_fields[field_name]
+            default = info.default_factory() if info.default_factory else info.default
+            entry = {**entry, "default": _format_default(default)}
+        resolved.append(entry)
+    return resolved
+
+
 def main() -> int:
-    schema = CONFIG_SCHEMA
+    schema = resolved_schema()
 
     # Generate .env.example
     env_example = generate_env_example(schema)

@@ -41,6 +41,12 @@ class TaskRunnerPort(Protocol):
         """Start a session immediately as a background task."""
         ...
 
+    async def resume_session(
+        self, session_id: str, answer: str, flow_factory: FlowFactory
+    ) -> Session:
+        """Resume a WAITING session: run its flow again with *answer* as the prompt."""
+        ...
+
     def create_plan_act_factory(
         self,
         llm: LLMPort,

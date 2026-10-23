@@ -18,8 +18,6 @@ import pytest
 from weebot.config import model_refs
 from weebot.config.model_catalog import MODELS
 from weebot.config.model_registry import strip_routing_suffix
-from weebot.core.model_cascade_config import MODEL_CASCADE
-from weebot.domain.models.agent_capability import AGENT_CAPABILITIES
 
 
 def _routed() -> dict[str, set[str]]:
@@ -30,18 +28,24 @@ def _routed() -> dict[str, set[str]]:
             model_refs.MODEL_CASCADE_TIER3,
             model_refs.MODEL_CASCADE_TIER4,
         },
-        "model_refs._ROLE_MODEL_CASCADE": {
-            m for ms in model_refs._ROLE_MODEL_CASCADE.values() for m in ms
-        },
         "model_refs.ROLE_MODEL_CONFIG": {
             m for ms in model_refs.ROLE_MODEL_CONFIG.values() for m in ms
         },
-        "model_refs.get_free_models()": set(model_refs.get_free_models()),
-        "core.model_cascade_config.MODEL_CASCADE": {
-            m.id for ms in MODEL_CASCADE.values() for m in ms
+        "model_refs.TASK_MODEL_CASCADE": {
+            m for ms in model_refs.TASK_MODEL_CASCADE.values() for m in ms
         },
-        "agent_capability.AGENT_CAPABILITIES": {
-            m for cap in AGENT_CAPABILITIES.values() for m in cap.preferred_models
+        "model_refs.SUBAGENT_TIER_MODEL": set(model_refs.SUBAGENT_TIER_MODEL.values()),
+        # The named constants (planner, reviewer, role defaults, budget, price
+        # keys). Image and video constants are out of scope, as above; an id
+        # without a slash is a provider-native name for a direct adapter.
+        "model_refs.MODEL_* constants": {
+            value
+            for name, values in vars(model_refs).items()
+            if name.startswith("MODEL_")
+            and not name.startswith(("MODEL_IMAGE_", "MODEL_VIDEO_"))
+            and isinstance(values, (str, list))
+            for value in ([values] if isinstance(values, str) else values)
+            if isinstance(value, str) and "/" in value
         },
     }
     return sources

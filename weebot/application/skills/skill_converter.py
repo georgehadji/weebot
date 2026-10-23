@@ -213,7 +213,8 @@ class SkillConverter:
 
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write manifest
+        # Third-party content: quarantined until promoted, whatever the source says (F42).
+        manifest = {**manifest, "trust": "quarantined"}
         (target_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
         # Write prompt

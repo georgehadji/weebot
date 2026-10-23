@@ -20,7 +20,6 @@ import tempfile
 from datetime import datetime, timedelta
 
 from weebot.infrastructure.event_store import EventStore
-from weebot.infrastructure.event_logging import EventLogger
 
 
 def example_1_basic_logging():
@@ -152,68 +151,6 @@ def example_3_session_queries():
         print(f"📋 Recent failed: {len(recent_failed)}")
 
 
-def example_4_event_logger_helper():
-    """Demonstrate the EventLogger helper class."""
-    print("\n" + "=" * 60)
-    print("Example 4: EventLogger Helper")
-    print("=" * 60)
-    
-    with tempfile.TemporaryDirectory() as tmp:
-        db_path = f"{tmp}/events.db"
-        logger = EventLogger(EventStore(db_path=db_path))
-        
-        # Start session
-        logger.event_store.start_session("session-helper", "user-1")
-        
-        # Log various activities
-        logger.log_llm_call(
-            session_id="session-helper",
-            model="gpt-4",
-            prompt="Calculate 2+2",
-            response="The answer is 4",
-            tokens_used=50,
-            cost=0.01
-        )
-        print("✓ Logged LLM call")
-        
-        logger.log_tool_call(
-            session_id="session-helper",
-            tool_name="bash",
-            parameters={"command": "ls"},
-            result={"output": "file1.txt file2.txt", "success": True},
-            duration_ms=100
-        )
-        print("✓ Logged tool call")
-        
-        logger.log_bash_command(
-            session_id="session-helper",
-            command="rm -rf temp/",
-            risk_level="dangerous",
-            approved=True,
-            output="Files deleted",
-            exit_code=0
-        )
-        print("✓ Logged bash command with risk assessment")
-        
-        logger.log_plan_created(
-            session_id="session-helper",
-            plan={
-                "id": "plan-1",
-                "title": "Calculate sum",
-                "steps": ["Parse input", "Calculate", "Return result"]
-            }
-        )
-        print("✓ Logged plan creation")
-        
-        # Show stats
-        stats = logger.event_store.get_stats()
-        print(f"\n📊 Database Stats:")
-        print(f"  Sessions: {stats['sessions']}")
-        print(f"  Events: {stats['events']}")
-        print(f"  Total Cost: ${stats['total_cost']:.4f}")
-        print(f"  Total Tokens: {stats['total_tokens']}")
-
-
 def example_5_export():
     """Demonstrate session export."""
     print("\n" + "=" * 60)
@@ -254,7 +191,6 @@ if __name__ == "__main__":
         example_1_basic_logging()
         example_2_cost_tracking()
         example_3_session_queries()
-        example_4_event_logger_helper()
         example_5_export()
         
         print("\n" + "=" * 60)

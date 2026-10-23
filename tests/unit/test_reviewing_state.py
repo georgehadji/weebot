@@ -27,6 +27,7 @@ def mock_context():
     )
     ctx._code_reviewer = None
     ctx._correction_tracker = None
+    ctx._emit = AsyncMock()
     return ctx
 
 
@@ -145,3 +146,26 @@ def test_is_code_step_helper():
     assert _is_code_step(Step(id="s3", description="Fix bug in parser"))
     assert not _is_code_step(Step(id="s4", description="Search for documentation"))
     assert not _is_code_step(Step(id="s5", description="Read the file"))
+
+
+@pytest.mark.asyncio
+async def test_revise_persists_the_revised_plan(mock_context, mock_reviewer):
+    """ExecuteStepHandler reads the plan from the saved session. A revise that
+    only changed the in-memory plan was refused ("Step ... is already
+    completed"), so every REVISE verdict was dropped (2026-10-23 batch: the
+    reviewer caught invented CSV data and the fix never ran)."""
+    from weebot.domain.models.event import PlanEvent
+    from weebot.domain.models.plan import StepStatus
+
+    mock_reviewer.review.return_value = CodeReviewResult(
+        step_id="step-1", verdict="revise", hint="Use the exact rows"
+    )
+    state = ReviewingState(step=Step(id="step-1", description="Write code"), reviewer=mock_reviewer)
+    events = [e async for e in state.execute(mock_context, "test prompt")]
+
+    plan_events = [e for e in events if isinstance(e, PlanEvent)]
+    assert plan_events, "the revised plan was never persisted"
+    saved = plan_events[-1].plan
+    step = next(s for s in saved["steps"] if s["id"] == "step-1")
+    assert step["status"] == StepStatus.PENDING.value
+    mock_context._emit.assert_awaited()

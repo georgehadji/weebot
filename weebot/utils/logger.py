@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Union
 
-LOG_FILE = Path("logs/agent.log")
+from weebot.config.settings import LOG_FILE  # noqa: E402 -- honours WEEBOT_LOGS_DIR
 MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
 

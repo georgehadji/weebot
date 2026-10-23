@@ -51,6 +51,27 @@ class ImportResult:
 _LINK_RE = re.compile(r"-\s*\[([^\]]+)]\((https://[^)]+)\)\s*[-–—]\s*(.+?)(?:\n|$)")
 
 
+def _quarantined(skill_md: str) -> str:
+    """Force ``metadata.trust: quarantined`` on a downloaded SKILL.md (F42).
+
+    The remote author controls the file, so a declared ``trusted`` (or none,
+    which reads as human-authored) would inject it into the executor prompt.
+    """
+    import yaml
+
+    front, body = {}, "\n" + skill_md
+    if skill_md.startswith("---"):
+        parts = skill_md.split("---", 2)
+        if len(parts) == 3:
+            loaded = yaml.safe_load(parts[1])
+            front = loaded if isinstance(loaded, dict) else {}
+            body = parts[2]
+    meta = front.get("metadata") if isinstance(front.get("metadata"), dict) else {}
+    front["metadata"] = {**meta, "trust": "quarantined"}
+    front.setdefault("name", "imported-skill")
+    return "---\n" + yaml.safe_dump(front, sort_keys=False, allow_unicode=True) + "---" + body
+
+
 class ClawHubImporter:
     """Parse the awesome-openclaw-skills repo and import skills.
 
@@ -202,6 +223,8 @@ class ClawHubImporter:
             f"source: {entry.url}\n"
             f'category: "{entry.category}"\n'
             f'author: "{entry.author}"\n'
+            f"metadata:\n"
+            f"  trust: quarantined\n"
             f"---\n"
             f"\n"
             f"# {entry.name}\n"
@@ -236,7 +259,9 @@ class ClawHubImporter:
                 data = json.loads(resp.read())
                 skill_dir = install_dir / data.get("name", slug)
                 skill_dir.mkdir(parents=True, exist_ok=True)
-                (skill_dir / "SKILL.md").write_text(data.get("content", ""), encoding="utf-8")
+                (skill_dir / "SKILL.md").write_text(
+                    _quarantined(data.get("content", "")), encoding="utf-8"
+                )
                 return True
         except Exception as exc:
             logger.warning("Failed to fetch %s: %s", slug, exc)

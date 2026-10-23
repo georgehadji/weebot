@@ -152,7 +152,7 @@ graphify-out/
 # Untracked deliberately: these are real address-book dumps containing
 # names and contact details. They remain in git history — purging them
 # requires a coordinated `git filter-repo` rewrite plus a force-push.
-# See PRODUCTION_READINESS_ASSESSMENT.md (P3-3) / implementation_plan.md (WI-18).
+# See _archive/root-2026-10-23/reports/PRODUCTION_READINESS_ASSESSMENT.md (P3-3) / implementation_plan.md (WI-18).
 abook-*_contacts.json
 thunderbird_addressbooks.json
 
@@ -177,3 +177,5 @@ weebot/application/services/model_registry/_catalog.py.tmp
 # egress allowlist defaults to the repo root, so they can land here.
 .*.json.*.tmp
 weebot_egress_allowlist.json
+# Hypothesis example database (property tests).
+.hypothesis/

@@ -117,7 +117,8 @@ class ToolCollection:
         aiohttp sessions) can release their resources cleanly.
         """
         for tool in self._tools.values():
-            svc = getattr(tool, "apify_service", None)
+            # Through a GuardedTool to the tool it wraps (paid tools are guarded, F54).
+            svc = getattr(getattr(tool, "inner", tool), "apify_service", None)
             if svc is not None and callable(getattr(svc, "shutdown", None)):
                 try:
                     await svc.shutdown()
@@ -125,6 +126,14 @@ class ToolCollection:
                     logger.debug(
                         "Error shutting down service for tool %r", tool.name, exc_info=True
                     )
+            # BaseTool.close(): browsers, subprocesses. Teardown never called it,
+            # so every browsing flow left its Chromium running.
+            closer = getattr(tool, "close", None)
+            if callable(closer):
+                try:
+                    await closer()
+                except Exception:
+                    logger.warning("Error closing tool %r", tool.name, exc_info=True)
 
     async def check_health(self) -> dict[str, bool]:
         """Run health checks for all tools; cache results for this session.
@@ -137,9 +146,21 @@ class ToolCollection:
         self._healthy = {name: (r is True) for name, r in zip(self._tools.keys(), results)}
         return dict(self._healthy)
 
+    def set_visible(self, names: set[str] | None) -> None:
+        """Send only these tools' definitions (None: all). All stay callable (ICM B1)."""
+        self._visible = None if names is None else set(names)
+
+    def hidden_names(self) -> list[str]:
+        """Callable tools whose definitions are not being sent."""
+        visible = getattr(self, "_visible", None)
+        return [] if visible is None else sorted(n for n in self._tools if n not in visible)
+
     def to_params(self) -> list[dict]:
         params = []
+        visible = getattr(self, "_visible", None)
         for tool in self._tools.values():
+            if visible is not None and tool.name not in visible:
+                continue
             # Phase 3: Skip tools that failed health check (if check has run)
             if self._healthy is not None and not self._healthy.get(tool.name, True):
                 continue
@@ -209,7 +230,9 @@ class ToolCollection:
 
         start_time = time.time()
         retry_count = 0
-        max_retries = kwargs.pop("_max_retries", self.DEFAULT_MAX_RETRIES)
+        # Arguments come from the model, so it must not choose the retry count.
+        kwargs.pop("_max_retries", None)
+        max_retries = self.DEFAULT_MAX_RETRIES
 
         async def _execute_with_semaphore():
             if _tool_semaphore is not None:

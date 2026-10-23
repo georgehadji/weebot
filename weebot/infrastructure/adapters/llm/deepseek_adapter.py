@@ -32,6 +32,16 @@ MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK_STRIPPED
 _log = logging.getLogger(__name__)
 
 
+def native_model_id(model: str) -> str:
+    """The DeepSeek API id for an OpenRouter-style DeepSeek id.
+
+    The API serves only the aliases ``deepseek-flash`` and ``deepseek-v4-pro``
+    and rejects versioned ids such as ``deepseek-v4.1-flash`` with 400.
+    """
+    name = model.split("/", 1)[-1].split(":", 1)[0].lower()
+    return "deepseek-v4-pro" if "pro" in name else "deepseek-flash"
+
+
 class DeepSeekAdapter(OpenAIAdapter):
     """Adapter for DeepSeek API (OpenAI-compatible) with thinking mode.
 
@@ -56,23 +66,27 @@ class DeepSeekAdapter(OpenAIAdapter):
         model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> LLMResponse:
-        """Override chat to enable thinking mode for DeepSeek V4 Pro.
+        """Think only when the caller asks for a reasoning effort.
 
-        Per https://api-docs.deepseek.com/guides/thinking_mode:
-        - Thinking is enabled by default for deepseek-v4-pro
-        - Temperature is silently ignored in thinking mode
-        - ``reasoning_effort="high"`` for complex agent tasks
-        - Tool-call turns must pass ``reasoning_content`` back in context
+        Per https://api-docs.deepseek.com/guides/thinking_mode thinking is on by
+        default. Forcing it at "high" on every call made a planning call 3.8 s
+        against 1.4 s without (2026-10-23), so it is off unless requested.
         """
+        thinking = reasoning_effort not in (None, "none", "minimal")
         return await super().chat(
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
             response_format=response_format,
-            model=model,
-            temperature=None,  # thinking mode ignores temperature
+            model=native_model_id(model or self._default_model),
+            temperature=None if thinking else temperature,  # thinking ignores it
             max_tokens=max_tokens,
-            reasoning_effort="high",
-            extra_body={"thinking": {"type": "enabled"}},
+            reasoning_effort=reasoning_effort if thinking else None,
+            extra_body={
+                **(extra_body or {}),
+                "thinking": {"type": "enabled" if thinking else "disabled"},
+            },
         )

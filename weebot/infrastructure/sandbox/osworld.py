@@ -24,7 +24,7 @@ from weebot.application.ports.sandbox_port import (
     SandboxResult,
     SandboxConfig,
 )
-from weebot.config.settings import OSWorldSettings
+from weebot.config.osworld_settings import OSWorldSettings
 
 logger = logging.getLogger(__name__)
 

@@ -9,6 +9,8 @@ import { FilePlus, FileEdit, FileX, FileSymlink, Circle, AlertTriangle } from "l
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RecentAction } from "@/hooks/useBehavior";
+import { ENDPOINTS } from "@/lib/endpoints";
+import { authHeaders } from "@/lib/api";
 
 interface RecentActionsProps {
   actions: RecentAction[];
@@ -46,7 +48,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
   const [overrideReason, setOverrideReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+  const API_URL = ENDPOINTS.api;
 
   const handleOverride = async () => {
     if (!selectedAction || !overrideReason.trim()) return;
@@ -54,7 +56,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
     try {
       const res = await fetch(`${API_URL}/behavior/override`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           timestamp: selectedAction.timestamp,
           reason: overrideReason,

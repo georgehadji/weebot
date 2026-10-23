@@ -9,6 +9,8 @@ from datetime import datetime, UTC
 
 from typing import Any
 
+from weebot import __version__
+
 
 from fastapi import APIRouter, Request, Depends
 
@@ -34,7 +36,9 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.get("", response_model=HealthResponse)
-async def health_check(state_repo: StateRepositoryPort = Depends(get_state_repo)) -> HealthResponse:
+async def health_check(
+    request: Request, state_repo: StateRepositoryPort = Depends(get_state_repo)
+) -> HealthResponse:
     """
 
     Comprehensive health check including all system components.
@@ -175,42 +179,25 @@ async def health_check(state_repo: StateRepositoryPort = Depends(get_state_repo)
             HealthComponent(name="memory", status="unknown", message="Memory monitor error")
         )
 
-    # Check browser pool if available (importlib to avoid import-linter trace)
-
+    # Agent tools: build_mediator falls back to tool-less steps if the admin
+    # tool set fails to build (F28). Say so here, not only in a log line.
     try:
+        from weebot.application.cqrs.mediator import Mediator
 
-        import importlib as _il
-
-        _browser_mod = _il.import_module("weebot.infrastructure.browser")
-
-        session_pool_available = getattr(_browser_mod, "SESSION_POOL_AVAILABLE", False)
-
-        if session_pool_available:
-
-            components.append(
-                HealthComponent(
-                    name="browser_pool", status="healthy", message="Browser session pool available"
-                )
-            )
-
-        else:
-
-            components.append(
-                HealthComponent(
-                    name="browser_pool",
-                    status="healthy",
-                    message="Browser pool not configured (optional)",
-                )
-            )
-
-    except Exception:
-
-        logger.exception("Browser pool health check failed")
-
+        degraded = request.app.state.container.get(Mediator).degraded
+        # Not `.get("tools")`: the DI-key lint reads that as a container key.
+        tools_error = degraded["tools"] if "tools" in degraded else None  # noqa: SIM401
         components.append(
             HealthComponent(
-                name="browser_pool", status="degraded", message="Browser pool check failed"
+                name="agent_tools",
+                status="degraded" if tools_error else "healthy",
+                message=f"Steps run with no tools: {tools_error}" if tools_error else "Loaded",
             )
+        )
+    except Exception:
+        logger.exception("Agent tools health check failed")
+        components.append(
+            HealthComponent(name="agent_tools", status="unknown", message="Mediator check failed")
         )
 
     # Check if any component is degraded
@@ -464,7 +451,9 @@ async def metrics_check(
 
 
 @router.get("/status")
-async def detailed_status() -> dict[str, Any]:
+async def detailed_status(
+    request: Request, state_repo: StateRepositoryPort = Depends(get_state_repo)
+) -> dict[str, Any]:
     """
 
     Human-readable system status.
@@ -477,7 +466,7 @@ async def detailed_status() -> dict[str, Any]:
 
     status = {
         "status": "operational",
-        "version": "2.6.0",
+        "version": __version__,
         "timestamp": datetime.now(UTC).isoformat(),
         "features": {
             "resilient_adapters": True,
@@ -494,7 +483,7 @@ async def detailed_status() -> dict[str, Any]:
 
     try:
 
-        health = await health_check()
+        health = await health_check(request, state_repo)
 
         status["health"] = health.status
 

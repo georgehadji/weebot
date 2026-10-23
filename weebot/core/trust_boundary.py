@@ -56,8 +56,12 @@ UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
         "browser_inspector",
         "vane_search",
         "web_scraper",
+        "moli_fetch",  # Moli headless browser: arbitrary page text
+        "agent_reach",  # Agent-Reach channels: pages, GitHub, YouTube, search
+        "camofox_browser",  # Camoufox stealth browser: arbitrary page text
         "spacescraper",
         "search_images",
+        "search_history",  # old session content, web pages included (F67)
         "weather",
         "video_ingest",  # BaseTool.name of tools/video_ingest_tool.py
         "video_ingest_tool",  # legacy module-name spelling
@@ -143,6 +147,10 @@ def is_untrusted_tool(tool_name: str) -> bool:
     because the model cannot inspect what the remote server returns.
     """
     if tool_name in UNTRUSTED_OUTPUT_TOOLS:
+        return True
+    # Apify presets are apify_<actor> (apify_web_scraper, apify_reddit_scraper, ...):
+    # every one returns scraped third-party content (F46).
+    if tool_name.startswith("apify_"):
         return True
     return len(tool_name) > len(_MCP_NAMESPACE_PREFIX) and tool_name.startswith(
         _MCP_NAMESPACE_PREFIX

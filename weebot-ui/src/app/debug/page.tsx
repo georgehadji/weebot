@@ -3,6 +3,7 @@
 import { useWebSocketDebug } from "@/hooks/useWebSocketDebug";
 import { useState } from "react";
 import { notFound } from "next/navigation";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 export default function DebugPage() {
   // Raw wire-protocol debugging tool — not meant for production operators.
@@ -69,7 +70,7 @@ export default function DebugPage() {
           <li>Make sure backend is running: <code>python -m weebot.interfaces.web.main</code></li>
           <li>Check browser console for CORS errors</li>
           <li>Check Windows Firewall/antivirus isn&apos;t blocking port 8000</li>
-          <li>Try opening <a href="http://localhost:8000/" target="_blank" rel="noreferrer">http://localhost:8000/</a> in a new tab</li>
+          <li>Try opening <a href={`${ENDPOINTS.origin}/`} target="_blank" rel="noreferrer">{ENDPOINTS.origin}/</a> in a new tab</li>
         </ul>
       </div>
     </div>

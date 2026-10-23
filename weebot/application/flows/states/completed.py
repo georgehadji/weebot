@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
@@ -40,7 +43,7 @@ async def _run_retention_review(
     )
 
 
-async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
+async def _run_skill_gap_processing(gaps: list[dict], session_id: str, idea_gate=None) -> None:
     """Submit skill-gap signals as IdeaContracts through the IdeaGate (Phase 2).
 
     Background task — never blocks CompletedState.  Runs after the flow
@@ -48,14 +51,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
     """
     from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
 
-    if not SKILL_GAP_TRIGGER_ENABLED or not gaps:
+    if not SKILL_GAP_TRIGGER_ENABLED or not gaps or idea_gate is None:
         return
     try:
-        from weebot.application.di import Container
         from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
-
-        c = Container()
-        c.configure_defaults()
 
         contracts = [
             IdeaContract(
@@ -74,12 +73,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
             for g in gaps
         ]
 
-        # From the container, not hand-assembled. The "idea_gate" binding gives
-        # each reviewer its intended role tier -- intent review on the critic
-        # model, main review on the verifier model -- and was never resolved:
-        # this site built both reviewers on the default LLMPort instead.
-        gate = c.get("idea_gate")
-        approved = await gate.process(contracts)
+        # The container's "idea_gate", passed in through the flow (W5.3). It
+        # gives each reviewer its intended role tier -- intent review on the
+        # critic model, main review on the verifier model.
+        approved = await idea_gate.process(contracts)
         if approved:
             logger.info(
                 "Phase 2: %d/%d skill-gap contracts approved for session %s",
@@ -97,18 +94,36 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
         logger.debug("Phase 2 skill-gap background processing failed", exc_info=True)
 
 
-async def _run_dream_scan() -> None:
-    """Run DreamerAgent + IdeaGate as background task after completion."""
-    try:
-        from weebot.application.di import Container
-        from weebot.application.ports.event_store_port import EventStorePort
 
-        c = Container()
-        c.configure_defaults()
-        dreamer = c.get("dreamer_agent")
-        event_store = c.get(EventStorePort)
-        if dreamer is None or event_store is None:
-            return
+_DREAM_SCAN_MARKER = Path.home() / ".weebot" / "dream_scan_last"
+_DREAM_SCAN_INTERVAL_S = 6 * 3600
+
+
+def _dream_scan_due(now: float | None = None) -> bool:
+    """True at most once per interval, across processes (a marker file's mtime)."""
+    now = time.time() if now is None else now
+    try:
+        if now - _DREAM_SCAN_MARKER.stat().st_mtime < _DREAM_SCAN_INTERVAL_S:
+            return False
+    except OSError:
+        logger.debug("No dream-scan marker yet: the scan is due")
+    try:
+        _DREAM_SCAN_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        _DREAM_SCAN_MARKER.touch()
+        os.utime(_DREAM_SCAN_MARKER, (now, now))
+    except OSError:
+        logger.debug("Could not write the dream-scan marker", exc_info=True)
+    return True
+
+async def _run_dream_scan(dreamer=None, event_store=None, idea_gate=None) -> None:
+    """Run DreamerAgent + IdeaGate as background task after completion.
+
+    The collaborators come from the flow. Each used to be fetched from a new
+    Container() built on every completion (W5.3, F28).
+    """
+    if dreamer is None or event_store is None:
+        return
+    try:
 
         failed_events = await event_store.query_recent_events(event_type="error", limit=30)
         contracts = await dreamer.dream(
@@ -117,11 +132,10 @@ async def _run_dream_scan() -> None:
             audit_violations=[],
             session_id="post_completion_scan",
         )
-        if contracts:
+        if contracts and idea_gate is not None:
             # The container's gate, with the critic and verifier role tiers --
             # see _run_skill_gap_processing above.
-            gate = c.get("idea_gate")
-            approved = await gate.process(contracts)
+            approved = await idea_gate.process(contracts)
 
             high_heat = [a for a in approved if a.heat_score >= 0.8]
             if high_heat:
@@ -232,19 +246,26 @@ class CompletedState(FlowState):
                     # four. Every call raised TypeError into the handler below,
                     # which logged it at DEBUG — so the plan_templates table has
                     # never held a row. (D75.)
-                    await context._state_repo.save_plan_template(
-                        template.template_id,
-                        template.task_hash,
-                        template.task_description,
-                        template.plan_json,
-                        template.success_score,
+                    from weebot.application.ports.state_roles_port import (
+                        PlanTemplateWriter,
+                        as_role,
                     )
-                    logger.info(
-                        "Saved plan template (hash=%s, score=%.2f) for session %s",
-                        template.task_hash,
-                        score,
-                        context._session.id[:8],
-                    )
+
+                    writer = as_role(context._state_repo, PlanTemplateWriter)
+                    if writer is not None:  # a repository without the role keeps none
+                        await writer.save_plan_template(
+                            template.template_id,
+                            template.task_hash,
+                            template.task_description,
+                            template.plan_json,
+                            template.success_score,
+                        )
+                        logger.info(
+                            "Saved plan template (hash=%s, score=%.2f) for session %s",
+                            template.task_hash,
+                            score,
+                            context._session.id[:8],
+                        )
                 except Exception as exc:
                     # WARNING, not DEBUG. A save that cannot happen is worth
                     # one line in a normal log; at DEBUG this hid a TypeError
@@ -328,7 +349,7 @@ class CompletedState(FlowState):
 
             stamp = SessionStamp(
                 flow_type="PlanActFlow",
-                model_used=getattr(context._executor, "_model", "") or "",
+                model_used=context._model or getattr(context._summary_executor, "_model", "") or "",
                 plan_fingerprint=fingerprint,
                 verification=verif_scores,
                 gate_failures=gate_failures,
@@ -437,15 +458,29 @@ class CompletedState(FlowState):
             )
 
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
-        _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
+        _gaps = list(getattr(context, "step_skill_gaps", []) or []) + list(
+            getattr(getattr(context, "_summary_executor", None), "_skill_gaps", []) or []
+        )
         if _gaps:
             _background().spawn(
-                _run_skill_gap_processing(list(_gaps), context._session.id),
+                _run_skill_gap_processing(
+                    list(_gaps), context._session.id, idea_gate=context._idea_gate
+                ),
                 name=f"skill-gaps:{context._session.id[:8]}",
             )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
-        _background().spawn(_run_dream_scan(), name="dream-scan")
+        # It reads recent errors across all sessions, so once per interval is
+        # enough; per completion it cost a one-shot `flow run` a 10 s drain.
+        if _dream_scan_due():
+            _background().spawn(
+                _run_dream_scan(
+                    dreamer=context._dreamer_agent,
+                    event_store=context._event_store,
+                    idea_gate=context._idea_gate,
+                ),
+                name="dream-scan",
+            )
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:

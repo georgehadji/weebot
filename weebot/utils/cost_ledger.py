@@ -27,8 +27,13 @@ class StepCost:
 
     @property
     def cost_usd(self) -> float:
-        in_rate, out_rate = CostLedger.PRICING.get(self.model, CostLedger.PRICING["default"])
-        return self.input_tokens * in_rate / 1_000_000 + self.output_tokens * out_rate / 1_000_000
+        """At the model catalog's rates; 0.0 for a model the catalog does not list."""
+        from weebot.config.model_registry import get_model_config
+
+        config = get_model_config(self.model)
+        if config is None:
+            return 0.0
+        return config.estimate_cost(self.input_tokens, self.output_tokens)
 
     @property
     def cost_eur(self) -> float:
@@ -47,17 +52,6 @@ class CostLedger:
         ...
         ledger.print_report()     # summary table at the end
     """
-
-    # (input $/1M tokens, output $/1M tokens)
-    PRICING: dict[str, tuple[float, float]] = {
-        "claude-sonnet-4-6": (3.00, 15.00),
-        "claude-opus-4-6": (15.00, 75.00),
-        "claude-haiku-4-5": (0.80, 4.00),
-        "gpt-4o": (5.00, 15.00),
-        "gpt-4o-mini": (0.15, 0.60),
-        "deepseek-chat": (2.00, 8.00),
-        "default": (3.00, 15.00),
-    }
 
     EUR_RATE: float = 0.92
 

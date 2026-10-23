@@ -63,3 +63,28 @@ class Commitment:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     failure_reason: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> Commitment:
+        """A Commitment from a ``commitments`` table row (ISO dates, '' for none)."""
+
+        def _when(value) -> datetime | None:
+            if not value:
+                return None
+            if isinstance(value, datetime):
+                return value
+            parsed = datetime.fromisoformat(str(value))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+        return cls(
+            id=row["id"],
+            promise_text=row.get("promise_text") or "",
+            context=row.get("context") or "",
+            source_session_id=row.get("source_session_id") or "",
+            source_event_id=row.get("source_event_id") or None,
+            due_at=_when(row.get("due_at")),
+            status=CommitmentStatus(row.get("status") or "pending"),
+            created_at=_when(row.get("created_at")) or datetime.now(UTC),
+            updated_at=_when(row.get("updated_at")) or datetime.now(UTC),
+            failure_reason=row.get("failure_reason") or None,
+        )

@@ -172,3 +172,21 @@ class TestWebhookToolRole:
                 )
                 assert response.status_code == 200
                 mock_build_tools.assert_awaited_once_with(role="admin")
+
+
+class TestWebhookSessionOwnership:
+    def test_cannot_run_a_session_it_does_not_own(self, monkeypatch):
+        # body.session_id loaded any stored session and ran the prompt in it (F57).
+        from weebot.domain.models.session import Session
+
+        app = _make_webhook_app(monkeypatch, webhook_api_key="k")
+        repo = app.state.container.get(None)
+        repo.load_session = AsyncMock(return_value=Session(id="s-alice", user_id="alice"))
+        with patch("weebot.interfaces.web.routers.webhook.create_flow") as create_flow:
+            resp = TestClient(app).post(
+                "/api/webhook/run",
+                json={"text": "hi", "session_id": "s-alice"},
+                headers={"X-Webhook-Key": "k"},
+            )
+        assert resp.status_code == 404
+        create_flow.assert_not_called()

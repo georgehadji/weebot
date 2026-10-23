@@ -20,7 +20,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.api_endpoints import XAI_API_BASE
+from weebot.config.api_endpoints import OPENROUTER_API_BASE, XAI_API_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +336,7 @@ class VideoGenTool(BaseTool):
                 async with (
                     aiohttp.ClientSession() as session,
                     session.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
+                        f"{OPENROUTER_API_BASE}/chat/completions",
                         headers=headers,
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=180),

@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { CostChart } from "@/components/dashboard/CostChart";
 import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
 import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
-import { api, ActiveSession } from "@/lib/api";
+import { api, ActiveSession, withToken } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ENDPOINTS } from "@/lib/endpoints";
+import type { StepStatus } from "@/types/events";
 
 interface OpsMetrics {
   total_sessions: number;
@@ -32,7 +34,7 @@ interface LogEntry {
 }
 
 function getWsBase(): string {
-  const fallback = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+  const fallback = ENDPOINTS.ws;
   if (typeof window === "undefined") return fallback;
   return localStorage.getItem("weebot_ws_url")?.trim() || fallback;
 }
@@ -57,7 +59,7 @@ export default function OpsPage() {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(getWsBase());
+    const ws = new WebSocket(withToken(getWsBase()));
     ws.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
@@ -363,7 +365,7 @@ export default function OpsPage() {
 function PlanVizTab() {
   const [sessionId, setSessionId] = useState("");
   const [planData, setPlanData] = useState<{
-    nodes: { id: string; description: string; status: "pending" | "running" | "completed" | "error" }[];
+    nodes: { id: string; description: string; status: StepStatus }[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -379,7 +381,7 @@ function PlanVizTab() {
           nodes: result.data.nodes.map((n) => ({
             id: n.id,
             description: n.label,
-            status: (n.status as "pending" | "running" | "completed" | "error") || "pending",
+            status: (n.status as StepStatus) || "pending",
           })),
         });
       }

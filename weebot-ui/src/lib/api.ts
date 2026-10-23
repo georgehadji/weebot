@@ -21,6 +21,19 @@ function _getApiKey(): string | null {
   }
 }
 
+/** The X-API-Key header for calls made outside fetchApi (empty when no key is set). */
+export function authHeaders(): Record<string, string> {
+  const apiKey = _getApiKey();
+  return apiKey ? { "X-API-Key": apiKey } : {};
+}
+
+/** A WebSocket URL carrying the API key as ?token= (the backend's socket auth). */
+export function withToken(url: string): string {
+  const apiKey = _getApiKey();
+  if (!apiKey) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(apiKey)}`;
+}
+
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const apiKey = _getApiKey();
 

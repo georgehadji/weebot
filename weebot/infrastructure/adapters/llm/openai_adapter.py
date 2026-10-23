@@ -14,6 +14,7 @@ from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
 from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.llm_response import LLMChunk
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
+from weebot.config.api_endpoints import DEEPSEEK_API_BASE, OPENROUTER_API_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,13 @@ def _catalog_spec(model_id: str):
     from weebot.config.model_registry import get_model_config
 
     return get_model_config(model_id)
+
+
+# On OpenRouter max_tokens covers reasoning plus the visible answer. A call this
+# short (a score, a verdict, a small JSON object) that names no effort runs at
+# the model's lowest effort, and a model that cannot stop reasoning gets this
+# much headroom on top of the caller's budget.
+SHORT_CALL_TOKENS = 1024
 
 
 def _fit_effort(effort: str, spec) -> str:
@@ -74,9 +82,9 @@ class OpenAIAdapter(LLMPort):
                 or key.startswith("sk-or-v1-")
                 or os.getenv("OPENROUTER_API_KEY") == key
             ):
-                url = "https://openrouter.ai/api/v1"  # kept inline — OPENROUTER_API_BASE in api_endpoints
+                url = OPENROUTER_API_BASE
             elif model_lower.startswith("deepseek/") or os.getenv("DEEPSEEK_API_KEY") == key:
-                url = "https://api.deepseek.com"
+                url = DEEPSEEK_API_BASE
 
         self._client = AsyncOpenAI(api_key=key, base_url=url)
         self._default_model = default_model
@@ -132,6 +140,9 @@ class OpenAIAdapter(LLMPort):
         # temperature for gpt-4.1 (which takes it) and sent it to Claude Sonnet 5
         # (which does not list it).
         spec = _catalog_spec(kwargs["model"])
+        direct_openai = "api.openai.com" in str(getattr(self._client, "base_url", ""))
+        if spec is None and direct_openai and "/" not in str(kwargs["model"]):
+            spec = _catalog_spec(f"openai/{kwargs['model']}")  # the catalog keys by vendor
         if spec is not None and spec.supports_temperature is not None:
             accepts_temperature = spec.supports_temperature
         else:
@@ -187,13 +198,45 @@ class OpenAIAdapter(LLMPort):
             # key must not be reintroduced below.
             kwargs.pop("reasoning_effort", None)
 
+        if (
+            reasoning_effort is None
+            and "reasoning_effort" not in kwargs
+            and "grok" not in model_id
+            and spec is not None
+            and spec.reasoning_efforts
+            and kwargs["max_tokens"] <= SHORT_CALL_TOKENS
+        ):
+            kwargs["reasoning_effort"] = "none"  # _fit_effort steps it to the lowest allowed
+            if spec.reasoning_mandatory:
+                kwargs["max_tokens"] += SHORT_CALL_TOKENS
+
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
+        # Claude caches only when asked; OpenRouter's automatic form is one
+        # top-level field. Tool loops resend the same prefix every turn, and a
+        # one-shot call would pay the 1.25x cache write for nothing.
+        if (
+            tools
+            and str(kwargs["model"]).startswith("anthropic/")
+            and "openrouter.ai" in str(getattr(self._client, "base_url", ""))
+        ):
+            kwargs["extra_body"] = {
+                **(kwargs.get("extra_body") or {}),
+                "cache_control": {"type": "ephemeral"},
+            }
         if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
         if "reasoning_effort" in kwargs:
             kwargs["reasoning_effort"] = _fit_effort(kwargs["reasoning_effort"], spec)
+        # api.openai.com differs from OpenRouter on two params: it rejects
+        # max_tokens for current models, and on /v1/chat/completions it rejects
+        # tools with a reasoning effort for models where reasoning is optional.
+        if direct_openai:
+            if "max_tokens" in kwargs:
+                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+            if tools and not (spec is not None and spec.reasoning_mandatory):
+                kwargs["reasoning_effort"] = "none"
 
         return kwargs
 
@@ -292,6 +335,10 @@ class OpenAIAdapter(LLMPort):
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
+            details = getattr(response.usage, "prompt_tokens_details", None)
+            cached = getattr(details, "cached_tokens", None)
+            if isinstance(cached, int):
+                usage["cached_tokens"] = cached
 
         return LLMResponse(
             content=msg.content or "",

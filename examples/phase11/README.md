@@ -69,7 +69,7 @@ python 01_basic_usage.py
 
 **Key Classes:**
 - `EventStore` - Αποθήκευση events
-- `EventLogger` - Helper για logging
+
 - `CostSummary` - Σύνοψη κόστους
 
 ## 🎯 Παραδείγματα Εξόδου

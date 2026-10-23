@@ -184,14 +184,6 @@ class DispatchAgentsTool(BaseTool):
             context={"dispatch_task_id": task_id},
         )
 
-        # Persist if state_repo is available (non-critical, best-effort)
-        if self._state_repo:
-            try:
-                # Synchronous save if available
-                save = getattr(self._state_repo, "save_sync", None)
-                if save:
-                    save(session)
-            except Exception:
-                pass
+        # The sub-agent flow saves the session itself (state_repo via the flow factory).
 
         return session

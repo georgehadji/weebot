@@ -544,14 +544,19 @@ class SchedulingManager:
             logger.error("Failed to load jobs from config: %s", exc)
             return 0
 
-    async def load_cron_agent_jobs(self, jobs_path: Path | None = None) -> int:
-        """Load cron agent job records and register CronAgentRunner.
+    async def load_cron_agent_jobs(
+        self, jobs_path: Path | None = None, container: Any = None
+    ) -> int:
+        """Schedule the cron agent jobs ``cron-agent create`` saved.
 
-        Reads ``CronJobRecord`` JSON files and registers each as a
-        scheduled job with the ``cron_agent_runner`` callable.
+        Each enabled ``CronJobRecord`` in *jobs_path* becomes a cron job whose
+        callable runs it through ``CronAgentRunner`` with *container*'s LLM,
+        state repo, flow factory and tool registry. The caller passes its
+        container (the web server's lifespan does); without one nothing loads.
 
         Args:
             jobs_path: Path to cron_jobs.json. Defaults to ~/.weebot/cron_jobs.json.
+            container: The entry point's DI container.
 
         Returns:
             Number of cron agent jobs loaded.
@@ -560,72 +565,10 @@ class SchedulingManager:
             jobs_path = Path.home() / ".weebot" / "cron_jobs.json"
         if not jobs_path.exists():
             return 0
+        if container is None:
+            logger.warning("Cron agent jobs not loaded: no container was passed")
+            return 0
 
-        # Register the CronAgentRunner callable if not already registered
-        if "cron_agent_runner" not in self._callables:
-            try:
-                from weebot.application.services.cron_agent_runner import CronAgentRunner
-                from weebot.application.di import Container
-
-                container = Container()
-                container.configure_defaults()
-
-                async def _run_cron_job(job_id: str) -> None:
-                    """Wrapper that loads CronJobRecord and runs it."""
-                    import json
-
-                    try:
-                        raw = json.loads(jobs_path.read_text(encoding="utf-8"))
-                        data = raw.get(job_id)
-                        if data is None:
-                            logger.error("Cron job %s not found in %s", job_id, jobs_path)
-                            return
-                        from weebot.domain.models.cron_job import CronJobRecord
-
-                        job = CronJobRecord(**data)
-
-                        from weebot.application.ports.llm_port import LLMPort
-                        from weebot.application.ports.state_repo_port import (
-                            StateRepositoryPort,
-                        )
-
-                        # These two were container.get("llm_port") and
-                        # container.get("state_repo_port"). Both ports are bound
-                        # by TYPE, and Container.get() does not cross-resolve
-                        # strings to types, so every cron agent job raised
-                        # KeyError here -- caught below and logged -- from
-                        # 813a840 (2026-06-18) on.
-                        runner = CronAgentRunner(
-                            llm=container.get(LLMPort),
-                            state_repo=container.get(StateRepositoryPort),
-                            flow_factory=container.get("create_flow"),
-                        )
-                        result = await runner.run(job)
-
-                        # Deliver result
-                        from weebot.application.services.cron_delivery_service import (
-                            CronDeliveryService,
-                        )
-
-                        delivery = CronDeliveryService()
-                        await delivery.deliver(job, result)
-
-                        # Update job record
-                        from datetime import datetime
-
-                        raw[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
-                        raw[job_id]["last_result"] = result[:500]
-                        raw[job_id]["run_count"] = data.get("run_count", 0) + 1
-                        jobs_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-                    except Exception as exc:
-                        logger.error("Cron agent job %s failed: %s", job_id, exc)
-
-                self.register_callable("cron_agent_runner", _run_cron_job)
-            except Exception as exc:
-                logger.error("Failed to register CronAgentRunner: %s", exc)
-                return 0
-
-        # Load jobs from file
         import json
 
         try:
@@ -638,8 +581,13 @@ class SchedulingManager:
         for job_id, job_data in data.items():
             if not job_data.get("enabled", True):
                 continue
-            existing = self.get_job(job_id)
-            if existing is not None:
+            # One callable per job: the scheduler calls a job's callable with
+            # no arguments, so a shared one taking job_id raised TypeError.
+            callable_name = f"cron_agent:{job_id}"
+            self.register_callable(
+                callable_name, self._cron_agent_callable(job_id, jobs_path, container)
+            )
+            if self.get_job(job_id) is not None:
                 continue  # Already scheduled
             schedule = job_data.get("schedule", "0 * * * *")
             try:
@@ -650,7 +598,7 @@ class SchedulingManager:
                     description=job_data.get("prompt", "")[:100],
                     trigger_type="cron",
                     trigger_config=trigger_config,
-                    callable_name="cron_agent_runner",
+                    callable_name=callable_name,
                 )
                 loaded += 1
             except Exception as exc:
@@ -658,6 +606,45 @@ class SchedulingManager:
 
         logger.info("Loaded %d cron agent jobs from %s", loaded, jobs_path)
         return loaded
+
+    @staticmethod
+    def _cron_agent_callable(job_id: str, jobs_path: Path, container: Any):
+        """An argument-less coroutine function that runs cron agent job *job_id*."""
+
+        async def _run() -> None:
+            import json
+            from datetime import datetime
+
+            from weebot.application.ports.llm_port import LLMPort
+            from weebot.application.ports.state_repo_port import StateRepositoryPort
+            from weebot.application.services.cron_agent_runner import CronAgentRunner
+            from weebot.application.services.cron_delivery_service import CronDeliveryService
+            from weebot.domain.models.cron_job import CronJobRecord
+
+            try:
+                raw = json.loads(jobs_path.read_text(encoding="utf-8"))
+                data = raw.get(job_id)
+                if data is None:
+                    logger.error("Cron job %s not found in %s", job_id, jobs_path)
+                    return
+                job = CronJobRecord(**{"id": job_id, **data})
+                runner = CronAgentRunner(
+                    llm=container.get(LLMPort),
+                    state_repo=container.get(StateRepositoryPort),
+                    # Was None: a scheduled job ran with no tools.
+                    tool_registry=container.get("tool_registry"),
+                    flow_factory=container.get("create_flow"),
+                )
+                result = await runner.run(job)
+                await CronDeliveryService().deliver(job, result)
+                raw[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
+                raw[job_id]["last_result"] = result[:500]
+                raw[job_id]["run_count"] = data.get("run_count", 0) + 1
+                jobs_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            except Exception as exc:
+                logger.error("Cron agent job %s failed: %s", job_id, exc)
+
+        return _run
 
     async def run_catch_up(self) -> int:
         """Run catch-up for missed scheduled jobs.

@@ -9,7 +9,7 @@ import httpx
 from pydantic import PrivateAttr
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.tool_config import ToolConfig, resolve_setting
+from weebot.config.tool_config import ToolConfig, require_setting, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -123,12 +123,7 @@ class ReasonerTool(BaseTool):
             self._tool_config, "reasoner_api_url", "REASONER_API_URL", "http://localhost:8003"
         ).rstrip("/")
         api_key = resolve_setting(self._tool_config, "reasoner_api_key", "REASONER_API_KEY")
-        reasoner_dir = resolve_setting(
-            self._tool_config,
-            "reasoner_dir",
-            "REASONER_DIR",
-            "E:\\Documents\\Vibe-Coding\\Reasoner",
-        )
+        reasoner_dir = resolve_setting(self._tool_config, "reasoner_dir", "REASONER_DIR")
 
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -190,6 +185,7 @@ class ReasonerTool(BaseTool):
                     import asyncio
                     from pathlib import Path
 
+                    cwd = require_setting(reasoner_dir, "REASONER_DIR", "the Reasoner CLI")
                     # Construct CLI arguments
                     cli_args = [
                         sys.executable,
@@ -222,14 +218,14 @@ class ReasonerTool(BaseTool):
                         cli_args.extend(["--output", str(temp_json_path)])
 
                         logger.info(
-                            "Falling back to headless CLI execution of Reasoner in %s", reasoner_dir
+                            "Falling back to headless CLI execution of Reasoner in %s", cwd
                         )
                         logger.info("CLI command: %s", " ".join(cli_args))
 
                         # Execute subprocess asynchronously
                         process = await asyncio.create_subprocess_exec(
                             *cli_args,
-                            cwd=reasoner_dir,
+                            cwd=cwd,
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
                         )

@@ -2,8 +2,8 @@
 
 Covers:
 - _resolve_image() returns CUSTOM_IMAGE when it exists
-- _resolve_image() falls back to DEFAULT_IMAGE when custom is missing
-- _resolve_image() falls back when Docker is unavailable
+- _resolve_image() returns None when custom is missing (ADR-014: no fallback)
+- _resolve_image() returns None when Docker is unavailable
 - Dockerfile exists at the expected path
 """
 
@@ -29,8 +29,8 @@ class TestDockerImageResolution:
         assert image == DockerLinuxSandbox.CUSTOM_IMAGE
 
     @pytest.mark.asyncio
-    async def test_falls_back_when_custom_image_missing(self, mocker):
-        """When the custom image is not found, _resolve_image returns DEFAULT_IMAGE."""
+    async def test_no_image_when_custom_image_missing(self, mocker):
+        """ADR-014: no python:slim fallback; a missing tool image resolves to None."""
         from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
 
         sandbox = DockerLinuxSandbox()
@@ -41,11 +41,11 @@ class TestDockerImageResolution:
         mocker.patch("asyncio.create_subprocess_exec", return_value=mock_proc)
 
         image = await sandbox._resolve_image()
-        assert image == DockerLinuxSandbox.DEFAULT_IMAGE
+        assert image is None
 
     @pytest.mark.asyncio
-    async def test_falls_back_when_docker_unavailable(self, mocker):
-        """When docker inspect raises, _resolve_image returns DEFAULT_IMAGE."""
+    async def test_no_image_when_docker_unavailable(self, mocker):
+        """When docker inspect raises, _resolve_image returns None (ADR-014)."""
         from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
 
         sandbox = DockerLinuxSandbox()
@@ -56,7 +56,7 @@ class TestDockerImageResolution:
         )
 
         image = await sandbox._resolve_image()
-        assert image == DockerLinuxSandbox.DEFAULT_IMAGE
+        assert image is None
 
     @pytest.mark.asyncio
     async def test_uses_explicit_image_when_provided(self, mocker):

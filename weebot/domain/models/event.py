@@ -121,6 +121,10 @@ class ToolApprovalEvent(BaseEvent):
     risk_level: str = Field(default="")
     reason: str = Field(default="")
     prompt: str = Field(default="Allow this command? (yes/no)")
+    # ADR-013: the exact call a "yes" approves, and an egress host the human
+    # may allowlist for good ("always"). Empty/None for older payloads.
+    fingerprint: str = Field(default="")
+    allow_always: str | None = Field(default=None)
 
 
 class NotificationEvent(BaseEvent):
@@ -458,6 +462,21 @@ class SkillGapDetected(DomainEvent):
     session_id: str
     step_description: str
     best_score: float = 0.0  # highest match score returned by retriever
+
+
+class LLMCallCompleted(DomainEvent):
+    """One successful LLM call: the fact the cost read model sums (F23).
+
+    DurableEventBus writes ``cost``, ``model`` and the token total into the
+    event store's cost columns, so the store is the one home for cost.
+    """
+
+    type: str = "llm_call_completed"
+    session_id: str = ""
+    model: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0  # estimate_cost(); USD
 
 
 class SkillDistilled(DomainEvent):

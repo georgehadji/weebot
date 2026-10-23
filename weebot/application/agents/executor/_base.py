@@ -46,6 +46,7 @@ from weebot.domain.models.event import (
     StepEvent,
     StepStatus,
     ThoughtEvent,
+    ToolApprovalEvent,
     ToolEvent,
     ToolStatus,
     WaitForUserEvent,
@@ -165,6 +166,20 @@ _EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
 )
 
 
+def _merge_middleware_result(result: ToolResult, mw: Any) -> ToolResult:
+    """The tool result with middleware's output (and error, if it set one).
+
+    Built with ``dataclasses.replace``: ``is_error`` is a property, so passing it
+    to ``ToolResult(...)`` raised TypeError, and data/metadata were dropped (F64).
+    """
+    import dataclasses
+
+    error = mw.error or result.error
+    if mw.is_error and not error:
+        error = "Tool output rejected by middleware"
+    return dataclasses.replace(result, output=mw.output, error=error, success=error is None)
+
+
 def _load_executor_system_prompt() -> str:
     """Load the executor system prompt from the package or filesystem.
 
@@ -227,6 +242,7 @@ class ExecutorAgent:
         session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
         llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
         provider_account: ProviderAccountPort | None = None,  # Credit check + live rescue
+        pinned_model: str | None = None,  # `flow run --model`: the cascade tries it first
     ):
         self._llm = llm
         self._tools = tools
@@ -287,7 +303,8 @@ class ExecutorAgent:
         self._cascade: CascadeExecutor = CascadeExecutor(
             llm=llm,
             tools=tools,
-            agent_role=agent_role,
+            # No role (no SOUL.md profile) is still a step executor.
+            agent_role=agent_role or "executor",
             model_provider=self._resolve_model_for_step,
             # This argument was missing from the only production construction
             # of CascadeExecutor, so the pool's bounded branch never executed
@@ -296,8 +313,10 @@ class ExecutorAgent:
             # matters -- the container's step executor -- passes the pool.
             llm_pool=llm_pool,
             provider_account=provider_account,
+            pinned_model=pinned_model,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
+            on_call_completed=self._publish_llm_call,
         )
         self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
@@ -360,6 +379,13 @@ class ExecutorAgent:
             except Exception:
                 pass
         return _load_executor_system_prompt()
+
+    async def _publish_llm_call(self, event: Any) -> None:
+        """Stamp the step's session on an LLMCallCompleted and publish it (W4.1)."""
+        if self._event_bus is None:
+            return
+        event.session_id = getattr(self, "_current_session_id", "") or ""
+        await self._event_bus.publish_domain_event(event)
 
     async def _emit(self, event: AgentEvent) -> None:
         if self._event_bus:
@@ -471,6 +497,29 @@ class ExecutorAgent:
 
         return VISION_IN_LOOP_ENABLED and VISION_REFLECTION_ENABLED
 
+    _tool_note: str = ""
+
+    def _scope_tools_for(self, step: Step) -> str:
+        """Send this step only the tool definitions it needs (ICM B1); return the
+        line naming the rest, which stay callable. All ~171 used to go every call."""
+        from weebot.config.feature_flags import TOOL_SCOPE_ENABLED
+
+        if self._tools is None or not hasattr(self._tools, "set_visible"):
+            return ""
+        if not TOOL_SCOPE_ENABLED:
+            self._tools.set_visible(None)
+            return ""
+        from weebot.application.services.tool_scope import select_tools
+
+        self._tools.set_visible(select_tools(step.description, {t.name for t in self._tools}))
+        hidden = self._tools.hidden_names()
+        if not hidden:
+            return ""
+        return (
+            "\n\nMore tools exist (definitions not shown); call one by its exact name if the "
+            "step needs it: " + ", ".join(hidden)
+        )
+
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None, session_id: str = ""
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -494,6 +543,10 @@ class ExecutorAgent:
                 _step_span.set_attribute("step.description", step.description[:200])
         self._current_step_id = step.id
         self._current_session_id = session_id or getattr(self, "_current_session_id", "unknown")
+        # The approval scope and audit records read the session from here; it
+        # was never set, so Flow pause denied every web approval (B2c).
+        self._tool_executor.set_step_context(step.id, session_id)
+        self._tool_note = self._scope_tools_for(step)
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
@@ -507,7 +560,12 @@ class ExecutorAgent:
             try:
                 import hashlib
 
-                repo = self._state_repo
+                from weebot.application.ports.state_roles_port import (
+                    MemoryMetadataStore,
+                    as_role,
+                )
+
+                repo = as_role(self._state_repo, MemoryMetadataStore)
                 if repo is not None:
                     key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
                     row = await repo.get_memory_entry(key)
@@ -636,7 +694,7 @@ class ExecutorAgent:
                     }
                 )
                 messages = sanitize_tool_call_pairing(
-                    [{"role": "system", "content": self._system_prompt}]
+                    [{"role": "system", "content": self._system_prompt + self._tool_note}]
                     + list(self._conversation_buffer)
                 )
                 try:
@@ -654,7 +712,7 @@ class ExecutorAgent:
             await self._context_compressor._maybe_compress()
 
             messages = sanitize_tool_call_pairing(
-                [{"role": "system", "content": self._system_prompt}]
+                [{"role": "system", "content": self._system_prompt + self._tool_note}]
                 + list(self._conversation_buffer)
             )
 
@@ -935,12 +993,7 @@ class ExecutorAgent:
                     )
                     # If middleware modified the output, update the result
                     if _mw_result.output != (result.output or ""):
-                        result = ToolResult(
-                            output=_mw_result.output,
-                            error=_mw_result.error or result.error,
-                            is_error=_mw_result.is_error or result.is_error,
-                            base64_image=result.base64_image,
-                        )
+                        result = _merge_middleware_result(result, _mw_result)
 
                 yield ToolEvent(
                     tool_call_id=tc["id"],
@@ -957,6 +1010,23 @@ class ExecutorAgent:
                     if result.data.get("awaiting_human"):
                         question = result.data.get("question", "")
                         yield WaitForUserEvent(question=question)
+                        return
+
+                    # ADR-013 flow pause: a guard asked, and a human must answer.
+                    pending = result.data.get("approval_required")
+                    if pending:
+                        yield ToolApprovalEvent(
+                            tool_name=pending.get("tool_name", tool_name),
+                            arguments=pending.get("arguments", {}),
+                            risk_level=pending.get("guard", ""),
+                            reason=pending.get("reason", ""),
+                            prompt=pending.get("prompt", "Allow this command? (yes/no)"),
+                            fingerprint=pending.get("fingerprint", ""),
+                            allow_always=pending.get("allow_always"),
+                        )
+                        # The UI, CLI and SSE render wait_for_user, not
+                        # tool_approval: this is the question a person sees.
+                        yield WaitForUserEvent(question=pending.get("prompt", ""))
                         return
 
                 if tool_name == "terminate":

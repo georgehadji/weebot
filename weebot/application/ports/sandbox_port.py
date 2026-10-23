@@ -7,9 +7,33 @@ environments (native Windows, Docker, WSL2, etc.).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
+
+# ── Per-call network (ICM fix plan W3.9, decision 7, ADR-013 section 3) ──
+# The sandbox runs with network off. ToolExecutor opens it for one call whose
+# egress was cleared (allowlisted host, or approved by a human), by running
+# that call inside ``network_cleared_for_call()``. Backends read
+# ``network_allowed(config)`` when they build the process. Lives in the port so
+# infrastructure can read it without importing application services.
+_network_cleared: ContextVar[bool] = ContextVar("weebot_sandbox_network", default=False)
+
+
+@contextmanager
+def network_cleared_for_call() -> Iterator[None]:
+    token = _network_cleared.set(True)
+    try:
+        yield
+    finally:
+        _network_cleared.reset(token)
+
+
+def network_allowed(config: SandboxConfig) -> bool:
+    return config.allow_network or _network_cleared.get()
 
 
 class SandboxType(Enum):
@@ -31,6 +55,9 @@ class SandboxCapability(Enum):
     NETWORK_ACCESS = auto()
     FILE_SYSTEM = auto()
     GPU_ACCESS = auto()
+    # The backend can actually cut a process off the network (Docker
+    # ``--network none``). Native Windows and WSL2 cannot (W3.9, F30).
+    NETWORK_ISOLATION = auto()
 
 
 @dataclass(frozen=True)
@@ -84,16 +111,19 @@ class SandboxConfig:
         env_vars: Additional environment variables.
         read_only_paths: Paths to mount as read-only (Docker/K8s).
         read_write_paths: Paths to mount as read-write (Docker/K8s).
+        workspace_dir: Host project folder. Docker mounts it read-only at
+            /workspace with its Output/ read-write (ADR-014).
     """
 
     timeout: float = 30.0
     max_output_bytes: int = 65_536
     memory_limit_mb: int | None = None
-    allow_network: bool = True
+    allow_network: bool = False  # decision 7: off unless a call is cleared (W3.9)
     working_dir: Path | None = None
     env_vars: dict[str, str] = None
     read_only_paths: list[Path] = None
     read_write_paths: list[Path] = None
+    workspace_dir: Path | None = None
 
     def __post_init__(self):
         if self.env_vars is None:

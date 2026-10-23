@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from weebot.config.settings import WeebotSettings, WORKSPACE_ROOT, LOGS_DIR
+from weebot.config.settings import get_settings, WORKSPACE_ROOT, LOGS_DIR
 from weebot.templates.parser import TemplateParser
 
 # TemplateMarketplace is imported lazily inside the two functions that use it —
@@ -222,7 +222,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
 
     # API keys / settings
     try:
-        settings = WeebotSettings()
+        settings = get_settings()
         providers = settings.available_providers()
         if providers:
             checks.append(
@@ -257,6 +257,19 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
             name="logs_dir",
             status="ok" if (root / LOGS_DIR).exists() else "warn",
             details=str(root / LOGS_DIR),
+        )
+    )
+
+    # Sessions that failed to save (SessionPersistenceAdapter dead letters)
+    import weebot.config.constants as _spa
+
+    pending = len(list(_spa.DEAD_LETTER_DIR.glob("*.json"))) if _spa.DEAD_LETTER_DIR.is_dir() else 0
+    checks.append(
+        DoctorCheck(
+            name="dead_letters",
+            status="warn" if pending else "ok",
+            details=f"{pending} unsaved session(s) in {_spa.DEAD_LETTER_DIR}"
+            + (" (SessionPersistenceAdapter.replay_dead_letters re-saves them)" if pending else ""),
         )
     )
 

@@ -36,7 +36,14 @@ def _load_jobs() -> dict[str, dict]:
     if CRON_JOBS_PATH.exists():
         try:
             return json.loads(CRON_JOBS_PATH.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            # Set it aside: the next save would otherwise overwrite every job (F77).
+            import time
+
+            backup = CRON_JOBS_PATH.with_name(f"{CRON_JOBS_PATH.name}.corrupt-{int(time.time())}")
+            CRON_JOBS_PATH.replace(backup)
+            logger.warning("Unreadable %s (%s); moved to %s", CRON_JOBS_PATH, exc, backup)
+            console.print(f"[yellow]Jobs file was unreadable; kept as {backup}[/yellow]")
             return {}
     return {}
 
@@ -250,10 +257,10 @@ def cron_run(job_id: str) -> None:
     console.print(f"[yellow]Running cron job: {job.name} ({job_id})...[/yellow]")
 
     from weebot.application.services.cron_agent_runner import CronAgentRunner
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
 
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -264,7 +271,8 @@ def cron_run(job_id: str) -> None:
     runner = CronAgentRunner(
         llm=container.get(LLMPort),
         state_repo=container.get(StateRepositoryPort),
-        tool_registry=None,
+        # Was None: the job ran with no tools.
+        tool_registry=container.get("tool_registry"),
         flow_factory=container.get("create_flow"),
     )
 

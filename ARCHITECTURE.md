@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-07 (Architecture 9 Plan — Phase 1–2, 11/15 steps)
 **Architecture score:** 9.0/10 (post-Architecture 9 Plan — Phase 1 Foundation + Phase 2 Structural Consolidation)
-**Last audit:** implementation_audit_report.md — APPROVED WITH CONDITIONS (2026-07-07)
+**Last audit:** _archive/root-2026-10-23/reports/implementation_audit_report.md — APPROVED WITH CONDITIONS (2026-07-07)
 **Maturity:** Production
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
 
@@ -58,9 +58,9 @@
 |---|------|----------|--------|
 | D1 | Root-level stray files (4 remaining) | LOW | `agent_selection`, `failure_recovery`, `tray`, `notifications` deferred to 2027-03-01 |
 | D2 | Core framework coupling — `agent.py` LangChain deps | MEDIUM | Deferred to `agent_core_v2` sunset (2027-03-01) per ADR-009 |
-| D3 | ignore_imports: 35 (target ≤25) | LOW | Remaining 10 entries need DI refactoring (Steps 2.3-2.4 deferred work) |
-| D4 | `plan_act_flow.py` 972 lines (target ≤700) | MEDIUM | 2.2.3-2.2.4 preamble/tool-result extraction deferred; needs step-by-step tests |
-| D5 | `_base.py` 1042 lines (target ≤650) | MEDIUM | `_handle_step_completion` extracted; preamble (~166 lines) still inline |
+| D3 | `.importlinter` ignore_imports (count: `import_exemptions` in `tasks/quality/ceilings.toml`; target ≤25) | LOW | Remaining 10 entries need DI refactoring (Steps 2.3-2.4 deferred work) |
+| D4 | `plan_act_flow.py` over its 700-line target | MEDIUM | 2.2.3-2.2.4 preamble/tool-result extraction deferred; needs step-by-step tests |
+| D5 | `_base.py` over its 650-line target | MEDIUM | `_handle_step_completion` extracted; preamble (~166 lines) still inline |
 | D6 | `behavior_tracker.py` git ops in core layer | LOW | Extracted to async helper; needs migration to infrastructure/persistence (P4) |
 
 ---
@@ -222,9 +222,9 @@ Architecture boundaries are enforced at three levels:
 
 | Level | Mechanism | What It Checks |
 |-------|-----------|----------------|
-| **Static (CI)** | `.importlinter` — 4 contracts | Domain purity, tools-no-db, infra-no-app-services, interfaces-no-infra |
-| **Dynamic (CI)** | `tests/unit/test_architecture_fitness.py` (44+ tests) | AST-based: layer boundaries, port contracts, import rules |
+| **Static (CI)** | `.importlinter` contracts (`lint-imports` lists them) | Layer boundaries: domain purity, tools-no-db, infra-no-app-services, interfaces-no-infra and more |
+| **Dynamic (CI)** | `tests/unit/test_architecture_fitness.py` | AST-based: layer boundaries, port contracts, import rules |
 | **Lint (CI)** | `scripts/lint_async_io.py` | Blocking I/O inside async def (open(), sqlite3.connect(), etc.) |
 | **Lint (CI)** | Ruff `B` rules (bugbear) | Mutable defaults, bare except, etc. |
 
-See `AGENTS.md` → Architecture Rules for the full dependency matrix.
+See `.importlinter` (contracts) and `tests/unit/test_architecture_fitness.py` for the full dependency matrix.

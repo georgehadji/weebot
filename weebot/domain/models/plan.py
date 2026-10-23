@@ -160,7 +160,9 @@ class Plan(BaseModel):
     status: PlanStatus = Field(default=PlanStatus.CREATED)
     # Enhancement 4: tracks how many times the planner's step-splitting heuristics
     # fired during plan parsing (proxy for decomposition granularity problems).
-    _heuristic_splits: int = 0
+    # A field, not a private attribute: the plan crosses model_dump/model_validate
+    # between planner and flow, which reset a private one to 0 (F70).
+    heuristic_splits: int = Field(default=0)
 
     def get_next_step(self) -> Step | None:
         """Return the first step that is not done."""

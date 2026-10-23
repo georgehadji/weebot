@@ -20,7 +20,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.api_endpoints import IDEOGRAM_GENERATION_URL, XAI_IMAGE_GENERATION_URL
+from weebot.config.api_endpoints import (
+    IDEOGRAM_GENERATION_URL,
+    OPENROUTER_API_BASE,
+    XAI_IMAGE_GENERATION_URL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -672,7 +676,7 @@ class ImageGenTool(BaseTool):
                 async with (
                     aiohttp.ClientSession() as session,
                     session.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
+                        f"{OPENROUTER_API_BASE}/chat/completions",
                         headers=headers,
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=120),
@@ -896,6 +900,12 @@ class ImageGenTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = ImageGenParams(**{k: v for k, v in kwargs.items() if v is not None})
+        if params.output_path:
+            # Every branch writes output_path; only _download_image checked it (F50).
+            try:
+                self._sanitize_output_path(params.output_path)
+            except ValueError as exc:
+                return ToolResult(output="", error=str(exc))
 
         # Route to the appropriate generator
         generators = {

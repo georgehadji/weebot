@@ -47,13 +47,10 @@ class TestStripeSignatureValidation:
         assert handler.validate_signature(payload, "invalid") is False
 
     def test_no_secret_with_dev_opt_in_allowed(self, monkeypatch):
+        # No module reload: conftest clears get_settings() per test. Deleting
+        # weebot.config.settings from sys.modules left later tests holding two
+        # copies of the module.
         monkeypatch.setenv("STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "true")
-        # Reset settings singleton so the env var is picked up
-        import sys
-
-        for mod in list(sys.modules.keys()):
-            if "weebot.config.settings" in mod:
-                del sys.modules[mod]
         handler = StripeWebhookHandler(webhook_secret=None)
         payload = json.dumps({"type": "payment_intent.succeeded"}).encode("utf-8")
         assert handler.validate_signature(payload, "invalid") is True

@@ -100,7 +100,8 @@ class PlanningState(FlowState):
 
         # ── Intent disambiguation gate (Enhancement 2 — S2 fix) ──────────────
         # Skip if this is a short continuation like "yes" / "proceed".
-        # IntentReviewService.review() has a 5s timeout and fails open.
+        # IntentReviewService.review() times out after WEEBOT_INTENT_REVIEW_TIMEOUT_S
+        # (default 30 s) and fails open.
         _is_continuation = len(prompt.split()) < 6 and prompt.strip().lower() in {
             "yes",
             "ok",
@@ -120,7 +121,6 @@ class PlanningState(FlowState):
                 from weebot.application.services.intent_review_service import IntentReviewService
                 from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
                 from weebot.domain.models.intent_review import IntentVerdict
-                from weebot.domain.models.event import WaitForUserEvent
 
                 _contract = IdeaContract(
                     title=prompt[:80], prompt=prompt, source=IdeaSource.USER_PROMPT
@@ -131,10 +131,18 @@ class PlanningState(FlowState):
                     _new_extra = {**context._session.context.extra, "_intent_reviewed": True}
                     _new_ctx = context._session.context.model_copy(update={"extra": _new_extra})
                     context._session = context._session.model_copy(update={"context": _new_ctx})
-                    yield WaitForUserEvent(
-                        question="\n".join(
+                    # A durable pause: WAITING, persisted, before the yield. A
+                    # bare WaitForUserEvent left the session pending, and the
+                    # user's answer failed with "is not waiting".
+                    from weebot.application.flows.collaborators.user_pause import (
+                        pause_for_user,
+                    )
+
+                    yield await pause_for_user(
+                        context,
+                        "\n".join(
                             f"{i+1}. {q}" for i, q in enumerate(_review.clarification_needed[:3])
-                        )
+                        ),
                     )
                     return
 
@@ -253,7 +261,15 @@ class PlanningState(FlowState):
                     if candidates:
                         plan = await merger.merge(candidates, prompt)
                         if plan is not None:
+                            # Persist before adopting: the resume after plan review
+                            # restores the last PlanEvent, so without this event the
+                            # pre-DPPM plan ran instead of the one reviewed (F36).
+                            dppm_event = PlanEvent(
+                                status=PlanStatus.UPDATED, plan=plan.model_dump(mode="json")
+                            )
+                            await context._emit(dppm_event)
                             context._plan = plan
+                            yield dppm_event
                             logger.info(
                                 "DPPM: generated plan with %d steps from %d candidates",
                                 len(plan.steps),
@@ -275,7 +291,8 @@ class PlanningState(FlowState):
                             if best.generalized_steps:
                                 awm_hints = best.generalized_steps
                                 logger.info(
-                                    "AWM: injected %d workflow hints from '%s' (%.0f%% success rate)",
+                                    "AWM: injected %d workflow hints from '%s' "
+                                    "(%.0f%% success rate)",
                                     len(awm_hints),
                                     best.task_summary,
                                     best.success_rate * 100,

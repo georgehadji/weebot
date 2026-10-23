@@ -73,9 +73,24 @@ class AgentPersonaParser:
         filename: str | None = None,
         division_hint: str | None = None,
     ) -> AgentPersona:
+        front: dict = {}
+        if content.startswith("---"):
+            # YAML frontmatter: its first line used to become the name "---" (F78).
+            parts = content.split("---", 2)
+            if len(parts) == 3:
+                import yaml
+
+                try:
+                    loaded = yaml.safe_load(parts[1])
+                except yaml.YAMLError:
+                    loaded = None
+                front = loaded if isinstance(loaded, dict) else {}
+                content = parts[2]
         sections = self._split_sections(content)
         first_heading = self._first_heading(content)
-        name = self._extract_name(sections, filename, first_heading)
+        name = str(front.get("name") or "").strip() or self._extract_name(
+            sections, filename, first_heading
+        )
         role = self._derive_role(name, filename)
         division = division_hint or ""
 

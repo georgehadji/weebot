@@ -84,34 +84,12 @@ class DesignSystemTool(BaseTool):
                 )
 
             if result.returncode != 0:
-                # Try to auto-install on first failure
+                # Installing a global npm package is the user's call, not the
+                # agent's: report it instead (F51).
                 if "not found" in result.stderr.lower() or "enoent" in result.stderr.lower():
-                    try:
-                        install = await asyncio.to_thread(
-                            lambda: subprocess.run(
-                                ["npm", "install", "-g", "skillui"],
-                                capture_output=True,
-                                text=True,
-                                timeout=60,
-                                shell=False,
-                            )
-                        )
-                        if install.returncode != 0:
-                            return ToolResult.error_result(
-                                error=f"Failed to install skillui: {install.stderr[:500]}"
-                            )
-                        # Retry after install
-                        result = await asyncio.to_thread(
-                            lambda: subprocess.run(
-                                cmd, capture_output=True, text=True, timeout=120, cwd=tmpdir
-                            )
-                        )
-                        if result.returncode != 0:
-                            return ToolResult.error_result(
-                                error=f"skillui failed: {result.stderr[:1000]}"
-                            )
-                    except Exception as e:
-                        return ToolResult.error_result(error=f"skillui install/run failed: {e}")
+                    return ToolResult.error_result(
+                        error="skillui not found. Install it with: npm install -g skillui"
+                    )
                 else:
                     return ToolResult.error_result(
                         error=f"skillui failed (exit {result.returncode}): {result.stderr[:1000]}"

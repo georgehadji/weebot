@@ -1,7 +1,7 @@
 """CodeReviewerService — LLM-backed per-step code review.
 
-Uses MODEL_CODE_REVIEW (grok-4.3 — reasoning, 1M context) to review the
-output of each code-producing step before the flow advances.
+Uses the ``reviewer`` role's model (``model_refs.ROLE_MODEL_CONFIG``) to review
+the output of each code-producing step before the flow advances.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class CodeReviewerService(CodeReviewerPort):
     def __init__(self, llm: LLMPort, timeout_seconds: float = 30.0) -> None:
         """
         Args:
-            llm: LLMPort instance. Should target MODEL_CODE_REVIEW (grok-4.3).
+            llm: LLMPort instance for the ``reviewer`` role (DI builds it).
             timeout_seconds: Max wait for the LLM call. Returns approved on timeout.
         """
         self._llm = llm

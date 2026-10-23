@@ -9,7 +9,6 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -42,8 +41,9 @@ def hyper_run(
     """Run a multi-agent HyperAgent workflow with the given prompt."""
 
     async def _run() -> None:
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
 
         llm = container.get(LLMPort)
         state_repo = container.get(StateRepositoryPort)
@@ -97,8 +97,9 @@ def hyper_list_costs(session_id: str | None):
     """List completed HyperAgent workflows and their costs."""
 
     async def _run() -> None:
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
         state_repo = container.get(StateRepositoryPort)
         sessions = await state_repo.list_sessions()
         table = Table(title="HyperAgent Sessions")

@@ -3,12 +3,16 @@
 Implements ``EventBusPort``.  When Valkey is unavailable (no ``WEEBOT_REDIS_URL``
 env var or connection fails at first publish), falls back to ``AsyncEventBus``
 so the system never breaks from a missing Valkey dependency.
+
+Not wired (W4.3, F24): nothing reads the Valkey channels back into local
+subscribers, so with Valkey connected ``publish`` refuses instead of dropping
+the event, and DI refuses a configured Valkey URL. The fix is a reader task
+that re-dispatches channel messages, tagged with an origin id against echo.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -19,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 # Sentinel for unavailable Valkey
 _VALKEY_UNAVAILABLE = object()
+_NOT_BRIDGED = (
+    "ValkeyEventBus: Valkey is connected, but nothing delivers its channels to this "
+    "process's subscribers yet (F24); refusing rather than dropping the event"
+)
 
 
 class ValkeyEventBus(EventBusPort):
@@ -109,12 +117,7 @@ class ValkeyEventBus(EventBusPort):
         if r is _VALKEY_UNAVAILABLE:
             await self._in_memory.publish(event)
         else:
-            # Valkey path: serialize to JSON and publish to channel
-            try:
-                payload = json.dumps(event.model_dump(mode="json"), default=str)
-                await r.publish("weebot:events", payload)
-            except Exception as exc:
-                logger.error("ValkeyEventBus: publish failed: %s", exc)
+            raise RuntimeError(_NOT_BRIDGED)
 
     async def publish_domain_event(self, event: DomainEvent) -> None:
         """Publish a domain event."""
@@ -122,11 +125,7 @@ class ValkeyEventBus(EventBusPort):
         if r is _VALKEY_UNAVAILABLE:
             await self._in_memory.publish_domain_event(event)
         else:
-            try:
-                payload = json.dumps(event.model_dump(mode="json"), default=str)
-                await r.publish("weebot:domain_events", payload)
-            except Exception as exc:
-                logger.error("ValkeyEventBus: domain publish failed: %s", exc)
+            raise RuntimeError(_NOT_BRIDGED)
 
     def subscribe(self, handler: EventHandler) -> None:
         self._subscribers.append(handler)

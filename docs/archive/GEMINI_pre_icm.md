@@ -1,0 +1,81 @@
+# 🤖 Weebot — Project Context & Guidelines
+
+Weebot is an advanced AI Agent Framework specifically designed for Windows 11, focusing on multi-model routing, secure code execution, and complex multi-agent orchestration.
+
+---
+
+## 🏗️ Project Overview
+
+- **Core Purpose**: Provide a robust, secure, and extensible framework for building and running AI agents that can interact with the Windows operating system and perform complex workflows.
+- **Main Technologies**:
+  - **Language**: Python 3.12+
+  - **AI Integration**: LiteLLM (supporting 100+ providers), LangChain
+  - **Orchestration**: Custom DAG-based Workflow Orchestrator
+  - **Automation**: Playwright (Browser), custom tools for Bash/Python/PowerShell
+  - **Templates**: YAML-based Template Engine for codeless workflows
+  - **Database**: SQLite (default), PostgreSQL (production)
+  - **Caching**: Redis, local file cache
+  - **Security**: Sandboxed execution, multi-layer command validation, GDPR-compliant privacy audit
+
+## 📂 Architecture
+
+- `weebot/core/`: The "brain" of the system, including the `WorkflowOrchestrator`, `CircuitBreaker`, and `DependencyGraph`.
+- `weebot/templates/`: Logic for parsing and executing YAML-based workflow templates.
+- `weebot/tools/`: Implementations of various agent tools (bash, python, browser, etc.) with security layers.
+- `weebot/mcp/`: Model Context Protocol (MCP) server integration for use with Claude Desktop.
+- `weebot/config/`: Configuration management using Pydantic.
+- `cli/`: Command-line interface logic built with `click` and `rich`.
+- `research_modules/`: Specialized modules for data validation, literature review, etc.
+
+## 🚀 Key Commands
+
+### Setup & Diagnostics
+- **Install Dependencies**: `pip install -r requirements.txt`
+- **Verify Environment**: `python run.py --diagnostic` or `python -m cli.main doctor`
+- **Interactive Session**: `python run.py --interactive`
+
+### CLI Usage
+- **Initialize**: `python -m cli.main init`
+- **Create Project**: `python -m cli.main create <project_id> "<description>"`
+- **List Projects**: `python -m cli.main list`
+- **Check Status**: `python -m cli.main status <project_id>`
+- **Run Workflow**: `python -m cli.main run <project_id> <workflow_json>`
+- **Implement from Spec**: `python -m cli.main implement <spec.md> -o <plan.json>`
+
+### Testing
+- **Run All Tests**: `pytest tests/unit/ -v`
+- **Run Coverage**: `pytest tests/unit/ --cov=weebot --cov-report=html`
+- **Verify Phase 3**: `python verify_phase3_complete.py`
+
+## 🛠️ Development Conventions
+
+### Coding Standards
+- **Async/Await**: The framework is heavily asynchronous. Use `asyncio` for all I/O bound operations and agent orchestration.
+- **Type Hinting**: Mandatory for all new functions and classes.
+- **Configuration**: Use `weebot.config.settings.WeebotSettings` for accessing environment variables and constants.
+- **UI/UX**: Use the `rich` library for all CLI output to maintain visual consistency.
+
+### Efficiency & Focus
+- **Ignore Irrelevant Files**: The root directory contains some legacy or unrelated files (e.g., `thunderbird_addressbooks.json`, `abook-2_contacts.json`). **IGNORE** these unless specifically asked to perform a mail-related task. Stay focused on the primary task objectives.
+- **Prefer Powershell Tool**: When on Windows, prefer `powershell_tool` for complex scripts. `bash_tool` is optimized for simple cross-platform commands but uses PowerShell internally on Windows.
+- **Browser Timeouts**: If `advanced_browser` times out, fall back to `web_search` or try a different URL.
+
+### AI Orchestrator Delegation for Web & App Building
+- **Core Directive**: When instructed to build websites or build applications (React, Next.js, FastAPI, Django, full-stack scaffolding, multi-file projects, etc.), Weebot **must** prioritize delegating the task to the **AI Orchestrator** (the `multi_llm_orchestrator` skill located at `E:\Documents\Vibe-Coding\Ai Orchestrator`).
+- **Flow & Fallback**: 
+  1. Invoke the AI Orchestrator via its CLI from `E:\Documents\Vibe-Coding\Ai Orchestrator`.
+  2. If the AI Orchestrator execution fails or is unavailable, Weebot **can and must** fallback to building the website or application directly by itself.
+
+### Security Guidelines
+- **Command Execution**: Never execute shell commands directly. Use `weebot.tools.bash_tool` which includes multi-layer safety checks.
+- **Sandboxing**: Python code execution must be performed within the sandboxed tool environment.
+- **Secrets**: Never hardcode API keys. Use `.env` and `BaseSettings`.
+
+## 📚 Documentation Reference
+- [README.md](README.md): High-level overview and features.
+- [SECURITY_HARDENING_GUIDE.md](SECURITY_HARDENING_GUIDE.md): Detailed information on "HARDEN" mode.
+- [PROJECT_FINAL_SUMMARY.md](PROJECT_FINAL_SUMMARY.md): Comprehensive project status and technical summary.
+- [WEEBOT_CAPABILITIES_GUIDE.md](WEEBOT_CAPABILITIES_GUIDE.md): Guide on what the agents can do.
+
+---
+*Generated by Gemini CLI - 2026-03-11*

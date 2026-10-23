@@ -2,7 +2,7 @@
 
 The headline test is ``test_default_catalog_is_clean``: it asserts the real
 shipped catalog and the real role cascades agree. Without it, drift between
-``_ROLE_MODEL_CASCADE`` and the model catalog only ever surfaced as a startup
+``ROLE_MODEL_CONFIG`` and the model catalog only ever surfaced as a startup
 log line that nothing failed on.
 """
 

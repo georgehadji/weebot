@@ -21,7 +21,7 @@ def client(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(router, prefix="/api")
-    return TestClient(app)
+    return TestClient(app, client=("127.0.0.1", 50000))  # loopback, as the local UI
 
 
 def test_get_mode_defaults_to_off(client):

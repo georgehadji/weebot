@@ -226,11 +226,10 @@ class VideoIngestTool(BaseTool):
     def __init__(self, repo: ToolRepositoryPort | None = None):
         super().__init__()
         if repo is None:
-            import importlib as _il
-
-            _c = _il.import_module("weebot.application.di").Container()
-            _c.configure_defaults()
-            repo = _c.get(ToolRepositoryPort)  # type: ignore[assignment]
+            raise RuntimeError(
+                "{} needs its ToolRepositoryPort collaborator: build it through the DI "
+                "container's tool_registry, whose wiring supplies it (W5.5)".format(self.name)
+            )
         self._repo = repo
 
     # ------------------------------------------------------------------
@@ -330,6 +329,12 @@ class VideoIngestTool(BaseTool):
             return ToolResult(output="", error="'project_id' is required for export_jsonl")
         if not output_path:
             return ToolResult(output="", error="'output_path' is required for export_jsonl")
+        try:
+            from weebot.core.output_path import output_path as _in_project
+
+            output_path = _in_project(output_path)  # writes stay in the project (F50)
+        except ValueError as exc:
+            return ToolResult(output="", error=str(exc))
 
         # Count already-written lines so we can resume after a crash.
         skipped = 0

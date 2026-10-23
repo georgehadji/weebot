@@ -25,7 +25,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from weebot.core.bash_guard import BashGuard, RiskLevel
-from weebot.core.approval import ApprovalManager, ApprovalRequest, ApprovalDecision
+from weebot.core.approval import ApprovalRequest, ApprovalDecision
 
 
 def example_1_safe_commands():
@@ -114,8 +114,7 @@ def example_4_approval_workflow():
     print("=" * 60)
     
     guard = BashGuard()
-    manager = ApprovalManager(auto_approve_safe=True, auto_deny_blocked=True)
-    
+
     # Simulate commands with different risk levels
     test_commands = [
         "echo hello",                              # SAFE

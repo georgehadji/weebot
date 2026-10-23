@@ -189,7 +189,15 @@ class ConstraintExtractor:
         asks the user, so a false positive is not free — see
         tasks/specs/side_constraint_integrity_plan.md Phase 5.4 defect 2.
         """
-        step_tokens = {self._stem(t) for t in _WORD_RE.findall(step_description.lower())}
+        # A step that restates a prohibition ("... Do not create any files.")
+        # honours it; the restated words are not evidence of a violation.
+        affirmative = re.sub(
+            r"(?:do\s+not|don't|never|must\s+not|shall\s+not|cannot|can't|avoid|without)"
+            r"\s+[^.;!?]*",
+            " ",
+            step_description.lower(),
+        )
+        step_tokens = {self._stem(t) for t in _WORD_RE.findall(affirmative)}
 
         violations: list[Constraint] = []
         for c in constraints:

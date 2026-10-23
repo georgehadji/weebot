@@ -189,6 +189,11 @@ class BrowserInspectorTool(BaseTool):
 
     # Injected by tool_registry via DI — shared with AdvancedBrowserTool
     browser: object | None = None  # PlaywrightAdapter
+
+    async def close(self) -> None:
+        """Close the shared PlaywrightAdapter (idempotent; the sibling tool may close it too)."""
+        if self.browser is not None and callable(getattr(self.browser, "close", None)):
+            await self.browser.close()
     description: str = (
         "Inspect a live page: extract design tokens (CSS custom properties), "
         "computed CSS for any element, full asset inventory (images/SVG/video), "

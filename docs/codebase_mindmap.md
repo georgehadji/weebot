@@ -226,7 +226,7 @@
 
 ### Infrastructure — Events `weebot/infrastructure/`
 - **Responsibility:** Event bus, event store, swarm event bus.
-- **Exports:** `AsyncEventBus`, `EventStore`, `SwarmEventBus`, `EventBrokerAdapter`, `EventLogger`
+- **Exports:** `AsyncEventBus`, `EventStore`, `SwarmEventBus`, `EventBrokerAdapter`
 - **Internal Structure:**
   - `event_bus.py` — `AsyncEventBus(EventBusPort)`: in-memory async event bus; `publish()` uses `asyncio.gather` for parallel handler dispatch; Prometheus counter `events_published_total`; `subscribe()`/`subscribe_domain()`
   - `event_store.py` — `EventStore(EventStorePort)`: SQLite append-only log; `CostSummary`, `SessionInfo` dataclasses

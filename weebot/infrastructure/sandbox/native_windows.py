@@ -16,6 +16,7 @@ from weebot.application.ports.sandbox_port import (
     SandboxPort,
     SandboxResult,
     SandboxType,
+    network_allowed,
 )
 
 # ---------------------------------------------------------------------------
@@ -75,8 +76,9 @@ def _build_child_env(config: SandboxConfig, extra: dict[str, str] | None = None)
     if extra:
         env.update(extra)
 
-    # Network gating: best-effort proxy blockade when network is disabled
-    if not config.allow_network:
+    # Network gating: best-effort proxy blockade when network is disabled and
+    # this call was not cleared for network (W3.9). Raw sockets bypass it.
+    if not network_allowed(config):
         env["HTTP_PROXY"] = "http://127.0.0.1:9"
         env["HTTPS_PROXY"] = "http://127.0.0.1:9"
         env["ALL_PROXY"] = "http://127.0.0.1:9"
@@ -317,6 +319,10 @@ class NativeWindowsSandbox(SandboxPort):
 
             script = re.sub(r"\bmkdir\s+-p\s+", "mkdir ", script)
             script = re.sub(r"\bmkdir\s+--parents\s+", "mkdir ", script)
+            # PowerShell 5.1 writes piped output in the console code page; we
+            # decode UTF-8, so every non-ASCII character ("12°C") came back as
+            # U+FFFD. Make PowerShell write UTF-8.
+            script = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + script
             command = ["powershell", "-NoProfile", "-Command", script]
         elif shell == "cmd":
             command = ["cmd", "/c", script]

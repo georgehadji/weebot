@@ -144,12 +144,15 @@ async def build_executor_prompt(
             logger.warning("Behavioral rules injection failed: %s", exc)
 
     # ── User profile ──────────────────────────────────────────────────
-    if "profile" in sources and state_repo is not None:
+    from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
+
+    memory = as_role(state_repo, MemoryMetadataStore)
+    if "profile" in sources and memory is not None:
         try:
             import hashlib
 
             key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-            row = await state_repo.get_memory_entry(key)
+            row = await memory.get_memory_entry(key)
             txt = row.get("entry_text", "") if row else ""
             if txt and txt != "No user data collected yet.":
                 constraints.append(f"\n\n## User Profile\n{txt[:500]}")

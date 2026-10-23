@@ -248,7 +248,7 @@ full list of gateway environment variables.
 
 | Command | Description |
 |---|---|
-| `python -m cli.main skills list` | List installed skills |
+| `python -m cli.main skill list` | List installed skills |
 | `python -m cli.main flow skillopt <name>` | Optimize a skill from trajectories |
 | `python -m cli.main agents list` | List available personas |
 | `python -m cli.main agents route "task"` | Route a task to the best persona |
@@ -441,7 +441,7 @@ python run_mcp.py
 
 ## Development
 
-- Read `AGENTS.md` for the complete contributor guide, architecture rules, and conventions.
+- Read `CLAUDE.md` for commands, architecture rules, and conventions; see `docs/ENTRY_POINTS.md`, `docs/SECURITY_MODEL.md` and `docs/DEPLOYMENT.md` for detail.
 - Follow the Clean Architecture dependency rule for all new code.
 - Add unit tests for domain and application changes; integration tests for new adapters and flows.
 - Run `make check` before opening a PR: it runs tests, architecture gates, and import-linting.

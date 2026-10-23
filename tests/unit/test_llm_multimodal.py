@@ -150,3 +150,28 @@ def test_o1_o3_match_as_exact_segments(model):
 )
 def test_o1_o3_do_not_false_positive_on_substrings(model):
     assert model_supports_vision(model) is False
+
+
+# ── Provider-native blocks pass through (2026-10-23) ─────────────────────────
+# osworld/agent_adapter.py sends OpenAI-native image_url blocks; the converter
+# knew only the neutral "image" shape and turned them into the text
+# "[unsupported content block: image_url]", so the agent never saw its
+# screenshots (a live probe got "I can't see the image").
+
+
+def test_an_openai_image_url_block_reaches_an_openai_model_unchanged():
+    from weebot.infrastructure.adapters.llm._multimodal import convert_messages
+
+    block = {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}}
+    out = convert_messages([{"role": "user", "content": [block]}], "openai")
+    assert out[0]["content"] == [block]
+
+
+def test_an_openai_image_url_data_block_is_mapped_for_anthropic():
+    from weebot.infrastructure.adapters.llm._multimodal import convert_messages
+
+    block = {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,QUJD"}}
+    out = convert_messages([{"role": "user", "content": [block]}], "anthropic")
+    assert out[0]["content"] == [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "QUJD"}}
+    ]

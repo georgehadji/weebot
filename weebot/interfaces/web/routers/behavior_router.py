@@ -4,22 +4,24 @@
 from __future__ import annotations
 
 import asyncio
-from concurrent.futures import Future
 import json
 import logging
-from datetime import datetime, UTC
+from concurrent.futures import Future
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+
 from weebot.core.behavior_reporting import BehaviorReporter, SelfKnowledgeGenerator
 from weebot.core.behavior_tracker import (
-    TrustManager,
-    BehaviorTracker,
     BehaviorEvent,
+    BehaviorTracker,
+    TrustManager,
     create_tracker,
     get_tracker,
     stop_tracker,
 )
+from weebot.interfaces.web.auth import require_mutation_identity
 from weebot.interfaces.web.websocket import fan_out
 
 logger = logging.getLogger(__name__)
@@ -120,7 +122,7 @@ async def get_session_summary(session_id: str):
     return reporter.get_session_summary(session_id)
 
 
-@router.post("/override")
+@router.post("/override", dependencies=[Depends(require_mutation_identity)])
 async def mark_override(request: OverrideRequest):
     """Mark an action as unsanctioned."""
     trust = TrustManager()
@@ -132,7 +134,7 @@ async def mark_override(request: OverrideRequest):
     return {"success": True, "timestamp": request.timestamp, "reason": request.reason}
 
 
-@router.post("/watch/start")
+@router.post("/watch/start", dependencies=[Depends(require_mutation_identity)])
 async def start_watching(session_id: str, directory: str):
     """Start behavior tracking for a session."""
     from pathlib import Path
@@ -157,7 +159,7 @@ async def start_watching(session_id: str, directory: str):
     return {"status": "started", "session_id": session_id, "watch_dir": str(watch_path)}
 
 
-@router.post("/watch/stop")
+@router.post("/watch/stop", dependencies=[Depends(require_mutation_identity)])
 async def stop_watching(session_id: str):
     """Stop behavior tracking for a session."""
     tracker = get_tracker(session_id)
@@ -187,7 +189,7 @@ async def get_self_knowledge():
     return {"content": content, "path": str(gen.SELF_KNOWLEDGE_FILE)}
 
 
-@router.post("/self-knowledge/regenerate")
+@router.post("/self-knowledge/regenerate", dependencies=[Depends(require_mutation_identity)])
 async def regenerate_self_knowledge():
     """Regenerate self-knowledge file."""
     gen = SelfKnowledgeGenerator()
@@ -247,9 +249,9 @@ async def broadcast_event(event: BehaviorEvent):
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
     # WebSocket authentication check — three-tier: subprotocol → header → query param
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws_settings = WeebotSettings()
+    _ws_settings = get_settings()
     if _ws_settings.weebot_api_key:
         # 1. Subprotocol (preferred — works in browsers)
         protocols = websocket.headers.get("sec-websocket-protocol", "")
@@ -361,9 +363,9 @@ async def behavior_websocket(websocket: WebSocket):
 async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
     # WebSocket authentication check
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws_settings = WeebotSettings()
+    _ws_settings = get_settings()
     if _ws_settings.weebot_api_key:
         token = websocket.query_params.get("token")
         import hmac as _hmac

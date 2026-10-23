@@ -11,7 +11,7 @@ from typing import Any
 
 from weebot.application.ports.context_engine_port import IContextEnginePort
 from weebot.domain.models.context import ContextBudget
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class ContextManager:
     def _budget_from_settings() -> ContextBudget:
         """Read budget defaults from WeebotSettings."""
         try:
-            settings = WeebotSettings()
+            settings = get_settings()
             return ContextBudget(
                 max_tokens=settings.context_compression_threshold,
                 protect_last_n=settings.context_compression_protect_last_n,

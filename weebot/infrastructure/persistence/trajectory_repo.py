@@ -16,6 +16,7 @@ from weebot.domain.models.failure_signature import FailureCluster, FailureSignat
 from weebot.domain.models.trajectory import TrajectorySummary
 from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
 from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class TrajectoryRepository(TrajectoryRepositoryPort):
     """SQLite adapter for TrajectoryRepositoryPort."""
 
-    def __init__(self, db_path: str = "./weebot_sessions.db"):
+    def __init__(self, db_path: str = DB_SESSIONS_PATH):
         self._db_path = Path(db_path)
         self._pool = None
         self._initialized = False

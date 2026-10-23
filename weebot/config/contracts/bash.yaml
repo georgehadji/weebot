@@ -15,8 +15,6 @@ coercions:
   use_wsl:
     type: bool
     default: false
-  security_override:
-    type: str
 defaults:
   use_wsl: false
 block_patterns:

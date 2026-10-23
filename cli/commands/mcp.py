@@ -30,19 +30,19 @@ logger = logging.getLogger(__name__)
 
 def _get_mcp_bridge():
     """Resolve MCPToolRegistryBridge from DI container."""
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
     return container.build_mcp_bridge()
 
 
 def _get_mcp_client():
     """Resolve MCPClientManager from DI container."""
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
     return container.get("mcp_client")
 
 
@@ -59,10 +59,6 @@ def mcp_list() -> None:
     stats = bridge.get_stats()
 
     # Also show raw server configs
-    from weebot.config.settings import WeebotSettings
-
-    settings = WeebotSettings()
-
     table = Table(title="MCP Servers")
     table.add_column("Server", style="cyan")
     table.add_column("Transport", style="magenta")
@@ -218,10 +214,6 @@ def mcp_configure(name: str) -> None:
 @click.option("--force", is_flag=True, help="Force re-authentication")
 def mcp_login(name: str, force: bool) -> None:
     """Authenticate with an MCP server (OAuth flow)."""
-    from weebot.config.settings import WeebotSettings
-
-    settings = WeebotSettings()
-
     configs = _load_server_configs()
     if name not in configs:
         console.print(f"[red]Server '{name}' not found.[/red]")
@@ -278,9 +270,9 @@ def mcp_config_path() -> None:
 
 def _get_config_path() -> Path:
     """Get the path to the MCP servers config file."""
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    settings = WeebotSettings()
+    settings = get_settings()
     config_path = settings.mcp_servers_config_path
     if config_path:
         return Path(config_path)
@@ -340,9 +332,9 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
     For X (Twitter) servers, print xurl auth instructions instead of
     claiming we open a browser.  Falls back to paste-token for other servers.
     """
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    settings = WeebotSettings()
+    settings = get_settings()
     token_dir = Path(settings.mcp_token_dir)
     token_dir.mkdir(parents=True, exist_ok=True)
     token_path = token_dir / f"{name}_token.json"

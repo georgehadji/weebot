@@ -29,6 +29,7 @@ import aiofiles
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
+import weebot.config.constants as _consts
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class SessionPersistenceAdapter:
     ) -> None:
         self._repo = repo
         self._retry = retry or RetryWithBackoff(PERSISTENCE_RETRY_CONFIG)
-        self._dead_letter_dir = dead_letter_dir or Path("./.weebot/dead_letter")
+        self._dead_letter_dir = dead_letter_dir or _consts.DEAD_LETTER_DIR
         self._dead_letter_dir.mkdir(parents=True, exist_ok=True)
 
     async def save_session(self, session: Session) -> bool:
@@ -102,9 +103,8 @@ class SessionPersistenceAdapter:
             ``False`` if all retries were exhausted and the session
             was written to the dead-letter directory.
 
-        Raises:
-            Only non-retryable exceptions (per the backoff config's
-            ``retryable`` predicate) are re-raised.
+        Never raises: a permanent error skips the retries (``retryable``)
+        but is dead-lettered like the rest.
         """
         try:
             await self._retry.call(self._repo.save_session, session)

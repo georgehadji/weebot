@@ -11,6 +11,7 @@ from rich.table import Table
 
 from weebot.application.di import Container
 from weebot.application.cqrs.mediator import Mediator
+from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.model_selection import ModelSelectionService
 from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
@@ -39,6 +40,20 @@ def _run_async(coro_factory) -> None:
     """
 
     async def _wrapper() -> None:
+        import sys
+
+        if sys.stdin.isatty():
+            # ADR-013: a person at a terminal answers tool-call approvals here.
+            from weebot.application.ports.event_store_port import EventStorePort
+            from weebot.application.services.tool_approval import (
+                ConsoleApproval,
+                set_approval_journal,
+                set_process_approval,
+            )
+
+            set_process_approval(ConsoleApproval())
+            _get_state_repo()  # builds the shared container
+            set_approval_journal(_container.get(EventStorePort))
         try:
             await coro_factory()
         finally:
@@ -53,6 +68,9 @@ def _run_async(coro_factory) -> None:
             # never finished. Bounded, so a slow background job delays exit but
             # cannot prevent it.
             await get_background_tasks().drain()
+            from weebot.interfaces.factories import close_mcp_toolkit
+
+            await close_mcp_toolkit()
             await close_all_pools()
 
     asyncio.run(_wrapper())
@@ -61,8 +79,9 @@ def _run_async(coro_factory) -> None:
 def _get_state_repo() -> StateRepositoryPort:
     global _container
     if _container is None:
-        _container = Container()
-        _container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        _container = shared_container()
     return _container.get(StateRepositoryPort)
 
 
@@ -95,21 +114,51 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
         mediator = _get_mediator()
         run_session_id = session_id or str(uuid.uuid4())
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, mediator=mediator, model=model, use_rich=False
+            llm=llm,
+            state_repo=state_repo,
+            mediator=mediator,
+            model=model,
+            use_rich=False,
+            retention_agent=_container.get("retention_agent"),
+            # Domain events and the skill-gap subscription need the bus (F56).
+            event_bus=_container.get(EventBusPort),
         )
-        subscriber = CLIEventSubscriber(use_rich=True)
+        try:
+            subscriber = CLIEventSubscriber(use_rich=True)
 
-        async for event in runner.run_prompt(prompt, session_id=run_session_id):
-            await subscriber.on_event(event)
-            if isinstance(event, WaitForUserEvent):
+            waiting = False
+            async for event in runner.run_prompt(prompt, session_id=run_session_id):
+                await subscriber.on_event(event)
+                if isinstance(event, WaitForUserEvent):
+                    waiting = True
+                    break
+            # Every question on the way gets asked: plan review, then e.g. the
+            # constraint gate. Answering only the first one ended the command with
+            # the session still waiting and nothing said.
+            while waiting:
                 # to_thread: a bare input() here would block the event loop,
                 # freezing the runner's own background tasks while it waits.
-                answer = await asyncio.to_thread(
-                    input, f"\n[weebot asks] {event.question}\nYour answer: "
-                )
+                # The subscriber above already printed the question (F37).
+                try:
+                    answer = await asyncio.to_thread(input, "\nYour answer: ")
+                except EOFError:
+                    # stdin closed (a script, CI, a pipe): never answer for the
+                    # user. The session stays WAITING and can be resumed.
+                    click.echo(
+                        f"\nNo answer on stdin; session {run_session_id} is waiting. "
+                        "Resume it with: python -m cli.main flow resume "
+                        f'{run_session_id} "<answer>"'
+                    )
+                    break
+                waiting = False
                 async for resume_event in runner.resume_session(run_session_id, answer):
                     await subscriber.on_event(resume_event)
-                break
+                    if isinstance(resume_event, WaitForUserEvent):
+                        waiting = True
+                        break
+
+        finally:
+            await runner.close()  # tools: Apify HTTP sessions, the browser
 
     _run_async(_run)
 
@@ -127,11 +176,21 @@ def flow_resume(session_id: str, answer: str) -> None:
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         mediator = _get_mediator()
-        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, use_rich=False)
-        subscriber = CLIEventSubscriber(use_rich=True)
+        runner = AgentRunner(
+            llm=llm,
+            state_repo=state_repo,
+            mediator=mediator,
+            use_rich=False,
+            event_bus=_container.get(EventBusPort),
+        )
+        try:
+            subscriber = CLIEventSubscriber(use_rich=True)
 
-        async for event in runner.resume_session(session_id, answer):
-            await subscriber.on_event(event)
+            async for event in runner.resume_session(session_id, answer):
+                await subscriber.on_event(event)
+
+        finally:
+            await runner.close()  # tools: Apify HTTP sessions, the browser
 
     _run_async(_run)
 
@@ -173,11 +232,34 @@ def flow_cancel(session_id: str) -> None:
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
-        ok = await runner.cancel_session(session_id)
-        if ok:
+        if await runner.cancel_session(session_id):
             console.print(f"[green]Cancelled session {session_id}[/green]")
+            return
+        # Another process may be running it (F77): file a request it checks
+        # every iteration; a session nobody is running is marked failed here.
+        from weebot.core import cancel_requests
+        from weebot.domain.models.session import SessionStatus
+
+        session = await state_repo.load_session(session_id)
+        if session is None:
+            console.print(f"[yellow]Session {session_id} not found[/yellow]")
+        elif session.status in (
+            SessionStatus.RUNNING, SessionStatus.WAITING, SessionStatus.PENDING
+        ):
+            # A resumed run keeps WAITING in the store while it works, so file the
+            # request for every open status; mark it failed too in case nothing runs it.
+            cancel_requests.request(session_id)
+            if session.status != SessionStatus.RUNNING:
+                await state_repo.update_session_status(session_id, SessionStatus.FAILED)
+            console.print(
+                f"[green]Cancel requested for {session_id}; a process running it stops "
+                f"at its next step.[/green]"
+            )
         else:
-            console.print(f"[yellow]Session {session_id} was not active[/yellow]")
+            console.print(
+                f"[yellow]Session {session_id} is {session.status.value}; nothing to cancel"
+                f"[/yellow]"
+            )
 
     _run_async(_run)
 
@@ -194,8 +276,9 @@ def flow_retry(session_id: str) -> None:
     async def _run() -> None:
         global _container
         if _container is None:
-            _container = Container()
-            _container.configure_defaults()
+            from weebot.interfaces.factories import shared_container
+
+            _container = shared_container()
         from weebot.application.services.task_runner import TaskRunner
 
         runner = _container.get(TaskRunner)
@@ -204,8 +287,9 @@ def flow_retry(session_id: str) -> None:
             console.print(f"[green]Retrying failed session {session_id}[/green]")
         else:
             console.print(
-                f"[yellow]Session {session_id} is not in FAILED status "
-                f"or has no flow factory cached[/yellow]"
+                f"[yellow]Session {session_id} is not FAILED, or was not run by this "
+                f"process: retry works only in the process that ran it (the web "
+                f"server). From the CLI, start it again with 'flow run'.[/yellow]"
             )
 
     _run_async(_run)

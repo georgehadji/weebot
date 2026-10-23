@@ -51,6 +51,8 @@ class PlaywrightAdapter(BrowserPort):
         self._page: Any | None = None
         self._config: BrowserConfig | None = None
         self._lock = asyncio.Lock()
+        # Separate from _lock: start() calls close() on failure, which takes _lock.
+        self._start_lock = asyncio.Lock()
 
     @property
     def page(self):
@@ -79,6 +81,14 @@ class PlaywrightAdapter(BrowserPort):
         Args:
             config: Browser configuration. Uses defaults if None.
         """
+        async with self._start_lock:
+            # Two tools share this adapter; a second start() overwrote the first
+            # browser without closing it (F73).
+            if self._browser is not None:
+                return
+            await self._start(config)
+
+    async def _start(self, config: BrowserConfig | None) -> None:
         from playwright.async_api import async_playwright
 
         self._config = config or BrowserConfig()

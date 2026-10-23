@@ -33,6 +33,17 @@ def _empty_tools():
 ExecutorFactory = Callable[..., "ExecutorAgent"]
 
 
+
+def _usage_of(executor) -> dict:
+    """The step executor's token usage; reporting it never fails a step."""
+    usage = getattr(executor, "token_usage", None)
+    return dict(usage) if isinstance(usage, dict) else {}
+
+
+def _gaps_of(executor) -> list:
+    gaps = getattr(executor, "_skill_gaps", None)
+    return list(gaps) if isinstance(gaps, (list, tuple)) else []
+
 class ExecuteStepHandler(CommandHandler):
     """Executes a plan step through ExecutorAgent and returns events.
 
@@ -82,12 +93,22 @@ class ExecuteStepHandler(CommandHandler):
                     error_code="STEP_ALREADY_DONE",
                 )
 
+            context = command.step_context
             if self._executor_factory is not None:
-                executor = self._executor_factory(model=command.model, session=session)
+                # `context` only when there is one: a factory written before
+                # ADR-015 takes model and session only.
+                extra = {"context": context} if context is not None else {}
+                executor = self._executor_factory(model=command.model, session=session, **extra)
             else:
-                executor = ExecutorAgent(
-                    llm=self._llm, tools=self._tools, event_bus=self._event_bus, model=command.model
-                )
+                kwargs = {
+                    "llm": self._llm,
+                    "tools": self._tools,
+                    "event_bus": self._event_bus,
+                    "model": command.model,
+                }
+                if context is not None:
+                    kwargs.update(context.executor_kwargs())
+                executor = ExecutorAgent(**kwargs)
 
             # ── Lost-in-Compaction: deliver session constraints ──────────
             # Delivered here (not via the factory) because it's a per-session
@@ -127,6 +148,10 @@ class ExecuteStepHandler(CommandHandler):
                     "step_id": command.step_id,
                     "events": events,
                     "status": "step_executed",
+                    # The flow totals these (ADR-015): it no longer reads them
+                    # from an executor that never ran a step.
+                    "token_usage": _usage_of(executor),
+                    "skill_gaps": _gaps_of(executor),
                 }
             )
         except Exception as exc:

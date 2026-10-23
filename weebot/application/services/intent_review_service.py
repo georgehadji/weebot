@@ -13,6 +13,7 @@ import logging
 from weebot.application.ports.intent_review_port import IntentReviewPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
+from weebot.config.settings import get_settings
 from weebot.domain.models.idea_contract import IdeaContract
 from weebot.domain.models.intent_review import IntentReview, IntentVerdict
 
@@ -28,16 +29,16 @@ dreamer agent. Assess whether this idea is:
 Return ONLY valid JSON:
 {"verdict": "ready" | "not_ready" | "blocked", "reasoning": "...", "clarification_needed": [...]}"""
 
-_TIMEOUT = 5.0
 _MAX_TOKENS = MAX_TOKENS_CONCISE
 
 
 class IntentReviewService(IntentReviewPort):
     """LLM-backed intent reviewer. Fail-open: returns NOT_READY."""
 
-    def __init__(self, llm: LLMPort, timeout: float = _TIMEOUT) -> None:
+    def __init__(self, llm: LLMPort, timeout: float | None = None) -> None:
         self._llm = llm
-        self._timeout = timeout
+        # Was a fixed 5 s, which a thinking model missed on every run.
+        self._timeout = timeout if timeout is not None else get_settings().intent_review_timeout_s
 
     async def review(self, contract: IdeaContract) -> IntentReview:
         try:
@@ -70,6 +71,13 @@ class IntentReviewService(IntentReviewPort):
                 reasoning=data.get("reasoning", ""),
                 clarification_needed=data.get("clarification_needed", []),
             )
+        except TimeoutError:
+            logger.warning(
+                "IntentReview timed out after %.0fs for %s (fails open)",
+                self._timeout,
+                contract.id,
+            )
+            return IntentReview(idea_contract_id=contract.id, verdict=IntentVerdict.NOT_READY)
         except Exception as exc:
-            logger.warning("IntentReview failed for %s: %s", contract.id, exc)
+            logger.warning("IntentReview failed for %s: %r", contract.id, exc)
             return IntentReview(idea_contract_id=contract.id, verdict=IntentVerdict.NOT_READY)

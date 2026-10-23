@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import shutil
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PurePosixPath
 from typing import Any
 
 from weebot.application.ports.sandbox_port import (
@@ -15,6 +15,7 @@ from weebot.application.ports.sandbox_port import (
     SandboxPort,
     SandboxResult,
     SandboxType,
+    network_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,8 +45,16 @@ class DockerLinuxSandbox(SandboxPort):
     """
 
     _TRUNCATION_SUFFIX = b"...[truncated]"
-    DEFAULT_IMAGE = "python:3.11-slim"
+    # ADR-014: the built tool image is required; it has the uid-1000 user.
+    # python:3.11-slim was the fallback and ran everything as root.
     CUSTOM_IMAGE = "weebot-tool-env:latest"
+    BUILD_HINT = (
+        "docker build -t weebot-tool-env:latest -f docker/weebot-tool-env.Dockerfile ."
+    )
+    CONTAINER_WORKSPACE = "/workspace"
+    SANDBOX_USER = "1000:1000"
+    PIP_CACHE_VOLUME = "weebot-pip-cache"
+    CONTAINER_PIP_CACHE = "/home/weebot/.cache/pip"
 
     def __init__(
         self,
@@ -57,24 +66,22 @@ class DockerLinuxSandbox(SandboxPort):
 
         Args:
             config: Sandbox configuration. Uses defaults if None.
-            image: Docker image to use. Defaults to python:3.11-slim.
+            image: Docker image to use as-is. None means weebot-tool-env, required.
             docker_path: Path to docker executable. Auto-detected if None.
         """
         self._config = config or SandboxConfig()
-        self._image = image or self.DEFAULT_IMAGE
+        self._image = image
         self._docker_path = docker_path or shutil.which("docker") or "docker"
 
-    async def _resolve_image(self) -> str:
-        """Return the custom image if available, else fall back to DEFAULT_IMAGE.
+    async def _resolve_image(self) -> str | None:
+        """The image to run, or None when weebot-tool-env is not built.
 
-        When an explicit *image* was passed to the constructor, it is used
-        as-is.  When using the default, the builder-preferred
-        ``weebot-tool-env:latest`` is tried first with a graceful fallback
-        to ``python:3.11-slim``.
+        An explicit *image* from the constructor is used as-is. Otherwise only
+        ``weebot-tool-env:latest`` qualifies (ADR-014): it has the uid-1000 user
+        that ``--user`` maps to.
         """
-        if self._image != self.DEFAULT_IMAGE:
+        if self._image:
             return self._image
-        # Quick docker inspect to check for the custom image
         try:
             proc = await asyncio.create_subprocess_exec(
                 self._docker_path,
@@ -87,9 +94,22 @@ class DockerLinuxSandbox(SandboxPort):
             await asyncio.wait_for(proc.wait(), timeout=5.0)
             if proc.returncode == 0:
                 return self.CUSTOM_IMAGE
-        except Exception:
-            pass
-        return self.DEFAULT_IMAGE
+        except Exception as exc:
+            logger.debug("docker image inspect failed: %r", exc)
+        return None
+
+    def _container_cwd(self, cwd: str | Path | None) -> str | None:
+        """Map a host working directory into /workspace (ADR-014)."""
+        workspace = self._config.workspace_dir
+        if workspace is None:
+            return str(cwd) if cwd else None
+        if cwd:
+            try:
+                rel = Path(cwd).resolve().relative_to(Path(workspace).resolve())
+                return str(PurePosixPath(self.CONTAINER_WORKSPACE, *rel.parts))
+            except ValueError:
+                logger.debug("cwd %s is outside the workspace; using /workspace", cwd)
+        return self.CONTAINER_WORKSPACE
 
     @property
     def sandbox_type(self) -> SandboxType:
@@ -119,6 +139,7 @@ class DockerLinuxSandbox(SandboxPort):
             SandboxCapability.BASH,
             SandboxCapability.PYTHON,
             SandboxCapability.FILE_SYSTEM,
+            SandboxCapability.NETWORK_ISOLATION,  # --network none is enforced
         }
 
         if self._config.allow_network:
@@ -143,7 +164,35 @@ class DockerLinuxSandbox(SandboxPort):
             "run",
             "--rm",  # Remove container after execution
             "-i",  # Interactive
+            # Hardening (W3.9, F30; ADR-014): read-only root, not root, /tmp in
+            # memory. pip installs land in /tmp/.local (PIP_USER) and reuse a
+            # cache volume, so they work without a writable root filesystem.
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            "256",
+            "--read-only",
+            "--user",
+            self.SANDBOX_USER,
+            "--tmpfs",
+            "/tmp:rw,exec,nosuid,size=256m",
+            "-v",
+            f"{self.PIP_CACHE_VOLUME}:{self.CONTAINER_PIP_CACHE}",
+            "-e",
+            "PIP_USER=1",
+            "-e",
+            "PYTHONUSERBASE=/tmp/.local",
+            "-e",
+            f"PIP_CACHE_DIR={self.CONTAINER_PIP_CACHE}",
         ]
+        workspace = self._config.workspace_dir
+        if workspace is not None:
+            output = Path(workspace) / "Output"
+            output.mkdir(parents=True, exist_ok=True)
+            docker_cmd += ["-v", f"{workspace}:{self.CONTAINER_WORKSPACE}:ro"]
+            docker_cmd += ["-v", f"{output}:{self.CONTAINER_WORKSPACE}/Output"]
 
         # Memory limit
         limit = memory_limit_mb or self._config.memory_limit_mb
@@ -151,7 +200,7 @@ class DockerLinuxSandbox(SandboxPort):
             docker_cmd.extend(["-m", f"{limit}m"])
 
         # Network
-        if not self._config.allow_network:
+        if not network_allowed(self._config):
             docker_cmd.extend(["--network", "none"])
 
         # Environment variables
@@ -172,12 +221,13 @@ class DockerLinuxSandbox(SandboxPort):
                 continue
             docker_cmd.extend(["-v", f"{rw_path}:{rw_path}"])
 
-        # Working directory
-        if cwd:
-            docker_cmd.extend(["-w", str(cwd)])
+        # Working directory: the host path mapped into /workspace
+        container_cwd = self._container_cwd(cwd)
+        if container_cwd:
+            docker_cmd.extend(["-w", container_cwd])
 
-        # Image and command
-        docker_cmd.append(image)
+        # Image and command (execute() refuses first when the image is missing)
+        docker_cmd.append(image or self.CUSTOM_IMAGE)
         docker_cmd.extend(command)
 
         return docker_cmd
@@ -206,6 +256,18 @@ class DockerLinuxSandbox(SandboxPort):
             return SandboxResult(
                 stdout="",
                 stderr="Docker is not available on this system",
+                returncode=-1,
+                elapsed_ms=0.0,
+                sandbox_type=self.sandbox_type,
+            )
+
+        if await self._resolve_image() is None:
+            return SandboxResult(
+                stdout="",
+                stderr=(
+                    f"Docker image {self.CUSTOM_IMAGE} is not built (ADR-014 requires it). "
+                    f"Build it with: {self.BUILD_HINT}"
+                ),
                 returncode=-1,
                 elapsed_ms=0.0,
                 sandbox_type=self.sandbox_type,
@@ -340,6 +402,9 @@ class DockerLinuxSandbox(SandboxPort):
             return False, "Docker is not available"
 
         image = await self._resolve_image()
+        if image is None:
+            # weebot-tool-env is built locally, not pulled from a registry.
+            return False, f"{self.CUSTOM_IMAGE} is not built; run: {self.BUILD_HINT}"
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -352,7 +417,7 @@ class DockerLinuxSandbox(SandboxPort):
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300.0)
 
             if proc.returncode == 0:
-                return True, f"Successfully pulled {self._image}"
+                return True, f"Successfully pulled {image}"
             else:
                 error = stderr.decode("utf-8", errors="replace")[:500]
                 return False, f"Failed to pull image: {error}"

@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 
 from weebot.core.behavior_tracker import BehaviorTracker, create_tracker, stop_tracker
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class BehaviorIntegration:
     """Integrates behavior tracking with Weebot sessions."""
 
     def __init__(self):
-        self.settings = WeebotSettings()
+        self.settings = get_settings()
         self._enabled = self._check_enabled()
 
     def _check_enabled(self) -> bool:

@@ -41,6 +41,15 @@ class EventStorePort(ABC):
         ...
 
     @abstractmethod
+    async def get_cost_window(self, window_hours: int) -> dict[str, Any]:
+        """Sum the ``llm_call_completed`` events of the last *window_hours*.
+
+        Returns ``{"total_cost", "total_tokens", "calls", "by_model": {model:
+        {"cost", "tokens", "calls"}}}``. The one cost query (W4.2, F23).
+        """
+        ...
+
+    @abstractmethod
     async def query_recent_events(
         self, event_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:

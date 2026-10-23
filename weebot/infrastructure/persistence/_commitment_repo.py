@@ -67,13 +67,6 @@ class CommitmentRepo:
             )
         return [dict(r) for r in rows]
 
-    async def get_pending(self) -> list[dict]:
-        """Get all pending commitments."""
-        rows = await self._pool.execute_read(
-            "SELECT * FROM commitments WHERE status = 'pending' ORDER BY created_at ASC"
-        )
-        return [dict(r) for r in rows]
-
     async def update_status(
         self, commitment_id: str, status: str, failure_reason: str | None = None
     ) -> None:

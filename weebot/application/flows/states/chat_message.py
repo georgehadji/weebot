@@ -32,7 +32,7 @@ class ChatMessageState(FlowState):
             return
 
         # ── Inject pending commitment summary ──────────────────
-        if context._state_repo and hasattr(context._state_repo, "get_pending_commitments"):
+        if context._state_repo is not None:
             try:
                 from weebot.domain.services.commitment_engine import CommitmentEngine
 

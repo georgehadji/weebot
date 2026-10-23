@@ -436,12 +436,19 @@ class TestEntropyCalculation:
         assert entropy < 4.0, f"English text entropy should be low, got {entropy}"
 
     def test_high_entropy_base64(self):
-        """Base64 has high entropy (~6 bits/char)."""
+        """Base64 has higher entropy than English, but a 35-char string cannot exceed log2(35).
+
+        This used to assert > 5.0, which a 35-char string cannot reach (max
+        log2(35) = 5.13; this one is 4.31). The analyzer met it with a 1.2x
+        multiplier that also pushed hex commit hashes over the threshold (F10,
+        ICM fix plan W3.6). The value is now plain Shannon entropy.
+        """
         analyzer = CommandSecurityAnalyzer()
-        # Random base64-like string
         high_entropy = "aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQ"
         entropy = analyzer._calculate_entropy(high_entropy)
-        assert entropy > 5.0, f"Base64 entropy should be high, got {entropy}"
+        english = analyzer._calculate_entropy("hello world this is english text")
+        assert entropy > 4.0, f"Base64 entropy should exceed 4 bits/char, got {entropy}"
+        assert entropy > english
 
     def test_empty_string_entropy(self):
         """Empty string has zero entropy."""

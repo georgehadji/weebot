@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ALLOWED_MODES = {"off", "lite", "full", "ultra"}
+from weebot.config.settings import PONYTAIL_MODES as _ALLOWED_MODES  # noqa: E402
 
 
 def _read_persisted_mode() -> str:
@@ -31,7 +31,7 @@ def get_ponytail_mode(mode: str | None = None) -> str:
 
     Priority:
     1. Explicit *mode* argument.
-    2. ``WeebotSettings().ponytail_mode`` (from .env / environment).
+    2. ``get_settings().ponytail_mode`` (from .env / environment).
     3. Project-local ``.weebot/ponytail_mode.json`` (written by CLI/web).
 
     Returns:
@@ -40,9 +40,9 @@ def get_ponytail_mode(mode: str | None = None) -> str:
     resolved_mode = mode
     if resolved_mode is None:
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            resolved_mode = WeebotSettings().ponytail_mode
+            resolved_mode = get_settings().ponytail_mode
         except Exception:
             resolved_mode = "off"
 

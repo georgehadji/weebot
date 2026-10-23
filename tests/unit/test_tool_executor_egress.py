@@ -136,3 +136,77 @@ class TestUntrustedContextTracking:
         assert second.is_error
         assert "untrusted_context" in second.error
         assert len(tools.calls) == 2, "the tainted send must not have executed"
+
+
+class TestTaintOutlivesTheStep:
+    """ExecuteStepHandler builds a fresh executor per step, so a taint kept on
+    the executor reset every step: content fetched in step 1 could drive an
+    ungated send to a known recipient in step 2."""
+
+    @pytest.mark.asyncio
+    async def test_the_next_steps_executor_is_still_tainted(self):
+        guard = make_guard()
+        step1, _ = make_executor(guard)
+        step1.set_step_context("step-1", "sess-taint")
+        await step1.execute_tool("web_search", {"query": "weather"})
+
+        step2, _ = make_executor(guard)
+        step2.set_step_context("step-2", "sess-taint")
+        assert step2._untrusted_context_active is True
+
+        other, _ = make_executor(guard)
+        other.set_step_context("step-1", "sess-clean")
+        assert other._untrusted_context_active is False
+
+
+class TestLocalPagesDoNotTaint:
+    """Typing into a page counts as egress once the session is tainted (F41).
+    Reading a file:// or loopback page the agent opened tainted the session,
+    so a local form could never be filled without a human (eval task 22)."""
+
+    @pytest.mark.asyncio
+    async def test_a_local_form_can_be_filled(self):
+        ex, tools = make_executor(make_guard())
+        await ex.execute_tool("advanced_browser", {"action": "navigate", "url": "file:///C:/o/form.html"})
+        result = await ex.execute_tool(
+            "advanced_browser", {"action": "type", "selector": "#name", "text": "Weebot"})
+        assert not result.is_error
+        assert ex._untrusted_context_active is False
+
+    @pytest.mark.asyncio
+    async def test_a_remote_page_still_taints(self):
+        ex, _ = make_executor(make_guard())
+        await ex.execute_tool("advanced_browser", {"action": "navigate", "url": "https://evil.example.com"})
+        assert ex._untrusted_context_active is True
+
+    @pytest.mark.asyncio
+    async def test_the_next_step_still_knows_the_tab_is_local(self):
+        guard = make_guard()
+        step4, _ = make_executor(guard)
+        step4.set_step_context("step-4", "sess-local-tab")
+        await step4.execute_tool("advanced_browser", {"action": "navigate", "url": "file:///C:/o/f.html"})
+        step5, _ = make_executor(guard)
+        step5.set_step_context("step-5", "sess-local-tab")
+        await step5.execute_tool("advanced_browser", {"action": "get_text"})
+        result = await step5.execute_tool("advanced_browser", {"action": "type", "text": "Weebot"})
+        assert not result.is_error
+
+    @pytest.mark.asyncio
+    async def test_writing_a_file_does_not_taint_but_viewing_one_does(self):
+        ex, _ = make_executor(make_guard())
+        create = {"command": "create", "path": "a.html", "file_text": "x"}
+        await ex.execute_tool("file_editor", create)
+        assert ex._untrusted_context_active is False
+        await ex.execute_tool("file_editor", {"command": "view", "path": "downloaded.html"})
+        assert ex._untrusted_context_active is True
+
+    @pytest.mark.asyncio
+    async def test_viewing_a_file_this_session_wrote_does_not_taint(self):
+        ex, _ = make_executor(make_guard())
+        ex.set_step_context("step-2", "sess-own-file")
+        create = {"command": "create", "path": "o/form.html", "file_text": "x"}
+        await ex.execute_tool("file_editor", create)
+        nxt, _ = make_executor(make_guard())
+        nxt.set_step_context("step-3", "sess-own-file")
+        await nxt.execute_tool("file_editor", {"command": "view", "path": "o/form.html"})
+        assert nxt._untrusted_context_active is False

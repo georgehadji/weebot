@@ -64,6 +64,10 @@ class VaneSearchTool(BaseTool):
                         }
                     )
 
+                if formatted_sources:  # the model reads only `output` (F63)
+                    message += "\n\nSources:\n" + "\n".join(
+                        f"- {s['title']}: {s['url']}" for s in formatted_sources
+                    )
                 return ToolResult(
                     output=message,
                     metadata={"sources": formatted_sources, "vane_response_raw": data},

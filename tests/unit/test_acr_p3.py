@@ -114,11 +114,14 @@ class TestBenchmarkRunner:
 
     async def test_cost_guard_aborts(self):
         runner = BenchmarkRunner(call_llm=self._mock_llm, cost_ceiling=0.0)
-        # A catalog id: the cost comes from the generated catalog. The bare
-        # "deepseek-r1" was an alias only the deleted hand-written registry had,
-        # and an unknown model estimates at 0 (runs rather than blocks).
+        # A catalog id: the cost comes from the generated catalog, and an
+        # unknown model estimates at 0 (runs rather than blocks). Read from
+        # model_refs, which the routed-models test keeps in the catalog;
+        # "deepseek/deepseek-r1" left OpenRouter in the 2026-10-23 refresh.
+        from weebot.config.model_refs import MODEL_CASCADE_TIER1
+
         with pytest.raises(CostGuardError):
-            await runner.run("deepseek/deepseek-r1", suites=[ALL_SUITES[0]])
+            await runner.run(MODEL_CASCADE_TIER1, suites=[ALL_SUITES[0]])
 
     async def test_cost_guard_allows_under_budget(self):
         runner = BenchmarkRunner(call_llm=self._mock_llm, cost_ceiling=10.0)

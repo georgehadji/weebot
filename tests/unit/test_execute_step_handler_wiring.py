@@ -38,6 +38,14 @@ class _FakeStateRepo:
     async def list_active_session_constraints(self, session_id: str):
         return self._active_constraints
 
+    # The rest of the SessionConstraintStore role (W5.1): the accumulator
+    # resolves the whole role or none of it.
+    async def save_session_constraint(self, session_id: str, constraint) -> None:
+        return None
+
+    async def revoke_session_constraint(self, session_id: str, text: str, revoked_at) -> None:
+        return None
+
 
 @pytest.mark.asyncio
 async def test_uses_executor_factory_when_provided():

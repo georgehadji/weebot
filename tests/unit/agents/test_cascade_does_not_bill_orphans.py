@@ -192,3 +192,64 @@ async def test_every_probe_failing_leaves_no_probe_unaccounted_for(monkeypatch):
 
 async def _ident(models):
     return list(models)
+
+
+# ── Hedge, don't race (2026-10-23) ───────────────────────────────────────────
+#
+# Cancelling is not enough: a non-streamed request cancelled client-side still
+# bills (measured live: a MiMo V2.6 Pro call cancelled after 3 s cost $0.0068,
+# the full completion). Phase 1 started every probe at once, so each executor
+# call paid for three models, and the two losers were dearer than the winner.
+# Phase 1 now starts one probe and hedges to the next only when it fails or
+# has not answered within `_HEDGE_DELAY_S`.
+
+
+def _fast_hedge(monkeypatch, seconds: float = 0.05) -> None:
+    monkeypatch.setattr(CascadeExecutor, "_HEDGE_DELAY_S", seconds, raising=False)
+
+
+@pytest.mark.asyncio
+async def test_a_quick_answer_starts_no_other_probe(monkeypatch):
+    llm = _CountingLLM({"a/works": (0.01, True), "b/works": (0.01, True)})
+    ex = _executor(llm, ["a/works", "b/works"], monkeypatch)
+    monkeypatch.setattr(
+        "weebot.config.model_refs.get_model_cascade_for_role", lambda role: ["a/works"]
+    )
+    _fast_hedge(monkeypatch)
+
+    resp = await ex.call_with_cascade(messages=[{"role": "user", "content": "hi"}], description="d")
+
+    assert resp.content == "ok from a/works"
+    assert llm.started == ["a/works"], f"paid for probes nobody needed: {llm.started}"
+
+
+@pytest.mark.asyncio
+async def test_a_failure_starts_the_next_probe_at_once(monkeypatch):
+    llm = _CountingLLM({"a/fails": (0.01, False), "b/works": (0.01, True)})
+    ex = _executor(llm, ["a/fails", "b/works"], monkeypatch)
+    monkeypatch.setattr(
+        "weebot.config.model_refs.get_model_cascade_for_role", lambda role: ["a/fails"]
+    )
+    _fast_hedge(monkeypatch, seconds=30.0)  # a failure must not wait for the hedge
+
+    resp = await asyncio.wait_for(
+        ex.call_with_cascade(messages=[{"role": "user", "content": "hi"}], description="d"), 5
+    )
+
+    assert resp.content == "ok from b/works"
+
+
+@pytest.mark.asyncio
+async def test_a_slow_probe_is_hedged_and_the_faster_answer_wins(monkeypatch):
+    llm = _CountingLLM({"a/slow": (2.0, True), "b/works": (0.01, True)})
+    ex = _executor(llm, ["a/slow", "b/works"], monkeypatch)
+    monkeypatch.setattr(
+        "weebot.config.model_refs.get_model_cascade_for_role", lambda role: ["a/slow"]
+    )
+    _fast_hedge(monkeypatch)
+
+    resp = await ex.call_with_cascade(messages=[{"role": "user", "content": "hi"}], description="d")
+    await asyncio.sleep(0.05)
+
+    assert resp.content == "ok from b/works"
+    assert "a/slow" in llm.cancelled

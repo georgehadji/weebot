@@ -2,8 +2,16 @@
  * TypeScript event types - mirrors Python AgentEvent hierarchy
  */
 
-export type PlanStatus = 'created' | 'updated' | 'completed';
-export type StepStatus = 'pending' | 'running' | 'completed' | 'error';
+// Mirrors weebot/domain/models/plan.py. 'error' is the legacy name for 'failed'.
+export type PlanStatus = 'created' | 'updated' | 'running' | 'completed' | 'failed';
+export type StepStatus =
+  | 'pending'
+  | 'running'
+  | 'started'
+  | 'completed'
+  | 'failed'
+  | 'unverified'
+  | 'error';
 export type ToolStatus = 'calling' | 'called';
 
 export interface BaseEvent {

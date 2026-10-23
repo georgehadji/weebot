@@ -39,6 +39,102 @@ def _egress_blocked_result(name: str, decision) -> ToolResult:
     return ToolResult.error_result(error=message, output=message, tool_name=name)
 
 
+async def _ask_about_egress(session_id: str, name: str, args: dict, decision) -> ToolResult | None:
+    """Route an egress ASK to the approval channel (ADR-013, W3.5).
+
+    None means "approved, run it". The default Deny channel returns the same
+    blocked result as before; Flow pause returns a pending result that
+    ExecutorAgent turns into a ToolApprovalEvent; Console asks on the terminal.
+    A new host with nothing else wrong may be allowlisted for good ("always").
+    """
+    from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
+    from weebot.application.services import tool_approval
+    from weebot.core.approval import call_fingerprint
+    from weebot.core.egress_guard import EgressReason
+
+    first_time_only = decision.reasons == [EgressReason.FIRST_TIME_RECIPIENT]
+    request = ToolCallApproval(
+        session_id=session_id,
+        tool_name=name,
+        arguments=dict(args),
+        fingerprint=call_fingerprint(name, args),
+        guard="egress_guard",
+        reason=decision.summary,
+        allow_always=decision.recipient if first_time_only else None,
+    )
+    outcome = await tool_approval.current_approval().resolve(request)
+    if outcome is ApprovalOutcome.APPROVED:
+        logger.info("egress_guard: approved by a human — %s", decision.summary)
+        return None
+    if outcome is ApprovalOutcome.PENDING:
+        return tool_approval.pending_result(request)
+    logger.warning("egress_guard: blocked outbound tool call — %s", decision.summary)
+    return _egress_blocked_result(name, decision)
+
+
+async def _clear_network_use(
+    guard, session_id: str, name: str, args: dict
+) -> tuple[ToolResult | None, bool]:
+    """Network-off sandbox (W3.9, decision 7): may this download use the network?
+
+    Returns ``(refusal_or_None, network_ok)``. Applies only while
+    ``SANDBOX_ALLOW_NETWORK`` is false and the call reaches the network
+    (``EgressGuard.network_use``). A known host is cleared; detect-only egress
+    mode clears everything; otherwise the first host asks through the ADR-013
+    channel, and "always" allowlists it.
+    """
+    from weebot.config.settings import get_settings
+
+    if get_settings().sandbox_allow_network:
+        return None, False  # the sandbox network is on for every call anyway
+    uses_network, host = guard.network_use(name, args)
+    if not uses_network:
+        return None, False
+    if guard.is_known_recipient(host) or not is_enforcing():
+        return None, True
+
+    from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
+    from weebot.application.services import tool_approval
+    from weebot.core.approval import call_fingerprint
+
+    request = ToolCallApproval(
+        session_id=session_id,
+        tool_name=name,
+        arguments=dict(args),
+        fingerprint=call_fingerprint(name, args),
+        guard="sandbox_network",
+        reason=f"network access to {host or 'an unknown host'} (the sandbox network is off)",
+        allow_always=host,
+    )
+    outcome = await tool_approval.current_approval().resolve(request)
+    if outcome is ApprovalOutcome.APPROVED:
+        return None, True
+    if outcome is ApprovalOutcome.PENDING:
+        return tool_approval.pending_result(request), False
+    message = (
+        f"Network access to {host or 'an unknown host'} needs approval: the sandbox network "
+        "is off (SANDBOX_ALLOW_NETWORK=false). Approve it from the CLI or web UI, or allowlist "
+        "the host."
+    )
+    return ToolResult.error_result(error=message, output=message, tool_name=name), False
+
+
+def _is_local_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    return parsed.scheme == "file" or parsed.hostname in ("localhost", "127.0.0.1", "::1")
+
+
+# Sessions whose context holds untrusted external content (see ToolExecutor).
+# shortcut: in-process only, so a resume in a new process starts untainted;
+# move it to a session fact if resumes cross processes in practice.
+_TAINTED_SESSIONS: set[str] = set()
+# Session id -> whether its browser tab was last navigated to a local page.
+_LOCAL_TAB: dict[str, bool] = {}
+# Session id -> paths file_editor wrote in it (viewing them adds no external content).
+_WRITTEN_FILES: dict[str, set[str]] = {}
+
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
 
@@ -69,7 +165,18 @@ class ToolExecutor:
         # True once any untrusted-output tool has run in this session. Egress
         # after that point always needs approval — the injected content is the
         # payload (the "lethal trifecta" escalation in egress_guard.py).
-        self._untrusted_context_active: bool = False
+        self._tainted_here: bool = False
+
+    @property
+    def _untrusted_context_active(self) -> bool:
+        # Per session, not per executor: each step builds a fresh executor.
+        return self._tainted_here or self._current_session_id in _TAINTED_SESSIONS
+
+    @_untrusted_context_active.setter
+    def _untrusted_context_active(self, value: bool) -> None:
+        self._tainted_here = value
+        if value and self._current_session_id:
+            _TAINTED_SESSIONS.add(self._current_session_id)
 
     # ── Dynamic context ────────────────────────────────────────────
 
@@ -101,26 +208,19 @@ class ToolExecutor:
             return self._egress_guard
         from weebot.core.egress_guard import EgressGuard
 
+        # Constructed directly. This used to build and configure a whole
+        # Container() first, but its EgressGuard factory is `EgressGuard()` and
+        # a fresh container shares nothing, so the result was the same (W5.3).
         try:
-            from weebot.application.di import Container
-
-            container = Container()
-            container.configure_defaults()
-            self._egress_guard = container.get(EgressGuard)
+            self._egress_guard = EgressGuard()
         except Exception:
-            logger.warning(
-                "egress_guard: DI resolution failed — constructing directly", exc_info=True
+            logger.error(
+                "egress_guard: unavailable — outbound tool calls will be BLOCKED "
+                "while enforcement is on",
+                exc_info=True,
             )
-            try:
-                self._egress_guard = EgressGuard()
-            except Exception:
-                logger.error(
-                    "egress_guard: unavailable — outbound tool calls will be BLOCKED "
-                    "while enforcement is on",
-                    exc_info=True,
-                )
-                self._egress_guard = None
-                return None
+            self._egress_guard = None
+            return None
         self._egress_guard_resolved = True
         return self._egress_guard
 
@@ -244,25 +344,53 @@ class ToolExecutor:
                     f"that cannot verify does not report clean."
                 )
                 return ToolResult.error_result(error=_msg, output=_msg, tool_name=name)
-        else:
+        approved_call = ""
+        network_ok = False  # W3.9: does this call get sandbox network?
+        if guard is not None:
             decision = guard.classify(
                 name, args, untrusted_context_active=self._untrusted_context_active
             )
             if decision.requires_approval:
                 if is_enforcing():
-                    logger.warning(
-                        "egress_guard: blocked outbound tool call — %s", decision.summary
+                    refused = await _ask_about_egress(
+                        self._current_session_id, name, args, decision
                     )
-                    return _egress_blocked_result(name, decision)
-                logger.warning("egress_guard: detect-only mode, allowing — %s", decision.summary)
+                    if refused is not None:
+                        return refused
+                    from weebot.core.approval import call_fingerprint
+
+                    approved_call = call_fingerprint(name, args)
+                else:
+                    logger.warning(
+                        "egress_guard: detect-only mode, allowing — %s", decision.summary
+                    )
+            # Egress that passed (allowlisted, approved, or detect-only) may use
+            # the network; other network use (downloads) is cleared below.
+            network_ok = decision.is_egress
+            if not network_ok:
+                refused, network_ok = await _clear_network_use(
+                    guard, self._current_session_id, name, args
+                )
+                if refused is not None:
+                    return refused
 
         import time as _timer
 
+        from weebot.application.ports.sandbox_port import network_cleared_for_call
+        from weebot.application.services.tool_approval import approval_scope
+
         _t0 = _timer.monotonic()
         try:
-            result = await asyncio.wait_for(
-                self._tools.execute(_name=name, **args), timeout=timeout
-            )
+            # The session and any approval just given travel with the call, so
+            # GuardedTool resolves its own ASK against the same session and does
+            # not ask again for a call a human approved here (ADR-013).
+            with (
+                approval_scope(session_id=self._current_session_id, approved_call=approved_call),
+                network_cleared_for_call() if network_ok else contextlib.nullcontext(),
+            ):
+                result = await asyncio.wait_for(
+                    self._tools.execute(_name=name, **args), timeout=timeout
+                )
         except TimeoutError:
             logger.warning("Tool %s timed out after %.0fs", name, timeout)
             return ToolResult.error_result(
@@ -294,7 +422,26 @@ class ToolExecutor:
         #
         # Narrower than the fence in _base.py by FENCE_ONLY_TOOLS: fencing is
         # free, this taint is sticky for the rest of the session.
-        if taints_egress_context(name) and not getattr(result, "is_error", False):
+        # A file:// or loopback tab holds no external content, so reading it
+        # does not taint. shortcut: tracked per session from the last navigate,
+        # not the shared browser's real tab; read the tab URL if that drifts.
+        if name == "advanced_browser" and args.get("url"):
+            _LOCAL_TAB[self._current_session_id] = _is_local_url(str(args["url"]))
+        local_page = name == "advanced_browser" and _LOCAL_TAB.get(self._current_session_id, False)
+        # Writing a file returns only a confirmation; `view` returns its content,
+        # which is new only if this session did not write the file.
+        own_file = False
+        if name == "file_editor":
+            path = str(args.get("path", ""))
+            written = _WRITTEN_FILES.setdefault(self._current_session_id, set())
+            own_file = args.get("command") != "view" or path in written
+            if args.get("command") != "view" and not getattr(result, "is_error", False):
+                written.add(path)
+        if (
+            taints_egress_context(name)
+            and not getattr(result, "is_error", False)
+            and not (local_page or own_file)
+        ):
             self._untrusted_context_active = True
         return result
 

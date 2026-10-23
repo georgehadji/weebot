@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib
 import logging
 import sys
 
@@ -31,36 +30,52 @@ _configure_weebot_logging()
 logger = logging.getLogger(__name__)
 
 
-def _try_attach(module_path: str, class_name: str, label: str) -> object | None:
-    """Import *class_name* from *module_path*, return an instance or None on failure."""
+def _resolve(label: str, get):
+    """*get()*, or None (logged) when that collaborator is not available."""
     try:
-        mod = importlib.import_module(module_path)
-        cls = getattr(mod, class_name)
-        return cls()
+        return get()
     except Exception as exc:
         logger.debug("Optional dependency %s unavailable: %s", label, exc)
         return None
 
 
-def _build_server():
-    """Construct a WeebotMCPServer with optional managers attached."""
-    from weebot.config.settings import WeebotSettings
+def _build_server(container=None):
+    """Construct a WeebotMCPServer from one composition-root container (W5.3).
+
+    Each collaborator is optional: one that does not resolve is left out and
+    the server runs without it. The scheduler was imported from a module that
+    does not exist (weebot.infrastructure.scheduling), so it was always None.
+    """
+    from weebot.application.ports.event_store_port import EventStorePort
+    from weebot.application.ports.rerank_port import RerankPort
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
+    from weebot.config.settings import get_settings
     from weebot.mcp.server import WeebotMCPServer
 
-    settings = WeebotSettings()
-    state_repo = _try_attach(
-        "weebot.infrastructure.persistence.sqlite_state_repo",
-        "SQLiteStateRepository",
-        "SQLiteStateRepository",
-    )
-    scheduler = _try_attach(
-        "weebot.infrastructure.scheduling.scheduler", "SchedulingManager", "SchedulingManager"
-    )
+    if container is None:
+        from weebot.application.di import Container
+
+        container = Container()
+        container.configure_defaults()
+    settings = get_settings()
     return WeebotMCPServer(
-        state_manager=state_repo,
-        scheduler=scheduler,
+        state_manager=_resolve("state repo", lambda: container.get(StateRepositoryPort)),
+        scheduler=_resolve("scheduler", container.build_scheduler),
+        event_store=_resolve("event store", lambda: container.get(EventStorePort)),
+        rerank=_resolve("reranker", lambda: container.get(RerankPort)),
+        # Without these, weebot://tools and weebot://skills were stubs (F62).
+        tool_discovery=_resolve("tool discovery", lambda: container._create_tool_discovery()),
+        skill_registry=_resolve("skill registry", _loaded_skills),
         composite_tools_enabled=settings.mcp_composite_tools_enabled,
     )
+
+
+def _loaded_skills():
+    from weebot.application.skills.skill_registry import SkillRegistry
+
+    registry = SkillRegistry()
+    registry.load_all()
+    return registry
 
 
 def main() -> None:
@@ -82,9 +97,9 @@ def main() -> None:
 
     # Validate settings
     try:
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        WeebotSettings.validate_at_least_one_key()
+        get_settings().validate_at_least_one_key()
     except ValueError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         sys.exit(1)

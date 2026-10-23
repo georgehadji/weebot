@@ -27,9 +27,6 @@ def _get_session_store():
     """Resolve the gateway session store."""
     from weebot.infrastructure.persistence.gateway_session_store import SQLiteGatewaySessionStore
 
-    from weebot.config.settings import WeebotSettings
-
-    settings = WeebotSettings()
     return SQLiteGatewaySessionStore()
 
 

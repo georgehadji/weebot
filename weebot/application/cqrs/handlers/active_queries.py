@@ -9,10 +9,15 @@ Both handlers below are live — dispatched by
 
 from __future__ import annotations
 
+import logging
+
 from weebot.application.cqrs.base import QueryHandler, QueryResult
+from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 from weebot.application.cqrs.queries import GetActiveSessionsQuery, GetCostSummaryQuery
+
+logger = logging.getLogger(__name__)
 
 
 class GetActiveSessionsHandler(QueryHandler):
@@ -64,31 +69,24 @@ class GetActiveSessionsHandler(QueryHandler):
 
 
 class GetCostSummaryHandler(QueryHandler):
-    """Aggregate cost/cascade stats from the cascade tracker."""
+    """The one cost query: LLM spend from the event store (W4.2, F23).
 
-    def __init__(self, state_repo: StateRepositoryPort):
-        self._state_repo = state_repo
+    Executors publish LLMCallCompleted (W4.1); DurableEventBus writes it with
+    its cost columns. The CLI ``costs`` command, MCP ``weebot://costs`` and the
+    ops API all answer through this handler.
+    """
+
+    def __init__(self, event_store: EventStorePort | None):
+        self._event_store = event_store
 
     async def handle(self, query: GetCostSummaryQuery) -> QueryResult:
+        if self._event_store is None:
+            return QueryResult.fail("no event store configured")
         try:
-            # Try to get cascade tracker from DI container
-            try:
-                from weebot.application.di import Container
-
-                c = Container()
-                c.configure_defaults()
-                tracker = c.get("cascade_tracker")
-                summary = tracker.summary() if tracker else {"total_decisions": 0}
-            except Exception:
-                summary = {
-                    "total_decisions": 0,
-                    "per_tier": {},
-                    "total_cost_estimate": 0.0,
-                    "avg_latency_ms": 0.0,
-                    "cascade_hit_rate": 1.0,
-                }
-
-            summary["window_hours"] = query.window_hours
-            return QueryResult.ok(summary)
+            query.validate()
+            summary = await self._event_store.get_cost_window(query.window_hours)
         except Exception as exc:
+            logger.warning("cost summary failed: %s", exc)
             return QueryResult.fail(str(exc))
+        summary["window_hours"] = query.window_hours
+        return QueryResult.ok(summary)

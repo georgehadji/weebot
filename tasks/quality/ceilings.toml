@@ -33,8 +33,26 @@
 # each of its four store lookups in `except (KeyError, Exception): pass`, which
 # is how three of the four purges failed unnoticed. Each failure is logged now.
 # (bandit_b110 does not move: bandit's B110 does not match the tuple form.)
+# 129 -> 128 with ICM fix plan W1.5 (F21): get_models_for_role_and_task in
+# config/model_refs.py logs its fallback instead of `except Exception: pass`.
+# 128 -> 127 with W1.6 (F10): the deleted _layer4_semantic_llm_analysis in
+# tools/bash_security.py held one.
+# 127 -> 126 with W3.6 (F10): layer 3 of tools/bash_security.py no longer
+# wraps its base64 decode in `except Exception: pass`.
+# 126 -> 125 with ADR-014: DockerLinuxSandbox._resolve_image logs the failed
+# `docker image inspect` instead of `except Exception: pass`.
+# 125 -> 124 with W5.3 batch 4: AgentRunner's `except Exception: pass` around
+# its Container() lookup went with the lookup.
+# 124 -> 121 with W5.3 batch 5: the tool registry's three `except Exception:
+# pass` around its Container() lookups went with the lookups.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 129
+# 121 -> 119: the deleted core error family and the YouTube tool's throwaway
+# VideoIngestTool() probe each held an `except Exception: pass`.
+# 119 -> 117: the dead save_sync pre-saves in dispatch_agents and
+# workflow_orchestrator (F49).
+# 117 -> 116: computer_use's advisory focus check now refuses (F75).
+# 116 -> 115: the dead browser-pool shutdown hook in web/main.py (F72).
+silent_except_handlers = 115
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -65,8 +83,24 @@ bare_env_reads = 71
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
 # body is exactly `pass`/`...` by AST, while B110 is bandit's own detection.
 # The sets overlap heavily but are not equal, so the two move independently.
+# 67 -> 66 with ICM fix plan W1.5 (F21): the same model_refs.py handler as
+# silent_except_handlers 129 -> 128.
+# 66 -> 65 with W1.6 (F10): the same deleted bash_security handler as
+# silent_except_handlers 128 -> 127.
+# 65 -> 64 with W3.6: the same bash_security handler as silent_except_handlers
+# 127 -> 126.
+# 64 -> 63 with ADR-014: the same _resolve_image handler as
+# silent_except_handlers 126 -> 125.
+# 63 -> 62 with W5.3 batch 4: the same AgentRunner handler as
+# silent_except_handlers 125 -> 124.
+# 62 -> 59 with W5.3 batch 5: the same three tool-registry handlers as
+# silent_except_handlers 124 -> 121.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 67
+# 59 -> 58: the YouTube probe, as for silent_except_handlers 121 -> 119.
+# 58 -> 56: the same two save_sync handlers (F49).
+# 56 -> 55: the same handler (F75).
+# 55 -> 54: the same handler (F72).
+bandit_b110 = 54
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -81,8 +115,14 @@ bandit_b110 = 67
 # `required_level` without ever reading it; the lookup is now an actual guard.
 # 32 -> 31 with phase 2.3: one was in the dead code deleted there (ruff
 # version unchanged at 0.15.20, so the move is the code, not the tool).
+# 31 -> 28 with ICM fix plan W2.3: three CLI functions built a WeebotSettings
+# and never read it (cli/commands/gateway.py, mcp.py x2); the reads were
+# deleted. Measured 31 before and 28 after with ruff 0.17.1, so the move is
+# the code, not the tool.
+# 28 -> 27 with W3.6: layer 2 of tools/bash_security.py built an `operators`
+# set it never read (ruff 0.17.1 both before and after).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 31
+unused_locals = 27
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
@@ -177,5 +217,61 @@ unregistered_di_keys = 0
 # 80 -> 77 with the same fix: web/main.py takes the gateway store from the
 # container, and dependencies.py resolves stores by port, so neither imports
 # a persistence adapter any more.
+# 77 -> 76 with ICM fix plan W1.6 (F10): bash_security's unwired LLM layer was
+# deleted, so its import of application.services.model_selection is gone.
+# 76 -> 75 with W7.1 (F22): ops_router takes the mediator and state repo from
+# the lifespan container on app.state, so it no longer imports application.di.
+# 75 -> 73 with W5.3 batch 4: interfaces.cli.agent_runner and
+# interfaces.gateways.base no longer import application.di.
 # Measured by: scripts/lint_import_exemptions.py
-import_exemptions = 77
+import_exemptions = 73
+
+# Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
+# (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
+# each call re-reads .env and re-validates, one ran per inbound gateway
+# message. Production code reads get_settings() instead.
+# 43 at the start of Wave 2; 41 when this key was added, because W2.1 moved
+# the two factories in application/di/__init__.py onto Container.get.
+# 41 -> 38 with W2.3 batch 1: gateways/base.py (once per inbound message),
+# flows/states/plan_review.py, flows/states/verifying.py.
+# 38 -> 34 batch 2 (di/_factories.py), -> 23 batch 3 (web app, routers,
+# WhatsApp gateway), -> 13 batch 4 (CLI, run.py, run_mcp.py; three of those
+# were dead reads and were deleted), -> 0 batch 5 (services, core, adapters).
+# At 0 the ratchet is now a ban: any new WeebotSettings() call outside
+# config/settings.py fails it.
+# Measured by: scripts/lint_settings_construction.py
+settings_construction = 0
+
+# Hand-built Container() calls outside weebot/application/di. Each builds a
+# second object graph (its own event bus, state repo, LLM adapters); a flow
+# built that way publishes where nobody listens. ICM fix plan W5.3 (F28).
+# 44 when this key was added; 44 -> 42 in the same change, because
+# interfaces/factories.py's _resolve_personality and _get_flow_factory now use
+# its one cached container. Composition roots (web lifespan, CLI entry points)
+# count too: the target is one per entry point, not zero.
+# 42 -> 39: ChatFlow takes the persistence adapter as an argument (its bare
+# Container() never ran configure_defaults, so the adapter was always
+# missing), and the unwired EventEmitter / FlowPersistence collaborators were
+# deleted.
+# 39 -> 36: CompletedState's skill-gap job and dream scan take idea_gate,
+# dreamer_agent and event_store from the flow (factories.create_flow fills
+# them), and ToolExecutor constructs its EgressGuard directly.
+# 36 -> 34: GatewayAdapter requires its llm_port (every subclass already
+# passed one), and AgentRunner receives its retention_agent from the entry
+# point instead of building a Container in its constructor.
+# 34 -> 31: RoleBasedToolRegistry takes state_repo and rerank from its
+# callers instead of building a Container per rerank tool, per state-repo
+# tool and for a missing flow factory.
+# Measured by: scripts/lint_container_construction.py
+# 31 -> 25: W5.5, the six self-resolving tools (audit, knowledge, persistent
+# memory, video ingest, voice in/out) take collaborators from the registry's wiring.
+# 25 -> 23: `flow run` and `flow retry` use factories.shared_container(),
+# one container per process instead of two.
+# 23 -> 22: the scheduler's cron-agent loader and the MCP server take the
+# caller's container / reranker; run_mcp.py builds the one root container.
+# 22 -> 9: the CLI commands, cli/main.py and run.py use
+# factories.shared_container(); what is left builds a differently configured
+# container (harness db_path/model, skillopt), is a separate entry point
+# (web lifespan, run_mcp.py, the shared root itself) or is ADR-009 legacy.
+# 9 -> 8: the web lifespan uses shared_container() (F55).
+container_construction = 8

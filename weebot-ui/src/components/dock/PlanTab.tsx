@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
 import { api } from "@/lib/api";
+import type { StepStatus } from "@/types/events";
 
 interface PlanTabProps {
   sessionId: string;
@@ -18,7 +19,7 @@ interface PlanTabProps {
 
 export function PlanTab({ sessionId }: PlanTabProps) {
   const [nodes, setNodes] = useState<
-    { id: string; description: string; status: "pending" | "running" | "completed" | "error" }[] | null
+    { id: string; description: string; status: StepStatus }[] | null
   >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function PlanTab({ sessionId }: PlanTabProps) {
             result.data.nodes.map((n) => ({
               id: n.id,
               description: n.label,
-              status: (n.status as "pending" | "running" | "completed" | "error") || "pending",
+              status: (n.status as StepStatus) || "pending",
             }))
           );
         }

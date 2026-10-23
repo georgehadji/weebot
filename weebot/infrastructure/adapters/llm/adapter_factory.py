@@ -225,17 +225,25 @@ class AdapterFactory:
         if provider == "openai":
             # Strip provider prefix: "openai/gpt-4o-mini" → "gpt-4o-mini"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            return OpenAIAdapter(api_key=api_key, base_url=base_url, default_model=clean_model)
+            # The key lives in .env-backed settings, not the process environment.
+            key = _resolve_direct_key("OPENAI_API_KEY") or api_key
+            return OpenAIAdapter(api_key=key, base_url=base_url, default_model=clean_model)
 
         elif provider == "anthropic":
             # Strip provider prefix: "anthropic/claude-3.5-haiku" → "claude-3.5-haiku"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            return AnthropicAdapter(api_key=api_key, default_model=clean_model)
+            return AnthropicAdapter(
+                api_key=_resolve_direct_key("ANTHROPIC_API_KEY") or api_key,
+                default_model=clean_model,
+            )
 
         elif provider == "deepseek":
             # Strip provider prefix: "deepseek/deepseek-v4-flash" → "deepseek-v4-flash"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            direct = DeepSeekAdapter(api_key=api_key, default_model=clean_model)
+            # Not the api_key parameter: it carries the OpenRouter key (see xai).
+            direct = DeepSeekAdapter(
+                api_key=_resolve_direct_key("DEEPSEEK_API_KEY"), default_model=clean_model
+            )
             # If DEEPSEEK_API_KEY is set, try direct first; fall back to OpenRouter
             if _has_direct_key("DEEPSEEK_API_KEY"):
                 fallback = OpenRouterAdapter(api_key=api_key, default_model=model)
@@ -253,7 +261,11 @@ class AdapterFactory:
             clean_model = model.split("/", 1)[-1] if "/" in model else model
             # Drop the ":free" suffix for direct API calls
             clean_model = clean_model.split(":")[0] if ":" in clean_model else clean_model
-            direct = MoonshotAdapter(api_key=api_key, default_model=clean_model)
+            direct = MoonshotAdapter(
+                api_key=_resolve_direct_key("KIMI_API_KEY")
+                or _resolve_direct_key("MOONSHOT_API_KEY"),
+                default_model=clean_model,
+            )
             # If KIMI_API_KEY or MOONSHOT_API_KEY is set, try direct first; fall back to OpenRouter.
             if _has_direct_key("KIMI_API_KEY") or _has_direct_key("MOONSHOT_API_KEY"):
                 fallback = OpenRouterAdapter(api_key=api_key, default_model=model)
@@ -301,6 +313,14 @@ class AdapterFactory:
 
         elif provider == "openrouter":
             return OpenRouterAdapter(api_key=api_key, default_model=model)
+
+        elif model and "/" in model:
+            # A vendor/model id with no direct adapter here (google/, poolside/,
+            # microsoft/, ...) is an OpenRouter id. These raised "Unknown
+            # provider", so a role or fallback on such a model could not build.
+            return OpenRouterAdapter(
+                api_key=_resolve_direct_key("OPENROUTER_API_KEY") or api_key, default_model=model
+            )
 
         else:
             raise ValueError(f"Unknown provider: {provider}")
@@ -358,9 +378,9 @@ def _resolve_direct_key(env_var: str) -> str | None:
     field = _SETTINGS_FIELD_MAP.get(env_var)
     if field:
         try:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            val = getattr(WeebotSettings(), field, None)
+            val = getattr(get_settings(), field, None)
             if val and val.strip():
                 return val
         except Exception:

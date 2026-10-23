@@ -15,7 +15,6 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from weebot.application.di import Container
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -36,8 +35,9 @@ def dream_scan(max_contracts: int) -> None:
     """Run DreamerAgent + IdeaGate cycle and print approved ideas."""
 
     async def _run() -> None:
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
 
         dreamer = container.get("dreamer_agent")
         if dreamer is None:
@@ -151,8 +151,9 @@ def dream_build(contract_id: str) -> None:
         from weebot.application.ports.llm_port import LLMPort
         from weebot.domain.models.session import Session
 
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
 
         llm = container.get(LLMPort)
         state_repo = container.get(StateRepositoryPort)
@@ -168,7 +169,11 @@ def dream_build(contract_id: str) -> None:
         # Was container.get("mediator"). Mediator is bound by type, not by that
         # string, so building an idea raised KeyError before the runner existed.
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, mediator=container.get(Mediator), use_rich=False
+            llm=llm,
+            state_repo=state_repo,
+            mediator=container.get(Mediator),
+            use_rich=False,
+            retention_agent=container.get("retention_agent"),
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 
@@ -181,9 +186,8 @@ def dream_build(contract_id: str) -> None:
             if isinstance(event, WaitForUserEvent):
                 # to_thread: a bare input() here would block the event loop,
                 # freezing the runner's own background tasks while it waits.
-                answer = await asyncio.to_thread(
-                    input, f"\n[weebot asks] {event.question}\nYour answer: "
-                )
+                # The subscriber above already printed the question (F37).
+                answer = await asyncio.to_thread(input, "\nYour answer: ")
                 async for resume_event in runner.resume_session(session.id, answer):
                     await subscriber.on_event(resume_event)
                 break

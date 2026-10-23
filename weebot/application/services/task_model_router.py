@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from enum import Enum
 
+from weebot.config.model_refs import ROLE_MODEL_CONFIG
+
 
 class TaskCategory(Enum):
     CODING = "coding"
@@ -25,18 +27,24 @@ class TaskCategory(Enum):
     GENERAL = "general"
 
 
-# ── Category → best model ──────────────────────────────────────────
+# ── Category → role → model ────────────────────────────────────────
+# Which model serves a role lives in model_refs.ROLE_MODEL_CONFIG; this module
+# only says which role a step category is.
+
+CATEGORY_ROLE: dict[TaskCategory, str] = {
+    TaskCategory.CODING: "coder",
+    TaskCategory.FILE_OPS: "automation",
+    TaskCategory.RESEARCH: "researcher",
+    TaskCategory.BROWSER: "executor",  # tool-use loop
+    TaskCategory.REVIEW: "reviewer",
+    TaskCategory.PLANNING: "planner",
+    TaskCategory.SECURITY: "reviewer",
+    TaskCategory.SUMMARIZATION: "summarizer",
+    TaskCategory.GENERAL: "executor",
+}
 
 CATEGORY_MODEL: dict[TaskCategory, str] = {
-    TaskCategory.CODING: "x-ai/grok-build-0.1",
-    TaskCategory.FILE_OPS: "minimax/minimax-m3",
-    TaskCategory.RESEARCH: "deepseek/deepseek-v4-flash:thinking",
-    TaskCategory.BROWSER: "deepseek/deepseek-v4-flash",  # strong tool-use for browser automation
-    TaskCategory.REVIEW: "x-ai/grok-4.3:thinking",
-    TaskCategory.PLANNING: "z-ai/glm-5.2:thinking",
-    TaskCategory.SECURITY: "x-ai/grok-4.3:thinking",
-    TaskCategory.SUMMARIZATION: "minimax/minimax-m3",
-    TaskCategory.GENERAL: "deepseek/deepseek-v4-flash",
+    category: ROLE_MODEL_CONFIG[role][0] for category, role in CATEGORY_ROLE.items()
 }
 
 # ── Keyword patterns ───────────────────────────────────────────────

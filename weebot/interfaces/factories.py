@@ -17,6 +17,7 @@ from typing import Any
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
@@ -61,21 +62,99 @@ def _cached(key: str):
 
     Thread-safe: uses a lock for container initialization.
     """
+    try:
+        return shared_container().get(key)
+    except Exception:
+        return None
+
+
+def shared_container():
+    """The process's one DI container, built on first use (W5.3).
+
+    Entry points use this rather than building their own, so a `flow run`
+    configures the object graph once. Unlike ``_cached`` it raises when the
+    container cannot be built.
+    """
     global _shared_container
     if _shared_container is None:
         with _shared_container_lock:
             if _shared_container is None:
-                try:
-                    from weebot.application.di import Container
+                from weebot.application.di import Container
 
-                    _shared_container = Container()
-                    _shared_container.configure_defaults()
-                except Exception:
-                    return None
+                container = Container()
+                container.configure_defaults()
+                _shared_container = container
+    return _shared_container
+
+
+_MCP_TOOLKIT: Any = None  # MCPToolkitAdapter, connected once per process
+_MCP_LOCK: Any = None
+
+
+def _resolve_mcp_client() -> Any:
+    """The DI "mcp_client" (MCPClientManager), logging why when it is missing.
+
+    ``_cached`` swallows errors; a ConfigError here (``${POSTIZ_API_KEY}`` unset)
+    must be visible, or the configured server's tools just vanish.
+    """
+    if _cached("mcp_client") is None and _shared_container is not None:
+        try:
+            return _shared_container.get("mcp_client")
+        except Exception as exc:
+            _log.warning("Configured MCP servers not loaded: %s", exc)
+            return None
+    return _cached("mcp_client")
+
+
+async def _configured_mcp_tools() -> list:
+    """Tools of the servers in MCP_SERVERS_CONFIG_PATH (WEEBOT_ENABLE_X_MCP).
+
+    MCPToolRegistryBridge only adds names to roles and the registry cannot
+    build an MCP tool, so this is the path that makes them callable. Connected
+    once per process; a failure is logged and the flow runs without them.
+    """
+    global _MCP_TOOLKIT, _MCP_LOCK
+    import asyncio
+
+    if _MCP_TOOLKIT is not None:
+        return _MCP_TOOLKIT.get_tools()
+    _MCP_LOCK = _MCP_LOCK or asyncio.Lock()
+    async with _MCP_LOCK:
+        if _MCP_TOOLKIT is not None:
+            return _MCP_TOOLKIT.get_tools()
+        manager = _resolve_mcp_client()
+        if manager is None or not getattr(manager, "has_servers", False):
+            return []
+        import importlib as _il
+
+        toolkit_cls = _il.import_module(
+            "weebot.infrastructure.mcp.mcp_toolkit_adapter"
+        ).MCPToolkitAdapter
+        toolkit = toolkit_cls(manager)
+        try:
+            await toolkit.initialize()
+        except Exception as exc:
+            _log.warning("Configured MCP servers not connected: %s", exc)
+            return []
+        _MCP_TOOLKIT = toolkit
+        _log.info("Configured MCP servers connected: %d tools", len(toolkit.get_tools()))
+        return toolkit.get_tools()
+
+
+async def close_mcp_toolkit() -> None:
+    """Close the configured MCP connections, in the task that is ending.
+
+    Left open, asyncio finalised the streamable-HTTP client at loop shutdown
+    from another task: "Attempted to exit cancel scope in a different task".
+    """
+    global _MCP_TOOLKIT
+    toolkit, _MCP_TOOLKIT = _MCP_TOOLKIT, None
+    if toolkit is None:
+        return
     try:
-        return _shared_container.get(key)
-    except Exception:
-        return None
+        await toolkit.cleanup()
+    except Exception as exc:
+        _log.warning("Closing the configured MCP servers failed: %s", exc)
 
 
 async def route_and_create_flow(
@@ -115,16 +194,11 @@ async def route_and_create_flow(
 
 
 def _resolve_personality():
-    """Resolve PersonalityManager from the DI container, or None."""
-    try:
-        from weebot.application.di import Container
-
-        c = Container()
-        c.configure_defaults()
-        return c.get("personality")
-    except Exception:
-        _log.debug("PersonalityManager not available in DI", exc_info=True)
-        return None
+    """Resolve PersonalityManager from the shared DI container, or None."""
+    personality = _cached("personality")
+    if personality is None:
+        _log.debug("PersonalityManager not available in DI")
+    return personality
 
 
 def create_flow(
@@ -153,6 +227,18 @@ def create_flow(
     """
     if task_route is not None:
         flow_type = task_route.flow_type
+    if mediator is None:
+        # Gateways and the webhook passed none, and PlanningState cannot plan
+        # without one (F43).
+        from weebot.application.cqrs.mediator import Mediator
+
+        mediator = _cached(Mediator)
+    if event_bus is None:
+        # Gateway and webhook flows passed none: no domain events, and the
+        # web UI never saw their progress (F56).
+        from weebot.application.ports.event_bus_port import EventBusPort
+
+        event_bus = _cached(EventBusPort)
 
     if flow_type == "plan_act":
         personality = _resolve_personality()
@@ -210,6 +296,12 @@ def create_flow(
             behavioral_learner=_cached("behavioral_learner"),
             correction_tracker=_cached("correction_tracker"),
             session_constraint_extractor=_cached("session_constraint_extractor"),
+            # For CompletedState's background jobs, which built a whole
+            # Container per completion to find these (W5.3, F28).
+            idea_gate=_cached("idea_gate"),
+            dreamer_agent=_cached("dreamer_agent"),
+            event_store=_cached(EventStorePort),
+            persistence_adapter=_cached("session_persistence"),
         )
     if flow_type == "chat":
         import importlib as _il
@@ -217,7 +309,13 @@ def create_flow(
         _chat_flow_mod = _il.import_module("weebot.application.flows.chat_flow")
         ChatFlow = _chat_flow_mod.ChatFlow
         return ChatFlow(
-            llm=llm, session=session, event_bus=event_bus, model=model, mediator=mediator
+            llm=llm,
+            session=session,
+            event_bus=event_bus,
+            model=model,
+            mediator=mediator,
+            state_repo=state_repo,
+            persistence_adapter=_cached("session_persistence"),
         )
     raise ValueError(f"Unknown flow type: {flow_type}")
 
@@ -230,16 +328,15 @@ def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:
     if llm_port is None:
         return None
     try:
-        from weebot.application.di import Container
-
-        c = Container()
-        c.configure_defaults()
+        from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
 
-        state_repo = c.get(StateRepositoryPort)
-        from weebot.application.ports.event_bus_port import EventBusPort
-
-        event_bus = c.get(EventBusPort)
+        # The shared container: a container built here had its own event bus,
+        # so sub-agent flows published where nobody listened (F28).
+        state_repo = _cached(StateRepositoryPort)
+        event_bus = _cached(EventBusPort)
+        if state_repo is None or event_bus is None:
+            return None
 
         def _factory(session):
             from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -251,6 +348,7 @@ def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:
                 session=session,
                 event_bus=event_bus,
                 state_repo=state_repo,
+                persistence_adapter=_cached("session_persistence"),
             )
             return PlanActFlow(config=config)
 
@@ -274,13 +372,25 @@ async def build_tools(
     RoleBasedToolRegistry = _tool_registry_mod.RoleBasedToolRegistry
     BaseTool = _base_mod.BaseTool
 
-    registry = RoleBasedToolRegistry()
+    # The container's registry carries its tool wiring (state repo, reranker,
+    # tool config, per-tool collaborators); a bare one would build tools without.
+    registry = _cached("tool_registry") or RoleBasedToolRegistry()
 
+    if llm_port is None:
+        # Web sessions, the webhook and the gateways pass none; without it the
+        # sub-agent tools get no flow factory and fail when called (F48).
+        from weebot.application.ports.llm_port import LLMPort as _LLMPort
+
+        llm_port = _cached(_LLMPort)
     # Build flow_factory for tools that spawn sub-agents (debate, dispatch_parallel_tasks)
     flow_factory = _get_flow_factory(llm_port)
 
     combined: list[BaseTool] = list(
-        registry.create_tool_collection(role, llm_port=llm_port, flow_factory=flow_factory)
+        registry.create_tool_collection(
+            role,
+            llm_port=llm_port,
+            flow_factory=flow_factory,
+        )
     )
 
     if mcp_config:
@@ -293,6 +403,8 @@ async def build_tools(
             adapter = _mcp_mod.MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())
+    else:
+        combined.extend(await _configured_mcp_tools())
 
     if extra_tools:
         combined.extend(extra_tools)
@@ -317,6 +429,14 @@ async def build_tools(
                 "Apify integration skipped — initialization failed", exc_info=True
             )
 
+    # MCP, extra and Apify tools join after the registry's own guard_tools call,
+    # so wrap again: shell tools are already wrapped and skipped; a financial
+    # tool from an MCP server is wrapped here (F06). Resolved through DI because
+    # this layer may not import tool_guards. Fail closed: no guard, no tools.
+    guard_tools = _cached("guard_tools")
+    if guard_tools is None:
+        raise RuntimeError("tool guard chain unavailable; refusing to build unguarded tools")
+    combined = guard_tools(combined, include_egress=False)
     ToolCollection = _get_tool_collection_cls()
     canonicalizer = _build_action_canonicalizer(combined)
     contract_loader = _cached("contract_loader")

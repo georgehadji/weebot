@@ -20,8 +20,17 @@ class _FakePersonality:
 
 
 class _FakeStateRepo:
+    """Plays the whole MemoryMetadataStore role (W5.1): the prompt builder
+    resolves the role, not one method of it."""
+
     async def get_memory_entry(self, key: str) -> dict:
         return {"entry_text": "USER_PROFILE_MARKER_TEXT"}
+
+    async def upsert_memory_metadata(self, entry_hash, entry_text, source="agent", salience=None):
+        return None
+
+    async def delete_memory_entries(self, entry_hashes) -> int:
+        return 0
 
 
 class _FakeBehavioralLearner:

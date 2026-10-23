@@ -89,6 +89,7 @@ def register_default_handlers(
     trajectory_builder=None,
     executor_factory=None,
     trajectory_repo=None,
+    event_store=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -158,7 +159,7 @@ def register_default_handlers(
     mediator.register_query_handler(
         GetPlanVisualizationQuery, GetPlanVisualizationHandler(state_repo)
     )
-    mediator.register_query_handler(GetCostSummaryQuery, GetCostSummaryHandler(state_repo))
+    mediator.register_query_handler(GetCostSummaryQuery, GetCostSummaryHandler(event_store))
 
 
 def register_skillopt_handlers(

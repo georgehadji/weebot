@@ -12,6 +12,7 @@ from weebot.tools.base import BaseTool, ToolResult
 
 
 from pydantic import PrivateAttr
+from weebot.config.constants import DB_SESSIONS_PATH
 
 
 class SearchHistoryTool(BaseTool):
@@ -50,7 +51,7 @@ class SearchHistoryTool(BaseTool):
             from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
 
             self._pool = await get_or_create_pool(
-                "./weebot_sessions.db", max_read_connections=3, enable_wal=True
+                DB_SESSIONS_PATH, max_read_connections=3, enable_wal=True
             )
 
         try:

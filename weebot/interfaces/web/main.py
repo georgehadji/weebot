@@ -180,9 +180,26 @@ WEBSOCKET_TEST_HTML = """
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     logger.info("Starting Weebot Web Server...")
-    container = Container()
-    container.configure_defaults()
+    # The process's one container: build_tools, create_flow and the gateways
+    # resolve through shared_container(), so a second one here split the event
+    # bus and sub-agent events never reached the WebSocket broadcaster (F55).
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()
     app.state.container = container
+
+    # ADR-013: in the web process (UI and chat gateways) a tool call that needs
+    # approval pauses the flow and asks. Headless runs here (cron, webhooks)
+    # narrow this to Deny with approval_scope.
+    from weebot.application.ports.event_store_port import EventStorePort
+    from weebot.application.services.tool_approval import (
+        FlowPauseApproval,
+        set_approval_journal,
+        set_process_approval,
+    )
+
+    set_process_approval(FlowPauseApproval())
+    set_approval_journal(container.get(EventStorePort))
 
     # ── Live event fan-out (WebSocket) ─────────────────────────
     # Wired once, here, at the composition root — nothing in application/
@@ -222,6 +239,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from weebot.scheduling.default_jobs import register_default_jobs
 
     await register_default_jobs(scheduler, container)
+    # The jobs `cron-agent create` saved; nothing loaded them before.
+    try:
+        await scheduler.load_cron_agent_jobs(container=container)
+    except Exception as exc:
+        logger.warning("Cron agent jobs not loaded: %s", exc)
     await scheduler.start()
     app.state.scheduler = scheduler
 
@@ -241,9 +263,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.debug("Circuit breaker state restore skipped: %s", exc)
 
     # ── Telegram gateway (long-polling) ─────────────────────────
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _settings = WeebotSettings()
+    _settings = get_settings()
     telegram_adapter = None
     if _settings.telegram_bot_token:
         try:
@@ -343,13 +365,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
-    # Close browser session pool if initialized
-    try:
-        pool = container.get("browser_pool")
-        await pool.close()
-        logger.info("Browser pool closed")
-    except Exception:
-        pass  # Browser pool not configured
+    # The configured MCP servers' connections, from the task that opened them.
+    from weebot.interfaces.factories import close_mcp_toolkit
+
+    await close_mcp_toolkit()
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools
@@ -364,7 +383,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 # ── Loopback addresses for fail-closed access control ─────────────────
-_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+from weebot.interfaces.web.auth import _LOOPBACK  # noqa: E402 -- one loopback set
 
 
 def create_app() -> FastAPI:
@@ -453,9 +472,23 @@ def create_app() -> FastAPI:
     )
 
     # API Key authentication middleware (optional) + fail-closed default
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _ws = WeebotSettings()
+    _ws = get_settings()
+    # Probes and the chat platforms' webhooks, which verify their own signature
+    # and cannot send X-API-Key. The list used to name /api/live and
+    # /api/prometheus, which do not exist (F60).
+    _public_paths = frozenset(
+        {
+            "/",
+            "/api/health",
+            "/api/health/live",
+            "/api/health/prometheus",
+            "/api/gateway/slack/events",
+            "/api/gateway/discord/interactions",
+            "/api/gateway/whatsapp/webhook",
+        }
+    )
 
     if _ws.weebot_api_key:
 
@@ -464,7 +497,7 @@ def create_app() -> FastAPI:
 
             async def dispatch(self, request: Request, call_next):
                 # Skip auth for health endpoint and WebSocket test UI
-                if request.url.path in ("/api/health", "/", "/api/prometheus"):
+                if request.url.path in _public_paths:
                     return await call_next(request)
 
                 api_key = request.headers.get("X-API-Key")
@@ -492,7 +525,7 @@ def create_app() -> FastAPI:
 
             async def dispatch(self, request: Request, call_next):
                 # Always allow health/liveness probes and WebSocket test UI
-                if request.url.path in ("/api/health", "/api/live", "/", "/api/prometheus"):
+                if request.url.path in _public_paths:
                     return await call_next(request)
 
                 client_host = request.client.host if request.client else ""
@@ -699,9 +732,9 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    from weebot.config.settings import WeebotSettings
+    from weebot.config.settings import get_settings
 
-    _settings = WeebotSettings()
+    _settings = get_settings()
 
     port = int(os.getenv("WEEBOT_PORT", "8000"))
     host = _settings.web_host

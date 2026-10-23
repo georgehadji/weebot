@@ -9,6 +9,7 @@ from pathlib import Path
 import aiohttp
 
 from weebot.application.ports.speech_port import SpeechPort
+from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
         async with (
             aiohttp.ClientSession() as session,
             session.post(
-                "https://openrouter.ai/api/v1/audio/transcriptions",
+                f"{OPENROUTER_API_BASE}/audio/transcriptions",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),
@@ -92,7 +93,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
         async with (
             aiohttp.ClientSession() as session,
             session.post(
-                "https://openrouter.ai/api/v1/audio/speech",
+                f"{OPENROUTER_API_BASE}/audio/speech",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),

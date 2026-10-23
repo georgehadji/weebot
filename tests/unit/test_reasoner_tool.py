@@ -10,6 +10,12 @@ from weebot.tools.reasoner import ReasonerTool
 from weebot.tools.base import ToolResult
 
 
+@pytest.fixture(autouse=True)
+def _reasoner_dir(monkeypatch, tmp_path):
+    """REASONER_DIR has no default since W1.4 (F15); the CLI path needs one set."""
+    monkeypatch.setenv("REASONER_DIR", str(tmp_path))
+
+
 class TestReasonerTool:
     """Tests for ReasonerTool and registry registration."""
 

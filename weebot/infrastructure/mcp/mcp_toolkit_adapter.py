@@ -34,7 +34,9 @@ class MCPToolkitAdapter:
 
     async def initialize(self, config: dict[str, Any] | None = None) -> None:
         if config:
-            self._manager = MCPClientManager(config)
+            from weebot.infrastructure.mcp.config_loader import expand_env
+
+            self._manager = MCPClientManager(expand_env(config))
         await self._manager.initialize()
         mcp_tools = await self._manager.get_all_tools()
         self._tools = []

@@ -150,3 +150,165 @@ claude-haiku-3-5-sonnet:
     tool_use: 8.0
     writing: 8.0
   source: seed
+
+# ── 2026-10-23 role-table models ────────────────────────────────────
+# Seeded from Artificial Analysis v4.3.2 (snapshot 2026-10-17..23), each axis
+# scaled so the best model in the set scores 10: reasoning = Intelligence
+# Index / 5.8, tool_use = agentic automation % / 7.8, coding = Terminal-Bench
+# 4.0 % / 6.4, writing = (GDPval - 1400) / 46.6, long_context = LCR % / 8.9,
+# math = HLE % / 6.1, planning = mean(reasoning, tool_use). The deepseek row
+# uses the -1017 snapshot's scores. Live telemetry overwrites these.
+
+anthropic/claude-opus-5.5:
+  axes:
+    coding: 9.4
+    reasoning: 10.0
+    planning: 9.5
+    tool_use: 9.0
+    writing: 10.0
+    math: 10.0
+    long_context: 9.6
+  source: seed
+
+anthropic/claude-sonnet-5.5:
+  axes:
+    coding: 10.0
+    reasoning: 9.7
+    planning: 9.4
+    tool_use: 9.2
+    writing: 9.4
+    math: 9.0
+    long_context: 9.3
+  source: seed
+
+openai/gpt-6.1-sol:
+  axes:
+    coding: 8.8
+    reasoning: 9.0
+    planning: 8.7
+    tool_use: 8.3
+    writing: 4.1
+    math: 8.7
+    long_context: 9.3
+  source: seed
+
+google/gemini-4-argon:
+  axes:
+    coding: 8.9
+    reasoning: 9.1
+    planning: 9.6
+    tool_use: 10.0
+    writing: 4.8
+    math: 9.3
+    long_context: 9.0
+  source: seed
+
+xiaomi/mimo-v2.6-pro:
+  axes:
+    coding: 5.5
+    reasoning: 7.9
+    planning: 7.8
+    tool_use: 7.6
+    writing: 6.1
+    math: 8.0
+    long_context: 9.7
+  source: seed
+
+deepseek/deepseek-v4.1-flash-1017:
+  axes:
+    coding: 5.3
+    reasoning: 7.8
+    planning: 8.2
+    tool_use: 8.6
+    writing: 7.4
+    math: 7.0
+    long_context: 9.3
+  source: seed
+
+z-ai/glm-5.3:
+  axes:
+    coding: 6.6
+    reasoning: 7.8
+    planning: 7.8
+    tool_use: 7.9
+    writing: 5.3
+    math: 6.9
+    long_context: 9.0
+  source: seed
+
+anthropic/claude-haiku-5.5:
+  axes:
+    coding: 5.2
+    reasoning: 7.4
+    planning: 6.0
+    tool_use: 4.5
+    writing: 4.7
+    math: 7.2
+    long_context: 9.3
+  source: seed
+
+minimax/minimax-m3.1-flash:
+  axes:
+    coding: 4.1
+    reasoning: 7.4
+    planning: 8.4
+    tool_use: 9.4
+    writing: 1.2
+    math: 7.9
+    long_context: 9.0
+  source: seed
+
+z-ai/glm-5.3-flash:
+  axes:
+    coding: 5.2
+    reasoning: 7.2
+    planning: 7.5
+    tool_use: 7.7
+    writing: 5.2
+    math: 6.6
+    long_context: 9.0
+  source: seed
+
+google/gemini-3.8-flash:
+  axes:
+    coding: 3.1
+    reasoning: 7.1
+    planning: 7.4
+    tool_use: 7.7
+    writing: 0.8
+    math: 7.9
+    long_context: 9.1
+  source: seed
+
+qwen/qwen3.8-flash:
+  axes:
+    coding: 3.9
+    reasoning: 6.9
+    planning: 7.1
+    tool_use: 7.2
+    writing: 4.9
+    math: 6.2
+    long_context: 9.0
+  source: seed
+
+openai/gpt-6-luna:
+  axes:
+    coding: 2.0
+    reasoning: 6.6
+    planning: 6.7
+    tool_use: 6.8
+    writing: 0.7
+    math: 6.4
+    long_context: 9.3
+  source: seed
+
+xiaomi/mimo-v2.6-flash:
+  axes:
+    coding: 3.6
+    reasoning: 6.6
+    planning: 7.4
+    tool_use: 8.2
+    writing: 4.4
+    math: 5.7
+    long_context: 8.3
+  source: seed

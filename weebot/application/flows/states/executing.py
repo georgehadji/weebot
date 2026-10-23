@@ -9,11 +9,11 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
-from weebot.domain.models.audit import AuditVerdict
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
     MessageEvent,
+    PlanEvent,
     ToolApprovalEvent,
     ToolEvent,
     WaitForUserEvent,
@@ -22,6 +22,7 @@ from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
 from weebot.application.flows.collaborators.user_pause import pause_for_user
+from weebot.application.services.tool_approval import mark_tool_approval_pending
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +233,13 @@ class ExecutingState(FlowState):
                 return []
             constraints = extractor.extract(source)
         return extractor.check_step(step.description, constraints)
+
+    async def _evidence_gate(
+        self, context, step: Step, step_events: list, step_elapsed: float
+    ) -> PlanEvent | None:
+        from weebot.application.flows.states.evidence_gate import evidence_gate
+
+        return await evidence_gate(context, step, step_events, step_elapsed)
 
     @staticmethod
     async def _journal_constraint_violation(
@@ -453,6 +461,7 @@ class ExecutingState(FlowState):
                 # `effective_prompt`, not `prompt`: this sent the ORIGINAL,
                 # so steering was polled, logged and dropped (P3-2 in the audit).
                 user_input=effective_prompt,
+                step_context=context.step_execution_context(),  # ADR-015
             )
         )
         _step_elapsed = _time.monotonic() - _step_t0
@@ -460,6 +469,9 @@ class ExecutingState(FlowState):
             yield ErrorEvent(error=f"Step execution rejected: {cmd_result.error}")
             context.set_state(UpdatingState())
             return
+
+        _data = cmd_result.data
+        context.record_step_usage(_data.get("token_usage"), _data.get("skill_gaps"))
 
         # Consume events from the mediator result via shared reconstructor.
         from weebot.application.cqrs.event_reconstructor import reconstruct_events
@@ -473,12 +485,8 @@ class ExecutingState(FlowState):
                 hitl_paused = True
             elif isinstance(event, ToolApprovalEvent):
                 hitl_paused = True
-                logger.info(
-                    "Tool '%s' requires approval (risk=%s): %s",
-                    event.tool_name,
-                    event.risk_level,
-                    event.reason,
-                )
+                # ADR-013: record what a "yes" approves; FlowRouter grants it.
+                context._session = mark_tool_approval_pending(context._session, event)
             elif isinstance(event, ErrorEvent):
                 execution_failed = True
             # Reconstruct shutdown signals from the serialised events
@@ -674,36 +682,12 @@ class ExecutingState(FlowState):
         # aren't placeholders) — runs BEFORE completion is committed, not
         # after, and is scoped to this step's own events, not the whole
         # session. See tasks/specs/longhorizon_harness_implementation_plan.md.
-        _step_audit_service = getattr(context, "_step_audit_service", None)
-        if _step_audit_service is not None:
-            _step_tool_events = [e for e in _current_step_events if isinstance(e, ToolEvent)]
-            _audit_report = await _step_audit_service.audit_step(
-                step=step, events=_step_tool_events, session_id=context._session.id
-            )
-            if _audit_report.verdict != AuditVerdict.PASS:
-                logger.warning(
-                    "Step '%s' failed evidence audit (%s): %s",
-                    step.id,
-                    _audit_report.verdict.value,
-                    _audit_report.summary,
-                )
-                if step.retry_count < 1:
-                    updated_step = step.model_copy(
-                        update={
-                            "description": f"{step.description}\n[Evidence gap: {_audit_report.summary}]",
-                            "retry_count": 1,
-                            "status": StepStatus.PENDING,
-                        }
-                    )
-                    context._plan = context._plan.replace_step(step.id, updated_step)
-                    context.set_state(ExecutingState())
-                    return
-                context._plan = context._plan.update_step_status(
-                    step.id, StepStatus.UNVERIFIED, result=_audit_report.summary
-                )
-                logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, _step_elapsed)
-                context.set_state(UpdatingState())
-                return
+        _audit_event = await self._evidence_gate(
+            context, step, _current_step_events, _step_elapsed
+        )
+        if _audit_event is not None:
+            yield _audit_event
+            return
 
         # Update step as completed, carrying the extracted result through
         context._plan = context._plan.update_step_status(

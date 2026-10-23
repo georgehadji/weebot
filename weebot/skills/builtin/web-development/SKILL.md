@@ -63,6 +63,20 @@ metadata:
 - Fonts: `font-display: swap`, subset to needed characters
 - No jQuery — use vanilla JS or framework utilities
 
+## Website Standards (MANDATORY)
+Every website you build or generate MUST comply with the following — no exceptions:
+
+1. **Mobile-First**: Design and code for the smallest screen first, then progressively enhance for larger viewports. Use `min-width` media queries, not `max-width`.
+2. **Fully Responsive**: Layouts must adapt fluidly across all screen sizes (320px → 1920px+). No horizontal overflow, no fixed-width containers that break on small screens.
+3. **Web Standards & Best Practices**, including but not limited to:
+   - **Semantic HTML**: Use correct elements (`<header>`, `<nav>`, `<main>`, `<section>`, `<article>`, `<footer>`, etc.) rather than generic `<div>` stacks.
+   - **Accessibility (WCAG 2.1 AA)**: Proper alt text, ARIA labels where needed, keyboard navigability, sufficient color contrast (4.5:1 for text).
+   - **Performance**: Images with explicit dimensions and `loading="lazy"`, minimal render-blocking resources, optimized assets.
+   - **Valid HTML/CSS**: Markup must pass W3C validation. No deprecated elements or attributes.
+   - **Meta & SEO**: `<meta charset>`, `<meta name="viewport" content="width=device-width, initial-scale=1">`, descriptive `<title>`, `<meta name="description">`.
+   - **Security headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options` where applicable.
+   - **No inline styles or scripts** unless absolutely unavoidable; prefer external stylesheets and scripts.
+
 ## Output Convention
 
 All websites go under `Output/<project-name>/`. Single-file projects: `Output/<name>/index.html`.

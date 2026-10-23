@@ -7,6 +7,7 @@ from pydantic import ConfigDict, PrivateAttr
 
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.config.tool_config import ToolConfig
+from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
 from weebot.tools.base import BaseTool, ToolResult
@@ -157,7 +158,7 @@ class PythonExecuteTool(BaseTool):
         approval = self._policy.evaluate(code)
         if not approval.approved:
             return ToolResult(output="", error=f"Code denied by policy: {approval.reason}")
-        if approval.requires_confirmation:
+        if approval.requires_confirmation and not is_human_approved(self.name):
             hint = _contextual_hint(code, approval.undo_hint)
             return ToolResult(
                 output="",

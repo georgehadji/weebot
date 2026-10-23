@@ -18,7 +18,7 @@ from weebot.application.flows.mcp_scope_config import McpScopeConfig
 logger = logging.getLogger(__name__)
 
 # Namespace prefix used by MCPToolRegistryBridge for external MCP tools.
-_MCP_TOOL_PREFIX = "mcp__"
+from weebot.core.mcp_naming import MCP_NAMESPACE_PREFIX as _MCP_TOOL_PREFIX  # noqa: E402
 
 
 async def apply_mcp_tool_scope(scope_config: McpScopeConfig, prompt: str) -> Any:

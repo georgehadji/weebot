@@ -119,10 +119,20 @@ def test_the_repository_is_initialised_once(ledger, caplog):
     assert inits == [], f"re-initialised {len(inits)}x because .git never appeared"
 
 
+def _clear_readonly_and_retry(func, path, _exc):
+    # git writes .git/objects read-only; Windows refuses to unlink those.
+    import os
+    import stat
+
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def test_a_git_failure_is_reported_not_swallowed_as_success(ledger, caplog):
     """The `except` guard around the git calls must be reachable."""
     lm, d = ledger
-    shutil.rmtree(d / ".git")          # repo gone; `git commit` must now fail
+    # repo gone; `git commit` must now fail
+    shutil.rmtree(d / ".git", onexc=_clear_readonly_and_retry)
     with caplog.at_level("DEBUG", logger=bt.__name__):
         lm.append(_event("c.txt"))
     text = "\n".join(r.getMessage() for r in caplog.records)
@@ -218,6 +228,27 @@ def test_concurrent_appends_are_all_committed():
             assert absent == [], f"entries missing from the committed tree: {absent}"
         finally:
             bt.LEDGER_DIR = original
+
+
+def test_concurrent_appends_keep_every_entry_on_disk(ledger, monkeypatch):
+    """The daily file itself lost entries: parallel appends overwrote each other.
+
+    Found 2026-10-22 behind the flaky test above: an entry missing at HEAD was
+    missing on disk too, so git was not the cause. Git is stubbed out here so
+    the writes overlap as much as possible.
+    """
+    lm, d = ledger
+    monkeypatch.setattr(bt, "_commit", lambda *a, **k: True)
+    for round_ in range(20):
+        names = [f"r{round_}-c{i}.txt" for i in range(12)]
+        threads = [threading.Thread(target=lm.append, args=(_event(n),)) for n in names]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        disk = "".join(f.read_text(encoding="utf-8") for f in d.glob("*.md"))
+        absent = [n for n in names if n not in disk]
+        assert absent == [], f"round {round_}: entries lost on disk: {absent}"
 
 
 # --------------------------------------------------------------------------

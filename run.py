@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # and path validation inconsistently rejects valid workspace paths.
 load_dotenv(override=True)
 
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 # Clear stale bytecode cache to prevent import errors from old .pyc files
 import shutil as _shutil
@@ -60,7 +60,7 @@ def validate_environment() -> None:
     Raises:
         ValueError: If no AI API keys are configured.
     """
-    settings = WeebotSettings()
+    settings = get_settings()
     settings.validate_at_least_one_key()
     print(
         f"weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}"
@@ -125,7 +125,6 @@ def run_interactive(
     skillopt: bool = False,
 ) -> None:
     """Run interactive agent session using the new Clean Architecture flows."""
-    from weebot.application.di import Container
     from weebot.application.ports.state_repo_port import StateRepositoryPort
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
@@ -154,8 +153,9 @@ def run_interactive(
 
         _default = _os.environ.get("DEFAULT_MODEL", MODEL_BUDGET)
         llm = model_service.create_llm_adapter(model or _default)
-        _container = Container()
-        _container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        _container = shared_container()  # one container per process
         state_repo = _container.get(StateRepositoryPort)
 
         # ── Phase 5: Steering — wire up mid-execution input channel ──
@@ -192,6 +192,7 @@ def run_interactive(
             skill_prompt=skill_prompt,
             steering=steering,
             mediator=_container.get(Mediator),
+            retention_agent=_container.get("retention_agent"),
         )
 
         while True:
@@ -266,10 +267,10 @@ async def _run_skillopt_pass() -> None:
     Uses 1 epoch × 2 steps to keep cost low.  Full training runs
     are available via ``python -m cli.main flow skillopt <name>``.
     """
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
 
     try:
         container.configure_skillopt()

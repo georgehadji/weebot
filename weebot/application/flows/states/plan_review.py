@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
-from weebot.config.settings import WeebotSettings
+from weebot.config.settings import get_settings
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -54,7 +54,7 @@ def next_state_after_plan(min_steps: int = 1):
     """
     from weebot.application.flows.states.executing import ExecutingState
 
-    settings = WeebotSettings()
+    settings = get_settings()
     if not settings.plan_review_enabled:
         return ExecutingState()
     return PlanReviewState(min_steps=min_steps)
@@ -90,7 +90,13 @@ class PlanReviewState(FlowState):
 
         _log.info("Plan review: presenting %d-step plan '%s' to user", len(plan.steps), plan.title)
 
-        yield PlanReviewEvent(plan_data=plan.model_dump(mode="json"), step_count=len(plan.steps))
+        # Emitted, not only yielded, so it is stamped with the session id, saved
+        # and published like the other plan events (F37).
+        review_event = PlanReviewEvent(
+            plan_data=plan.model_dump(mode="json"), step_count=len(plan.steps)
+        )
+        await context._emit(review_event)
+        yield review_event
 
         # Mark plan as pending approval in session context (extra dict)
         _new_extra = {**context._session.context.extra, "plan_pending_approval": True}
@@ -107,24 +113,41 @@ class PlanReviewState(FlowState):
 
         context._session = context._session.set_status(SessionStatus.WAITING)
 
+        # The plan as a file the user can edit before approving (ICM B2);
+        # FlowRouter reads it back on approve.
+        file_hint = ""
+        try:
+            from weebot.core import plan_file
+
+            path = plan_file.write(
+                context._session.id, plan.title, [s.description for s in plan.steps]
+            )
+            file_hint = f"\nTo change steps, edit {path} and save, then approve."
+        except Exception as exc:  # the file is a convenience; review must not fail on it
+            _log.warning("Plan review: could not write the plan file: %s", exc)
+
         wait_event = WaitForUserEvent(
             question=(
                 f"Plan ready ({len(plan.steps)} step{'s' if len(plan.steps) != 1 else ''}):\n"
                 + "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(plan.steps[:8]))
                 + ("\n  ..." if len(plan.steps) > 8 else "")
                 + "\n\nType 'approve' to start execution, or describe changes / constraints to add."
+                + file_hint
             )
         )
 
-        # Persist WAITING status AND the event directly to DB
-        context._session = context._session.add_event(wait_event)
+        # Persist WAITING directly first, so the status is in the DB even if
+        # the emit below fails; the emit adds the event, publishes and saves.
+        # (Adding the event here too stored it twice.)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
 
-        # Also emit through pipeline for event bus subscribers
         try:
             await context._emit(wait_event)
         except Exception:
-            _log.debug("Emit through pipeline failed (non-critical)", exc_info=True)
+            _log.warning("Plan review: emitting the wait event failed", exc_info=True)
+            context._session = context._session.add_event(wait_event)
+            if context._state_repo:
+                await context._state_repo.save_session(context._session)
 
         yield wait_event

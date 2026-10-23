@@ -13,7 +13,8 @@ class TestOutputPath:
         # Normalize to forward slashes for cross-platform assertions
         norm = result.replace("\\", "/")
         assert norm.endswith("Output/test/file.txt")
-        assert "weebot" in norm
+        # lower(): the checkout folder may be "Weebot" (Windows keeps the case).
+        assert "weebot" in norm.lower()
 
     def test_already_absolute_under_project(self):
         # NOTE: this walked up four parents (the repo's *parent*), so the path

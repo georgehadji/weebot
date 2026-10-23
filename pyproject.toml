@@ -19,11 +19,11 @@ classifiers = [
 dependencies = [
     # Pinned dependencies are managed in requirements.txt (the deployment lockfile).
     # pyproject.toml carries minimal metadata for PEP 517/518 build isolation.
-    # See WI-05 in implementation_plan.md for the design rationale.
+    # See WI-05 in _archive/root-2026-10-23/reports/implementation_plan.md for the design rationale.
 ]
 
 [project.scripts]
-weebot = "cli.main:main"
+weebot = "cli.main:_wrap_main"
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}

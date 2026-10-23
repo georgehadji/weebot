@@ -39,11 +39,10 @@ class VoiceInputTool(BaseTool):
     def __init__(self, speech: SpeechPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if speech is None:
-            import importlib as _il
-
-            _c = _il.import_module("weebot.application.di").Container()
-            _c.configure_defaults()
-            speech = _c.get(SpeechPort)
+            raise RuntimeError(
+                "{} needs its SpeechPort collaborator: build it through the DI "
+                "container's tool_registry, whose wiring supplies it (W5.5)".format(self.name)
+            )
         object.__setattr__(self, "_speech", speech)
 
     async def health_check(self) -> bool:

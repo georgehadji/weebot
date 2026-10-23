@@ -70,9 +70,9 @@ class StripeWebhookHandler:
             True if the signature is valid.
         """
         if not self._webhook_secret:
-            from weebot.config.settings import WeebotSettings
+            from weebot.config.settings import get_settings
 
-            _settings = WeebotSettings()
+            _settings = get_settings()
             if _settings.stripe_allow_unsigned_webhooks:
                 logger.warning(
                     "STRIPE_WEBHOOK_SECRET not configured — accepting unsigned webhook "

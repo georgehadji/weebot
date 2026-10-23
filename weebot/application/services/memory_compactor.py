@@ -7,6 +7,7 @@ from weebot.domain.models.event import AgentEvent, ToolEvent, MessageEvent
 from weebot.domain.models.session import Session
 
 from .constraint_extractor import ConstraintExtractor, Constraint
+from .tool_guards import SHELL_TOOLS
 
 
 class MemoryCompactor:
@@ -143,7 +144,7 @@ class MemoryCompactor:
                     update={"result": f"[Screenshot compacted: {len(result)} chars]"}
                 )
 
-        if event.tool_name in ("bash", "shell_exec", "powershell"):
+        if event.tool_name in SHELL_TOOLS:
             result = event.result or ""
             lines = result.splitlines()
             if len(lines) > self.max_shell_lines:

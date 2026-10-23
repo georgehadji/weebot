@@ -58,13 +58,9 @@ _DOCUMENT_DIRECTIVE = "[[as_document]]"
 class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
 
-    def __init__(self, llm_port: LLMPort | None = None) -> None:
-        if llm_port is None:
-            from weebot.application.di import Container
-
-            c = Container()
-            c.configure_defaults()
-            llm_port = c.get(LLMPort)
+    def __init__(self, llm_port: LLMPort) -> None:
+        # Required: every adapter gets `llm` from the entry point's container.
+        # A None here used to build a whole second Container (W5.3, F28).
         self._safety = SafetyChecker(llm=llm_port)
         self._auth = GatewayAuth()
 
@@ -81,10 +77,10 @@ class GatewayAdapter(ABC):
         per-user allowlist, if configured for the platform, adds a further
         restriction; an explicit user block always applies.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
         from weebot.domain.models.gateway_session import GatewaySessionKey
 
-        if not WeebotSettings().gateway_auth_enabled:
+        if not get_settings().gateway_auth_enabled:
             return True
         if not self._auth.is_platform_allowed(platform):
             return False
@@ -162,7 +158,8 @@ class GatewayAdapter(ABC):
             ``(is_command, mode_or_none)``. When *mode_or_none* is ``None``
             the caller should reply with the current mode.
         """
-        allowed = {"off", "lite", "full", "ultra"}
+        from weebot.config.settings import PONYTAIL_MODES as allowed
+
         normalized = text.strip().lower()
         if normalized == "ponytail":
             return True, None
@@ -219,9 +216,19 @@ class GatewayAdapter(ABC):
             ".txt",
         }
 
+        # Documents can hold secrets (a credentials .json named in a reply was
+        # uploaded): attach them only from inside the project (F76).
+        from weebot.core import output_path as _op
+
+        document_extensions = {".pdf", ".docx", ".xlsx", ".csv", ".json", ".yaml", ".yml",
+                               ".md", ".txt"}
         valid_paths = []
         for p in paths:
             ext = Path(p).suffix.lower()
+            if ext in document_extensions and not Path(p).resolve().is_relative_to(
+                _op._PROJECT_ROOT
+            ):
+                continue
             if ext in media_extensions:
                 valid_paths.append(p)
                 text = text.replace(p, "")

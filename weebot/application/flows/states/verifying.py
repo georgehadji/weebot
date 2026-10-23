@@ -57,9 +57,9 @@ class VerifyingState(FlowState):
             flow: The PlanActFlow instance (provides llm, session, plan).
             prompt: Not used — verification runs on the flow's current plan/session.
         """
-        from weebot.config.settings import WeebotSettings
+        from weebot.config.settings import get_settings
 
-        _settings = WeebotSettings()
+        _settings = get_settings()
 
         # ── Feature toggle ──────────────────────────────────────────
         if not _settings.cove_enabled:
@@ -134,7 +134,12 @@ class VerifyingState(FlowState):
             for question in questions:
                 try:
                     answer = await self._answer_independently(flow, question)
-                    consistent = await self._check_consistency(flow, question, answer, summary)
+                    # Unverifiable is not a contradiction: counting "the
+                    # evidence does not say" as inconsistent rewrote correct
+                    # summaries on most runs.
+                    consistent = self._is_unverifiable(answer) or await self._check_consistency(
+                        flow, question, answer, summary
+                    )
                 except LLMAuthenticationError:
                     _auth_error_count += 1
                     if _auth_error_count >= _MAX_AUTH_RETRIES:
@@ -158,7 +163,7 @@ class VerifyingState(FlowState):
 
                 if not consistent:
                     # Find which claim this question was about
-                    inconsistencies.append((question, answer, summary[:200]))
+                    inconsistencies.append((question, answer, summary[:2000]))
 
             # ── Step 3: Revise if needed ────────────────────────────────
             if inconsistencies:
@@ -414,8 +419,8 @@ class VerifyingState(FlowState):
             failures.append("unresolved_errors")
 
         # Gate 4: Token budget — check executor token usage
-        if flow._executor and hasattr(flow._executor, "token_usage"):
-            usage = flow._executor.token_usage
+        if hasattr(flow, "token_usage"):
+            usage = flow.token_usage
             if usage.get("total_tokens", 0) > 100_000:
                 failures.append("token_budget_exceeded")
 
@@ -601,7 +606,11 @@ class VerifyingState(FlowState):
                 if result and isinstance(result, str):
                     # Truncate long outputs but preserve the evidence
                     truncated = result[:800] if len(result) > 800 else result
-                    tool_outputs.append(f"[{tool_name}] {truncated}")
+                    # With the call's arguments when the event kept them, so
+                    # "what was run?" is answerable from the evidence.
+                    args = getattr(event, "function_args", None) or {}
+                    called = f"({json.dumps(args, default=str)[:300]})" if args else ""
+                    tool_outputs.append(f"[{tool_name}{called}] {truncated}")
 
         evidence_block = ""
         if tool_outputs:
@@ -614,7 +623,8 @@ class VerifyingState(FlowState):
         prompt = (
             f"Answer this verification question using ONLY the factual evidence"
             f" provided below.  If the evidence doesn't contain the answer,"
-            f" state exactly what is missing rather than guessing.\n\n"
+            f" reply starting with 'UNKNOWN:' and say what is missing, rather"
+            f" than guessing.\n\n"
             f"Question: {question}"
             f"{evidence_block}"
         )
@@ -633,10 +643,27 @@ class VerifyingState(FlowState):
             _log.debug("Failed to answer verification question", exc_info=True)
             return "(verification failed)"
 
+    @staticmethod
+    def _is_unverifiable(answer: str) -> bool:
+        """True when the independent answer says the evidence cannot settle it."""
+        text = (answer or "").strip().lower()
+        return text.startswith("unknown") or any(
+            phrase in text
+            for phrase in (
+                "evidence does not contain",
+                "evidence doesn't contain",
+                "does not contain any information",
+                "no information about",
+            )
+        )
+
     async def _check_consistency(self, flow, question: str, answer: str, summary: str) -> bool:
         """Check if the independent answer is consistent with the summary."""
         prompt = (
-            f"Original claim (from summary):\n{summary[:300]}\n\n"
+            # 2000, not 300: the summary opens with the step description
+            # (often 250+ chars), so 300 cut off the result being checked and
+            # every check on a correct answer read as inconsistent.
+            f"Original claim (from summary):\n{summary[:2000]}\n\n"
             f"Verification question: {question}\n"
             f"Independent answer: {answer}\n\n"
             f"Is the independent answer CONSISTENT with the original claim? "
@@ -648,7 +675,7 @@ class VerifyingState(FlowState):
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_VERDICT,
             )
-            return "yes" in (response.content or "").lower()
+            return (response.content or "").strip().lower().startswith("yes")
         except LLMAuthenticationError:
             # Propagate (E6): an unreachable LLM is an infra problem for
             # execute()'s auth-retry counter to handle (→ NOT_RUN after

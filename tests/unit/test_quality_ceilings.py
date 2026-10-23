@@ -56,6 +56,12 @@ _EXPECTED = {
     # Active .importlinter exemptions. Tracked only in prose before, where
     # every target moved the wrong way. See scripts/lint_import_exemptions.py.
     "import_exemptions",
+    # Direct WeebotSettings() construction outside get_settings(). ICM fix
+    # plan W2.2 (F16). See scripts/lint_settings_construction.py.
+    "settings_construction",
+    # Hand-built Container() outside application/di. ICM fix plan W5.3 (F28).
+    # See scripts/lint_container_construction.py.
+    "container_construction",
 }
 
 

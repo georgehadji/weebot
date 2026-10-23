@@ -19,6 +19,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
+from weebot.config.model_refs import SUBAGENT_TIER_MODEL, get_model_cascade_for_role
 from weebot.domain.models.agent_capability import AGENT_CAPABILITIES
 from weebot.domain.models.sub_agent import (
     AgentTier,
@@ -121,7 +122,7 @@ class HyperAgent:
                     tier=cap.tier,
                     strategy=effective,
                     tools=goal.tools or cap.default_tools,
-                    model=cap.preferred_models[0] if cap.preferred_models else None,
+                    model=get_model_cascade_for_role(role.value)[0],
                     max_tool_calls=cap.max_tool_calls,
                 )
             )
@@ -143,14 +144,9 @@ class HyperAgent:
             if self._cost_tracker.can_afford(spec.tier, est):
                 result.append(spec)
             elif self._cost_tracker.can_afford(AgentTier.BUDGET, est):
-                cap = AGENT_CAPABILITIES[spec.role]
-                budget_model = next(
-                    (m for m in cap.preferred_models if "free" in m or "minimax" in m),
-                    cap.preferred_models[-1] if cap.preferred_models else None,
+                downgraded = spec.with_tier(AgentTier.BUDGET).with_model(
+                    SUBAGENT_TIER_MODEL[AgentTier.BUDGET]
                 )
-                downgraded = spec.with_tier(AgentTier.BUDGET)
-                if budget_model:
-                    downgraded = downgraded.with_model(budget_model)
                 result.append(downgraded)
             else:
                 logger.warning("Budget exhausted — skipping: %s (%s)", spec.role.value, spec.id)

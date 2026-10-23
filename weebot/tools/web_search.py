@@ -69,25 +69,29 @@ class WebSearchTool(BaseTool):
         except Exception as e:
             errors.append(f"Perplexity: {e}")
 
+        # Fallbacks run only while results are short: they used to run in
+        # series on every search, whatever the engine before them returned.
         # Fallback 1: DuckDuckGo (no API key required)
-        try:
-            ddg_results = await self._search_duckduckgo(query, num_results * 2)
-            seen_urls = {r.get("url", "") for r in all_results}
-            for r in ddg_results:
-                if r.get("url", "") not in seen_urls:
-                    all_results.append(r)
-        except Exception as e:
-            errors.append(f"DuckDuckGo: {e}")
+        if len(all_results) < num_results:
+            try:
+                ddg_results = await self._search_duckduckgo(query, num_results * 2)
+                seen_urls = {r.get("url", "") for r in all_results}
+                for r in ddg_results:
+                    if r.get("url", "") not in seen_urls:
+                        all_results.append(r)
+            except Exception as e:
+                errors.append(f"DuckDuckGo: {e}")
 
         # Fallback 2: Bing Web Search API (requires BING_API_KEY)
-        try:
-            bing_results = await self._search_bing(query, num_results)
-            seen_urls = {r.get("url", "") for r in all_results}
-            for r in bing_results:
-                if r.get("url", "") not in seen_urls:
-                    all_results.append(r)
-        except Exception as e:
-            errors.append(f"Bing: {e}")
+        if len(all_results) < num_results:
+            try:
+                bing_results = await self._search_bing(query, num_results)
+                seen_urls = {r.get("url", "") for r in all_results}
+                for r in bing_results:
+                    if r.get("url", "") not in seen_urls:
+                        all_results.append(r)
+            except Exception as e:
+                errors.append(f"Bing: {e}")
 
         if not all_results:
             return ToolResult(output="", error=f"All search engines failed: {'; '.join(errors)}")
