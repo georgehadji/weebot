@@ -110,8 +110,9 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
     # Best independent terminal-coding score at half the top model's price.
     "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
-    # Review is a different lab from the coder (Anthropic) and executor (DeepSeek).
-    "reviewer": [_SOL, _ARGON, _OPUS],
+    # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
+    # Sol (another lab than the Anthropic coder) is fallback 1.
+    "reviewer": [_HAIKU, _SOL, _ARGON, _OPUS],
     "critic": [_SOL, _ARGON, _OPUS],
     "verifier": [_DEEPSEEK, _MIMO_FLASH, _HAIKU],
     "researcher": [_HAIKU, _MIMO_PRO, _SOL, _DEEPSEEK],

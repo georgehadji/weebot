@@ -329,6 +329,7 @@ Independent of C-E; it can go anywhere after A.
   - **Jira:** connected via `uvx mcp-atlassian` in `config/mcp_servers.json` (63 tools, read-only project listing works; the site has no projects yet).
   - **HubSpot:** connected via `npx @hubspot/mcp-server` (21 tools; read-only `hubspot_get_user_details` works). Writes ask first; no write test run yet.
   - **Apify:** built-in preset tools turn on with `APIFY_API_KEY`; the official MCP server (`mcp.apify.com`) is added once that key is in `.env`.
+- **Reviewer moved to Haiku 5.5 (2026-10-23):** for value for money; it tied Sol 6/6 on the billed subtle-bug eval at about 1/12 the cost. Sol is fallback 1. Live: the `code_reviewer` caught an off-by-one and the empty-list case in 2.3 s (timeout 8 s). Test: `tests/unit/config/test_reviewer_routing.py`, failing first. The analyst stays on Sol, the only 6/6 there.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
