@@ -41,7 +41,9 @@ def png(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_without_tesseract_the_vision_model_reads_the_image(no_tesseract, png):
+async def test_without_tesseract_the_vision_model_reads_the_image(no_tesseract, png, monkeypatch):
+    # ocr reads only inside the workspace (F65); the fixture image is in tmp.
+    monkeypatch.setattr("weebot.config.settings.WORKSPACE_ROOT", png.parent)
     vision = _Vision()
     result = await OCRTool(vision_llm=vision).execute(image_path=str(png))
     assert result.error is None

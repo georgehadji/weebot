@@ -13,6 +13,21 @@ from pydantic import Field
 
 from weebot.tools.base import BaseTool, ToolResult
 
+
+def _read_refusal(image_path: str) -> str | None:
+    """Why *image_path* may not be read, or None. Same rule as file_editor:
+    inside the workspace, and allowed by the filesystem policy (F65)."""
+    from weebot.config.fs_permissions import load_fs_permission_checker
+    from weebot.config.settings import WORKSPACE_ROOT
+
+    path = Path(image_path).resolve()
+    if not path.is_relative_to(Path(WORKSPACE_ROOT).resolve()):
+        return f"Access denied: {path} is outside the workspace {WORKSPACE_ROOT}"
+    perm = load_fs_permission_checker()
+    if perm.has_rules and perm.check("read", str(path)) != "allow":
+        return f"Access denied: read on {path} is denied by filesystem policy"
+    return None
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +71,8 @@ class OCRTool(BaseTool):
 
         try:
             if image_path:
+                if refusal := _read_refusal(image_path):
+                    return ToolResult(output="", error=refusal)
                 image_data = await asyncio.to_thread(Path(image_path).read_bytes)
             elif image_base64:
                 image_data = base64.b64decode(image_base64)
