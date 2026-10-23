@@ -268,6 +268,8 @@ Independent of C-E; it can go anywhere after A.
 
 - **Live probe of the role table (2026-10-23):** every one of the 16 models in `ROLE_MODEL_CONFIG` and the fallback chain made a correct tool call (`multiply(17, 23)`) through Weebot's own adapter, 0.9 to 12.1 s each. The probe found that `google/...` (and any other vendor prefix without a direct adapter, `poolside/`, `microsoft/`, ...) raised "Unknown provider" in `AdapterFactory`: a `vendor/model` id with no direct adapter now goes to OpenRouter (`tests/unit/fixes/test_adapter_factory_vendor_prefixes.py`).
 
+- **Representative batch (2026-10-23):** eight `flow run` tasks through the real CLI (chat, Python, file read, line count, file write, web search, multi-step coding, file sizes). Seven completed correctly in 15 to 51 s each, with no tracebacks; the batch spent $0.08 of OpenRouter credit (about $0.01 per task). The coding task failed on the intent-review clarification ("is not waiting"), fixed in the same pass (`test_intent_review_pause_is_durable.py`). Noted, not fixed: CoVe often marks correct answers "inconsistent" and revises the summary; under investigation.
+
 ### SSOT pass (2026-10-23)
 User request: "Make sure the ssot principal holds in the project". Audit and per-row status: `tasks/audits/ssot_audit_2026_10_23.md`. Every row is done or deferred with its reason; none open. Deferred: 12 (agree at runtime), 14 (tools differ on purpose), 20 (name collision, not a duplicated fact), parts of 9, 16, 24, 25, 29. One decision for the user: `WEEBOT_VISION_REFLECTION` defaults on and doubles image tokens.
 
