@@ -184,6 +184,10 @@ class FlowRouter:
             session = session.set_status(SessionStatus.RUNNING)
             return ExecutingState(), session
 
+        # WAITING with no plan: the answer to a pre-plan question (intent
+        # review). Still WAITING, the run loop breaks right after planning.
+        if session.status == SessionStatus.WAITING:
+            session = session.set_status(SessionStatus.RUNNING)
         return PlanningState(), session
 
     @staticmethod
