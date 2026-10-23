@@ -29,6 +29,22 @@ from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 from weebot.interfaces.factories import build_tools, create_flow, route_and_create_flow
 
 
+
+def settled_status(session: Session) -> Session:
+    """The status to save when the flow returns. COMPLETED, WAITING (a HITL
+    pause) and FAILED (failed steps, `flow cancel`) stand; a session the flow
+    left mid-loop waits for the next task description."""
+    if session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.FAILED):
+        return session
+    return session.set_status(SessionStatus.WAITING)
+
+
+
+def _was_emitted(flow, event) -> bool:
+    """`_emit` already published this event; it sits at the session's tail."""
+    return any(e.id == event.id for e in getattr(flow._session, "events", [])[-8:])
+
+
 class AgentRunner:
     """High-level runner that encapsulates session lifecycle, flow execution, and event streaming."""
 
@@ -224,7 +240,7 @@ class AgentRunner:
             if isinstance(event, WaitForUserEvent):
                 # Ensure local status is updated for the interactive loop
                 session = session.set_status(SessionStatus.WAITING)
-            if self._event_bus:
+            if self._event_bus and not _was_emitted(flow, event):
                 await self._event_bus.publish(event)
             yield event
 
@@ -234,12 +250,7 @@ class AgentRunner:
             # The flow's session is the canonical state after execution
             session = flow_session
 
-        if flow.is_done():
-            session = session.set_status(SessionStatus.COMPLETED)
-        elif not session.status == SessionStatus.WAITING:
-            # If not done and not explicitly waiting for HITL, assume it finished
-            # its current loop and is waiting for the next task description.
-            session = session.set_status(SessionStatus.WAITING)
+        session = settled_status(session)
 
         await self._state_repo.save_session(session)
 
@@ -300,7 +311,7 @@ class AgentRunner:
             if isinstance(event, WaitForUserEvent):
                 # Ensure local status is updated for the interactive loop
                 session = session.set_status(SessionStatus.WAITING)
-            if self._event_bus:
+            if self._event_bus and not _was_emitted(flow, event):
                 await self._event_bus.publish(event)
             yield event
 
@@ -310,12 +321,7 @@ class AgentRunner:
             # The flow's session is the canonical state after execution
             session = flow_session
 
-        if flow.is_done():
-            session = session.set_status(SessionStatus.COMPLETED)
-        elif not session.status == SessionStatus.WAITING:
-            # If not done and not explicitly waiting for HITL, assume it finished
-            # its current loop and is waiting for the next task description.
-            session = session.set_status(SessionStatus.WAITING)
+        session = settled_status(session)
 
         await self._state_repo.save_session(session)
 
