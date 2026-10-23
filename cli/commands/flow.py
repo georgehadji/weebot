@@ -67,6 +67,9 @@ def _run_async(coro_factory) -> None:
             # never finished. Bounded, so a slow background job delays exit but
             # cannot prevent it.
             await get_background_tasks().drain()
+            from weebot.interfaces.factories import close_mcp_toolkit
+
+            await close_mcp_toolkit()
             await close_all_pools()
 
     asyncio.run(_wrapper())
@@ -75,8 +78,9 @@ def _run_async(coro_factory) -> None:
 def _get_state_repo() -> StateRepositoryPort:
     global _container
     if _container is None:
-        _container = Container()
-        _container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        _container = shared_container()
     return _container.get(StateRepositoryPort)
 
 
@@ -118,16 +122,36 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 
+        waiting = False
         async for event in runner.run_prompt(prompt, session_id=run_session_id):
             await subscriber.on_event(event)
             if isinstance(event, WaitForUserEvent):
-                # to_thread: a bare input() here would block the event loop,
-                # freezing the runner's own background tasks while it waits.
-                # The subscriber above already printed the question (F37).
-                answer = await asyncio.to_thread(input, "\nYour answer: ")
-                async for resume_event in runner.resume_session(run_session_id, answer):
-                    await subscriber.on_event(resume_event)
+                waiting = True
                 break
+        # Every question on the way gets asked: plan review, then e.g. the
+        # constraint gate. Answering only the first one ended the command with
+        # the session still waiting and nothing said.
+        while waiting:
+            # to_thread: a bare input() here would block the event loop,
+            # freezing the runner's own background tasks while it waits.
+            # The subscriber above already printed the question (F37).
+            try:
+                answer = await asyncio.to_thread(input, "\nYour answer: ")
+            except EOFError:
+                # stdin closed (a script, CI, a pipe): never answer for the
+                # user. The session stays WAITING and can be resumed.
+                click.echo(
+                    f"\nNo answer on stdin; session {run_session_id} is waiting. "
+                    "Resume it with: python -m cli.main flow resume "
+                    f'{run_session_id} "<answer>"'
+                )
+                break
+            waiting = False
+            async for resume_event in runner.resume_session(run_session_id, answer):
+                await subscriber.on_event(resume_event)
+                if isinstance(resume_event, WaitForUserEvent):
+                    waiting = True
+                    break
 
     _run_async(_run)
 
@@ -212,8 +236,9 @@ def flow_retry(session_id: str) -> None:
     async def _run() -> None:
         global _container
         if _container is None:
-            _container = Container()
-            _container.configure_defaults()
+            from weebot.interfaces.factories import shared_container
+
+            _container = shared_container()
         from weebot.application.services.task_runner import TaskRunner
 
         runner = _container.get(TaskRunner)

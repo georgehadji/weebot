@@ -15,6 +15,7 @@ from weebot.domain.models.event import (
     ThoughtEvent,
     TitleEvent,
     ToolEvent,
+    VerificationEvent,
     WaitForUserEvent,
 )
 
@@ -47,7 +48,11 @@ def _format_event(event: AgentEvent) -> str:
         return f"\n[bold red]⚠️ Error: {event.error}[/bold red]"
     if isinstance(event, DoneEvent):
         return "\n[bold green]✨ Done[/bold green]"
-    return str(event)
+    if isinstance(event, VerificationEvent):
+        verdict = "consistent" if event.consistent else "inconsistent"
+        return f"    [dim]🔎 Check: {event.question} ({verdict})[/dim]"
+    # Never the pydantic repr: an unlisted type prints its name, one line.
+    return f"    [dim]· {getattr(event, 'type', type(event).__name__)}[/dim]"
 
 
 class CLIEventSubscriber:

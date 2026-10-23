@@ -121,7 +121,6 @@ class PlanningState(FlowState):
                 from weebot.application.services.intent_review_service import IntentReviewService
                 from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
                 from weebot.domain.models.intent_review import IntentVerdict
-                from weebot.domain.models.event import WaitForUserEvent
 
                 _contract = IdeaContract(
                     title=prompt[:80], prompt=prompt, source=IdeaSource.USER_PROMPT
@@ -132,10 +131,18 @@ class PlanningState(FlowState):
                     _new_extra = {**context._session.context.extra, "_intent_reviewed": True}
                     _new_ctx = context._session.context.model_copy(update={"extra": _new_extra})
                     context._session = context._session.model_copy(update={"context": _new_ctx})
-                    yield WaitForUserEvent(
-                        question="\n".join(
+                    # A durable pause: WAITING, persisted, before the yield. A
+                    # bare WaitForUserEvent left the session pending, and the
+                    # user's answer failed with "is not waiting".
+                    from weebot.application.flows.collaborators.user_pause import (
+                        pause_for_user,
+                    )
+
+                    yield await pause_for_user(
+                        context,
+                        "\n".join(
                             f"{i+1}. {q}" for i, q in enumerate(_review.clarification_needed[:3])
-                        )
+                        ),
                     )
                     return
 
