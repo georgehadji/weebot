@@ -315,7 +315,11 @@ Independent of C-E; it can go anywhere after A.
   - DeepSeek-direct forced high-effort thinking on every call: a planning call took 3.8 s, against 1.4 s without thinking and 2.6 s via OpenRouter. It now thinks only when an effort is requested; planning median went back from 3.8 s to 2.4 s.
   - A REVISE from the code reviewer changed only the in-memory plan. `ExecuteStepHandler` reads the saved plan, so it refused the re-run ("already completed") and every REVISE was dropped. The revised plan is now persisted as a PlanEvent; live, the reviewer's fix to an invented-data CSV re-ran and the task passed.
 - **Image generation (2026-10-23):** use 28 of the 50, now tested. `image_gen` with `kind="openrouter"` produced a correct 1024x1024 red-circle PNG via `x-ai/grok-imagine-image-quality`. Asked in plain words through the CLI, the agent drew it with PIL instead, which also met the task.
-  - Still not run: inbox triage (needs a mailbox account, which the agent may not create), CRM/ticket updates (no connector configured) and purchases (prohibited).
+  - The last three, as local stand-ins (no account, no connector, no money), all passed live:
+    - **Inbox triage:** 4 `.eml` files classified as urgent, spam and normal, written to `triage.json`.
+    - **Ticket updates:** a JSON tracker edited as asked, with the untouched ticket left byte-identical.
+    - **Shop checkout:** a local HTML shop driven through the browser tool; two items added, the form filled, total 15.50, stopped before payment.
+  - The real-account versions (an `@atomicmail.ai` inbox, a Jira or HubSpot connector) still need the user. Real purchases stay prohibited.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
