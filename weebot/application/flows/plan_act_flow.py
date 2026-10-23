@@ -380,7 +380,7 @@ class PlanActFlow(BaseFlow):
                 signals.append(f"critique_confidence={conf:.2f}")
 
         # Signal 4: heuristic splits applied during plan parsing
-        heuristic_splits = getattr(self._plan, "_heuristic_splits", 0)
+        heuristic_splits = getattr(self._plan, "heuristic_splits", 0)
         if heuristic_splits > 0:
             signals.append(f"heuristic_splits={heuristic_splits}")
 
