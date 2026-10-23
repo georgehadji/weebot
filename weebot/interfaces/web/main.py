@@ -478,6 +478,20 @@ def create_app() -> FastAPI:
     from weebot.config.settings import get_settings
 
     _ws = get_settings()
+    # Probes and the chat platforms' webhooks, which verify their own signature
+    # and cannot send X-API-Key. The list used to name /api/live and
+    # /api/prometheus, which do not exist (F60).
+    _public_paths = frozenset(
+        {
+            "/",
+            "/api/health",
+            "/api/health/live",
+            "/api/health/prometheus",
+            "/api/gateway/slack/events",
+            "/api/gateway/discord/interactions",
+            "/api/gateway/whatsapp/webhook",
+        }
+    )
 
     if _ws.weebot_api_key:
 
@@ -486,7 +500,7 @@ def create_app() -> FastAPI:
 
             async def dispatch(self, request: Request, call_next):
                 # Skip auth for health endpoint and WebSocket test UI
-                if request.url.path in ("/api/health", "/", "/api/prometheus"):
+                if request.url.path in _public_paths:
                     return await call_next(request)
 
                 api_key = request.headers.get("X-API-Key")
@@ -514,7 +528,7 @@ def create_app() -> FastAPI:
 
             async def dispatch(self, request: Request, call_next):
                 # Always allow health/liveness probes and WebSocket test UI
-                if request.url.path in ("/api/health", "/api/live", "/", "/api/prometheus"):
+                if request.url.path in _public_paths:
                     return await call_next(request)
 
                 client_host = request.client.host if request.client else ""

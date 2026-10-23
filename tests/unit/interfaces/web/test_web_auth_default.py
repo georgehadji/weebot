@@ -95,14 +95,14 @@ class TestFailClosedMiddleware:
 class TestAPIKeyMiddleware:
     def test_api_key_wrong_key(self, monkeypatch):
         app = _create_app_with_mocks(monkeypatch, weebot_api_key="secret")
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
         response = client.get("/api/sessions", headers={"X-API-Key": "wrong"})
         assert response.status_code == 401
         assert response.headers.get("X-Error-Code") == "UNAUTHORIZED"
 
     def test_api_key_correct_key(self, monkeypatch):
         app = _create_app_with_mocks(monkeypatch, weebot_api_key="secret")
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
         response = client.get("/api/sessions", headers={"X-API-Key": "secret"})
         assert response.status_code in (200, 404)
 
@@ -189,3 +189,28 @@ class TestLegacyModeValidatesTheKey:
     async def test_the_right_key_may_mutate_from_off_host(self, monkeypatch):
         monkeypatch.setenv("WEEBOT_API_KEY", "secret")
         await require_mutation_identity(self._request("secret"))
+
+
+class TestKeyMiddlewarePublicPaths:
+    """F60: the exempt list named /api/live and /api/prometheus, which do not
+    exist (the routes are /api/health/...), and covered the chat platforms'
+    signed webhooks, which cannot send X-API-Key."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/health/live",
+            "/api/gateway/slack/events",
+            "/api/gateway/discord/interactions",
+            "/api/gateway/whatsapp/webhook",
+        ],
+    )
+    def test_public_and_signed_paths_skip_the_key(self, monkeypatch, path):
+        app = _create_app_with_mocks(monkeypatch, weebot_api_key="k")
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(path) if "health" in path else client.post(path, content=b"{}")
+        assert resp.status_code != 401, (path, resp.status_code)
+
+    def test_other_api_paths_still_need_it(self, monkeypatch):
+        app = _create_app_with_mocks(monkeypatch, weebot_api_key="k")
+        assert TestClient(app).get("/api/sessions").status_code == 401
