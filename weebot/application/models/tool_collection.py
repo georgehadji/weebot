@@ -146,9 +146,21 @@ class ToolCollection:
         self._healthy = {name: (r is True) for name, r in zip(self._tools.keys(), results)}
         return dict(self._healthy)
 
+    def set_visible(self, names: set[str] | None) -> None:
+        """Send only these tools' definitions (None: all). All stay callable (ICM B1)."""
+        self._visible = None if names is None else set(names)
+
+    def hidden_names(self) -> list[str]:
+        """Callable tools whose definitions are not being sent."""
+        visible = getattr(self, "_visible", None)
+        return [] if visible is None else sorted(n for n in self._tools if n not in visible)
+
     def to_params(self) -> list[dict]:
         params = []
+        visible = getattr(self, "_visible", None)
         for tool in self._tools.values():
+            if visible is not None and tool.name not in visible:
+                continue
             # Phase 3: Skip tools that failed health check (if check has run)
             if self._healthy is not None and not self._healthy.get(tool.name, True):
                 continue

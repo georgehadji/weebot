@@ -191,3 +191,8 @@ def require(flag_name: str) -> None:
             f"Feature flag '{flag_name}' is disabled. "
             "Set the corresponding environment variable to enable it."
         )
+
+# ICM B1 (2026-10-23): send each executor step only the tool definitions it
+# needs (core + category + named services); the rest stay callable by name.
+# Every call used to carry all ~171 (~49k tokens). WEEBOT_TOOL_SCOPE=false sends all.
+TOOL_SCOPE_ENABLED: bool = _env_bool("WEEBOT_TOOL_SCOPE", default=True)

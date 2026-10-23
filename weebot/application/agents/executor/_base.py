@@ -494,6 +494,29 @@ class ExecutorAgent:
 
         return VISION_IN_LOOP_ENABLED and VISION_REFLECTION_ENABLED
 
+    _tool_note: str = ""
+
+    def _scope_tools_for(self, step: Step) -> str:
+        """Send this step only the tool definitions it needs (ICM B1); return the
+        line naming the rest, which stay callable. All ~171 used to go every call."""
+        from weebot.config.feature_flags import TOOL_SCOPE_ENABLED
+
+        if self._tools is None or not hasattr(self._tools, "set_visible"):
+            return ""
+        if not TOOL_SCOPE_ENABLED:
+            self._tools.set_visible(None)
+            return ""
+        from weebot.application.services.tool_scope import select_tools
+
+        self._tools.set_visible(select_tools(step.description, {t.name for t in self._tools}))
+        hidden = self._tools.hidden_names()
+        if not hidden:
+            return ""
+        return (
+            "\n\nMore tools exist (definitions not shown); call one by its exact name if the "
+            "step needs it: " + ", ".join(hidden)
+        )
+
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None, session_id: str = ""
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -520,6 +543,7 @@ class ExecutorAgent:
         # The approval scope and audit records read the session from here; it
         # was never set, so Flow pause denied every web approval (B2c).
         self._tool_executor.set_step_context(step.id, session_id)
+        self._tool_note = self._scope_tools_for(step)
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
@@ -667,7 +691,7 @@ class ExecutorAgent:
                     }
                 )
                 messages = sanitize_tool_call_pairing(
-                    [{"role": "system", "content": self._system_prompt}]
+                    [{"role": "system", "content": self._system_prompt + self._tool_note}]
                     + list(self._conversation_buffer)
                 )
                 try:
@@ -685,7 +709,7 @@ class ExecutorAgent:
             await self._context_compressor._maybe_compress()
 
             messages = sanitize_tool_call_pairing(
-                [{"role": "system", "content": self._system_prompt}]
+                [{"role": "system", "content": self._system_prompt + self._tool_note}]
                 + list(self._conversation_buffer)
             )
 
