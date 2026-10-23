@@ -264,7 +264,10 @@ class MCPClientManager:
                     content.append(item.text)
                 else:
                     content.append(str(item))
-        return "\n".join(content) if content else "OK"
+        text = "\n".join(content)
+        if getattr(result, "isError", False):  # the server says the call failed
+            raise RuntimeError(text or f"MCP tool {original_name} returned an error")
+        return text or "OK"
 
     async def cleanup(self) -> None:
         await self._exit_stack.aclose()
