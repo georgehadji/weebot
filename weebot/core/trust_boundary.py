@@ -61,6 +61,7 @@ UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
         "camofox_browser",  # Camoufox stealth browser: arbitrary page text
         "spacescraper",
         "search_images",
+        "search_history",  # old session content, web pages included (F67)
         "weather",
         "video_ingest",  # BaseTool.name of tools/video_ingest_tool.py
         "video_ingest_tool",  # legacy module-name spelling

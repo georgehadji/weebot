@@ -114,6 +114,8 @@ class RoleBasedToolRegistry:
         "webhook": [
             # Admin-level tools minus exec tools (bash, powershell, python_execute)
             # and minus terminate — webhooks should not exec arbitrary code by default.
+            # Also out: spacescraper (docker-compose up), computer_use (types into
+            # any window), design_system (npm install -g) (F66).
             "web_search",
             "vane_search",
             "image_gen",
@@ -137,7 +139,6 @@ class RoleBasedToolRegistry:
             "file_editor",
             "knowledge",
             "video_ingest",
-            "computer_use",
             "screen_capture",
             "schedule",
             "product",
@@ -145,13 +146,11 @@ class RoleBasedToolRegistry:
             "ocr",
             "weather",
             "search_images",
-            "design_system",
             "persistent_memory",
             "mixture_of_agents",
             "atomic_mail",
             "reasoner",
             "berb",
-            "spacescraper",
         ],
         "coder": [
             "bash",
