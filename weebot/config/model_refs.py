@@ -21,6 +21,7 @@ provider outage does not take a role down.
 from __future__ import annotations
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,16 @@ _ARGON = "google/gemini-4-argon"
 _SONNET = "anthropic/claude-sonnet-5.5"
 _OPUS = "anthropic/claude-opus-5.5"
 _HAIKU = "anthropic/claude-haiku-5.5"
+
+# User rule (2026-10-23): of Claude models, only Opus, Sonnet and Haiku 5.5;
+# never Fable. Paths that pick from the live list (the cascade's rescue, the
+# ACR pool) filter through this. Pinned by tests/unit/test_claude_model_rule.py.
+_ALLOWED_CLAUDE = re.compile(r"^(anthropic/)?claude-(opus|sonnet|haiku)-5[.-]5(:[a-z]+)?$")
+
+
+def claude_model_allowed(model_id: str) -> bool:
+    """False only for a Claude model outside the user's allowed set."""
+    return "claude" not in model_id.lower() or bool(_ALLOWED_CLAUDE.match(model_id.lower()))
 _MIMO_FLASH = "xiaomi/mimo-v2.6-flash"
 _GLM = "z-ai/glm-5.3"
 _GLM_FLASH = "z-ai/glm-5.3-flash"
@@ -163,7 +174,7 @@ MODEL_DI_SKILLOPT: str = MODEL_CASCADE_TIER4
 # reorders, so both defaults requested a model their endpoint does not serve.
 # Pinned by tests/unit/test_provider_defaults.py.
 MODEL_FACTORY_OPENAI: str = "gpt-5.4-mini"
-MODEL_FACTORY_ANTHROPIC: str = "claude-sonnet-5"
+MODEL_FACTORY_ANTHROPIC: str = "claude-sonnet-5.5"
 MODEL_FACTORY_DEEPSEEK: str = MODEL_CASCADE_TIER1
 MODEL_FACTORY_OPENROUTER: str = MODEL_CASCADE_TIER1
 

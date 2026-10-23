@@ -615,8 +615,10 @@ class CascadeExecutor:
 
         paid_models: list[dict] = []
         free_models: list[dict] = []
+        from weebot.config.model_refs import claude_model_allowed
+
         for m in listings:
-            if not m.supports_tools:
+            if not m.supports_tools or not claude_model_allowed(m.id):
                 continue
             entry = {"id": m.id, "ctx": m.context_length}
             if ":free" in m.id:

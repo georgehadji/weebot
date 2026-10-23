@@ -40,7 +40,11 @@ def default_candidate_pool() -> list[str]:
     The profiles are hand-scored and outlive the models they score; routing to
     a retired one only adds a 404 to the cascade.
     """
-    return [m for m in get_all_profiles() if get_model_config(m) is not None]
+    from weebot.config.model_refs import claude_model_allowed
+
+    return [
+        m for m in get_all_profiles() if get_model_config(m) is not None and claude_model_allowed(m)
+    ]
 
 class AdaptiveCapabilityRouter:
     """Closed-loop model router: classify → constrain → score → (bandit).
