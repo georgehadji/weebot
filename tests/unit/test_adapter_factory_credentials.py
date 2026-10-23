@@ -31,3 +31,34 @@ def test_mapped_env_var_resolves_via_settings_or_env(monkeypatch):
 def test_has_direct_key_always_agrees_with_resolve_direct_key(monkeypatch):
     for env_var in ("XAI_API_KEY", "KIMI_API_KEY", "OPENROUTER_API_KEY"):
         assert _has_direct_key(env_var) == bool(_resolve_direct_key(env_var))
+
+
+def _direct_key_of(adapter) -> str | None:
+    return getattr(getattr(adapter._primary, "_client", None), "api_key", None)
+
+
+def _fake_keys(monkeypatch):
+    from weebot.infrastructure.adapters.llm import adapter_factory as af
+
+    keys = {"DEEPSEEK_API_KEY": "ds-key", "KIMI_API_KEY": "kimi-key", "OPENROUTER_API_KEY": "or-key"}
+    monkeypatch.setattr(af, "_resolve_direct_key", lambda env_var: keys.get(env_var))
+    return af.AdapterFactory()
+
+
+def test_deepseek_direct_gets_its_own_key_not_the_callers_openrouter_key(monkeypatch):
+    # The key lived only in .env (settings), not os.environ, and the caller's
+    # api_key is the OpenRouter key: DeepSeek-direct got "no-key" or a wrong
+    # key, so every call silently went to OpenRouter.
+    factory = _fake_keys(monkeypatch)
+    adapter = factory._create_inner_adapter(
+        provider="deepseek", model="deepseek/deepseek-v4.1-flash", api_key="or-key"
+    )
+    assert _direct_key_of(adapter) == "ds-key"
+
+
+def test_moonshot_direct_gets_its_own_key_not_the_callers_openrouter_key(monkeypatch):
+    factory = _fake_keys(monkeypatch)
+    adapter = factory._create_inner_adapter(
+        provider="moonshot", model="moonshotai/kimi-k2.6", api_key="or-key"
+    )
+    assert _direct_key_of(adapter) == "kimi-key"

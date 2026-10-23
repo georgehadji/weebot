@@ -235,7 +235,10 @@ class AdapterFactory:
         elif provider == "deepseek":
             # Strip provider prefix: "deepseek/deepseek-v4-flash" → "deepseek-v4-flash"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            direct = DeepSeekAdapter(api_key=api_key, default_model=clean_model)
+            # Not the api_key parameter: it carries the OpenRouter key (see xai).
+            direct = DeepSeekAdapter(
+                api_key=_resolve_direct_key("DEEPSEEK_API_KEY"), default_model=clean_model
+            )
             # If DEEPSEEK_API_KEY is set, try direct first; fall back to OpenRouter
             if _has_direct_key("DEEPSEEK_API_KEY"):
                 fallback = OpenRouterAdapter(api_key=api_key, default_model=model)
@@ -253,7 +256,11 @@ class AdapterFactory:
             clean_model = model.split("/", 1)[-1] if "/" in model else model
             # Drop the ":free" suffix for direct API calls
             clean_model = clean_model.split(":")[0] if ":" in clean_model else clean_model
-            direct = MoonshotAdapter(api_key=api_key, default_model=clean_model)
+            direct = MoonshotAdapter(
+                api_key=_resolve_direct_key("KIMI_API_KEY")
+                or _resolve_direct_key("MOONSHOT_API_KEY"),
+                default_model=clean_model,
+            )
             # If KIMI_API_KEY or MOONSHOT_API_KEY is set, try direct first; fall back to OpenRouter.
             if _has_direct_key("KIMI_API_KEY") or _has_direct_key("MOONSHOT_API_KEY"):
                 fallback = OpenRouterAdapter(api_key=api_key, default_model=model)
