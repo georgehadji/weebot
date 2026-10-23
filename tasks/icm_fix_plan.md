@@ -99,6 +99,20 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **Fixed: `delete` 260e1b5c, cron_agent 2ac3672c; cancel/retry now say they act only in the running process (5c574b1b). Cross-process cancel 48bac27e** | CLI | M |
 | F78 | Personas with YAML frontmatter get the name `---` and overwrite each other's registry entry. **Fixed 574d991e** | Personas | M |
 | F79 | Low-severity notes (dead methods and ports, duplicated facts, swallowed exceptions, stale comments, timeout unit mismatch in `advanced_browser`, unclosed ApifyService sessions): listed in each card's Shape | (cards) | L |
+| F80 | Edited plan file never ran: routing added the edited PlanEvent in memory only and the step handler reloads from the repo (STEP_NOT_FOUND). **Fixed d91d9f87** | FlowRouter | H |
+| F81 | A run with failed steps re-ran CompletedState until max_iterations (session FAILED was not a loop exit). **Fixed 8185a796** | PlanActFlow | H |
+| F82 | Egress taint reset every step (fresh executor per step), so fetched content could drive an ungated send to a known recipient in the next step. Now per session, in process. **Fixed cfb7d850** | EgressGuard | H |
+| F83 | AgentRunner saved FAILED/cancelled sessions as WAITING, and republished events the flow had already emitted. **Fixed 630096da** | CLI | M |
+| F84 | DI-built persistence adapter dropped the permanent-error filter. **Fixed b37950b4** | DIContainer | M |
+| F85 | MCP results flagged `isError` reported success. **Fixed 85a0e8d1** | MCPServer | M |
+| F86 | Events-json truncation could drop the only PlanEvent (NO_PLAN_FOUND). **Fixed 14fce2cd** | SQLiteStateRepository | M |
+| F87 | A met termination condition never ran CompletedState. **Fixed 195e5653** | PlanActFlow | M |
+| F88 | `flow run --model` never reached the cascade; now tried first, role models as fallbacks. **Fixed 02b5540b** | CascadeExecutor | M |
+| F89 | A step executor with no role used the default cascade (premium fallback), not the executor cascade. **Fixed fd555cb5** | CascadeExecutor | L |
+| F90 | One unset `${VAR}` in the MCP config disabled every server. **Fixed 5201a7d4** | MCPServer | L |
+| F91 | Plan review stored its WaitForUserEvent twice. **Fixed ae6843ac** | FlowState | L |
+| F92 | The model could set a tool's retry count via `_max_retries`. **Fixed bcfcd06e** | BaseTool | L |
+| F93 | Open, low (from the process-card read, 2026-10-23): EventPublisher keeps the construction-time plan for truth binding and checkpoints; `replay_dead_letters` has no caller and its dir is CWD-relative; cascade fast-fail records no decision, tier labels are wrong, rescue picks by context length not price; a cancelled WAITING session keeps its cancel marker; `build_tools(mcp_config=...)` skips `expand_env` (no production caller); `_maybe_save_checkpoint` ends the run span. | (process cards) | L |
 
 ## 3. Module, paradigm, pattern
 

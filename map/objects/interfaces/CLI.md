@@ -51,7 +51,7 @@ Groups registered at `:707-744`:
 
 Consequences (read from source, not run):
 - `pyproject.toml:26` declares `weebot = "cli.main:main"`, but `cli/main.py` defines no `main`; the module runs `_wrap_main()` only under `__main__` (`:752-753`). The installed `weebot` script cannot start.
-- `flow run`, `flow resume` and the other flow commands build `AgentRunner` without `event_bus` (`cli/commands/flow.py:115-122, 172, 192, 217, 266`), so `PlanActFlow` gets `event_bus=None`: no bus publish, no domain events, and no skill-gap subscription (`weebot/application/flows/plan_act_flow.py:299-301`). `Container.build_agent_runner` (`weebot/application/di/__init__.py:411-425`) passes the bus, but no production code calls it.
+- `flow run` and `flow resume` build `AgentRunner` with the container's bus (`cli/commands/flow.py:124, 184`), so the flow publishes events and domain events; the runner publishes only events the flow yielded without emitting (`weebot/interfaces/cli/agent_runner.py`, `_was_emitted`).
 - `flow cancel` can only cancel a task in its own process: `TaskRunner.cancel_session` looks in the in-memory `_tasks` (`weebot/application/services/task_runner.py:348-359`), and the CLI's runner is new per command.
 - `flow retry` returns False in a fresh process: `rerun_failed_session` pops a cached flow factory and returns False when there is none, though it logs "attempting resume with default factory" (`task_runner.py:383-391`).
 - `flow undo` rebuilds a flow whose `PlanHistory` starts empty (`plan_act_flow.py:206`), so `undo()` returns None and the command always prints "Nothing to undo" (`weebot/application/services/plan_history.py:56-57`). It also omits `state_repo` (`agent_runner.py:326-336`).

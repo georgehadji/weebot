@@ -10,10 +10,10 @@ and ``GuardedTool`` (Decorator) runs the chain before the wrapped tool.
 
 Modes (``WeebotSettings.shell_guard_mode``, env ``WEEBOT_SHELL_GUARD_MODE``):
 
-* ``observe`` (default) -- record the chain's verdict, then run the tool
+* ``observe`` -- record the chain's verdict, then run the tool
   unchanged. The tool's own gates still apply. This is the dark launch: the
   log shows what enforcement would refuse before anything is refused.
-* ``enforce`` -- refuse DENY; hand ASK to the approval channel of ADR-013
+* ``enforce`` (default) -- refuse DENY; hand ASK to the approval channel of ADR-013
   (``application/services/tool_approval.py``): Deny by default, a console
   prompt in the CLI, a flow pause in the web UI and gateways.
 
