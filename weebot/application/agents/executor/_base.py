@@ -242,6 +242,7 @@ class ExecutorAgent:
         session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
         llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
         provider_account: ProviderAccountPort | None = None,  # Credit check + live rescue
+        pinned_model: str | None = None,  # `flow run --model`: the cascade tries it first
     ):
         self._llm = llm
         self._tools = tools
@@ -311,6 +312,7 @@ class ExecutorAgent:
             # matters -- the container's step executor -- passes the pool.
             llm_pool=llm_pool,
             provider_account=provider_account,
+            pinned_model=pinned_model,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
             on_call_completed=self._publish_llm_call,

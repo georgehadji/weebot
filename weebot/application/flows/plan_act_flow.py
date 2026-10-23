@@ -944,6 +944,7 @@ class PlanActFlow(BaseFlow):
         return StepExecutionContext(
             tools=self._tools,
             harness_instruction_block=self._harness_instruction_block or None,
+            pinned_model=self._model or None,
             **self._step_settings,
         )
 

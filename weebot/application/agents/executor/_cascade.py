@@ -83,11 +83,13 @@ class CascadeExecutor:
         provider_account: ProviderAccountPort | None = None,
         # Awaited with an LLMCallCompleted after each successful call (W4.1, F23).
         on_call_completed=None,
+        pinned_model: str | None = None,  # `flow run --model`: tried before the role cascade
     ) -> None:
         self._llm = llm
         self._tools = tools
         self._agent_role = agent_role
         self._model_provider = model_provider
+        self._pinned_model = pinned_model
         self._llm_pool = llm_pool
         self._on_success = on_success
         self._tracker = tracker or ModelCascadeTracker()
@@ -481,7 +483,11 @@ class CascadeExecutor:
 
         # ── Credit pre-check: filter OpenRouter models if low credits ──
         all_models = list(
-            dict.fromkeys(m for m in (role_primary, *acr_models, task_model, role_fallback1) if m)
+            dict.fromkeys(
+                m
+                for m in (self._pinned_model, role_primary, *acr_models, task_model, role_fallback1)
+                if m
+            )
         )
         filtered_models = await self.get_credits_and_filter_direct(all_models)
 

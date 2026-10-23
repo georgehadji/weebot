@@ -28,6 +28,7 @@ class StepExecutionContext:
     middleware_chain: Any = None
     trajectory_config: Any = None
     max_steps: int | None = None
+    pinned_model: str | None = None  # `flow run --model`: tried first each step
 
     def executor_kwargs(self) -> dict[str, Any]:
         """The fields the flow set, as ``ExecutorAgent`` keyword arguments."""
