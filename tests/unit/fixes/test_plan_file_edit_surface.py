@@ -116,3 +116,23 @@ async def test_the_edited_plan_is_saved_before_the_first_step_runs(tmp_path, mon
     async for _ in flow.run("approve"):
         pass
     assert seen and seen[0] == ["s1", "s2", "edited-3"]
+
+
+async def test_the_wait_event_is_stored_once(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from weebot.application.flows.states.plan_review import PlanReviewState
+    from weebot.domain.models.event import WaitForUserEvent
+
+    monkeypatch.setattr("weebot.core.output_path._PROJECT_ROOT", tmp_path.resolve())
+    ctx = MagicMock()
+    ctx._plan = Plan(title="T", steps=[Step(id="s1", description="one")])
+    ctx._session = Session(id="sess-w")
+    ctx._state_repo = None
+
+    async def _emit(event):  # what PlanActFlow._emit does to the session
+        ctx._session = ctx._session.add_event(event)
+
+    ctx._emit = _emit
+    _ = [e async for e in PlanReviewState(min_steps=1).execute(ctx, "p")]
+    assert sum(isinstance(e, WaitForUserEvent) for e in ctx._session.events) == 1

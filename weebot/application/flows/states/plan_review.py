@@ -136,15 +136,18 @@ class PlanReviewState(FlowState):
             )
         )
 
-        # Persist WAITING status AND the event directly to DB
-        context._session = context._session.add_event(wait_event)
+        # Persist WAITING directly first, so the status is in the DB even if
+        # the emit below fails; the emit adds the event, publishes and saves.
+        # (Adding the event here too stored it twice.)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
 
-        # Also emit through pipeline for event bus subscribers
         try:
             await context._emit(wait_event)
         except Exception:
-            _log.debug("Emit through pipeline failed (non-critical)", exc_info=True)
+            _log.warning("Plan review: emitting the wait event failed", exc_info=True)
+            context._session = context._session.add_event(wait_event)
+            if context._state_repo:
+                await context._state_repo.save_session(context._session)
 
         yield wait_event
