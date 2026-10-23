@@ -603,10 +603,10 @@ class Container(
         from weebot.infrastructure.persistence.session_persistence_adapter import (
             SessionPersistenceAdapter,
         )
-        from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
-        retry = RetryWithBackoff(BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25))
-        return SessionPersistenceAdapter(repo=self.get(StateRepositoryPort), retry=retry)
+        # The adapter's default retry skips permanent errors; a config built
+        # here without `retryable` retried them three times.
+        return SessionPersistenceAdapter(repo=self.get(StateRepositoryPort))
 
     def _create_swarm_bus(self):
         """Create a SwarmEventBus."""
