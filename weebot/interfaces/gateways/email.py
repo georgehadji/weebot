@@ -30,6 +30,24 @@ logger = logging.getLogger(__name__)
 # Senders never processed, even if allowlisted — replying to these risks an
 # infinite autoresponder loop between weebot and another automated system.
 _AUTOMATED_SENDER_MARKERS = ("mailer-daemon", "no-reply", "noreply", "postmaster")
+_DKIM_PASS_DOMAIN = re.compile(r"dkim=pass[^;]*?header\.[di]=@?([\w.-]+)")
+
+
+def _sender_authenticated(parsed, sender: str) -> bool:
+    """True when the receiving server vouched for *sender*'s domain (F76).
+
+    ``From`` alone is forgeable. Only the topmost ``Authentication-Results``
+    counts (our own mail server adds it; a sender can append fake ones below):
+    DMARC pass for the domain, or a DKIM pass whose signing domain aligns.
+    """
+    domain = sender.rsplit("@", 1)[-1].strip().lower()
+    results = parsed.get_all("Authentication-Results") or []
+    if not domain or not results:
+        return False
+    top = str(results[0]).lower()
+    if re.search(rf"dmarc=pass[^;]*header\.from={re.escape(domain)}\b", top):
+        return True
+    return any(d == domain or d.endswith("." + domain) for d in _DKIM_PASS_DOMAIN.findall(top))
 
 
 class EmailAdapter(GatewayAdapter):
@@ -113,6 +131,10 @@ class EmailAdapter(GatewayAdapter):
 
         if not self.is_authorized("email", sender):
             logger.warning("Email message rejected by gateway allowlist: from=%s", sender)
+            return ""
+        if not message.metadata.get("sender_authenticated"):
+            # The allowlist matched a From header anyone can write (F76).
+            logger.warning("Email rejected: mail server did not authenticate from=%s", sender)
             return ""
 
         text = await self.handle(message)
@@ -223,6 +245,9 @@ class EmailAdapter(GatewayAdapter):
                                                 "subject": subject,
                                                 "message_id": parsed.get("Message-Id", ""),
                                                 "in_reply_to": parsed.get("In-Reply-To", ""),
+                                                "sender_authenticated": _sender_authenticated(
+                                                    parsed, sender.strip()
+                                                ),
                                             },
                                         )
                                     )
