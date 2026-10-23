@@ -214,7 +214,7 @@ xiaomi/mimo-v2.6-pro:
     long_context: 9.7
   source: seed
 
-deepseek/deepseek-v4.1-flash:
+deepseek/deepseek-v4.1-flash-1017:
   axes:
     coding: 5.3
     reasoning: 7.8

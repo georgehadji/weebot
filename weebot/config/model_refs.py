@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ========================================================================
 # Executor cascade tiers
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "deepseek/deepseek-v4.1-flash"
+MODEL_CASCADE_TIER1: str = "deepseek/deepseek-v4.1-flash-1017"  # user pick, 2026-10-23
 """Tier 1, the executor workhorse: best agentic-automation score per dollar.
 DeepSeek-direct first when DEEPSEEK_API_KEY is set, OpenRouter fallback."""
 
