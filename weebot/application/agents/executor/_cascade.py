@@ -401,13 +401,15 @@ class CascadeExecutor:
             return None
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
-                # Fast-fail errors (401, 403, 404) are recorded as FAILED
-                # but do NOT raise — the cascade must try other models.
+                # Fast-fail errors (401, bad key) do NOT raise — the cascade must
+                # try other models — and fail the same way every time, so this
+                # model is skipped for the rest of the run.
                 logger.warning(
                     "Fast-fail from %s: %s — suppressing to continue cascade",
                     model_id,
                     str(exc)[:200],
                 )
+                self._server_error_models.add(model_id)
             else:
                 if first_error is not None and model_id not in first_error:
                     first_error[model_id] = str(exc)[:300] or type(exc).__name__
@@ -418,16 +420,25 @@ class CascadeExecutor:
                 if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
                     self._server_error_models.add(model_id)
                     logger.debug("Server error from %s — skipping for rest of cascade", model_id)
-                elapsed = (_cascade_time.monotonic() - start) * 1000
-                self._record_decision(
-                    model_name=model_id,
-                    tier=tier,
-                    outcome=CascadeOutcome.FAILED,
-                    latency_ms=elapsed,
-                    error_message=str(exc)[:200],
-                    task_category=task_category,
-                )
+            elapsed = (_cascade_time.monotonic() - start) * 1000
+            self._record_decision(
+                model_name=model_id,
+                tier=tier,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=elapsed,
+                error_message=str(exc)[:200],
+                task_category=task_category,
+            )
             return None
+
+    @staticmethod
+    def _tier_of(model_id: str) -> CascadeTier:
+        """The model's own cost tier, for telemetry and the ACR bandit."""
+        from weebot.config.model_refs import PREMIUM_MODELS
+
+        if ":free" in model_id:
+            return CascadeTier.FREE
+        return CascadeTier.PREMIUM if model_id in PREMIUM_MODELS else CascadeTier.BUDGET
 
     # ── Full cascade orchestration ──────────────────────────────────
 
@@ -504,7 +515,8 @@ class CascadeExecutor:
             queue = list(parallel)
 
             def _launch() -> asyncio.Future:
-                return asyncio.ensure_future(_try(queue.pop(0), 90.0, tier=CascadeTier.FREE))
+                model = queue.pop(0)
+                return asyncio.ensure_future(_try(model, 90.0, tier=self._tier_of(model)))
 
             # Wait for a probe that actually SUCCEEDS, not merely one that
             # finishes first.
@@ -572,9 +584,8 @@ class CascadeExecutor:
             and m not in parallel
             and m not in self._server_error_models
         ]
-        remaining_tiers = [CascadeTier.BUDGET, CascadeTier.PREMIUM]
-        for m, t in zip(remaining, remaining_tiers[: len(remaining)]):
-            resp = await _try(m, 60.0, tier=t)
+        for m in remaining:
+            resp = await _try(m, 60.0, tier=self._tier_of(m))
             if resp is not None:
                 if self._on_success:
                     await self._on_success(resp)
@@ -639,7 +650,16 @@ class CascadeExecutor:
             logger.warning("Live model rescue: no models with tools support found")
             return None
 
-        candidates.sort(key=lambda m: m["ctx"], reverse=True)
+        # Cheapest catalog-priced model with a long enough context; unpriced
+        # models last. Sorting by context alone picked premium models.
+        from weebot.config.model_registry import get_model_config
+
+        def _rank(m: dict) -> tuple:
+            cfg = get_model_config(m["id"])
+            cost = cfg.cost_per_1k_tokens if cfg is not None else None
+            return (m["ctx"] < 128_000, cost is None, cost or 0.0, -m["ctx"])
+
+        candidates.sort(key=_rank)
         rescue_id = candidates[0]["id"]
         logger.warning(
             "Live model rescue: trying %s (from %d paid + %d free candidates)",

@@ -266,3 +266,27 @@ class TestLiveModelRescue:
         resp = await executor._live_model_rescue(self._MSG)
         assert resp.content == "rescued"
         assert executor._llm.chat.await_args.kwargs["model"] == "paid/wide"
+
+
+class TestRescuePicksByPrice:
+    """The rescue sorted by context length, so a premium 1M-context model won
+    over a cheap one of the same size. It now takes the cheapest known model
+    with a long enough context; models the catalog does not price come last."""
+
+    async def test_the_cheaper_known_model_is_tried(self, executor: CascadeExecutor) -> None:
+        from weebot.application.ports.provider_account_port import ModelListing
+
+        executor._provider_account = _Account([
+            ModelListing(id="anthropic/claude-opus-5.5", context_length=1_000_000, supports_tools=True),
+            ModelListing(id="deepseek/deepseek-v4.1-flash-1017", context_length=1_000_000, supports_tools=True),
+            ModelListing(id="unknown/vendor-model", context_length=2_000_000, supports_tools=True),
+        ])
+        tried = []
+
+        async def _chat(**kw):
+            tried.append(kw["model"])
+            return None
+
+        executor._llm.chat = _chat
+        await executor._live_model_rescue([{"role": "user", "content": "hi"}])
+        assert tried == ["deepseek/deepseek-v4.1-flash-1017"]
