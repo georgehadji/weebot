@@ -11,6 +11,7 @@ from rich.table import Table
 
 from weebot.application.di import Container
 from weebot.application.cqrs.mediator import Mediator
+from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.model_selection import ModelSelectionService
 from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
@@ -119,39 +120,45 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
             model=model,
             use_rich=False,
             retention_agent=_container.get("retention_agent"),
+            # Domain events and the skill-gap subscription need the bus (F56).
+            event_bus=_container.get(EventBusPort),
         )
-        subscriber = CLIEventSubscriber(use_rich=True)
+        try:
+            subscriber = CLIEventSubscriber(use_rich=True)
 
-        waiting = False
-        async for event in runner.run_prompt(prompt, session_id=run_session_id):
-            await subscriber.on_event(event)
-            if isinstance(event, WaitForUserEvent):
-                waiting = True
-                break
-        # Every question on the way gets asked: plan review, then e.g. the
-        # constraint gate. Answering only the first one ended the command with
-        # the session still waiting and nothing said.
-        while waiting:
-            # to_thread: a bare input() here would block the event loop,
-            # freezing the runner's own background tasks while it waits.
-            # The subscriber above already printed the question (F37).
-            try:
-                answer = await asyncio.to_thread(input, "\nYour answer: ")
-            except EOFError:
-                # stdin closed (a script, CI, a pipe): never answer for the
-                # user. The session stays WAITING and can be resumed.
-                click.echo(
-                    f"\nNo answer on stdin; session {run_session_id} is waiting. "
-                    "Resume it with: python -m cli.main flow resume "
-                    f'{run_session_id} "<answer>"'
-                )
-                break
             waiting = False
-            async for resume_event in runner.resume_session(run_session_id, answer):
-                await subscriber.on_event(resume_event)
-                if isinstance(resume_event, WaitForUserEvent):
+            async for event in runner.run_prompt(prompt, session_id=run_session_id):
+                await subscriber.on_event(event)
+                if isinstance(event, WaitForUserEvent):
                     waiting = True
                     break
+            # Every question on the way gets asked: plan review, then e.g. the
+            # constraint gate. Answering only the first one ended the command with
+            # the session still waiting and nothing said.
+            while waiting:
+                # to_thread: a bare input() here would block the event loop,
+                # freezing the runner's own background tasks while it waits.
+                # The subscriber above already printed the question (F37).
+                try:
+                    answer = await asyncio.to_thread(input, "\nYour answer: ")
+                except EOFError:
+                    # stdin closed (a script, CI, a pipe): never answer for the
+                    # user. The session stays WAITING and can be resumed.
+                    click.echo(
+                        f"\nNo answer on stdin; session {run_session_id} is waiting. "
+                        "Resume it with: python -m cli.main flow resume "
+                        f'{run_session_id} "<answer>"'
+                    )
+                    break
+                waiting = False
+                async for resume_event in runner.resume_session(run_session_id, answer):
+                    await subscriber.on_event(resume_event)
+                    if isinstance(resume_event, WaitForUserEvent):
+                        waiting = True
+                        break
+
+        finally:
+            await runner.close()  # tools: Apify HTTP sessions, the browser
 
     _run_async(_run)
 
@@ -169,11 +176,21 @@ def flow_resume(session_id: str, answer: str) -> None:
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         mediator = _get_mediator()
-        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, use_rich=False)
-        subscriber = CLIEventSubscriber(use_rich=True)
+        runner = AgentRunner(
+            llm=llm,
+            state_repo=state_repo,
+            mediator=mediator,
+            use_rich=False,
+            event_bus=_container.get(EventBusPort),
+        )
+        try:
+            subscriber = CLIEventSubscriber(use_rich=True)
 
-        async for event in runner.resume_session(session_id, answer):
-            await subscriber.on_event(event)
+            async for event in runner.resume_session(session_id, answer):
+                await subscriber.on_event(event)
+
+        finally:
+            await runner.close()  # tools: Apify HTTP sessions, the browser
 
     _run_async(_run)
 

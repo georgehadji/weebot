@@ -180,8 +180,12 @@ WEBSOCKET_TEST_HTML = """
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     logger.info("Starting Weebot Web Server...")
-    container = Container()
-    container.configure_defaults()
+    # The process's one container: build_tools, create_flow and the gateways
+    # resolve through shared_container(), so a second one here split the event
+    # bus and sub-agent events never reached the WebSocket broadcaster (F55).
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()
     app.state.container = container
 
     # ADR-013: in the web process (UI and chat gateways) a tool call that needs

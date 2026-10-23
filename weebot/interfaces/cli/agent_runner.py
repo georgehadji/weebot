@@ -66,6 +66,12 @@ class AgentRunner:
         if event_bus and use_rich:
             CLIEventSubscriber(use_rich=use_rich).subscribe_to(event_bus)
 
+    async def close(self) -> None:
+        """Tear down the tool collection (HTTP sessions, the shared browser)."""
+        if self._tools is not None:
+            await self._tools.teardown()
+            self._tools = None
+
     async def _ensure_tools(self) -> ToolCollection:
         if self._tools is None:
             self._tools = await build_tools(

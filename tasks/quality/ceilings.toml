@@ -273,4 +273,5 @@ settings_construction = 0
 # factories.shared_container(); what is left builds a differently configured
 # container (harness db_path/model, skillopt), is a separate entry point
 # (web lifespan, run_mcp.py, the shared root itself) or is ADR-009 legacy.
-container_construction = 9
+# 9 -> 8: the web lifespan uses shared_container() (F55).
+container_construction = 8
