@@ -303,7 +303,8 @@ class ExecutorAgent:
         self._cascade: CascadeExecutor = CascadeExecutor(
             llm=llm,
             tools=tools,
-            agent_role=agent_role,
+            # No role (no SOUL.md profile) is still a step executor.
+            agent_role=agent_role or "executor",
             model_provider=self._resolve_model_for_step,
             # This argument was missing from the only production construction
             # of CascadeExecutor, so the pool's bounded branch never executed
