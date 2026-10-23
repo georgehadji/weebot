@@ -210,6 +210,18 @@ class OpenAIAdapter(LLMPort):
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
+        # Claude caches only when asked; OpenRouter's automatic form is one
+        # top-level field. Tool loops resend the same prefix every turn, and a
+        # one-shot call would pay the 1.25x cache write for nothing.
+        if (
+            tools
+            and str(kwargs["model"]).startswith("anthropic/")
+            and "openrouter.ai" in str(getattr(self._client, "base_url", ""))
+        ):
+            kwargs["extra_body"] = {
+                **(kwargs.get("extra_body") or {}),
+                "cache_control": {"type": "ephemeral"},
+            }
         if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
         if "reasoning_effort" in kwargs:
@@ -312,6 +324,10 @@ class OpenAIAdapter(LLMPort):
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
+            details = getattr(response.usage, "prompt_tokens_details", None)
+            cached = getattr(details, "cached_tokens", None)
+            if isinstance(cached, int):
+                usage["cached_tokens"] = cached
 
         return LLMResponse(
             content=msg.content or "",
