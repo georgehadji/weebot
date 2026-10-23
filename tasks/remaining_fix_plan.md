@@ -320,6 +320,13 @@ Independent of C-E; it can go anywhere after A.
     - **Ticket updates:** a JSON tracker edited as asked, with the untouched ticket left byte-identical.
     - **Shop checkout:** a local HTML shop driven through the browser tool; two items added, the form filled, total 15.50, stopped before payment.
   - The real-account versions (an `@atomicmail.ai` inbox, a Jira or HubSpot connector) still need the user. Real purchases stay prohibited.
+- **Multi-step role checks, billed (2026-10-23):** real CLI tasks with the step model pinned.
+  - **Coder:** Sonnet 5.5 went 3/3 and Haiku 5.5 2/3; on the word-wrap task Haiku rewrote the input sentence instead of wrapping it. The coder stays on Sonnet. The cost runs overlapped, but Sonnet billed several times more.
+  - **Researcher:** Haiku $0.062 in 118 s and MiMo V2.6 Pro $0.055 in 205 s, both 2/2. Haiku stays first, 1.7x faster at about the same cost.
+- **Mail and Jira (2026-10-23):**
+  - **Mail:** the agent inbox is `weebot@atomicmail.ai`, readable live.
+  - **Jira:** connected via `uvx mcp-atlassian` in `config/mcp_servers.json` (63 tools, read-only project listing works; the site has no projects yet).
+  - **HubSpot:** waits for a real private-app token.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
