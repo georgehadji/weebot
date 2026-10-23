@@ -319,6 +319,10 @@ class NativeWindowsSandbox(SandboxPort):
 
             script = re.sub(r"\bmkdir\s+-p\s+", "mkdir ", script)
             script = re.sub(r"\bmkdir\s+--parents\s+", "mkdir ", script)
+            # PowerShell 5.1 writes piped output in the console code page; we
+            # decode UTF-8, so every non-ASCII character ("12°C") came back as
+            # U+FFFD. Make PowerShell write UTF-8.
+            script = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + script
             command = ["powershell", "-NoProfile", "-Command", script]
         elif shell == "cmd":
             command = ["cmd", "/c", script]
