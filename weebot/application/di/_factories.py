@@ -450,12 +450,14 @@ class FactoriesMixin:
             "ocr": {"vision_llm": self._vision_llm()},
             "audit_session": {"service": audit},
             "knowledge": {"repo": tool_repo},
+            "product": {"repo": tool_repo},
             "video_ingest": {"repo": tool_repo},
             "voice_input": {"speech": speech},
             "voice_output": {"speech": speech},
             "persistent_memory": {"memory": memory, "state_repo": state_repo},
         }
         required = {"ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
+                    "product": "repo",
                     "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
                     "persistent_memory": "memory"}
         return {
