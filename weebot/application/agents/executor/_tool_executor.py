@@ -119,6 +119,11 @@ async def _clear_network_use(
     return ToolResult.error_result(error=message, output=message, tool_name=name), False
 
 
+# Sessions whose context holds untrusted external content (see ToolExecutor).
+# shortcut: in-process only, so a resume in a new process starts untainted;
+# move it to a session fact if resumes cross processes in practice.
+_TAINTED_SESSIONS: set[str] = set()
+
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
 
@@ -149,7 +154,18 @@ class ToolExecutor:
         # True once any untrusted-output tool has run in this session. Egress
         # after that point always needs approval — the injected content is the
         # payload (the "lethal trifecta" escalation in egress_guard.py).
-        self._untrusted_context_active: bool = False
+        self._tainted_here: bool = False
+
+    @property
+    def _untrusted_context_active(self) -> bool:
+        # Per session, not per executor: each step builds a fresh executor.
+        return self._tainted_here or self._current_session_id in _TAINTED_SESSIONS
+
+    @_untrusted_context_active.setter
+    def _untrusted_context_active(self, value: bool) -> None:
+        self._tainted_here = value
+        if value and self._current_session_id:
+            _TAINTED_SESSIONS.add(self._current_session_id)
 
     # ── Dynamic context ────────────────────────────────────────────
 

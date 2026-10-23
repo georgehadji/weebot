@@ -136,3 +136,24 @@ class TestUntrustedContextTracking:
         assert second.is_error
         assert "untrusted_context" in second.error
         assert len(tools.calls) == 2, "the tainted send must not have executed"
+
+
+class TestTaintOutlivesTheStep:
+    """ExecuteStepHandler builds a fresh executor per step, so a taint kept on
+    the executor reset every step: content fetched in step 1 could drive an
+    ungated send to a known recipient in step 2."""
+
+    @pytest.mark.asyncio
+    async def test_the_next_steps_executor_is_still_tainted(self):
+        guard = make_guard()
+        step1, _ = make_executor(guard)
+        step1.set_step_context("step-1", "sess-taint")
+        await step1.execute_tool("web_search", {"query": "weather"})
+
+        step2, _ = make_executor(guard)
+        step2.set_step_context("step-2", "sess-taint")
+        assert step2._untrusted_context_active is True
+
+        other, _ = make_executor(guard)
+        other.set_step_context("step-1", "sess-clean")
+        assert other._untrusted_context_active is False
