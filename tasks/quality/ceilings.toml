@@ -48,7 +48,9 @@
 # Measured by: scripts/lint_except_pass.py
 # 121 -> 119: the deleted core error family and the YouTube tool's throwaway
 # VideoIngestTool() probe each held an `except Exception: pass`.
-silent_except_handlers = 119
+# 119 -> 117: the dead save_sync pre-saves in dispatch_agents and
+# workflow_orchestrator (F49).
+silent_except_handlers = 117
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -93,7 +95,8 @@ bare_env_reads = 71
 # silent_except_handlers 124 -> 121.
 # Measured by: scripts/lint_bandit_b110.py
 # 59 -> 58: the YouTube probe, as for silent_except_handlers 121 -> 119.
-bandit_b110 = 58
+# 58 -> 56: the same two save_sync handlers (F49).
+bandit_b110 = 56
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound

@@ -224,12 +224,6 @@ class WorkflowOrchestratorTool(BaseTool):
             context={"dag_task_id": task_id},
         )
 
-        if self._state_repo:
-            try:
-                save = getattr(self._state_repo, "save_sync", None)
-                if save:
-                    save(session)
-            except Exception:
-                pass
+        # The sub-agent flow saves the session itself (state_repo via the flow factory).
 
         return session
