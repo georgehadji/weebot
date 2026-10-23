@@ -185,10 +185,11 @@ class WeebotSettings(BaseSettings):
     sandbox_allow_network: bool = False  # env: SANDBOX_ALLOW_NETWORK
 
     # Tool guard chain (application/services/tool_guards.py). "observe" only
-    # records what the chain would decide; "enforce" refuses DENY and ASK.
-    # ICM fix plan W3.1; the flip to enforce is W3.7, after observe data.
+    # records what the chain would decide; "enforce" refuses DENY and asks a
+    # human on ASK. ICM fix plan W3.1; flipped to enforce at W3.7 (2026-10-23)
+    # after 28 observed runs and the widened Output/ carve-out.
     shell_guard_mode: str = Field(
-        default="observe",
+        default="enforce",
         alias="WEEBOT_SHELL_GUARD_MODE",
         description="Tool guard chain mode: 'observe' (record only) or 'enforce' (refuse).",
     )

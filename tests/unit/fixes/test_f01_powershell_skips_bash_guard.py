@@ -3,12 +3,9 @@
 `curl ... | bash` is BLOCKED by BashGuard, and `bash` refuses it; the
 powershell tool ran its own checks and ExecApprovalPolicy only. Since W3.2 the
 registry wraps powershell (with bash and python_execute) in GuardedTool, which
-runs the full chain. In the default observe mode it records the DENY and still
-runs the command; enforce mode refuses it. The default flips at W3.7 after
-observe data, so the last test stays strict-xfail until then.
+runs the full chain. Observe mode records the DENY and still runs the
+command; enforce mode refuses it. Enforce became the default at W3.7.
 """
-
-import pytest
 
 from weebot.application.ports.sandbox_port import SandboxResult
 from weebot.application.services.tool_guards import GuardedTool
@@ -52,7 +49,6 @@ async def test_enforce_mode_refuses_a_bash_guard_blocked_command(monkeypatch):
     assert sandbox.scripts == []
 
 
-@pytest.mark.xfail(strict=True, reason="F01: default mode is observe until W3.7")
 async def test_default_mode_refuses_a_bash_guard_blocked_command():
     sandbox = _RecordingSandbox()
     await _registry_powershell(sandbox).execute(command=_PIPE_TO_SHELL)

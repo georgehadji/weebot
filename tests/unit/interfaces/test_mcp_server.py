@@ -164,7 +164,9 @@ class TestMCPToolCalls:
             result = await server.mcp.call_tool("bash", {"command": "format c:"})
         assert isinstance(result, CallToolResult)
         assert result.isError
-        assert any("Command denied" in item.text for item in result.content)
+        # Under enforce (the default since W3.7) the guard chain refuses it
+        # before the tool runs; in observe the tool's own gate does.
+        assert any("denied" in item.text.lower() for item in result.content)
 
     @pytest.mark.asyncio
     async def test_python_execute_returns_stdout(self) -> None:
