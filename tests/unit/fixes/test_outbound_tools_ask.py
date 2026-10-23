@@ -130,8 +130,10 @@ async def test_the_observe_override_can_be_switched_off(monkeypatch):
 
 def test_the_patterns_are_a_setting(monkeypatch):
     monkeypatch.setenv("WEEBOT_OUTBOUND_TOOL_PATTERNS", "*announce*")
-    assert is_outbound_tool("mcp__x__announce")
-    assert not is_outbound_tool("mcp__postiz__schedulePostTool")
+    assert is_outbound_tool("announce_release")
+    assert not is_outbound_tool("publish_article")
+    # The setting adds names; it cannot un-gate an MCP write (F38 fails closed).
+    assert is_outbound_tool("mcp__postiz__schedulePostTool")
 
 
 async def test_build_tools_wraps_an_mcp_outbound_tool():
@@ -141,3 +143,49 @@ async def test_build_tools_wraps_an_mcp_outbound_tool():
         role="researcher", extra_tools=[_tool("mcp__postiz__schedulePostTool")]
     )
     assert isinstance(collection.get_tool("mcp__postiz__schedulePostTool"), GuardedTool)
+
+
+# MCP tools fail closed: a write that no name pattern lists still asks. Jira,
+# HubSpot and Apify writes went straight through before (Wave G, F38).
+@pytest.mark.parametrize(
+    "name",
+    [
+        "mcp__jira__jira_create_issue",
+        "mcp__jira__jira_delete_issue",
+        "mcp__jira__jira_transition_issue",
+        "mcp__jira__jira_add_comment",
+        "mcp__hubspot__hubspot_batch_create_objects",
+        "mcp__hubspot__hubspot_batch_update_objects",
+        "mcp__hubspot__hubspot_create_engagement",
+        "mcp__apify__call_actor",
+        "mcp__apify__abort_actor_run",
+        "mcp__apify__apify__rag_web_browser",  # runs a billed Actor
+        "mcp__postiz__uploadFromUrlTool",
+        "mcp__someserver__frobnicate",  # unknown verb: ask
+    ],
+)
+def test_mcp_writes_ask_even_without_a_pattern(name):
+    assert is_outbound_tool(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "mcp__jira__jira_get_issue",
+        "mcp__jira__jira_search",
+        "mcp__jira__jira_get_all_projects",
+        "mcp__jira__jira_download_attachments",
+        "mcp__jira__jira_batch_get_changelogs",
+        "mcp__hubspot__hubspot_list_objects",
+        "mcp__hubspot__hubspot_get_link",
+        "mcp__hubspot__hubspot_batch_read_objects",
+        "mcp__apify__search_actors",
+        "mcp__apify__fetch_actor_details",
+        "mcp__apify__get_dataset_items",
+        "mcp__apify__apify__web_fetch",
+        "mcp__postiz__integrationSchema",
+        "mcp__postiz__groupList",
+    ],
+)
+def test_mcp_reads_do_not_ask(name):
+    assert not is_outbound_tool(name)

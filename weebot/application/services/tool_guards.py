@@ -249,7 +249,48 @@ def is_outbound_tool(tool_name: str) -> bool:
 
     name = tool_name.lower()
     patterns = (p.strip().lower() for p in get_settings().outbound_tool_patterns.split(","))
-    return any(fnmatchcase(name, p) for p in patterns if p)
+    if any(fnmatchcase(name, p) for p in patterns if p):
+        return True
+    # MCP tools fail closed: one that does not read by its name asks (F38).
+    return name.startswith("mcp__") and not _mcp_tool_reads(tool_name)
+
+
+_READ_VERBS = frozenset(
+    {"get", "list", "search", "fetch", "read", "download", "schema", "status", "find", "query"}
+)
+_WRITE_VERBS = frozenset(
+    {
+        "create", "update", "delete", "remove", "add", "assign", "move", "transition",
+        "edit", "upload", "trigger", "call", "abort", "set", "post", "send", "publish",
+        "schedule", "report", "upsert", "merge", "archive", "close", "submit", "run",
+        "execute", "write", "import", "invite", "cancel", "approve", "reply",
+    }
+)
+# Postiz names these like actions, but they only read provider data.
+_MCP_READ_TOOLS = frozenset({"triggertool", "videofunctiontool"})
+
+
+def _mcp_tool_reads(tool_name: str) -> bool:
+    """True when ``mcp__<server>__<tool>`` reads by its name: it starts with a read
+    verb (``jira_get_issue``), or ends with one and has no write verb (``groupList``)."""
+    import re
+
+    _, server, *rest = tool_name.split("__")
+    tool = rest[-1] if rest else ""
+    if tool.lower() in _MCP_READ_TOOLS:
+        return True
+    words = [
+        w.lower()
+        for w in re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])", tool)
+        if w.lower() not in (server.lower(), "tool")
+    ]
+    if words[:1] == ["batch"]:
+        words = words[1:]
+    if not words:
+        return False
+    if words[0] in _READ_VERBS:
+        return True
+    return words[-1] in _READ_VERBS and not _WRITE_VERBS.intersection(words)
 
 
 class OutboundToolAdapter:
