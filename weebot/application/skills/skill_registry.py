@@ -62,7 +62,13 @@ class SkillRegistry:
         return paths
 
     def load_all(self) -> None:
-        """Discover and load all skills from search paths."""
+        """Discover and load all skills from search paths.
+
+        Each call rescans (so an edited SKILL.md is picked up); within a scan the
+        first path wins: project, then user, then built-in (F71). Skills added
+        only in memory (``update_skill``) and absent from disk are kept.
+        """
+        scanned: dict[str, Skill] = {}
         for path in self._search_paths:
             if not path.exists():
                 continue
@@ -86,8 +92,12 @@ class SkillRegistry:
                     except Exception as exc:
                         _log.warning("Skipping unparseable skill %s: %s", skill_file, exc)
                         continue
-                    if skill:
-                        self._skills[skill.name] = skill
+                    if skill and skill.name in scanned:
+                        _log.info("Skill %s at %s shadowed by %s", skill.name, skill_file,
+                                  scanned[skill.name].source_path)
+                    elif skill:
+                        scanned[skill.name] = skill
+        self._skills = {**self._skills, **scanned}
 
     def list_names(self) -> list[str]:
         """Return all loaded skill names."""

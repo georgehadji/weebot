@@ -65,3 +65,28 @@ def test_a_converted_third_party_skill_loads_quarantined(tmp_path):
     out.mkdir()
     SkillConverter(skills_dir=out).convert(src)
     assert _load(out)["thing"].metadata.trust == "quarantined"
+
+
+def test_a_project_skill_beats_a_builtin_of_the_same_name(tmp_path):
+    # Paths are searched project, user, built-in; the last write won, so a
+    # built-in silently replaced the project's own skill (F71).
+    project, builtin = tmp_path / "project", tmp_path / "builtin"
+    for root, body in ((project, "mine"), (builtin, "stock")):
+        (root / "dup").mkdir(parents=True)
+        (root / "dup" / "SKILL.md").write_text(
+            f"---\nname: dup\ndescription: d\n---\n\n{body}\n", encoding="utf-8"
+        )
+    reg = SkillRegistry(search_paths=[project, builtin])
+    reg.load_all()
+    assert reg.get_skill("dup").content == "mine"
+
+
+def test_a_rescan_picks_up_an_edited_skill(tmp_path):
+    (tmp_path / "s").mkdir()
+    f = tmp_path / "s" / "SKILL.md"
+    f.write_text("---\nname: s\ndescription: d\n---\n\nv1\n", encoding="utf-8")
+    reg = SkillRegistry(search_paths=[tmp_path])
+    reg.load_all()
+    f.write_text("---\nname: s\ndescription: d\n---\n\nv2\n", encoding="utf-8")
+    reg.load_all()
+    assert reg.get_skill("s").content == "v2"
