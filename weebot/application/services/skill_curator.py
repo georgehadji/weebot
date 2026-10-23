@@ -190,14 +190,15 @@ class SkillCurator:
 
         skills: list = []
         try:
-            skills = self._registry.load_all()
+            self._registry.load_all()  # returns None; the skills are list_skills()
+            skills = self._registry.list_skills()
         except Exception:
             logger.warning("SkillCurator overlap: registry load failed")
             return []
 
         keywords_map: dict[str, set[str]] = {}
         for s in skills:
-            text = f"{s.name} {s.description} {s.body}"
+            text = f"{s.name} {s.description} {s.content}"
             keywords_map[s.name] = _extract_keywords(text)
 
         recommendations: list[dict[str, str | float]] = []
