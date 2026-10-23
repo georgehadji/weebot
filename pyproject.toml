@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-weebot = "cli.main:main"
+weebot = "cli.main:_wrap_main"
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
