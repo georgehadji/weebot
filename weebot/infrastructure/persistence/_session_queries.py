@@ -42,8 +42,22 @@ class SessionQueries:
         events_json = json.dumps(events_data, default=str)
         original_count = len(events_data)
         original_bytes = len(events_json)
-        while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
-            events_data = events_data[1:]
+        if original_bytes > MAX_EVENTS_JSON_BYTES:
+            # Drop oldest first, but never the last plan: without it the next
+            # step and every resume fail with NO_PLAN_FOUND. Sizes are summed
+            # per event (+2 for the ", " separator) instead of re-dumping the
+            # list after each drop.
+            keep = max((i for i, e in enumerate(events_data) if e.get("type") == "plan"),
+                       default=len(events_data) - 1)
+            sizes = [len(json.dumps(e, default=str)) + 2 for e in events_data]
+            total, drop = sum(sizes), set()
+            for i in range(len(events_data)):
+                if total <= MAX_EVENTS_JSON_BYTES or len(events_data) - len(drop) <= 1:
+                    break
+                if i != keep:
+                    drop.add(i)
+                    total -= sizes[i]
+            events_data = [e for i, e in enumerate(events_data) if i not in drop]
             events_json = json.dumps(events_data, default=str)
         dropped = original_count - len(events_data)
         if dropped:

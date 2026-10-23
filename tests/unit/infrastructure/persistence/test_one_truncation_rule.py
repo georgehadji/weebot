@@ -134,3 +134,25 @@ async def test_save_reports_what_it_dropped(tmp_path, tiny_ceiling):
         assert await repo._session_queries.save(small) == 0
     finally:
         await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_truncation_keeps_the_last_plan(tmp_path, tiny_ceiling):
+    """Oldest-first truncation dropped the plan (usually the oldest big event),
+    so the next step or resume failed with NO_PLAN_FOUND."""
+    from weebot.domain.models.event import PlanEvent
+    from weebot.domain.models.plan import Plan, PlanStatus, Step
+
+    plan = Plan(title="P", steps=[Step(id="s1", description="a")])
+    session = Session(id="s1", task="t", title="T").add_event(
+        PlanEvent(status=PlanStatus.CREATED, plan=plan.model_dump(mode="json")))
+    for i in range(12):
+        session = session.add_event(MessageEvent(role="assistant", message=f"{i}:" + "x" * 400))
+    repo = SQLiteStateRepository(db_path=str(tmp_path / "s.db"))
+    try:
+        await repo.save_session(session)
+        loaded = await repo.load_session("s1")
+        assert loaded.get_last_plan() is not None
+        assert len(json.dumps([e.model_dump() for e in loaded.events], default=str)) <= 3000
+    finally:
+        await repo.close()
