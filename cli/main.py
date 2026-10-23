@@ -232,9 +232,12 @@ def checkpoint(project_id: str, checkpoint_id: str, response: str) -> None:
 @click.argument("project_id")
 @click.confirmation_option(prompt="Are you sure you want to delete this project?")
 def delete(project_id: str) -> None:
-    """Delete project."""
-    # Implementation would delete from database
-    console.print(f"[red]Deleted project: {project_id}[/red]")
+    """[DEPRECATED] Projects no longer exist; this removes nothing."""
+    console.print(
+        f"[yellow]Command 'delete' is deprecated: projects no longer exist, so "
+        f"nothing was removed ({project_id}).[/yellow]"
+    )
+    raise SystemExit(1)
 
 
 @cli.command()
