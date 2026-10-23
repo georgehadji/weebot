@@ -114,6 +114,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F92 | The model could set a tool's retry count via `_max_retries`. **Fixed bcfcd06e** | BaseTool | L |
 | F93 | Low items from the process-card read, 2026-10-23. Fixed: publisher reads the current plan and the run span ends once (f4ee482d); dead letters in ~/.weebot/dead_letter, reported by doctor (fab99881); cascade fast-fail recorded and skipped, rescue by price, true tier labels (628a16bd); `MCPToolkitAdapter` expands `${VAR}` (d3c08166). Kept as is: a cancelled WAITING session keeps its marker, so one later resume of it stops at its first step (the marker is then consumed). | (process cards) | L |
 | F94 | A local file:// page, a file_editor write and viewing the session's own file tainted the session, so a local form needed a human (F41 side effect, eval task 22). **Fixed e60aaa0e** | EgressGuard | M |
+| F95 | Batch median rose to ~57 s: ~25 s per run fell outside the flow. 10 s was the exit drain waiting on a dream scan spawned after every completion and then abandoned; now at most once per 6 h (**Fixed b4f0bf4b**; task 5 39 -> 30 s, task 6 47 -> 33 s). The rest is startup: four MCP servers connect in sequence (~7.4 s: jira 3.4, apify 2.0, hubspot 1.3, postiz 0.7). Connecting them in parallel needs each server in its own task (anyio cancel scopes cannot cross tasks); not done. | MCPServer, FlowState | M |
 
 ## 3. Module, paradigm, pattern
 
