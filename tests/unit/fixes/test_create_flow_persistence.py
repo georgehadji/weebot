@@ -59,3 +59,16 @@ def test_flows_built_without_a_mediator_get_the_containers(monkeypatch):
             kind, session=Session(id=kind, task="t"), llm=MagicMock(), tools=ToolCollection()
         )
         assert flow._mediator is mediator, kind
+
+
+async def test_build_tools_without_an_llm_still_wires_sub_agent_tools(monkeypatch):
+    # Web sessions, the webhook and the gateways call build_tools() with no
+    # llm_port, so debate/swarm/dispatch got flow_factory=None and errored (F48).
+    from weebot.application.ports.llm_port import LLMPort
+
+    llm = MagicMock(spec=LLMPort)
+    real = factories._cached
+    monkeypatch.setattr(factories, "_cached", lambda key: llm if key is LLMPort else real(key))
+    tools = await factories.build_tools(role="admin")
+    debate = tools.get_tool("debate")
+    assert debate is not None and debate._flow_factory is not None

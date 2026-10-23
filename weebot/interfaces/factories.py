@@ -370,6 +370,12 @@ async def build_tools(
     # tool config, per-tool collaborators); a bare one would build tools without.
     registry = _cached("tool_registry") or RoleBasedToolRegistry()
 
+    if llm_port is None:
+        # Web sessions, the webhook and the gateways pass none; without it the
+        # sub-agent tools get no flow factory and fail when called (F48).
+        from weebot.application.ports.llm_port import LLMPort as _LLMPort
+
+        llm_port = _cached(_LLMPort)
     # Build flow_factory for tools that spawn sub-agents (debate, dispatch_parallel_tasks)
     flow_factory = _get_flow_factory(llm_port)
 
