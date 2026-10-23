@@ -70,13 +70,19 @@ class SkillRegistry:
                 if not skill_dir.is_dir():
                     continue
                 skill_file = skill_dir / "SKILL.md"
+                if not skill_file.exists() and (skill_dir / "manifest.json").exists():
+                    skill_file = skill_dir / "manifest.json"  # Weebot package (F52)
                 if skill_file.exists():
                     # One malformed SKILL.md must not take down the whole
                     # registry: a YAML syntax error in any single skill would
                     # otherwise abort load_all() and leave the agent with zero
                     # skills, at DI-container startup, with no diagnostic.
                     try:
-                        skill = self._parse_skill(skill_file)
+                        skill = (
+                            self._parse_manifest(skill_file)
+                            if skill_file.name == "manifest.json"
+                            else self._parse_skill(skill_file)
+                        )
                     except Exception as exc:
                         _log.warning("Skipping unparseable skill %s: %s", skill_file, exc)
                         continue
@@ -126,12 +132,7 @@ class SkillRegistry:
         from weebot.domain.models.skill import SkillMetadata, SkillProvenance
 
         # Phase 0: trust tier + provenance (defensive — bad values fall back safely)
-        # No trust key: a human wrote the file (trusted). A value that is set but
-        # not a tier (a typo like "quarantine") fails closed (F42).
-        trust_val = meta.get("trust", "trusted") if isinstance(meta, dict) else "trusted"
-        if trust_val not in ("quarantined", "candidate", "trusted"):
-            _log.warning("Skill %s: unknown trust %r, quarantined", filepath, trust_val)
-            trust_val = "quarantined"
+        trust_val = _trust_tier(meta.get("trust") if isinstance(meta, dict) else None, filepath)
         prov_raw = meta.get("provenance", {}) if isinstance(meta, dict) else {}
         try:
             provenance = (
@@ -174,6 +175,31 @@ class SkillRegistry:
 
         return skill
 
+    @staticmethod
+    def _parse_manifest(filepath: Path) -> Skill | None:
+        """A manifest.json + prompt file package (skill_converter's format)."""
+        import json
+
+        from weebot.domain.models.skill import SkillMetadata
+
+        manifest = json.loads(filepath.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            return None
+        prompt = filepath.parent / str(manifest.get("prompt_file") or "prompt.md")
+        content = prompt.read_text(encoding="utf-8").strip() if prompt.exists() else ""
+        return Skill(
+            name=manifest.get("name") or filepath.parent.name,
+            description=manifest.get("description", ""),
+            content=content,
+            metadata=SkillMetadata(
+                emoji=manifest.get("emoji"),
+                env=manifest.get("env", []),
+                homepage=manifest.get("homepage"),
+                trust=_trust_tier(manifest.get("trust"), filepath),
+            ),
+            source_path=str(filepath),
+        )
+
     def get_skill(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
@@ -203,6 +229,17 @@ class SkillRegistry:
 
 
 # ── module-level helpers ────────────────────────────────────────────
+
+
+def _trust_tier(raw, filepath: Path) -> str:
+    """No trust key: a human wrote the file (trusted). A value that is set but
+    not a tier (a typo like "quarantine") fails closed (F42)."""
+    if raw is None:
+        return "trusted"
+    if raw not in ("quarantined", "candidate", "trusted"):
+        _log.warning("Skill %s: unknown trust %r, quarantined", filepath, raw)
+        return "quarantined"
+    return raw
 
 
 def _discover_references(skill_dir: Path) -> list[str]:
