@@ -40,7 +40,11 @@ def _direct_key_of(adapter) -> str | None:
 def _fake_keys(monkeypatch):
     from weebot.infrastructure.adapters.llm import adapter_factory as af
 
-    keys = {"DEEPSEEK_API_KEY": "ds-key", "KIMI_API_KEY": "kimi-key", "OPENROUTER_API_KEY": "or-key"}
+    keys = {
+        "DEEPSEEK_API_KEY": "ds-key",
+        "KIMI_API_KEY": "kimi-key",
+        "OPENROUTER_API_KEY": "or-key",
+    }
     monkeypatch.setattr(af, "_resolve_direct_key", lambda env_var: keys.get(env_var))
     return af.AdapterFactory()
 
