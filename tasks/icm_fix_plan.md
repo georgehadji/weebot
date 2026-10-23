@@ -113,6 +113,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F91 | Plan review stored its WaitForUserEvent twice. **Fixed ae6843ac** | FlowState | L |
 | F92 | The model could set a tool's retry count via `_max_retries`. **Fixed bcfcd06e** | BaseTool | L |
 | F93 | Open, low (from the process-card read, 2026-10-23): EventPublisher keeps the construction-time plan for truth binding and checkpoints; `replay_dead_letters` has no caller and its dir is CWD-relative; cascade fast-fail records no decision, tier labels are wrong, rescue picks by context length not price; a cancelled WAITING session keeps its cancel marker; `build_tools(mcp_config=...)` skips `expand_env` (no production caller); `_maybe_save_checkpoint` ends the run span. | (process cards) | L |
+| F94 | A local file:// page, a file_editor write and viewing the session's own file tainted the session, so a local form needed a human (F41 side effect, eval task 22). **Fixed e60aaa0e** | EgressGuard | M |
 
 ## 3. Module, paradigm, pattern
 
