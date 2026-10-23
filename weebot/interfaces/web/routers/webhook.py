@@ -115,6 +115,10 @@ async def webhook_run(
         session = await state_repo.load_session(session_id)
         if session is None:
             session = Session(id=session_id, user_id="webhook", agent_id="webhook-agent")
+        elif session.user_id != "webhook":
+            # The webhook key is not a user's identity: continue only webhook
+            # sessions, and 404 (not 403) so others' ids do not leak (F57).
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     else:
         session = Session(id=session_id, user_id="webhook", agent_id="webhook-agent")
 
