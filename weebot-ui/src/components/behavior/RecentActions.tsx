@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RecentAction } from "@/hooks/useBehavior";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { authHeaders } from "@/lib/api";
 
 interface RecentActionsProps {
   actions: RecentAction[];
@@ -55,7 +56,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
     try {
       const res = await fetch(`${API_URL}/behavior/override`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           timestamp: selectedAction.timestamp,
           reason: overrideReason,

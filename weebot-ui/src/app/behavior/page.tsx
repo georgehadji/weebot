@@ -8,13 +8,13 @@
  * and forced a navigation between them to go from watching to configuring.
  */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { authHeaders } from "@/lib/api";
 import { BehaviorPanel } from "@/components/behavior";
 
 function MonitorTab() {
@@ -87,44 +87,10 @@ weebot behavior reflect`}
 }
 
 function SettingsTab() {
-  const [enabled, setEnabled] = useState(true);
-  const [autoStart, setAutoStart] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetch("/api/behavior/settings")
-      .then((res) => res.json())
-      .then((data) => {
-        setEnabled(data.enabled ?? true);
-        setAutoStart(data.auto_start ?? true);
-      })
-      .catch(() => {
-        // Use defaults if API not available
-      });
-  }, []);
-
-  const saveSettings = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/behavior/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, auto_start: autoStart }),
-      });
-      if (res.ok) {
-        setMessage("Settings saved!");
-        setTimeout(() => setMessage(""), 3000);
-      }
-    } catch {
-      setMessage("Failed to save settings");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Tracking is configured by the environment variables below; there is no
+  // settings API (the old toggles posted to a route that did not exist).
   const downloadSelfKnowledge = () => {
-    fetch("/api/behavior/self-knowledge")
+    fetch("/api/behavior/self-knowledge", { headers: authHeaders() })
       .then((res) => res.json())
       .then((data) => {
         const blob = new Blob([data.content], { type: "text/markdown" });
@@ -140,31 +106,6 @@ function SettingsTab() {
     <div className="space-y-6">
       <Card>
         <CardContent className="divide-y pt-4">
-          <div className="flex items-center justify-between py-4">
-            <div>
-              <h3 className="font-medium">Enable Behavior Tracking</h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Record all filesystem actions during agent sessions
-              </p>
-            </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Enable behavior tracking" />
-          </div>
-
-          <div className="flex items-center justify-between py-4" style={{ opacity: enabled ? 1 : 0.5 }}>
-            <div>
-              <h3 className="font-medium">Auto-start with Sessions</h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Automatically start tracking when a new session begins
-              </p>
-            </div>
-            <Switch
-              checked={autoStart && enabled}
-              onCheckedChange={setAutoStart}
-              disabled={!enabled}
-              aria-label="Auto-start tracking with sessions"
-            />
-          </div>
-
           <div className="py-4">
             <h3 className="font-medium">Storage Location</h3>
             <code className="mt-2 block rounded-md bg-surface-1 p-3 text-sm text-muted-foreground">
@@ -178,31 +119,19 @@ function SettingsTab() {
       </Card>
 
       <div className="flex gap-3">
-        <Button onClick={saveSettings} disabled={loading}>
-          {loading ? "Saving..." : "Save Settings"}
-        </Button>
         <Button variant="outline" onClick={downloadSelfKnowledge}>
           Download Self-Knowledge
         </Button>
       </div>
 
-      {message && (
-        <div
-          className={
-            message.includes("saved")
-              ? "rounded-md bg-status-live/10 px-4 py-3 text-sm text-status-live"
-              : "surface-error rounded-md px-4 py-3 text-sm"
-          }
-        >
-          {message}
-        </div>
-      )}
-
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">CLI Environment Variables</CardTitle>
+          <CardTitle className="text-sm">Settings (environment variables)</CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Tracking is on by default. Set these before starting the backend to change it.
+          </p>
           <pre className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
 {`export WEEBOT_BEHAVIOR_TRACKING=false
 export WEEBOT_LEDGER_DIR=/path/to/ledger

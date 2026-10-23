@@ -12,12 +12,13 @@ import ReactFlow, {
   NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import type { StepStatus } from "@/types/events";
 
 interface PlanStep {
   id: string;
   description: string;
-  status: "pending" | "running" | "completed" | "error";
+  status: StepStatus;
   dependencies?: string[];
 }
 
@@ -38,9 +39,13 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
       case "completed":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case "running":
+      case "started":
         return <Loader2 className="h-5 w-5 text-yellow-500 animate-spin" />;
       case "error":
+      case "failed":
         return <XCircle className="h-5 w-5 text-red-500" />;
+      case "unverified":
+        return <AlertTriangle className="h-5 w-5 text-yellow-600" />;
       default:
         return <Circle className="h-5 w-5 text-gray-400" />;
     }
@@ -51,8 +56,11 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
       case "completed":
         return "border-green-500";
       case "running":
+      case "started":
+      case "unverified":
         return "border-yellow-500";
       case "error":
+      case "failed":
         return "border-red-500";
       default:
         return "border-gray-300";

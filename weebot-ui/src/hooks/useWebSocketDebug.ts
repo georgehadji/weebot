@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { withToken } from "@/lib/api";
 
 interface WebSocketDebugHook {
   isConnected: boolean;
@@ -40,7 +41,7 @@ export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
     addLog(`Connecting to ${url}...`);
 
     try {
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(withToken(url));
       wsRef.current = ws;
 
       ws.onopen = () => {

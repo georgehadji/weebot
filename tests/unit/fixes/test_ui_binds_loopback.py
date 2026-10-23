@@ -14,10 +14,15 @@ import json
 import pathlib
 
 
-def test_dev_and_start_bind_127_0_0_1():
+def test_dev_and_start_bind_loopback():
     root = pathlib.Path(__file__).resolve().parents[3]
     scripts = json.loads((root / "weebot-ui" / "package.json").read_text(encoding="utf-8"))[
         "scripts"
     ]
     for name in ("dev", "start"):
-        assert "-H 127.0.0.1" in scripts[name], (name, scripts[name])
+        # `localhost` for dev: HMR's WebSocket failed when the page was opened at
+        # localhost but the server listened on 127.0.0.1. Both are loopback only.
+        assert "-H 127.0.0.1" in scripts[name] or "-H localhost" in scripts[name], (
+            name,
+            scripts[name],
+        )
