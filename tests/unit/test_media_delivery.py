@@ -92,3 +92,27 @@ class TestMediaExtraction:
         )
         assert as_doc is True
         assert as_voice is True
+
+
+class TestDocumentsStayInTheProject:
+    """F76: any absolute .json/.md/.txt/... path named in a reply was uploaded,
+    e.g. a credentials file. Documents attach only from inside the project;
+    images and audio still attach from anywhere."""
+
+    def test_a_document_outside_the_project_is_not_attached(self):
+        from weebot.interfaces.gateways.base import GatewayAdapter
+
+        _, paths, _, _ = GatewayAdapter.extract_media(
+            "Config is at /home/user/.atomicmail/credentials.json"
+        )
+        assert paths == []
+
+    def test_a_document_inside_the_project_is_attached(self, monkeypatch):
+        from weebot.interfaces.gateways.base import GatewayAdapter
+
+        from pathlib import Path
+
+        monkeypatch.setattr("weebot.core.output_path._PROJECT_ROOT", Path("/srv/weebot").resolve())
+        inside = "/srv/weebot/Output/report.md"
+        _, paths, _, _ = GatewayAdapter.extract_media(f"Report: {inside}")
+        assert paths == [inside]

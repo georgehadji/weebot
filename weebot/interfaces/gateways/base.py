@@ -216,9 +216,19 @@ class GatewayAdapter(ABC):
             ".txt",
         }
 
+        # Documents can hold secrets (a credentials .json named in a reply was
+        # uploaded): attach them only from inside the project (F76).
+        from weebot.core import output_path as _op
+
+        document_extensions = {".pdf", ".docx", ".xlsx", ".csv", ".json", ".yaml", ".yml",
+                               ".md", ".txt"}
         valid_paths = []
         for p in paths:
             ext = Path(p).suffix.lower()
+            if ext in document_extensions and not Path(p).resolve().is_relative_to(
+                _op._PROJECT_ROOT
+            ):
+                continue
             if ext in media_extensions:
                 valid_paths.append(p)
                 text = text.replace(p, "")
