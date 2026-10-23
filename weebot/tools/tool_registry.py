@@ -43,6 +43,9 @@ class RoleBasedToolRegistry:
             "reasoner",
             "berb",
             "spacescraper",
+            "youtube_download",
+            "web_scraper",
+            "ocr_structured",
         ],
         "analyst": [
             "python_execute",
@@ -77,7 +80,6 @@ class RoleBasedToolRegistry:
             "moli_fetch",
             "agent_reach",
             "camofox_browser",
-            "browser_navigator",
             "browser_inspector",
             "dispatch_parallel_tasks",
             "workflow_orchestrator",
@@ -110,6 +112,13 @@ class RoleBasedToolRegistry:
             "reasoner",
             "berb",
             "spacescraper",
+            # In no role before (F53); skills name youtube_download and desktop_a11y.
+            "youtube_download",
+            "desktop_a11y",
+            "detect_elements",
+            "screenshot_ocr",
+            "ocr_structured",
+            "web_scraper",
         ],
         "webhook": [
             # Admin-level tools minus exec tools (bash, powershell, python_execute)
@@ -125,7 +134,6 @@ class RoleBasedToolRegistry:
             "moli_fetch",
             "agent_reach",
             "camofox_browser",
-            "browser_navigator",
             "browser_inspector",
             "dispatch_parallel_tasks",
             "workflow_orchestrator",
