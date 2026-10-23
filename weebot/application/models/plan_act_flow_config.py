@@ -154,6 +154,9 @@ class PlanActFlowConfig:
 
     # ── ICM edit-source tracking ─────────────────────────────────────
     correction_tracker: CorrectionTracker | None = None  # CorrectionTracker
+    # The container's "session_persistence" (retries, dead-letters). None saves
+    # straight through state_repo.
+    persistence_adapter: object | None = None  # SessionPersistenceAdapter (infrastructure)
     """Tracks recurring step-output corrections; surfaces patterns to BehavioralLearner."""
 
     # ── Lost-in-Compaction: session-scoped side-constraint registry ──

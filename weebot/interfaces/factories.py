@@ -289,6 +289,7 @@ def create_flow(
             idea_gate=_cached("idea_gate"),
             dreamer_agent=_cached("dreamer_agent"),
             event_store=_cached(EventStorePort),
+            persistence_adapter=_cached("session_persistence"),
         )
     if flow_type == "chat":
         import importlib as _il
@@ -296,7 +297,13 @@ def create_flow(
         _chat_flow_mod = _il.import_module("weebot.application.flows.chat_flow")
         ChatFlow = _chat_flow_mod.ChatFlow
         return ChatFlow(
-            llm=llm, session=session, event_bus=event_bus, model=model, mediator=mediator
+            llm=llm,
+            session=session,
+            event_bus=event_bus,
+            model=model,
+            mediator=mediator,
+            state_repo=state_repo,
+            persistence_adapter=_cached("session_persistence"),
         )
     raise ValueError(f"Unknown flow type: {flow_type}")
 
@@ -329,6 +336,7 @@ def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:
                 session=session,
                 event_bus=event_bus,
                 state_repo=state_repo,
+                persistence_adapter=_cached("session_persistence"),
             )
             return PlanActFlow(config=config)
 

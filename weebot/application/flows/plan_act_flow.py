@@ -112,6 +112,7 @@ class PlanActFlow(BaseFlow):
         agent_role: str | None = None,
         session_constraint_extractor: Any | None = None,
         correction_tracker: Any | None = None,
+        persistence_adapter: Any | None = None,  # retrying session saver
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -155,6 +156,7 @@ class PlanActFlow(BaseFlow):
                 # create_flow -- could not supply a tracker at all and
                 # ReviewingState's correction loop was unreachable.
                 correction_tracker=correction_tracker,
+                persistence_adapter=persistence_adapter,
             )
 
         self._llm = cfg.llm
@@ -218,7 +220,7 @@ class PlanActFlow(BaseFlow):
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
         self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
         self._tracing_port = cfg.tracing_port
-        self._persistence_adapter = None
+        self._persistence_adapter = cfg.persistence_adapter
 
         # ── Enhancement H1: scoped MCP tool aggregation ─────────────
         self._tool_registry = cfg.tool_registry
