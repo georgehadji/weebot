@@ -39,3 +39,25 @@ async def test_teardown_survives_a_tool_whose_close_fails():
     tools = ToolCollection(AdvancedBrowserTool(browser=_Bad()), BrowserInspectorTool(browser=good))
     await tools.teardown()
     assert good.closed == 1
+
+
+async def test_teardown_reaches_a_guarded_tools_service():
+    # Paid tools are wrapped in GuardedTool (F54); teardown looked for
+    # apify_service on the wrapper, so Apify's aiohttp sessions stayed open.
+    from unittest.mock import AsyncMock, MagicMock
+
+    from weebot.application.services.tool_guards import GuardChain, GuardedTool
+    from weebot.domain.models.base_tool import BaseTool
+    from weebot.domain.models.tool_result import ToolResult
+
+    class _Paid(BaseTool):
+        async def execute(self, **kw):
+            return ToolResult(output="ok")
+
+    inner = _Paid(name="apify_x", description="d", parameters={"type": "object", "properties": {}})
+    svc = MagicMock()
+    svc.shutdown = AsyncMock()
+    object.__setattr__(inner, "apify_service", svc)
+    tools = ToolCollection(GuardedTool.wrap(inner, GuardChain([]), "enforce", None))
+    await tools.teardown()
+    svc.shutdown.assert_awaited_once()

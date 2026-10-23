@@ -117,7 +117,8 @@ class ToolCollection:
         aiohttp sessions) can release their resources cleanly.
         """
         for tool in self._tools.values():
-            svc = getattr(tool, "apify_service", None)
+            # Through a GuardedTool to the tool it wraps (paid tools are guarded, F54).
+            svc = getattr(getattr(tool, "inner", tool), "apify_service", None)
             if svc is not None and callable(getattr(svc, "shutdown", None)):
                 try:
                     await svc.shutdown()
