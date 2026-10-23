@@ -234,3 +234,13 @@ class TestPingTool:
         tools = await server.mcp.list_tools()
         names = {t.name for t in tools}
         assert "ping" in names
+
+
+def test_build_server_wires_the_tool_and_skill_resources():
+    # run_mcp passed no tool_discovery or skill_registry, so weebot://tools and
+    # weebot://skills always returned placeholder stubs (F62).
+    from run_mcp import _build_server
+
+    server = _build_server()
+    assert server._tool_discovery is not None
+    assert server._skill_registry is not None and server._skill_registry.list_names()

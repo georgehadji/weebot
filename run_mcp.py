@@ -63,8 +63,19 @@ def _build_server(container=None):
         scheduler=_resolve("scheduler", container.build_scheduler),
         event_store=_resolve("event store", lambda: container.get(EventStorePort)),
         rerank=_resolve("reranker", lambda: container.get(RerankPort)),
+        # Without these, weebot://tools and weebot://skills were stubs (F62).
+        tool_discovery=_resolve("tool discovery", lambda: container._create_tool_discovery()),
+        skill_registry=_resolve("skill registry", _loaded_skills),
         composite_tools_enabled=settings.mcp_composite_tools_enabled,
     )
+
+
+def _loaded_skills():
+    from weebot.application.skills.skill_registry import SkillRegistry
+
+    registry = SkillRegistry()
+    registry.load_all()
+    return registry
 
 
 def main() -> None:
