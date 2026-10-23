@@ -26,5 +26,12 @@
     "args": ["-y", "@hubspot/mcp-server"],
     "env": { "PRIVATE_APP_ACCESS_TOKEN": "${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}" },
     "timeout_seconds": 60
+  },
+  "apify": {
+    "_comment": "Apify's hosted MCP server: search the Apify Store and run any Actor (billed to the Apify account). Token: console.apify.com > Settings > API & Integrations. The same key turns on the built-in apify_* preset tools.",
+    "transport": "streamable-http",
+    "url": "https://mcp.apify.com",
+    "auth": { "type": "bearer", "token": "${APIFY_API_KEY}" },
+    "timeout_seconds": 60
   }
 }
