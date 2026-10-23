@@ -78,7 +78,9 @@ _MINIMAX = MODEL_CASCADE_TIER2
 _MIMO_PRO = MODEL_CASCADE_TIER3
 _SOL = MODEL_CASCADE_TIER4
 _LUNA = MODEL_BUDGET
-_ARGON = "google/gemini-4-argon"
+# Replaced Gemini 4 Argon (AA 53, $1.99/task, 60 s) on 2026-10-23: AA 55,
+# $2.11/task, 35 s end to end, tool calls verified live through OpenRouter.
+_KIMI = "moonshotai/kimi-k3.1-pro"
 _SONNET = "anthropic/claude-sonnet-5.5"
 _OPUS = "anthropic/claude-opus-5.5"
 _HAIKU = "anthropic/claude-haiku-5.5"
@@ -104,7 +106,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # (tasks/remaining_fix_plan.md); the previous primary is fallback 1. The
     # coder stays on Sonnet: in multi-step coding runs Haiku went 2/3 (it
     # rewrote a task's input) against Sonnet's 3/3.
-    "planner": [_HAIKU, _SOL, _ARGON, _MIMO_PRO],
+    "planner": [_HAIKU, _SOL, _KIMI, _MIMO_PRO],
     "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
     # Highest volume: the agentic tool loop.
     "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
@@ -112,11 +114,11 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
     # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
     # Sol (another lab than the Anthropic coder) is fallback 1.
-    "reviewer": [_HAIKU, _SOL, _ARGON, _OPUS],
-    "critic": [_SOL, _ARGON, _OPUS],
+    "reviewer": [_HAIKU, _SOL, _KIMI, _OPUS],
+    "critic": [_SOL, _KIMI, _OPUS],
     "verifier": [_DEEPSEEK, _MIMO_FLASH, _HAIKU],
     "researcher": [_HAIKU, _MIMO_PRO, _SOL, _DEEPSEEK],
-    "analyst": [_SOL, _MIMO_PRO, _ARGON],
+    "analyst": [_SOL, _MIMO_PRO, _KIMI],
     "dreamer": [_MIMO_PRO, _DEEPSEEK, _SOL],
     "product_manager": [_MIMO_PRO, _SOL, _HAIKU],
     "designer": [_MIMO_PRO, _SONNET, _DEEPSEEK],
@@ -131,7 +133,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
 _DEFAULT_ROLE_CASCADE: list[str] = [_DEEPSEEK, _MIMO_PRO, _SOL]
 
 # Priced at the top: the ACR bandit explores these less.
-PREMIUM_MODELS: frozenset[str] = frozenset({_SOL, _ARGON, _SONNET, _OPUS})
+PREMIUM_MODELS: frozenset[str] = frozenset({_SOL, _KIMI, _SONNET, _OPUS})
 
 
 def get_model_cascade_for_role(role: str | None) -> list[str]:
