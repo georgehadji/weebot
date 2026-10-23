@@ -38,6 +38,12 @@ def _make_session(response_mock: MagicMock) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _no_real_key(monkeypatch):
+    # ApifyService falls back to APIFY_API_KEY; a key in .env must not reach these tests.
+    monkeypatch.delenv("APIFY_API_KEY", raising=False)
+
+
 @pytest.fixture
 def service():
     svc = ApifyService(api_key="test-key")
