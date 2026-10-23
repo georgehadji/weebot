@@ -147,6 +147,10 @@ def is_untrusted_tool(tool_name: str) -> bool:
     """
     if tool_name in UNTRUSTED_OUTPUT_TOOLS:
         return True
+    # Apify presets are apify_<actor> (apify_web_scraper, apify_reddit_scraper, ...):
+    # every one returns scraped third-party content (F46).
+    if tool_name.startswith("apify_"):
+        return True
     return len(tool_name) > len(_MCP_NAMESPACE_PREFIX) and tool_name.startswith(
         _MCP_NAMESPACE_PREFIX
     )

@@ -227,3 +227,14 @@ class TestFenceTaintDecoupling:
         for tool in ("bash", "python_execute", "terminate", "knowledge"):
             assert is_untrusted_tool(tool) is False, tool
             assert taints_egress_context(tool) is False, tool
+
+
+def test_apify_preset_output_is_untrusted():
+    # The presets are named apify_<actor>; only the stale "apify_actor_tool" was
+    # listed, so scraped web, X and Reddit text went unfenced (F46).
+    from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
+    from weebot.tools.apify_presets import create_apify_preset_tools
+
+    names = [t.name for t in create_apify_preset_tools(object())]
+    assert names and all(n.startswith("apify_") for n in names)
+    assert all(is_untrusted_tool(n) and taints_egress_context(n) for n in names)
