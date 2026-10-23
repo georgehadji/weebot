@@ -22,6 +22,26 @@ from weebot.domain.models.session import Session, SessionStatus
 logger = logging.getLogger(__name__)
 
 
+def _apply_plan_file(session: Session) -> Session:
+    """If the user edited Output/<session>/01_plan.md, the edited steps are the
+    plan (ICM B2). Unchanged steps keep their ids; an untouched file changes nothing."""
+    from weebot.core import plan_file
+    from weebot.domain.models.event import PlanEvent
+    from weebot.domain.models.plan import PlanStatus, Step
+
+    plan = session.get_last_plan()
+    edited = plan_file.read_steps(session.id) if plan is not None else None
+    if not edited or edited == [s.description for s in plan.steps]:
+        return session
+    by_text = {s.description: s for s in plan.steps}
+    steps = [by_text.get(d) or Step(id=f"edited-{i}", description=d) for i, d in enumerate(edited, 1)]
+    logger.info("Plan file edited by the user: %d -> %d steps", len(plan.steps), len(steps))
+    new_plan = plan.model_copy(update={"steps": steps})
+    return session.add_event(
+        PlanEvent(status=PlanStatus.UPDATED, plan=new_plan.model_dump(mode="json"))
+    )
+
+
 class FlowRouter:
     """Resolves the initial flow state based on session context and plan status."""
 
@@ -72,6 +92,7 @@ class FlowRouter:
 
             if response in _APPROVE_TOKENS or not response:
                 logger.info("Plan approved by user — proceeding to execution")
+                updated = _apply_plan_file(updated)
                 # Transition from WAITING → RUNNING so the main loop
                 # doesn't break prematurely (it breaks on WAITING).
                 updated = updated.set_status(SessionStatus.RUNNING)

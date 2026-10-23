@@ -113,12 +113,26 @@ class PlanReviewState(FlowState):
 
         context._session = context._session.set_status(SessionStatus.WAITING)
 
+        # The plan as a file the user can edit before approving (ICM B2);
+        # FlowRouter reads it back on approve.
+        file_hint = ""
+        try:
+            from weebot.core import plan_file
+
+            path = plan_file.write(
+                context._session.id, plan.title, [s.description for s in plan.steps]
+            )
+            file_hint = f"\nTo change steps, edit {path} and save, then approve."
+        except Exception as exc:  # the file is a convenience; review must not fail on it
+            _log.warning("Plan review: could not write the plan file: %s", exc)
+
         wait_event = WaitForUserEvent(
             question=(
                 f"Plan ready ({len(plan.steps)} step{'s' if len(plan.steps) != 1 else ''}):\n"
                 + "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(plan.steps[:8]))
                 + ("\n  ..." if len(plan.steps) > 8 else "")
                 + "\n\nType 'approve' to start execution, or describe changes / constraints to add."
+                + file_hint
             )
         )
 
