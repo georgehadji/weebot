@@ -18,5 +18,13 @@
       "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
     },
     "timeout_seconds": 60
+  },
+  "hubspot": {
+    "_comment": "HubSpot CRM via HubSpot's own MCP server (npx). Token: HubSpot Settings > Integrations > Private Apps.",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@hubspot/mcp-server"],
+    "env": { "PRIVATE_APP_ACCESS_TOKEN": "${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}" },
+    "timeout_seconds": 60
   }
 }
