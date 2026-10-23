@@ -447,6 +447,7 @@ class FactoriesMixin:
         audit = self._maybe_get(AuditService)
         memory = self._maybe_get(FileSystemMemoryAdapter)
         wanted = {
+            "ocr": {"vision_llm": self._vision_llm()},
             "audit_session": {"service": audit},
             "knowledge": {"repo": tool_repo},
             "video_ingest": {"repo": tool_repo},
@@ -454,8 +455,9 @@ class FactoriesMixin:
             "voice_output": {"speech": speech},
             "persistent_memory": {"memory": memory, "state_repo": state_repo},
         }
-        required = {"audit_session": "service", "knowledge": "repo", "video_ingest": "repo",
-                    "voice_input": "speech", "voice_output": "speech", "persistent_memory": "memory"}
+        required = {"ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
+                    "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
+                    "persistent_memory": "memory"}
         return {
             "state_repo": state_repo,
             "rerank": self._maybe_get(RerankPort),
@@ -465,6 +467,19 @@ class FactoriesMixin:
                 if kwargs[required[name]] is not None
             },
         }
+
+    def _vision_llm(self):
+        """The vision model, for `ocr` when Tesseract is not installed (or None)."""
+        from weebot.config.model_refs import MODEL_VISION_PRIMARY
+        from weebot.config.model_registry import ModelProvider
+        from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
+
+        try:
+            provider = ModelProvider.from_model_name(MODEL_VISION_PRIMARY).value
+            return create_adapter(provider, model=MODEL_VISION_PRIMARY)
+        except Exception as exc:
+            logger.debug("No vision LLM for ocr: %s", exc)
+            return None
 
     def _create_mcp_bridge(self):
         """Create an MCPToolRegistryBridge with the MCP client injected.

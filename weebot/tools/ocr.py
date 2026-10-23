@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import base64
+import logging
 from io import BytesIO
+from pathlib import Path
+from typing import Any
 
 from PIL import Image
+from pydantic import Field
 
 from weebot.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 class OCRTool(BaseTool):
@@ -15,11 +21,15 @@ class OCRTool(BaseTool):
 
     name: str = "ocr"
     description: str = (
-        "Extract text from an image using OCR. " "Accepts base64-encoded PNG/JPEG images."
+        "Extract text from an image using OCR. Pass image_path (a PNG/JPEG file) or "
+        "image_base64. Uses Tesseract, or the vision model when Tesseract is not installed."
     )
+    # An LLMPort for a vision model, injected by DI (Container.tool_wiring).
+    vision_llm: Any = Field(default=None, exclude=True)
     parameters: dict = {
         "type": "object",
         "properties": {
+            "image_path": {"type": "string", "description": "Path to a PNG or JPEG image file"},
             "image_base64": {"type": "string", "description": "Base64-encoded image (PNG or JPEG)"},
             "language": {
                 "type": "string",
@@ -30,35 +40,78 @@ class OCRTool(BaseTool):
                 "description": "Tesseract config (e.g., '--psm 6' for blocks, default: '')",
             },
         },
-        "required": ["image_base64"],
+        "required": [],
     }
 
     async def execute(
-        self, image_base64: str, language: str = "eng", config: str = "", **_
+        self,
+        image_base64: str | None = None,
+        image_path: str | None = None,
+        language: str = "eng",
+        config: str = "",
+        **_,
     ) -> ToolResult:
         """Extract text from image using OCR."""
+        import asyncio
+
+        try:
+            if image_path:
+                image_data = await asyncio.to_thread(Path(image_path).read_bytes)
+            elif image_base64:
+                image_data = base64.b64decode(image_base64)
+            else:
+                return ToolResult(output="", error="Pass image_path or image_base64")
+        except (OSError, ValueError) as exc:
+            return ToolResult(output="", error=f"Cannot read image: {exc}")
+
         try:
             import pytesseract
-            import asyncio
 
-            # Decode image (fast — CPU-bound PIL open in thread)
-            image_data = base64.b64decode(image_base64)
             image = await asyncio.to_thread(lambda: Image.open(BytesIO(image_data)))
-
-            # Run OCR (CPU-bound, run in thread)
             text = await asyncio.to_thread(
                 pytesseract.image_to_string, image, lang=language, config=config
             )
-
-            if not text.strip():
-                return ToolResult(output="No text detected in image")
-
-            return ToolResult(output=f"Extracted text:\n\n{text}")
-
         except ImportError:
-            return ToolResult(output="", error="pytesseract not installed")
+            return await self._vision_ocr(image_data, "pytesseract not installed")
         except Exception as exc:
+            if type(exc).__name__ == "TesseractNotFoundError":
+                return await self._vision_ocr(image_data, "Tesseract binary not installed")
             return ToolResult(output="", error=str(exc))
+
+        if not text.strip():
+            return ToolResult(output="No text detected in image")
+        return ToolResult(output=f"Extracted text:\n\n{text}")
+
+    async def _vision_ocr(self, image_data: bytes, why: str) -> ToolResult:
+        """Read the text with the vision model when Tesseract cannot run."""
+        if self.vision_llm is None:
+            return ToolResult(output="", error=f"{why}, and no vision model is configured")
+        from weebot.config.model_refs import MODEL_VISION_PRIMARY
+
+        fmt = "jpeg" if image_data[:2] == b"\xff\xd8" else "png"  # magic bytes, no decode
+        url = f"data:image/{fmt};base64,{base64.b64encode(image_data).decode()}"
+        try:
+            resp = await self.vision_llm.chat(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Transcribe all text in this image "
+                             "exactly. Reply with the text only."},
+                            {"type": "image_url", "image_url": {"url": url}},
+                        ],
+                    }
+                ],
+                model=MODEL_VISION_PRIMARY,
+                max_tokens=1024,
+            )
+        except Exception as exc:
+            logger.warning("Vision OCR failed: %s", exc)
+            return ToolResult(output="", error=f"{why}; vision OCR failed: {exc}")
+        text = (resp.content or "").strip()
+        if not text:
+            return ToolResult(output="No text detected in image")
+        return ToolResult(output=f"Extracted text (vision model, {why}):\n\n{text}")
 
 
 class StructuredOCRTool(BaseTool):
