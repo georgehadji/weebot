@@ -327,7 +327,8 @@ Independent of C-E; it can go anywhere after A.
 - **Mail and Jira (2026-10-23):**
   - **Mail:** the agent inbox is `weebot@atomicmail.ai`, readable live.
   - **Jira:** connected via `uvx mcp-atlassian` in `config/mcp_servers.json` (63 tools, read-only project listing works; the site has no projects yet).
-  - **HubSpot:** waits for a real private-app token.
+  - **HubSpot:** connected via `npx @hubspot/mcp-server` (21 tools; read-only `hubspot_get_user_details` works). Writes ask first; no write test run yet.
+  - **Apify:** built-in preset tools turn on with `APIFY_API_KEY`; the official MCP server (`mcp.apify.com`) is added once that key is in `.env`.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
