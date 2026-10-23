@@ -78,7 +78,9 @@ _MINIMAX = MODEL_CASCADE_TIER2
 _MIMO_PRO = MODEL_CASCADE_TIER3
 _SOL = MODEL_CASCADE_TIER4
 _LUNA = MODEL_BUDGET
-_ARGON = "google/gemini-4-argon"
+# Replaced Gemini 4 Argon (AA 53, $1.99/task, 60 s) on 2026-10-23: AA 55,
+# $2.11/task, 35 s end to end, tool calls verified live through OpenRouter.
+_KIMI = "moonshotai/kimi-k3.1-pro"
 _SONNET = "anthropic/claude-sonnet-5.5"
 _OPUS = "anthropic/claude-opus-5.5"
 _HAIKU = "anthropic/claude-haiku-5.5"
@@ -104,26 +106,30 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # (tasks/remaining_fix_plan.md); the previous primary is fallback 1. The
     # coder stays on Sonnet: in multi-step coding runs Haiku went 2/3 (it
     # rewrote a task's input) against Sonnet's 3/3.
-    "planner": [_HAIKU, _SOL, _ARGON, _MIMO_PRO],
+    "planner": [_HAIKU, _SOL, _KIMI, _MIMO_PRO],
     "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
     # Highest volume: the agentic tool loop.
     "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
-    # Best independent terminal-coding score at half the top model's price.
-    "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
+    # Sol first: billed 2026-10-23 coding eval, 5 tasks pinned per model, Sol
+    # 5/5 in 333 s vs Sonnet 4/5 in 1141 s, at ~1/3 the AA cost per task
+    # (tasks/audits/model_routing_2026_10_23.md). Sonnet is fallback 1.
+    "coder": [_SOL, _SONNET, _GLM, _DEEPSEEK],
     # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
     # Sol (another lab than the Anthropic coder) is fallback 1.
-    "reviewer": [_HAIKU, _SOL, _ARGON, _OPUS],
-    "critic": [_SOL, _ARGON, _OPUS],
+    "reviewer": [_HAIKU, _SOL, _KIMI, _OPUS],
+    "critic": [_SOL, _KIMI, _OPUS],
     "verifier": [_DEEPSEEK, _MIMO_FLASH, _HAIKU],
     "researcher": [_HAIKU, _MIMO_PRO, _SOL, _DEEPSEEK],
-    "analyst": [_SOL, _MIMO_PRO, _ARGON],
+    "analyst": [_SOL, _MIMO_PRO, _KIMI],
     "dreamer": [_MIMO_PRO, _DEEPSEEK, _SOL],
     "product_manager": [_MIMO_PRO, _SOL, _HAIKU],
     "designer": [_MIMO_PRO, _SONNET, _DEEPSEEK],
     "documentation": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
     "summarizer": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
-    "automation": [_MINIMAX, _DEEPSEEK, _MIMO_FLASH],
-    "admin": [_MINIMAX, _DEEPSEEK, _MIMO_PRO],
+    # DeepSeek first (AA 45, $0.26/task, 14 s) over MiniMax (43, $0.22, 30 s):
+    # tasks/audits/model_routing_2026_10_23.md.
+    "automation": [_DEEPSEEK, _MINIMAX, _MIMO_FLASH],
+    "admin": [_DEEPSEEK, _MINIMAX, _MIMO_PRO],
     "subagent": [_LUNA, _MIMO_FLASH, _HAIKU, _GLM_FLASH],
     "vision": [MODEL_VISION_PRIMARY, _HAIKU, "google/gemini-3.8-flash", _MIMO_FLASH],
 }
@@ -131,7 +137,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
 _DEFAULT_ROLE_CASCADE: list[str] = [_DEEPSEEK, _MIMO_PRO, _SOL]
 
 # Priced at the top: the ACR bandit explores these less.
-PREMIUM_MODELS: frozenset[str] = frozenset({_SOL, _ARGON, _SONNET, _OPUS})
+PREMIUM_MODELS: frozenset[str] = frozenset({_SOL, _KIMI, _SONNET, _OPUS})
 
 
 def get_model_cascade_for_role(role: str | None) -> list[str]:
