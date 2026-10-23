@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 from io import BytesIO
 from typing import ClassVar
 
@@ -18,6 +19,8 @@ except ImportError:
 from PIL import ImageDraw
 
 from weebot.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 class ComputerUseTool(BaseTool):
@@ -217,8 +220,17 @@ class ComputerUseTool(BaseTool):
                                 "Use focus_window action first to switch to the correct window."
                             ),
                         )
-                except Exception:
-                    pass  # Window check is advisory — proceed if unavailable
+                except Exception as exc:
+                    # The caller asked for this window; unable to confirm it means
+                    # the keys could land anywhere, so refuse (F75).
+                    logger.warning("computer_use: focus check failed: %s", exc)
+                    return ToolResult(
+                        output="",
+                        error=(
+                            f"Cannot confirm the active window is '{require_window}' "
+                            f"({exc}); not typing. Install pygetwindow or omit require_window."
+                        ),
+                    )
 
             if action == "move_mouse":
                 if sx is None or sy is None:
