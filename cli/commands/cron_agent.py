@@ -36,7 +36,14 @@ def _load_jobs() -> dict[str, dict]:
     if CRON_JOBS_PATH.exists():
         try:
             return json.loads(CRON_JOBS_PATH.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            # Set it aside: the next save would otherwise overwrite every job (F77).
+            import time
+
+            backup = CRON_JOBS_PATH.with_name(f"{CRON_JOBS_PATH.name}.corrupt-{int(time.time())}")
+            CRON_JOBS_PATH.replace(backup)
+            logger.warning("Unreadable %s (%s); moved to %s", CRON_JOBS_PATH, exc, backup)
+            console.print(f"[yellow]Jobs file was unreadable; kept as {backup}[/yellow]")
             return {}
     return {}
 
