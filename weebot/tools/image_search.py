@@ -145,8 +145,13 @@ class ImageSearchTool(BaseTool):
 
             logger.info("Image search returned %d results for query=%r", len(images), query)
 
+            # The model reads only `output` (F63), so the URLs go there too.
+            lines = [
+                f"{i}. {im['title'] or 'untitled'} — {im['image_url']} (page: {im['source_url']})"
+                for i, im in enumerate(images, 1)
+            ]
             return ToolResult.success_result(
-                output=f"Found {len(images)} images for '{query}'.",
+                output="\n".join([f"Found {len(images)} images for '{query}':", *lines]),
                 data={"images": images, "query": query, "count": len(images)},
                 execution_time_ms=0,
             )

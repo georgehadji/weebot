@@ -56,7 +56,8 @@ async def test_vane_search_success(mock_vane_settings):
         result = await tool.execute(query="What is agentic coding?")
 
         assert isinstance(result, ToolResult)
-        assert result.output == "This is a synthesized answer from Vane."
+        assert result.output.startswith("This is a synthesized answer from Vane.")
+        assert "http://example.com/2" in result.output  # sources reach the model (F63)
         assert "sources" in result.metadata
         assert len(result.metadata["sources"]) == 2
         assert result.metadata["sources"][0]["title"] == "Source 1"
