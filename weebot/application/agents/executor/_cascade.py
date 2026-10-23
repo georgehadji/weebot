@@ -52,6 +52,8 @@ class CascadeExecutor:
     # Override via OPENROUTER_MIN_CREDIT_USD. It used to be 10000 "tokens"
     # compared with a field OpenRouter does not send, so it always tripped.
     _OPENROUTER_MIN_CREDIT_USD: float = 0.10
+    # Seconds a Phase 1 probe runs alone before the next one is started.
+    _HEDGE_DELAY_S: float = 20.0
 
     @classmethod
     def _get_credit_threshold(cls) -> float:
@@ -488,9 +490,16 @@ class CascadeExecutor:
             dict.fromkeys(m for m in filtered_models if m not in self._server_error_models)
         )
         if parallel:
-            tasks = {
-                asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel
-            }
+            # Hedge, don't race: a non-streamed request cancelled client-side
+            # still bills (measured: a call cancelled after 3s cost the full
+            # completion), so starting every probe at once paid for all of
+            # them on every call. One probe runs; the next starts when it
+            # fails, or after _HEDGE_DELAY_S without an answer.
+            queue = list(parallel)
+
+            def _launch() -> asyncio.Future:
+                return asyncio.ensure_future(_try(queue.pop(0), 90.0, tier=CascadeTier.FREE))
+
             # Wait for a probe that actually SUCCEEDS, not merely one that
             # finishes first.
             #
@@ -512,18 +521,22 @@ class CascadeExecutor:
             # The cost is latency in exactly the case where escalating was the
             # alternative: worst case is the slowest probe's 90s cap rather than
             # the fastest probe's return.
-            pending = set(tasks.keys())
+            pending = {_launch()}
             winner = None
             try:
                 while pending and winner is None:
                     done, pending = await asyncio.wait(
-                        pending, return_when=asyncio.FIRST_COMPLETED
+                        pending,
+                        timeout=self._HEDGE_DELAY_S if queue else None,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
                     for fut in done:
                         resp = fut.result()
                         if resp is not None:
                             winner = resp
                             break
+                    if winner is None and queue:
+                        pending.add(_launch())  # a failure, or the hedge delay ran out
             finally:
                 # Always, on every exit: a probe left uncancelled runs to
                 # completion and bills. The old drain loop below this was a
