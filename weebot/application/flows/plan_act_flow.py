@@ -11,7 +11,6 @@ from collections.abc import AsyncGenerator
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
 from weebot.application.flows.base_flow import BaseFlow
-from weebot.application.flows._checkpoint_scheduler import CheckpointScheduler
 from weebot.application.flows._iteration_context import IterationContext
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.planning import PlanningState
@@ -477,6 +476,7 @@ class PlanActFlow(BaseFlow):
         # self._session (e.g. PlanReviewState setting WAITING status)
         # since the publisher was first constructed.
         publisher._session = self._session
+        publisher._plan = self._plan  # truth binding and checkpoints read it
         self._session = await publisher.emit(event)
 
     async def _extract_session_constraints(self, prompt: str) -> None:
@@ -705,7 +705,7 @@ class PlanActFlow(BaseFlow):
                 self._session = self._session.set_status(SessionStatus.FAILED)
                 await self._emit(ErrorEvent(error="Cancelled on request (flow cancel)."))
                 yield ErrorEvent(error="Cancelled on request (flow cancel).")
-                return
+                break  # through the normal exit: hooks run, the run span ends
 
             current_state_type = type(self._state)
 
@@ -733,8 +733,7 @@ class PlanActFlow(BaseFlow):
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
 
-                        if self._run_span is not None:
-                            self._run_span.end()
+                        self._end_run_span()
                         # Run CompletedState this pass; it sets the terminal
                         # status, so the loop ends after it.
                         self.set_state(CompletedState(termination_reason=_result.reason))
@@ -798,8 +797,7 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
-                if self._run_span is not None:
-                    self._run_span.end()
+                self._end_run_span()
                 return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
@@ -836,6 +834,7 @@ class PlanActFlow(BaseFlow):
 
         if iteration_count > max_iterations:
             yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")
+        self._end_run_span()
 
     def _has_unresolved_wait_event(self) -> bool:
         """Check if the last WaitForUserEvent in the session has not been resolved."""
@@ -975,19 +974,11 @@ class PlanActFlow(BaseFlow):
             self._awm = AgentWorkflowMemory(llm=self._llm)
         return self._awm
 
-    async def _maybe_save_checkpoint(self) -> None:
-        """Save a flow checkpoint if a CheckpointPort is wired.
-        Delegates to CheckpointScheduler."""
-        if not hasattr(self, "_checkpoint_scheduler"):
-            self._checkpoint_scheduler = CheckpointScheduler(checkpoint_port=self._checkpoint_port)
-        current_state_name = type(self._state).__name__ if self._state else "planning"
-        await self._checkpoint_scheduler.maybe_save(
-            session=self._session, plan=self._plan, current_state_name=current_state_name
-        )
-
-        # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
+    def _end_run_span(self) -> None:
+        """End the plan_act_iteration span once, on whichever exit the run takes."""
         if self._run_span is not None:
             self._run_span.end()
+            self._run_span = None
 
     def _get_tracing_port(self):
         """Return the tracing port injected at construction time, or None."""
