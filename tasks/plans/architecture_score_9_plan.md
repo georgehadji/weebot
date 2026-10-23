@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-06-28
+note: plans/architecture_elevation_plan.md
+---
+
 # Weebot Architecture Improvement Plan — Target Score >9/10
 
 **Baseline:** 6/10 (audit 2026-06-19)  

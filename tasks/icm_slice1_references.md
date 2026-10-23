@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-22
+---
+
 # ICM slice 1: reference integrity (read-only, nothing moved)
 
 Plan: `tasks/icm_plan.md`. Inventory: `tasks/icm_slice0_inventory.md`. Slice 0 decisions applied: `reasonix.toml`, `start-next.bat`, the PDF, `Output/` and `Useful Github Projects/` stay put; `weebot/osworld` is marked leftover (map flag only, no move).

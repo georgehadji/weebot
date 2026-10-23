@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-28
+---
+
 # Dead-Code Audit — `application/services/` — 26 Files with 0 Production Callers
 
 **Scan method:** Full-text search for `weebot.application.services.<module>` across all `weebot/` and `tests/` Python files.

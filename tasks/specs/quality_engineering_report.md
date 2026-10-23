@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-23
+---
+
 # WeeBot Autonomous Quality-Engineering Report
 
 **Date:** 2026-06-22  

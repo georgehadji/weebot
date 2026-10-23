@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-09-05
+note: A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
+---
+
 # Review Gate & Residual Work — Execution Plan
 
 Follows the V7 defect-hunt programme ([`defect_hunt_v7_execution_plan.md`](defect_hunt_v7_execution_plan.md),

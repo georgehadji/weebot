@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-25
+---
+
 # Weebot Architecture Audit v3.0 — Post-Refactoring
 
 **Date:** 2026-06-18  

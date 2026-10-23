@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-09-09
+note: phase 5 not built: Postgres backend, scheduler extraction, replica proof
+---
+
 # Architecture Remediation — Path to 9+
 
 Follows the ARCH-AUDIT-V2 static audit of `35270df` (2026-09-09), which scored the

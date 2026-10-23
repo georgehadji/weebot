@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # B1 — the candidate inventory becomes data
 
 Execution record for phase B1 of

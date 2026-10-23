@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-28
+---
+
 # YouTube Video Download Support — Implementation Plan
 
 **Context:** weebot currently supports YouTube *transcript* ingestion (`video_ingest_tool.py` via `youtube-transcript-api`) but cannot download actual video files (MP4). This plan adds video download via `yt-dlp`, a well-maintained, actively developed library.

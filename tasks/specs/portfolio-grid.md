@@ -1,3 +1,9 @@
+---
+status: reference
+date: 2026-06-10
+note: website spec from an agent build run
+---
+
 # Portfolio Grid — Project Cards Spec
 
 ## Overview

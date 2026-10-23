@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # ignore_imports Taxonomy — 67 Entries Across 6 Contracts
 
 > **Re-inventoried 2026-09-05 (defect-hunt Wave 0, item I6).** The header below

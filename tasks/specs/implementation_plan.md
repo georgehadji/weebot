@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-23
+---
+
 # WeeBot Implementation Plan — Post-QA Remediation
 
 **Version:** 2.0  

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-23
+---
+
 # Decision models instead of chat LLMs — where they fit (2026-10-23)
 
 Question: in which parts of the workflow would a decision model such as

@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-10
+note: none of the 6 enhancements built
+---
+
 # Auto-Evolve Back-End: 6 Enhancements (SkillClaw-Inspired)
 
 ## Context

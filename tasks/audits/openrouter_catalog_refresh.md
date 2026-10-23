@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-06
+---
+
 # Updating the models from OpenRouter — instrument repaired, then run
 
 Request: *"update the llm models from openrouter"*, with five documentation

@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-28
+---
+
 # Bug Fix Plan — B4 & B5
 
 **Audit ref:** Phase 1 inventory from 2026-06-18 audit  

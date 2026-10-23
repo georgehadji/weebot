@@ -5,8 +5,8 @@ code: SkillRegistry
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-23
-commit: 2be1ab8a
+verified: 2026-10-24
+commit: d4ffb555
 ---
 
 # SkillRegistry
@@ -27,11 +27,11 @@ Consequences (read from source, not run):
 - **Built-ins win name collisions.** Paths load project, then user, then built-in, and later ones overwrite (`:52-61, 84`). A project skill with the same name as a built-in is silently replaced by the built-in. No log line.
 - **`manifest.json` skills are invisible here.** Only `SKILL.md` is read (`:72`). Seven built-ins ship only `manifest.json` + `prompt.md`: `berb-research`, `competitive_analysis`, `design-taste`, `multi_llm_orchestrator`, `reasoner`, `skill-author`, `web_research` (directory listing 2026-10-23). They are handled by `SkillPackager` (`application/skills/skill_packager.py:47-63`) and the format detector (`application/skills/format_detector.py:44-45`), not by retrieval.
 - An unreadable file returns `None` with no log (`:100-103`); a bad `provenance` mapping falls back to an empty `SkillProvenance` with no log (`:133-140`).
-- No shared instance: `SkillRegistry()` is built and fully scanned at `application/di/_skills.py:31`, `application/di/_factories.py:518` (MCP skill indexer, when semantic retrieval is on), `application/di/_learning.py:159`, `application/services/ponytail_skill_prompt.py:76`, `application/skills/skill_packager.py:40`, `weebot/scheduling/default_jobs.py:106`, `cli/commands/ponytail.py:77` and five times in `cli/commands/skills.py` (`:31, 119, 186, 279, 350`). An `update_skill` on one instance is not seen by the others; the materializer reaches the retriever's instance through `retriever.registry` (`application/di/_learning.py:150-160`).
+- No shared instance: `SkillRegistry()` is built and fully scanned at `application/di/_skills.py:31`, `application/di/_factories.py:525` (MCP skill indexer, when semantic retrieval is on), `application/di/_learning.py:159`, `application/services/ponytail_skill_prompt.py:76`, `application/skills/skill_packager.py:40`, `weebot/scheduling/default_jobs.py:106`, `cli/commands/ponytail.py:77` and five times in `cli/commands/skills.py` (`:31, 119, 186, 279, 350`). An `update_skill` on one instance is not seen by the others; the materializer reaches the retriever's instance through `retriever.registry` (`application/di/_learning.py:150-160`).
 - `_reference_paths` is set with `object.__setattr__` on the pydantic model (`:170`); it is not part of a dump.
 
 ## Connected to
-- **Builds** `Skill` / `SkillMetadata` / `SkillProvenance` (`weebot/domain/models/skill.py`). **Read by** `BM25SkillRetriever`, `SemanticSkillRetriever` (both wrapped by `RerankingSkillRetriever`, built in `application/di/_skills.py:18-60`, registered as `"skill_retriever"`, `di/__init__.py:177`), `MCPToolSkillIndexer` (`di/_factories.py:518-520`), `SkillMaterializer` (`di/_learning.py:150-160`), `SkillPackager`.
+- **Builds** `Skill` / `SkillMetadata` / `SkillProvenance` (`weebot/domain/models/skill.py`). **Read by** `BM25SkillRetriever`, `SemanticSkillRetriever` (both wrapped by `RerankingSkillRetriever`, built in `application/di/_skills.py:18-60`, registered as `"skill_retriever"`, `di/__init__.py:177`), `MCPToolSkillIndexer` (`di/_factories.py:525-527`), `SkillMaterializer` (`di/_learning.py:150-160`), `SkillPackager`.
 - **Data:** `weebot/skills/builtin/*/SKILL.md` (see `map/CONTEXT.md`: loaded by path, not imported).
 - **Looks like but is not:** `RoleBasedToolRegistry` (tools, not skills); `SkillStore` / `SkillStorePort` (versioned skills in SQLite for SkillOpt, `infrastructure/persistence/skill_store.py:22`); personas (`weebot/agents/`).
 

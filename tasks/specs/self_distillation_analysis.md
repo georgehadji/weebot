@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # Self-Distillation (SSD) vs weebot — Value Analysis
 
 **Paper:** *Embarrassingly Simple Self-Distillation Improves Code Generation* (Apple, arXiv:2604.01193, Apr 2026). GitHub: `apple/ml-ssd`.

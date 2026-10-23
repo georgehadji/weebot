@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-09-06
+note: only passes P1-P2 run (audits/static_defect_audit_v3.md); P3-P11 not run
+---
+
 # Applying the Precision Defect Auditor (V3) to the weebot backend
 
 Execution plan for running `01._Debugging_1.md` — **PRECISION DEFECT AUDITOR — V3

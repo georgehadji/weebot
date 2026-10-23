@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-08-03
+note: phase 3 mechanism selection and phase 4 L1.5 instrumentation not built
+---
+
 # Bilevel Autoresearch → weebot: Implementation Plan
 
 **Source paper:** Qu & Lu, *Bilevel Autoresearch: Meta-Autoresearching Itself*, arXiv:2603.23420v2

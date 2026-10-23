@@ -1,3 +1,9 @@
+---
+status: reference
+date: 2026-06-04
+note: website spec from an agent build run
+---
+
 # Testimonials Section — Section Specification
 
 **Project:** Kallos Plastic Surgery Website — Dr. Jorgis Chatzivantsidis

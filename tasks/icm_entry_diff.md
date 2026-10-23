@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-10-22
+---
+
 # Entry-file diff: AGENTS.md / GEMINI.md / QWEN.md vs CLAUDE.md
 
 Step 1 of plan section 5 (`tasks/icm_plan.md`). Read-only analysis; nothing moved or overwritten yet.

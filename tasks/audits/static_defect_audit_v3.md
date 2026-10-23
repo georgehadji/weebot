@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-07
+---
+
 # V3 static defect audit — execution record
 
 Running [`static_defect_audit_v3_execution_plan.md`](../specs/static_defect_audit_v3_execution_plan.md)

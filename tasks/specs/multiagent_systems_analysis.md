@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-13
+---
+
 # Designing Multi-Agent Systems → Weebot: Architecture Analysis & Integration Roadmap
 
 **Source:** `victordibia/designing-multiagent-systems` (last pushed 2026-03-12)  

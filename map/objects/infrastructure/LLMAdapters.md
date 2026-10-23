@@ -5,8 +5,8 @@ code: AdapterFactory, ResilientLLMAdapter
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-24
+commit: d4ffb555
 ---
 
 # LLM adapters
@@ -32,7 +32,7 @@ Configuration is read from environment variables in the factory (`LLM_TIMEOUT`, 
 
 ## Connected to
 - **Port:** `LLMPort` (`application/ports/llm_port.py`).
-- **Created by** `FactoriesMixin._create_llm` (`application/di/_factories.py:111-117`, provider from `ModelProvider.from_model_name`), `di/_skillopt.py:141`, `application/services/model_registry/_service.py:53`. Role adapters (critic, verifier) are built with `_create_llm_for_role`.
+- **Created by** `FactoriesMixin._create_llm` (`application/di/_factories.py:111-117`, provider from `ModelProvider.from_model_name`), `di/_skillopt.py:142`, `application/services/model_registry/_service.py:53`. Role adapters (critic, verifier) are built with `_create_llm_for_role`.
 - **Consumed by** `CascadeExecutor` (which has its **own** per-model breaker, tripped at 5, see its card), `PlannerAgent`, the verifier and critic services.
 - **Looks like but is not:** `CascadeExecutor` (chooses *which* model; this layer makes one model reliable); `ProviderAccountPort` / `OpenRouterAccountAdapter` (credits and model list, not chat).
 

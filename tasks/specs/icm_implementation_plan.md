@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-13
+---
+
 # ICM-Derived Improvements — Implementation Plan
 
 **Source**: `tasks/specs/icm_weebot_analysis.md` (gap analysis)

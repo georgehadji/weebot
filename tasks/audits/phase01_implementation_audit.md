@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # Implementation Audit Report
 
 **Audit scope:** Commit `b0f5508..2f6bb59` — Phases 0 and 1 of Agent-Native Memory system  

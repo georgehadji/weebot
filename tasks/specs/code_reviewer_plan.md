@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-10
+---
+
 # Code Reviewer Agent — Implementation Plan
 
 **Feature:** `ReviewingState` — per-step LLM code review between `ExecutingState` and the next step.  

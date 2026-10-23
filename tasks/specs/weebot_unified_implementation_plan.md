@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-30
+note: P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
+---
+
 # WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted
 
 **Purpose:** A single, de-duplicated roadmap merging the two audit backlogs into one sequenced plan.

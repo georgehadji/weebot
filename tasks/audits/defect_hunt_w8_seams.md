@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Wave 8 — Seams & Fix-Interaction
 
 Execution record for W8. **Not a new surface** — a review of everything W1–W7 changed.

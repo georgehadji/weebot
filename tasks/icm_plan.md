@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-10-22
+note: slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
+---
+
 # Plan: make Weebot an ICM workspace
 
 Status: DRAFT, nothing moved or written yet. Method: icm-architect, Restructure mode + System map form.
@@ -54,9 +60,9 @@ map/                       new shelf, next to docs/, not inside weebot/
 
 **Slice 4, verbs.** Process cards for the five movements listed above only.
 
-**Slice 5, effects index plus outside-in pass.** Write `effects/CONTEXT.md`. Then list what points INTO the repo from outside (Claude Desktop config via `claude_desktop_config.json.example`, `run_mcp.py` path, CI, docker entrypoints) and record each on the card it lands on.
+**Slice 5, effects index plus outside-in pass.** Write `effects/CONTEXT.md`. Then list what points INTO the repo from outside (Claude Desktop config via `claude_desktop_config.json.example`, `run_mcp.py` path, CI, docker entrypoints) and record each on the card it lands on. Done 2026-10-24: `map/effects/inbound.md` lists each outside consumer with its citation.
 
-**Slice 6, re-verify.** Re-check Hits / Does not hit against source. Cold walk test (section 7).
+**Slice 6, re-verify.** Re-check Hits / Does not hit against source. Cold walk test (section 7). Done 2026-10-24: the cold walk answered 5 of 6 questions in 2 to 4 hops (about 6.5k tokens); the miss was a stale EgressGuard card, so `scripts/check_map_citations.py --drift` now compares cited lines with the card's `commit` (`make lint-map`), and all 42 cards were re-verified at d4ffb555.
 
 **Slice 7, clean-up (separate PR, needs approval).** Per the slice 0 table:
 - `transcript*`, `subs.en.vtt`, `chunk_transcript.py`, `fetch_transcript.py` to `Output/` or a `_archive/`, after referrer check.

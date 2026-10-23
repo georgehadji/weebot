@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-13
+---
+
 # Residual Fixes Plan
 **Scope**: Issues found during code review of the Phase 1–4 implementation (commit `042548c`).
 **Architecture constraint**: Dependency Rule — Domain ← Application ← Infrastructure ← Interfaces. No fix may introduce an import that flows outward.

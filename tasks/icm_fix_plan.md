@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-10-23
+note: F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
+---
+
 # Plan: fix the findings recorded in the map cards
 
 Status: IN PROGRESS. Written 2026-10-21 against commit `f00ea38`; Waves 0-2 and most of Wave 3 are done (results under each wave). The order for everything still open is in `tasks/remaining_fix_plan.md`.

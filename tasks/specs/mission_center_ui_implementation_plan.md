@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-04
+---
+
 # Weebot Mission Center — Implementation Plan
 
 **Status:** proposed

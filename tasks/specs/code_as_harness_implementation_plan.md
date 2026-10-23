@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-30
+note: phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
+---
+
 # Implementation Plan — "Code as Agent Harness" Enhancements & Fixes
 
 **Companion to:** `tasks/specs/code_as_agent_harness_analysis.md`

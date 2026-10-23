@@ -114,9 +114,10 @@ gen-map-index:
 	@python scripts/gen_map_index.py
 
 lint-map:
-	@echo "=== map/ index generated, card citations resolve ==="
+	@echo "=== map/ and tasks/ indexes generated, card citations resolve ==="
 	@python scripts/gen_map_index.py --check
-	@python scripts/check_map_citations.py
+	@python scripts/check_map_citations.py --drift
+	@python scripts/gen_tasks_index.py --check
 
 lint-settings-construction:
 	@echo "=== Direct WeebotSettings() construction (AST, ratcheted) ==="
