@@ -360,6 +360,9 @@ class Session(BaseModel):
         verified_by: str | None = None,
     ) -> Session:
         facts = dict(self.context.facts)
+        # Re-insert so a rewritten key counts as newest: the cap evicts the oldest
+        # insertion, and a gate flag set True late must not go first (F68).
+        facts.pop(key, None)
         facts[key] = Fact(value=value, source=source, verified_by=verified_by)
         SessionContext._cap_facts_dict(facts)
         new_ctx = self.context.model_copy(update={"facts": facts})
