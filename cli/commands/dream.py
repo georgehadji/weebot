@@ -15,7 +15,6 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from weebot.application.di import Container
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -36,8 +35,9 @@ def dream_scan(max_contracts: int) -> None:
     """Run DreamerAgent + IdeaGate cycle and print approved ideas."""
 
     async def _run() -> None:
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
 
         dreamer = container.get("dreamer_agent")
         if dreamer is None:
@@ -151,8 +151,9 @@ def dream_build(contract_id: str) -> None:
         from weebot.application.ports.llm_port import LLMPort
         from weebot.domain.models.session import Session
 
-        container = Container()
-        container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        container = shared_container()  # one container per process
 
         llm = container.get(LLMPort)
         state_repo = container.get(StateRepositoryPort)

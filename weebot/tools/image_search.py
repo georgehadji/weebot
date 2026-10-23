@@ -84,16 +84,6 @@ class ImageSearchTool(BaseTool):
     }
 
     default_timeout_seconds: int = 30
-    allowed_roles: list[str] = [
-        "designer",
-        "builder",
-        "creative",
-        "researcher",
-        "automation",
-        "architect",
-        "planner",
-        "executor",
-    ]
 
     async def execute(
         self,

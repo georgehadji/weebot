@@ -348,7 +348,6 @@ class GuardedTool(BaseTool):
             name=inner.name,
             description=inner.description,
             parameters=inner.parameters,
-            allowed_roles=inner.allowed_roles,
             max_concurrent=inner.max_concurrent,
             default_timeout_seconds=inner.default_timeout_seconds,
             truncation_strategy=inner.truncation_strategy,

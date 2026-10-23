@@ -20,6 +20,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 from collections.abc import Callable
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort 
 from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
 from weebot.application.services.task_runner import TaskRunner  # noqa: E402
 from weebot.config.harness.schema import HarnessConfig  # noqa: E402
+from weebot.config.tool_config import ToolConfig, tool_config_from_settings  # noqa: E402
 
 from weebot.application.di._factories import FactoriesMixin  # noqa: E402
 from weebot.application.di._agent_tools import AgentToolsMixin  # noqa: E402
@@ -125,13 +127,14 @@ class Container(
 
     # ── convenience binders ─────────────────────────────────────────
 
-    def configure_defaults(self, *, db_path="./weebot_sessions.db", default_model=None) -> None:
+    def configure_defaults(self, *, db_path=DB_SESSIONS_PATH, default_model=None) -> None:
         """Wire all defaults: LLM → OpenRouter, state → SQLite, etc."""
         from weebot.config.settings import WeebotSettings, get_settings
 
         # Factories resolve settings here rather than building their own
         # WeebotSettings(); the instance is the process-wide get_settings() one.
         self.register(WeebotSettings, get_settings)
+        self.register(ToolConfig, lambda: tool_config_from_settings(self.get(WeebotSettings)))
         self.register(StateRepositoryPort, lambda: self._create_state_repo(db_path))
         self.register("session_persistence", lambda: self._create_session_persistence_adapter())
         self.register(EventBusPort, self._create_event_bus)
@@ -421,6 +424,47 @@ class Container(
             retention_agent=self._maybe_get_str("retention_agent"),
         )
 
+    def step_executor(
+        self,
+        *,
+        model: str,
+        session=None,
+        context=None,
+        llm=None,
+        tools=None,
+        event_bus=None,
+        state_repo=None,
+    ):
+        """The ExecutorAgent that runs one plan step (ExecuteStepHandler).
+
+        Container singletons first, then every field the flow's
+        StepExecutionContext set (ADR-015, F25). Before, the flow's settings
+        went to an executor that never ran a step.
+        """
+        from weebot.application.agents.executor import ExecutorAgent
+        from weebot.application.models.tool_collection import ToolCollection
+        from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+
+        kwargs = dict(
+            llm=llm if llm is not None else self._maybe_get(LLMPort),
+            tools=tools if tools is not None else ToolCollection(),
+            event_bus=event_bus if event_bus is not None else self._maybe_get(EventBusPort),
+            model=model,
+            skill_retriever=self._maybe_get_str("skill_retriever"),
+            personality=self._maybe_get_str("personality"),
+            state_repo=(
+                state_repo if state_repo is not None else self._maybe_get(StateRepositoryPort)
+            ),
+            tracing_port=self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None,
+            # THE place the pool has to go: this executor runs every step
+            # (ExecutingState sends each one through the mediator).
+            llm_pool=self._maybe_get_str("llm_pool"),
+            provider_account=self._maybe_get(ProviderAccountPort),
+        )
+        if context is not None:
+            kwargs.update(context.executor_kwargs())
+        return ExecutorAgent(**kwargs)
+
     def build_mediator(self) -> Mediator:
         """Build a configured Mediator with default handlers registered."""
         from weebot.application.cqrs.behaviors.validation import ValidationBehavior
@@ -449,7 +493,10 @@ class Container(
                     return self._build_plan_act_flow_for_session(s)
 
                 tools = registry.create_tool_collection(
-                    role="admin", sandbox_port=sandbox, llm_port=llm, flow_factory=_flow_factory
+                    role="admin",
+                    sandbox_port=sandbox,
+                    llm_port=llm,
+                    flow_factory=_flow_factory,
                 )
             except Exception as exc:
                 # Do not fail silently: "no tools configured" and "tool
@@ -477,40 +524,22 @@ class Container(
         # llm/tools/event_bus/model (4 of ExecutorAgent's 22 params) — see
         # tasks/specs/side_constraint_integrity_plan.md Phase 0. This factory
         # wires the container-level singletons that request has no way to
-        # supply on its own. Per-flow/per-session values (skill_prompt,
-        # agent_role, harness block, behavioral_learner, middleware_chain,
-        # trajectory_config) are NOT available here — the Mediator is a
-        # shared singleton built once at container-construction time, before
-        # any session exists — and remain a follow-up (Phase 7 wires
-        # behavioral_learner specifically).
-        def _executor_factory(*, model: str, session):
-            from weebot.application.agents.executor import ExecutorAgent
-            from weebot.application.models.tool_collection import ToolCollection
-            from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
-
-            return ExecutorAgent(
-                llm=llm,
-                tools=tools if tools is not None else ToolCollection(),
-                event_bus=event_bus,
+        # supply on its own. The per-flow values (role-scoped tools,
+        # skill_prompt, agent_role, harness block, behavioral_learner,
+        # middleware_chain, trajectory_config) arrive on the command as the
+        # flow's StepExecutionContext and override these (ADR-015, F25).
+        def _executor_factory(*, model: str, session, context=None):
+            # The flow's StepExecutionContext (ADR-015) overlays these
+            # singletons: role-scoped tools, skill prompt, role, learner,
+            # harness block, middleware, trajectory config.
+            return self.step_executor(
                 model=model,
-                skill_retriever=self._maybe_get_str("skill_retriever"),
-                personality=self._maybe_get_str("personality"),
+                session=session,
+                context=context,
+                llm=llm,
+                tools=tools,
+                event_bus=event_bus,
                 state_repo=state_repo,
-                tracing_port=(
-                    self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None
-                ),
-                # THE place the pool has to go. ExecutingState runs every step
-                # through the mediator ("CQRS: execute step through mediator
-                # (REQUIRED)"), and this factory builds the executor that
-                # ExecuteStepHandler uses. PlanActFlow's own `self._executor`
-                # only serves the summarize fallback. The remediation plan said
-                # to pass the pool at `_base.py:283` via the flow's constructor
-                # chain; doing that would have bounded an executor that never
-                # runs a step, and the DI census would have gone green anyway,
-                # because it proves a key is resolved -- not that it reaches the
-                # object doing the work.
-                llm_pool=self._maybe_get_str("llm_pool"),
-                provider_account=self._maybe_get(ProviderAccountPort),
             )
 
         register_default_handlers(
@@ -608,18 +637,8 @@ class Container(
             flow_factory=_flow_factory,
         )
 
-        from weebot.config.model_refs import (
-            MODEL_CASCADE_TIER2,
-            MODEL_CASCADE_TIER4,
-            MODEL_ROLE_CODER,
-        )
-        from weebot.domain.models.sub_agent import AgentTier
-
-        _TIER_MODEL: dict[AgentTier, str] = {
-            AgentTier.BUDGET: MODEL_CASCADE_TIER2,
-            AgentTier.STANDARD: MODEL_ROLE_CODER,
-            AgentTier.PREMIUM: MODEL_CASCADE_TIER4,
-        }
+        from weebot.config.model_refs import MODEL_CASCADE_TIER2
+        from weebot.config.model_refs import SUBAGENT_TIER_MODEL as _TIER_MODEL
 
         def _build_sub_flow(session, spec, llm, tools):
             mediator = self.build_mediator()

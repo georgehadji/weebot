@@ -62,21 +62,29 @@ def _cached(key: str):
 
     Thread-safe: uses a lock for container initialization.
     """
+    try:
+        return shared_container().get(key)
+    except Exception:
+        return None
+
+
+def shared_container():
+    """The process's one DI container, built on first use (W5.3).
+
+    Entry points use this rather than building their own, so a `flow run`
+    configures the object graph once. Unlike ``_cached`` it raises when the
+    container cannot be built.
+    """
     global _shared_container
     if _shared_container is None:
         with _shared_container_lock:
             if _shared_container is None:
-                try:
-                    from weebot.application.di import Container
+                from weebot.application.di import Container
 
-                    _shared_container = Container()
-                    _shared_container.configure_defaults()
-                except Exception:
-                    return None
-    try:
-        return _shared_container.get(key)
-    except Exception:
-        return None
+                container = Container()
+                container.configure_defaults()
+                _shared_container = container
+    return _shared_container
 
 
 _MCP_TOOLKIT: Any = None  # MCPToolkitAdapter, connected once per process
@@ -131,6 +139,22 @@ async def _configured_mcp_tools() -> list:
         _MCP_TOOLKIT = toolkit
         _log.info("Configured MCP servers connected: %d tools", len(toolkit.get_tools()))
         return toolkit.get_tools()
+
+
+async def close_mcp_toolkit() -> None:
+    """Close the configured MCP connections, in the task that is ending.
+
+    Left open, asyncio finalised the streamable-HTTP client at loop shutdown
+    from another task: "Attempted to exit cancel scope in a different task".
+    """
+    global _MCP_TOOLKIT
+    toolkit, _MCP_TOOLKIT = _MCP_TOOLKIT, None
+    if toolkit is None:
+        return
+    try:
+        await toolkit.cleanup()
+    except Exception as exc:
+        _log.warning("Closing the configured MCP servers failed: %s", exc)
 
 
 async def route_and_create_flow(
@@ -328,13 +352,19 @@ async def build_tools(
     RoleBasedToolRegistry = _tool_registry_mod.RoleBasedToolRegistry
     BaseTool = _base_mod.BaseTool
 
-    registry = RoleBasedToolRegistry()
+    # The container's registry carries its tool wiring (state repo, reranker,
+    # tool config, per-tool collaborators); a bare one would build tools without.
+    registry = _cached("tool_registry") or RoleBasedToolRegistry()
 
     # Build flow_factory for tools that spawn sub-agents (debate, dispatch_parallel_tasks)
     flow_factory = _get_flow_factory(llm_port)
 
     combined: list[BaseTool] = list(
-        registry.create_tool_collection(role, llm_port=llm_port, flow_factory=flow_factory)
+        registry.create_tool_collection(
+            role,
+            llm_port=llm_port,
+            flow_factory=flow_factory,
+        )
     )
 
     if mcp_config:

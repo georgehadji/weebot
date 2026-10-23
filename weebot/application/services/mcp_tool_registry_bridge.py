@@ -224,8 +224,8 @@ class MCPToolRegistryBridge:
         """Register a single MCP tool into the tool registry.
 
         Write tools (matching ``write_tools`` patterns on the server config)
-        are registered to **admin-only** at **restricted** tier.  Read tools
-        register to all four roles at **controlled** tier.
+        are registered to **admin** only; read tools to all four roles.
+        Calls still pass the guard chain (ADR-013 approvals).
         """
         namespaced = tool_info.namespaced_name
 
@@ -235,13 +235,9 @@ class MCPToolRegistryBridge:
         is_write = any(fnmatch.fnmatch(tool_info.original_name, p) for p in write_patterns)
 
         if is_write:
-            # Write tools: admin-only + restricted tier
             roles = ["admin"]
-            tier = "restricted"
         else:
-            # Read tools: all roles + controlled tier
             roles = ["admin", "automation", "researcher", "coder"]
-            tier = "controlled"
 
         for role in roles:
             try:
@@ -250,16 +246,11 @@ class MCPToolRegistryBridge:
                 # Role doesn't exist yet — create it
                 self._registry.add_role(role, [namespaced])
 
-        # Set tier
-        if self._registry.get_tool_tier(namespaced) == "public":
-            self._registry.set_tool_tier(namespaced, tier)
-
         logger.debug(
-            "Bridge: registered MCP tool %s (server: %s, write=%s, tier=%s)",
+            "Bridge: registered MCP tool %s (server: %s, write=%s)",
             namespaced,
             server_name,
             is_write,
-            tier,
         )
 
     async def reload(self) -> int:

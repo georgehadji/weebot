@@ -43,8 +43,12 @@
 # `docker image inspect` instead of `except Exception: pass`.
 # 125 -> 124 with W5.3 batch 4: AgentRunner's `except Exception: pass` around
 # its Container() lookup went with the lookup.
+# 124 -> 121 with W5.3 batch 5: the tool registry's three `except Exception:
+# pass` around its Container() lookups went with the lookups.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 124
+# 121 -> 119: the deleted core error family and the YouTube tool's throwaway
+# VideoIngestTool() probe each held an `except Exception: pass`.
+silent_except_handlers = 119
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -85,8 +89,11 @@ bare_env_reads = 71
 # silent_except_handlers 126 -> 125.
 # 63 -> 62 with W5.3 batch 4: the same AgentRunner handler as
 # silent_except_handlers 125 -> 124.
+# 62 -> 59 with W5.3 batch 5: the same three tool-registry handlers as
+# silent_except_handlers 124 -> 121.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 62
+# 59 -> 58: the YouTube probe, as for silent_except_handlers 121 -> 119.
+bandit_b110 = 58
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -245,5 +252,18 @@ settings_construction = 0
 # 36 -> 34: GatewayAdapter requires its llm_port (every subclass already
 # passed one), and AgentRunner receives its retention_agent from the entry
 # point instead of building a Container in its constructor.
+# 34 -> 31: RoleBasedToolRegistry takes state_repo and rerank from its
+# callers instead of building a Container per rerank tool, per state-repo
+# tool and for a missing flow factory.
 # Measured by: scripts/lint_container_construction.py
-container_construction = 34
+# 31 -> 25: W5.5, the six self-resolving tools (audit, knowledge, persistent
+# memory, video ingest, voice in/out) take collaborators from the registry's wiring.
+# 25 -> 23: `flow run` and `flow retry` use factories.shared_container(),
+# one container per process instead of two.
+# 23 -> 22: the scheduler's cron-agent loader and the MCP server take the
+# caller's container / reranker; run_mcp.py builds the one root container.
+# 22 -> 9: the CLI commands, cli/main.py and run.py use
+# factories.shared_container(); what is left builds a differently configured
+# container (harness db_path/model, skillopt), is a separate entry point
+# (web lifespan, run_mcp.py, the shared root itself) or is ADR-009 legacy.
+container_construction = 9

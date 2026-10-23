@@ -235,6 +235,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from weebot.scheduling.default_jobs import register_default_jobs
 
     await register_default_jobs(scheduler, container)
+    # The jobs `cron-agent create` saved; nothing loaded them before.
+    try:
+        await scheduler.load_cron_agent_jobs(container=container)
+    except Exception as exc:
+        logger.warning("Cron agent jobs not loaded: %s", exc)
     await scheduler.start()
     app.state.scheduler = scheduler
 
@@ -363,6 +368,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Browser pool closed")
     except Exception:
         pass  # Browser pool not configured
+    # The configured MCP servers' connections, from the task that opened them.
+    from weebot.interfaces.factories import close_mcp_toolkit
+
+    await close_mcp_toolkit()
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools
@@ -377,7 +386,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 # ── Loopback addresses for fail-closed access control ─────────────────
-_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+from weebot.interfaces.web.auth import _LOOPBACK  # noqa: E402 -- one loopback set
 
 
 def create_app() -> FastAPI:

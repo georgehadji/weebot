@@ -1,8 +1,7 @@
 """Tests for run_mcp entry point and the ping health-check tool.
 
 Coverage:
-- _try_attach: returns None on import failure, instance on success
-- _build_server: returns WeebotMCPServer, forwards managers
+- _build_server: returns WeebotMCPServer, takes its collaborators from one container
 - main(): sys.exit(1) on bad settings; calls run_stdio / run_sse correctly
 - ping tool: returns JSON with status, version, ISO timestamp
 """
@@ -30,30 +29,26 @@ def _server_mock():
 
 
 # ---------------------------------------------------------------------------
-# _try_attach
+# _build_server: one composition-root container (W5.3)
 # ---------------------------------------------------------------------------
 
 
-class TestTryAttach:
-    def test_returns_none_on_import_error(self) -> None:
-        """Missing module → None, no exception raised."""
-        from run_mcp import _try_attach
+class _Container:
+    """A container double: `found` maps keys to objects; anything else raises."""
 
-        result = _try_attach("weebot.does_not_exist_xyz", "SomeClass", "Test")
-        assert result is None
+    def __init__(self, found=None, scheduler=None):
+        self._found = found or {}
+        self._scheduler = scheduler
 
-    def test_returns_instance_on_success(self) -> None:
-        """Existing class → instantiated object returned."""
-        from run_mcp import _try_attach
-        from weebot.core.activity_stream import ActivityStream
+    def get(self, key):
+        if key in self._found:
+            return self._found[key]
+        raise KeyError(key)
 
-        result = _try_attach("weebot.core.activity_stream", "ActivityStream", "ActivityStream")
-        assert isinstance(result, ActivityStream)
-
-
-# ---------------------------------------------------------------------------
-# _build_server
-# ---------------------------------------------------------------------------
+    def build_scheduler(self):
+        if self._scheduler is None:
+            raise KeyError("scheduler")
+        return self._scheduler
 
 
 class TestBuildServer:
@@ -62,34 +57,36 @@ class TestBuildServer:
         from run_mcp import _build_server
         from weebot.mcp.server import WeebotMCPServer
 
-        server = _build_server()
+        server = _build_server(container=_Container())
         assert isinstance(server, WeebotMCPServer)
 
     def test_graceful_when_managers_unavailable(self) -> None:
-        """All _try_attach calls returning None → server still created."""
+        """Nothing resolves -> the server is still created, without them."""
         from run_mcp import _build_server
 
-        with patch("run_mcp._try_attach", return_value=None):
-            server = _build_server()
+        server = _build_server(container=_Container())
 
         assert server._state_manager is None
         assert server._scheduler is None
 
-    def test_attaches_state_manager_when_available(self) -> None:
-        """A non-None return from _try_attach is forwarded to the server."""
+    def test_the_container_supplies_every_collaborator(self) -> None:
+        """State repo, scheduler, event store and reranker all come from the one
+        container. The scheduler used to be imported from a module that does
+        not exist (weebot.infrastructure.scheduling), so it was always None."""
         from run_mcp import _build_server
+        from weebot.application.ports.event_store_port import EventStorePort
+        from weebot.application.ports.rerank_port import RerankPort
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
 
-        mock_sm = MagicMock()
+        repo, sched, store, rerank = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        container = _Container(
+            {StateRepositoryPort: repo, EventStorePort: store, RerankPort: rerank},
+            scheduler=sched,
+        )
+        server = _build_server(container=container)
 
-        def fake_attach(module_path: str, class_name: str, label: str):
-            if class_name == "SQLiteStateRepository":
-                return mock_sm
-            return None
-
-        with patch("run_mcp._try_attach", side_effect=fake_attach):
-            server = _build_server()
-
-        assert server._state_manager is mock_sm
+        assert server._state_manager is repo and server._scheduler is sched
+        assert server._event_store is store and server._rerank is rerank
 
 
 # ---------------------------------------------------------------------------

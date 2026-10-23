@@ -30,19 +30,19 @@ logger = logging.getLogger(__name__)
 
 def _get_mcp_bridge():
     """Resolve MCPToolRegistryBridge from DI container."""
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
     return container.build_mcp_bridge()
 
 
 def _get_mcp_client():
     """Resolve MCPClientManager from DI container."""
-    from weebot.application.di import Container
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
     return container.get("mcp_client")
 
 

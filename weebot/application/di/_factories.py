@@ -278,7 +278,9 @@ class FactoriesMixin:
     def _create_harness_config():
         from pathlib import Path
 
-        version = _os.getenv("WEEBOT_HARNESS_VERSION", "v0.2.0")
+        from weebot.config.constants import DEFAULT_HARNESS_VERSION
+
+        version = _os.getenv("WEEBOT_HARNESS_VERSION", DEFAULT_HARNESS_VERSION)
         config_path = (
             Path(__file__).resolve().parent.parent.parent / "config" / "harness" / f"{version}.yaml"
         )
@@ -412,17 +414,57 @@ class FactoriesMixin:
 
         return CompositeToolRegistry()
 
-    @staticmethod
-    def _create_tool_registry():
+    def _create_tool_registry(self):
         """Create the shared RoleBasedToolRegistry (H1 single source of truth).
 
         The same registry instance is used by the MCP bridge and by
         PlanActFlow so that scoped retrieval mutations are visible to
-        the agent's tool collection on every turn.
+        the agent's tool collection on every turn. It carries this
+        container's ``tool_wiring``, so every collection built from it gets
+        the same collaborators (W5.5).
         """
         from weebot.tools.tool_registry import RoleBasedToolRegistry
 
-        return RoleBasedToolRegistry()
+        return RoleBasedToolRegistry(wiring=self.tool_wiring)
+
+    def tool_wiring(self) -> dict:
+        """The collaborators every tool collection gets: one place (W5.5).
+
+        Before, each caller repeated them, and one (``mcp_scope``) passed none.
+        A tool whose collaborator does not resolve is left out of
+        ``collaborators`` and the registry skips it.
+        """
+        from weebot.application.ports.rerank_port import RerankPort
+        from weebot.application.ports.speech_port import SpeechPort
+        from weebot.application.ports.tool_repository_port import ToolRepositoryPort
+        from weebot.application.services.audit_service import AuditService
+        from weebot.config.tool_config import ToolConfig
+        from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
+
+        state_repo = self._maybe_get(StateRepositoryPort)
+        tool_repo = self._maybe_get(ToolRepositoryPort)
+        speech = self._maybe_get(SpeechPort)
+        audit = self._maybe_get(AuditService)
+        memory = self._maybe_get(FileSystemMemoryAdapter)
+        wanted = {
+            "audit_session": {"service": audit},
+            "knowledge": {"repo": tool_repo},
+            "video_ingest": {"repo": tool_repo},
+            "voice_input": {"speech": speech},
+            "voice_output": {"speech": speech},
+            "persistent_memory": {"memory": memory, "state_repo": state_repo},
+        }
+        required = {"audit_session": "service", "knowledge": "repo", "video_ingest": "repo",
+                    "voice_input": "speech", "voice_output": "speech", "persistent_memory": "memory"}
+        return {
+            "state_repo": state_repo,
+            "rerank": self._maybe_get(RerankPort),
+            "tool_config": self._maybe_get(ToolConfig),
+            "collaborators": {
+                name: kwargs for name, kwargs in wanted.items()
+                if kwargs[required[name]] is not None
+            },
+        }
 
     def _create_mcp_bridge(self):
         """Create an MCPToolRegistryBridge with the MCP client injected.

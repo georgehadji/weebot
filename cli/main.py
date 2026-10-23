@@ -73,8 +73,9 @@ def _get_state_repo() -> Any:
     """
     global _container
     if _container is None:
-        _container = Container()
-        _container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        _container = shared_container()  # one container per process
     return _container.get(StateRepositoryPort)
 
 
@@ -82,8 +83,9 @@ def _get_llm() -> Any:
     """Resolve LLMPort from the shared DI container for health checks."""
     global _container
     if _container is None:
-        _container = Container()
-        _container.configure_defaults()
+        from weebot.interfaces.factories import shared_container
+
+        _container = shared_container()  # one container per process
     from weebot.application.ports.llm_port import LLMPort
 
     return _container.get(LLMPort)

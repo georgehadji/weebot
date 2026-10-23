@@ -153,8 +153,8 @@ def soul_list() -> None:
 
 def _get_provider():
     """Resolve SoulProviderPort from the DI container."""
-    from weebot.application.di import Container
 
-    c = Container()
-    c.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    c = shared_container()  # one container per process
     return c.get("soul_provider")

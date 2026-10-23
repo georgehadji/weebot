@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from weebot.tools.base import ToolCollection
-    from weebot.application.services.capability_gate import CapabilityGate
 
 logger = logging.getLogger(__name__)
 
@@ -181,56 +180,30 @@ class RoleBasedToolRegistry:
     # Lazy singleton: BaseTool.name -> tool class.
     _TOOL_CLASS_MAP: dict[str, type] | None = None
 
-    # Capability tiers per tool (Capability 4).
-    # Maps tool name -> tier string. Default is "public".
-    _TOOL_TIERS: dict[str, str] = {
-        "bash": "restricted",
-        "computer_use": "privileged",
-        "powershell": "restricted",
-        "python_execute": "controlled",
-        "file_editor": "controlled",
-        "schedule": "controlled",
-        "dispatch_parallel_tasks": "restricted",
-        "terminate": "privileged",
-        "persistent_memory": "controlled",
-        "advanced_browser": "controlled",
-        "screen_capture": "restricted",
-        "swarm": "controlled",
-        "debate": "controlled",
-        "mixture_of_agents": "controlled",
-        "audit_session": "restricted",
-        "reasoner": "controlled",
-        "berb": "controlled",
-        # Everything else defaults to "public" via get_tool_tier()
-    }
-
-    def __init__(self, role_mappings: dict[str, list[str]] | None = None) -> None:
+    def __init__(
+        self,
+        role_mappings: dict[str, list[str]] | None = None,
+        wiring: Any | None = None,
+    ) -> None:
         """Initialize the registry.
 
         Args:
             role_mappings: Optional custom role-to-tools mappings.
-                          If None, uses DEFAULT_ROLE_MAPPINGS merged with
-                          autodiscovered tool declarations.
+                          If None, uses DEFAULT_ROLE_MAPPINGS, the one role
+                          table (F32: the old ``allowed_roles`` autodiscovery
+                          could never take effect and was deleted).
+            wiring: Optional zero-argument callable returning the collaborators
+                every collection from this registry gets: ``state_repo``,
+                ``rerank``, ``tool_config``, ``sandbox_port``, and
+                ``collaborators`` (tool name -> constructor kwargs). The DI
+                container supplies it (W5.5); an argument a caller passes wins.
         """
-        if role_mappings:
-            self.role_mappings = role_mappings
-        else:
-            # Prefer autodiscovered role mappings from tool classes
-            auto = self._build_role_mappings_from_class_map()
-            if auto:
-                self.role_mappings = auto
-            else:
-                self.role_mappings = dict(self.DEFAULT_ROLE_MAPPINGS)
+        self._wiring = wiring
+        # Copies all the way down (F33): a shallow copy shared the lists, and
+        # add_tool_to_role on one registry changed every later one.
+        source = role_mappings or self.DEFAULT_ROLE_MAPPINGS
+        self.role_mappings = {role: list(tools) for role, tools in source.items()}
         logger.info(f"Initialized RoleBasedToolRegistry with {len(self.role_mappings)} roles")
-
-    def get_profile_for_role(self, role: str) -> Any:
-        """Return the ExpertProfile for a role, or None if unregistered."""
-        try:
-            from weebot.domain.models.expert_profile import get_expert_profile
-
-            return get_expert_profile(role)
-        except ImportError:
-            return None
 
     def get_tools_for_role(self, role: str) -> list[str]:
         """Get the list of authorized tools for a given role.
@@ -323,61 +296,6 @@ class RoleBasedToolRegistry:
             all_tools.update(tools)
         return sorted(list(all_tools))
 
-    def get_tool_tier(self, tool_name: str) -> str:
-        """Get the capability tier for a tool.
-
-        Args:
-            tool_name: The tool's name (e.g. "bash", "file_editor").
-
-        Returns:
-            Tier string: "public", "controlled", "restricted", or "privileged".
-        """
-        return self._TOOL_TIERS.get(tool_name, "public")
-
-    def set_tool_tier(self, tool_name: str, tier: str) -> None:
-        """Set the access tier for a tool.
-
-        Args:
-            tool_name: The tool''s name.
-            tier: One of "public", "controlled", "restricted", "privileged".
-        """
-        self._TOOL_TIERS[tool_name] = tier
-
-    def get_tools_for_role_with_gate(
-        self, role: str, gate: CapabilityGate, context: dict[str, Any]
-    ) -> list[str]:
-        """Get tools for a role, filtered by capability tier gate.
-
-        Args:
-            role: The role name.
-            gate: CapabilityGate instance for tier checking.
-            context: Context dict passed to gate.check().
-
-        Returns:
-            List of tool names that passed the tier gate.
-        """
-        all_tools = self.get_tools_for_role(role)
-        passed: list[str] = []
-        for tool_name in all_tools:
-            tier_str = self.get_tool_tier(tool_name)
-            from weebot.domain.models.capability_tier import CapabilityTier
-
-            try:
-                tier = CapabilityTier(tier_str)
-            except ValueError:
-                tier = CapabilityTier.PUBLIC
-            allowed, _reason = gate.check(tier, context)
-            if allowed:
-                passed.append(tool_name)
-            else:
-                logger.info(
-                    "Tool '%s' excluded from role '%s' by capability gate (tier: %s)",
-                    tool_name,
-                    role,
-                    tier_str,
-                )
-        return passed
-
     def get_registry_summary(self) -> dict[str, dict]:
         """Get a summary of all role-to-tools mappings.
 
@@ -430,9 +348,13 @@ class RoleBasedToolRegistry:
                         and attr is not BaseTool
                     ):
                         try:
-                            # Instantiate to read Pydantic field `name`
-                            instance = attr()
-                            tool_name = instance.name
+                            # The `name` field's default. Instantiating every
+                            # tool class to read it built a Container in each
+                            # tool that resolves its own collaborators (W5.3).
+                            field = attr.model_fields.get("name")
+                            tool_name = getattr(field, "default", None)
+                            if not isinstance(tool_name, str) or not tool_name:
+                                tool_name = attr().name
                             if tool_name and tool_name not in cls._TOOL_CLASS_MAP:
                                 cls._TOOL_CLASS_MAP[tool_name] = attr
                         except Exception:
@@ -445,41 +367,6 @@ class RoleBasedToolRegistry:
 
         return cls._TOOL_CLASS_MAP
 
-    @classmethod
-    def _build_role_mappings_from_class_map(cls) -> dict[str, list[str]]:
-        """Build role→tool mappings from ``BaseTool.allowed_roles`` attributes.
-
-        Iterates over the class map and groups tools by the roles listed
-        in their ``allowed_roles`` field.  Tools with ``allowed_roles=["*"]``
-        are assigned to a ``"*"`` key (all roles).  The primary use case
-        is to replace the hardcoded ``DEFAULT_ROLE_MAPPINGS``.
-
-        Returns:
-            Dict mapping role name to list of tool name strings, or empty
-            dict if the class map is not yet built or all tools are universal.
-        """
-        class_map = cls.build_tool_class_map()
-        mappings: dict[str, list[str]] = {}
-        universal: list[str] = []
-
-        for tool_name, tool_class in class_map.items():
-            allowed = getattr(tool_class, "allowed_roles", ["*"])
-            if not allowed or "*" in allowed:
-                universal.append(tool_name)
-                continue
-            for role in allowed:
-                mappings.setdefault(role, []).append(tool_name)
-
-        # If all tools are universal, return empty (caller falls back to DEFAULT_ROLE_MAPPINGS)
-        if not mappings:
-            return {}
-
-        # Merge universal tools into every role
-        for role in mappings:
-            mappings[role].extend(universal)
-
-        return mappings
-
     def create_tool_collection(
         self,
         role: str,
@@ -487,6 +374,8 @@ class RoleBasedToolRegistry:
         sandbox_port: Any | None = None,
         tool_config: Any | None = None,
         flow_factory: Any | None = None,
+        state_repo: Any | None = None,
+        rerank: Any | None = None,
     ) -> ToolCollection:
         """Create a :class:`ToolCollection` with instantiated tools for *role*.
 
@@ -496,6 +385,8 @@ class RoleBasedToolRegistry:
             sandbox_port: Optional SandboxPort for tools that support it.
             tool_config: Optional ToolConfig for tools that support it.
             flow_factory: Optional flow factory callable for sub-agent tools.
+            state_repo: Optional StateRepositoryPort for the sub-agent tools.
+            rerank: Optional RerankPort for tools with ``set_rerank``.
 
         Returns:
             ToolCollection populated with ``BaseTool`` instances.
@@ -508,6 +399,8 @@ class RoleBasedToolRegistry:
             sandbox_port=sandbox_port,
             tool_config=tool_config,
             flow_factory=flow_factory,
+            state_repo=state_repo,
+            rerank=rerank,
         )
 
     def create_tool_collection_from_names(
@@ -517,6 +410,8 @@ class RoleBasedToolRegistry:
         sandbox_port: Any | None = None,
         tool_config: Any | None = None,
         flow_factory: Any | None = None,
+        state_repo: Any | None = None,
+        rerank: Any | None = None,
     ) -> ToolCollection:
         """Create a :class:`ToolCollection` from an explicit list of tool names.
 
@@ -526,12 +421,27 @@ class RoleBasedToolRegistry:
             sandbox_port: Optional SandboxPort.
             tool_config: Optional ToolConfig.
             flow_factory: Optional flow factory callable for sub-agent tools.
+            state_repo: Optional StateRepositoryPort for the sub-agent tools.
+            rerank: Optional RerankPort for tools with ``set_rerank``.
+
+        Collaborators come from the caller, else from the registry's
+        ``wiring``. A tool with constructor collaborators of its own (audit,
+        knowledge, persistent memory, video ingest, voice in/out) gets them
+        from ``wiring()["collaborators"]`` and is skipped without them; these
+        tools used to build a whole Container() each (W5.3, W5.5, F28, F35).
 
         Returns:
             ToolCollection with matching ``BaseTool`` instances.
             Unknown names are logged and silently skipped.
         """
         from weebot.tools.base import ToolCollection
+
+        wired = self._wiring() if self._wiring is not None else {}
+        sandbox_port = sandbox_port if sandbox_port is not None else wired.get("sandbox_port")
+        tool_config = tool_config if tool_config is not None else wired.get("tool_config")
+        state_repo = state_repo if state_repo is not None else wired.get("state_repo")
+        rerank = rerank if rerank is not None else wired.get("rerank")
+        collaborators: dict[str, dict] = wired.get("collaborators") or {}
 
         class_map = self.build_tool_class_map()
         tools: list = []
@@ -552,42 +462,19 @@ class RoleBasedToolRegistry:
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
-                # If flow_factory is required but not provided, try to resolve it from the container
-                if name in _flow_factory_llm_tools or name in _flow_factory_state_tools:
-                    if flow_factory is None:
-                        try:
-                            import importlib as _il
-
-                            _c_mod = _il.import_module("weebot.application.di")
-                            _c = _c_mod.Container()
-                            _c.configure_defaults()
-                            flow_factory = lambda session: _c._build_plan_act_flow_for_session(
-                                session
-                            )
-                        except Exception:
-                            pass
-
-                if name in _llm_port_tools and llm_port is not None:
+                if name in collaborators:
+                    try:
+                        tool = tool_cls(**collaborators[name])
+                    except (TypeError, RuntimeError) as exc:
+                        logger.debug("Skipping tool %s: construction failed (%s)", name, exc)
+                        continue
+                elif name in _llm_port_tools and llm_port is not None:
                     tool = tool_cls(llm_port=llm_port)
                 elif name in _sandbox_port_tools and sandbox_port is not None:
                     tool = tool_cls(sandbox=sandbox_port)
                 elif name in _flow_factory_llm_tools:
                     tool = tool_cls(llm=llm_port, flow_factory=flow_factory)
                 elif name in _flow_factory_state_tools:
-                    state_repo = None
-                    try:
-                        import importlib as _il
-
-                        _state_repo_mod = _il.import_module(
-                            "weebot.application.ports.state_repo_port"
-                        )
-                        StateRepositoryPort = _state_repo_mod.StateRepositoryPort
-                        _c = _il.import_module("weebot.application.di").Container()
-                        _c.configure_defaults()
-                        state_repo = _c.get(StateRepositoryPort)
-                    except Exception:
-                        pass
-                    # ponytail: support state_repo injection cleanly
                     tool = tool_cls(flow_factory=flow_factory, state_repo=state_repo)
                 elif name in _browser_adapter_tools:
                     if _shared_browser_adapter is None:
@@ -611,20 +498,10 @@ class RoleBasedToolRegistry:
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)
-                # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine)
-                if hasattr(tool, "set_rerank"):
-                    try:
-                        import importlib as _il
-
-                        _rerank_mod = _il.import_module("weebot.application.ports.rerank_port")
-                        RerankPort = _rerank_mod.RerankPort
-                        _c = _il.import_module("weebot.application.di").Container()
-                        _c.configure_defaults()
-                        rerank = _c.get(RerankPort)
-                        tool.set_rerank(rerank)
-                        logger.debug("Injected RerankPort into %s", name)
-                    except Exception:
-                        pass  # RerankPort not configured — fall back to engine order
+                # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine).
+                # None: no reranker configured, results keep engine order.
+                if rerank is not None and hasattr(tool, "set_rerank"):
+                    tool.set_rerank(rerank)
                 tools.append(tool)
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)

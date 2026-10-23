@@ -139,6 +139,7 @@ class WeebotMCPServer:
         composite_registry: object | None = None,
         composite_executor: object | None = None,
         composite_tools_enabled: bool = True,
+        rerank: object | None = None,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
@@ -148,6 +149,8 @@ class WeebotMCPServer:
         self._tool_discovery = tool_discovery
         self._cascade_tracker = cascade_tracker
         self._event_store = event_store
+        # The entry point's reranker (run_mcp.py resolves it from its container).
+        self._rerank = rerank
         self._skill_registry = skill_registry
         self._composite_registry = composite_registry or self._default_composite_registry()
         self._composite_executor = composite_executor or self._default_composite_executor()
@@ -389,22 +392,9 @@ class WeebotMCPServer:
         _bash_tool, _python_tool = guard_tools([BashTool(), PythonExecuteTool()])
         _search_tool = WebSearchTool()
 
-        # Inject reranker into WebSearchTool if available
-        try:
-            from weebot.application.di import Container
-            from weebot.application.ports.rerank_port import RerankPort
-
-            c = Container()
-            c.configure_defaults()
-            rerank = c._maybe_get(RerankPort)
-            if rerank is not None:
-                _search_tool.set_rerank(rerank)
-        except Exception:
-            import logging as _log
-
-            _log.getLogger(__name__).debug(
-                "RerankPort not configured — search results use engine order", exc_info=True
-            )
+        # The reranker the entry point passed; without one, engine order.
+        if self._rerank is not None:
+            _search_tool.set_rerank(self._rerank)
 
         _editor = StrReplaceEditorTool()
 
@@ -566,9 +556,11 @@ class WeebotMCPServer:
             import json as _json
             from datetime import datetime
 
+            from weebot import __version__
+
             return self._tool_success_response(
                 _json.dumps(
-                    {"status": "ok", "version": "1.0.0", "timestamp": datetime.now(UTC).isoformat()}
+                    {"status": "ok", "version": __version__, "timestamp": datetime.now(UTC).isoformat()}
                 )
             )
 

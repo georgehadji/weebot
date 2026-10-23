@@ -31,7 +31,8 @@ class BaseTool(ABC, BaseModel):
     name: str
     description: str
     parameters: dict  # JSON Schema object
-    allowed_roles: list[str] = ["*"]  # Roles authorized to use this tool. ["*"] = all roles.
+    # Which roles get a tool is the registry's DEFAULT_ROLE_MAPPINGS (W5.5); the
+    # per-tool ``allowed_roles`` field that used to sit here was never enforced.
 
     # Phase 2: Concurrency cap (0 = unlimited). Set to 1 for tools that
     # share a resource (browser, screen, voice, computer_use).

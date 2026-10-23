@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from weebot.application.ports.audit_port import AuditPort
-from weebot.application.services.audit_service import AuditService
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -41,12 +40,10 @@ class AuditTool(BaseTool):
     def __init__(self, service: AuditPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if service is None:
-            import importlib as _il
-
-            _di_mod = _il.import_module("weebot.application.di")
-            _c = _di_mod.Container()
-            _c.configure_defaults()
-            service = _c.get(AuditService)
+            raise RuntimeError(
+                "{} needs its AuditPort collaborator: build it through the DI "
+                "container's tool_registry, whose wiring supplies it (W5.5)".format(self.name)
+            )
         object.__setattr__(self, "_service", service)
 
     async def execute(self, output: str, skill_name: str = "", **_: Any) -> ToolResult:
