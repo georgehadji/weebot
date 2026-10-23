@@ -119,10 +119,21 @@ async def _clear_network_use(
     return ToolResult.error_result(error=message, output=message, tool_name=name), False
 
 
+def _is_local_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    return parsed.scheme == "file" or parsed.hostname in ("localhost", "127.0.0.1", "::1")
+
+
 # Sessions whose context holds untrusted external content (see ToolExecutor).
 # shortcut: in-process only, so a resume in a new process starts untainted;
 # move it to a session fact if resumes cross processes in practice.
 _TAINTED_SESSIONS: set[str] = set()
+# Session id -> whether its browser tab was last navigated to a local page.
+_LOCAL_TAB: dict[str, bool] = {}
+# Session id -> paths file_editor wrote in it (viewing them adds no external content).
+_WRITTEN_FILES: dict[str, set[str]] = {}
 
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
@@ -411,7 +422,26 @@ class ToolExecutor:
         #
         # Narrower than the fence in _base.py by FENCE_ONLY_TOOLS: fencing is
         # free, this taint is sticky for the rest of the session.
-        if taints_egress_context(name) and not getattr(result, "is_error", False):
+        # A file:// or loopback tab holds no external content, so reading it
+        # does not taint. shortcut: tracked per session from the last navigate,
+        # not the shared browser's real tab; read the tab URL if that drifts.
+        if name == "advanced_browser" and args.get("url"):
+            _LOCAL_TAB[self._current_session_id] = _is_local_url(str(args["url"]))
+        local_page = name == "advanced_browser" and _LOCAL_TAB.get(self._current_session_id, False)
+        # Writing a file returns only a confirmation; `view` returns its content,
+        # which is new only if this session did not write the file.
+        own_file = False
+        if name == "file_editor":
+            path = str(args.get("path", ""))
+            written = _WRITTEN_FILES.setdefault(self._current_session_id, set())
+            own_file = args.get("command") != "view" or path in written
+            if args.get("command") != "view" and not getattr(result, "is_error", False):
+                written.add(path)
+        if (
+            taints_egress_context(name)
+            and not getattr(result, "is_error", False)
+            and not (local_page or own_file)
+        ):
             self._untrusted_context_active = True
         return result
 
