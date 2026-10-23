@@ -735,8 +735,10 @@ class PlanActFlow(BaseFlow):
 
                         if self._run_span is not None:
                             self._run_span.end()
+                        # Run CompletedState this pass; it sets the terminal
+                        # status, so the loop ends after it.
                         self.set_state(CompletedState(termination_reason=_result.reason))
-                        return
+                        break
 
             # ── Self-Harness: resolve harness instructions per-step ──
             # Before executing a state, check if we have a resolver and
