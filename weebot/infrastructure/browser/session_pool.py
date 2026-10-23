@@ -410,14 +410,14 @@ _DI_WARNED: bool = False
 async def get_browser_pool(
     min_sessions: int = 1, max_sessions: int = 5, **kwargs
 ) -> BrowserSessionPool:
-    """[DEPRECATED] Use container.get(\"browser_pool\") instead.
+    """[DEPRECATED] Unused: the browser tools share one PlaywrightAdapter per tool collection.
 
     This global-singleton pattern is being replaced by DI-managed
     lifecycle (Step 2.3 of Architecture 9 Plan).
     """
     global _global_pool, _DI_WARNED
     if not _DI_WARNED:
-        logger.warning("get_browser_pool() is deprecated. " "Use container.get('browser_pool').")
+        logger.warning("get_browser_pool() is deprecated. " "Nothing uses the pool.")
         _DI_WARNED = True
 
     async with _pool_lock:
@@ -432,11 +432,11 @@ async def get_browser_pool(
 
 
 async def close_global_pool() -> None:
-    """[DEPRECATED] Use container.get(\"browser_pool\").close() instead."""
+    """[DEPRECATED] Unused; see get_browser_pool."""
     global _global_pool, _DI_WARNED
     if not _DI_WARNED:
         logger.warning(
-            "close_global_pool() is deprecated. " "Use container.get('browser_pool').close()."
+            "close_global_pool() is deprecated. " "Nothing uses the pool."
         )
         _DI_WARNED = True
 
@@ -448,5 +448,5 @@ async def close_global_pool() -> None:
 
 
 async def reset_global_pool() -> None:
-    """[DEPRECATED] Use container.get(\"browser_pool\").reset() instead."""
+    """[DEPRECATED] Unused; see get_browser_pool."""
     await close_global_pool()

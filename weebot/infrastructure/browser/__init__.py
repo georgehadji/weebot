@@ -49,7 +49,7 @@ __all__ = [
     # Adapters
     "PlaywrightAdapter",
     "PLAYWRIGHT_AVAILABLE",
-    # Session pool (DEPRECATED — use container.get("browser_pool"))
+    # Session pool (DEPRECATED, unused)
     "BrowserSessionPool",
     "BrowserSession",
     "get_browser_pool",

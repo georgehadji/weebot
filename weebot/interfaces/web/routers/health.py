@@ -179,44 +179,6 @@ async def health_check(
             HealthComponent(name="memory", status="unknown", message="Memory monitor error")
         )
 
-    # Check browser pool if available (importlib to avoid import-linter trace)
-
-    try:
-
-        import importlib as _il
-
-        _browser_mod = _il.import_module("weebot.infrastructure.browser")
-
-        session_pool_available = getattr(_browser_mod, "SESSION_POOL_AVAILABLE", False)
-
-        if session_pool_available:
-
-            components.append(
-                HealthComponent(
-                    name="browser_pool", status="healthy", message="Browser session pool available"
-                )
-            )
-
-        else:
-
-            components.append(
-                HealthComponent(
-                    name="browser_pool",
-                    status="healthy",
-                    message="Browser pool not configured (optional)",
-                )
-            )
-
-    except Exception:
-
-        logger.exception("Browser pool health check failed")
-
-        components.append(
-            HealthComponent(
-                name="browser_pool", status="degraded", message="Browser pool check failed"
-            )
-        )
-
     # Agent tools: build_mediator falls back to tool-less steps if the admin
     # tool set fails to build (F28). Say so here, not only in a log line.
     try:

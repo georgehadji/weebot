@@ -340,8 +340,6 @@ class Container(
 
         self.register(ProviderAccountPort, _create_provider_account)
 
-        # Browser pool — DI-managed singleton replacing module-level _global_pool
-        self.register("browser_pool", self._create_browser_pool)
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
         self.register("tool_registry", self._create_tool_registry)

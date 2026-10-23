@@ -51,7 +51,8 @@
 # 119 -> 117: the dead save_sync pre-saves in dispatch_agents and
 # workflow_orchestrator (F49).
 # 117 -> 116: computer_use's advisory focus check now refuses (F75).
-silent_except_handlers = 116
+# 116 -> 115: the dead browser-pool shutdown hook in web/main.py (F72).
+silent_except_handlers = 115
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -98,7 +99,8 @@ bare_env_reads = 71
 # 59 -> 58: the YouTube probe, as for silent_except_handlers 121 -> 119.
 # 58 -> 56: the same two save_sync handlers (F49).
 # 56 -> 55: the same handler (F75).
-bandit_b110 = 55
+# 55 -> 54: the same handler (F72).
+bandit_b110 = 54
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound

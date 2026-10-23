@@ -535,17 +535,3 @@ class FactoriesMixin:
             self.register_instance("mcp_bridge", bridge)
         return bridge
 
-    def _create_browser_pool(self):
-        """Create a BrowserSessionPool as a DI-managed singleton.
-
-        The pool is started lazily on first use and closed via shutdown hook.
-        """
-        import os
-        from weebot.infrastructure.browser.session_pool import BrowserSessionPool
-
-        pool = BrowserSessionPool(
-            min_sessions=int(os.environ.get("BROWSER_POOL_MIN", "1")),
-            max_sessions=int(os.environ.get("BROWSER_POOL_SIZE", "4")),
-            headless=os.environ.get("BROWSER_HEADLESS", "1").lower() in ("1", "true"),
-        )
-        return pool  # Started lazily on first use

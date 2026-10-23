@@ -361,13 +361,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
-    # Close browser session pool if initialized
-    try:
-        pool = container.get("browser_pool")
-        await pool.close()
-        logger.info("Browser pool closed")
-    except Exception:
-        pass  # Browser pool not configured
     # The configured MCP servers' connections, from the task that opened them.
     from weebot.interfaces.factories import close_mcp_toolkit
 
