@@ -125,6 +125,14 @@ class ToolCollection:
                     logger.debug(
                         "Error shutting down service for tool %r", tool.name, exc_info=True
                     )
+            # BaseTool.close(): browsers, subprocesses. Teardown never called it,
+            # so every browsing flow left its Chromium running.
+            closer = getattr(tool, "close", None)
+            if callable(closer):
+                try:
+                    await closer()
+                except Exception:
+                    logger.warning("Error closing tool %r", tool.name, exc_info=True)
 
     async def check_health(self) -> dict[str, bool]:
         """Run health checks for all tools; cache results for this session.

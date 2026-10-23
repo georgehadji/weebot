@@ -121,6 +121,11 @@ class AdvancedBrowserTool(BaseTool):
     # Injected by tool_registry via DI
     browser: object | None = None  # PlaywrightAdapter
 
+    async def close(self) -> None:
+        """Close the shared PlaywrightAdapter (idempotent; the sibling tool may close it too)."""
+        if self.browser is not None and callable(getattr(self.browser, "close", None)):
+            await self.browser.close()
+
     def _page(self):
         """Return the current Playwright page, or None if not launched."""
         if self.browser is None:
