@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-23
-commit: 2be1ab8a
+commit: c2f39937
 ---
 
 # Orchestration tools
@@ -22,7 +22,7 @@ A sub-agent tool cannot build a flow itself without importing the composition ro
 |---|---|---|---|---|---|
 | `debate` | `DebateTool` `weebot/tools/debate.py:70` | yes, passed to an inner `DispatchAgentsTool` (`:116-119`) | yes, reconciler `chat` (`:138-152`) | none | researcher, admin, webhook |
 | `swarm` | `SwarmTool` `weebot/tools/swarm.py:28` | yes (`:126-131`) | yes, `GoalAgent` and `SynthesizerAgent` (`:89-93, 144-147`) | optional `swarm_bus`, else a new `SwarmEventBus` (`:107-112`) | researcher, admin, webhook |
-| `dispatch_parallel_tasks` | `DispatchAgentsTool` `weebot/tools/dispatch_agents.py:26` | yes, one flow per task (`:121-125`) | no | `state_repo` (`:86, 187-195`) | admin, webhook |
+| `dispatch_parallel_tasks` | `DispatchAgentsTool` `weebot/tools/dispatch_agents.py:26` | yes, one flow per task (`:121-125`) | no | `state_repo` (`:86, 91-97`) | admin, webhook |
 | `workflow_orchestrator` | `WorkflowOrchestratorTool` `weebot/tools/workflow_orchestrator.py:28` | yes, one flow per DAG node (`:145-146`) | no | `state_repo` (`:100, 227-233`) | admin, webhook |
 | `mixture_of_agents` | `MixtureOfAgentsTool` `weebot/tools/mixture_of_agents.py:54` | no | yes, field `llm_port` (`:102`) | none | admin, webhook |
 | `reasoner` | `ReasonerTool` `weebot/tools/reasoner.py:17` | no | no (HTTP to `REASONER_API_URL`, default `http://localhost:8003`, then CLI in `REASONER_DIR`, `:122-126, 164-259`) | `set_config(ToolConfig)` (`:26-28`) | researcher, analyst, admin, webhook |
@@ -45,7 +45,7 @@ Wiring, read from source:
 
 Consequences (read from source, not run):
 - Callers that pass no `llm_port` leave the sub-agent tools dead but listed: the web session router (`interfaces/web/routers/sessions.py:291`), the webhook router (`interfaces/web/routers/webhook.py:123-124`) and the gateways (e.g. `interfaces/gateways/discord.py:188`) call `build_tools(role=...)` with no `llm_port`; only the CLI runner passes one (`interfaces/cli/agent_runner.py:71-73`). MCP scoping rebuilds the collection with `llm_port` but no `flow_factory` (`application/flows/mcp_scope.py:84-86`), so `dispatch_parallel_tasks` and `workflow_orchestrator` fail and `debate`'s inner dispatcher returns an error after the scoped rebuild.
-- `dispatch_parallel_tasks` and `workflow_orchestrator` persist sessions through `getattr(state_repo, "save_sync", None)` (`dispatch_agents.py:191`, `workflow_orchestrator.py:229`); no `save_sync` exists in `weebot/` (only `checkpoint_store.py:70` `_save_sync`), so this never saves, and the surrounding `except Exception: pass` (`dispatch_agents.py:194-195`, `workflow_orchestrator.py:232-233`) hides any failure.
+- Fixed 2026-10-23 (F49): `dispatch_parallel_tasks` and `workflow_orchestrator` no longer call a `save_sync` that never existed inside `except Exception: pass`. The sub-agent flow saves its own session through the flow factory's `state_repo` (`dispatch_agents.py:175-189`).
 - `workflow_orchestrator` makes a new `asyncio.Semaphore(max_parallel)` inside each task call (`workflow_orchestrator.py:142`), so it limits nothing; the real cap is `max_parallel_agents` (`:165-166`).
 - `swarm` collects `bus_insights` from the swarm bus (`swarm.py:138-142`) and never passes them to the synthesizer (`:145-147`).
 - `todo_write` says its items stream to the UI (`todo_tool.py:25-30`), but nothing constructs `TodoWriteTool` with an `event_bus` (no `TodoWriteTool(` call in `weebot/` or `cli/`), so the registry's bare `tool_cls()` (`tool_registry.py:487-489`) always gets `_event_bus=None`.

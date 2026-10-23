@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-23
-commit: 2be1ab8a
+commit: c2f39937
 ---
 
 # Web API (FastAPI)
@@ -47,17 +47,17 @@ Consequences (read from source, not run):
 - The middleware exemptions name routes that do not exist: `/api/live` and `/api/prometheus` (`main.py:489, 517`); the real ones are `/api/health/live` and `/api/health/prometheus` (`routers/health.py:305, 312`), so a remote liveness probe or scrape needs the key.
 - With `WEEBOT_API_KEY` set, `APIKeyMiddleware` also covers `/api/gateway/*` (`main.py:489`), whose callers (Discord, Slack, Meta) cannot send `X-API-Key`.
 - Store-mode principal keys cannot pass the HTTP middleware: it compares only against `weebot_api_key` (`main.py:495`), and with no key `FailClosedMiddleware` refuses non-loopback (`:520-533`).
-- Reads with no tenant filter: `/api/sessions/search` (`routers/sessions.py:106-117`), `/api/events/stream` (`routers/sse.py:231-292`), `/api/dashboard/metrics` (`routers/dashboard.py:35`).
+- Reads with no tenant filter: `/api/sessions/search` (`routers/sessions.py:106-117`), `/api/dashboard/metrics` (`routers/dashboard.py:35`). `/api/events/stream` was fixed (F58): it forwards only events of the caller's sessions (`routers/sse.py:52-72`).
 - Behavior POSTs have no `require_mutation_identity` (`routers/behavior_router.py:123-196`); `watch/start` starts a file watcher on any existing directory the caller names (`:135-157`). `/api/ponytail/mode/{mode}` writes global mode with no identity check (`routers/ponytail.py:26-33`).
 - The behavior sockets do their own auth: with no API key both accept any client, loopback or not (`behavior_router.py:253-284, 365-372`), unlike `_websocket_auth` (`main.py:678-680`); `/ws/session/{id}` accepts only `?token=` and checks no ownership.
 - Silent swallows: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:204-207`); browser pool close `except Exception: pass` (`main.py:369-370`); `touch_last_used` (`auth.py:138-139, 237-238`).
-- Slack and WhatsApp callbacks spawn `asyncio.create_task` with no reference kept (`routers/slack_webhook.py:163`, `routers/whatsapp_webhook.py:293`).
+- Slack and WhatsApp callbacks spawn `asyncio.create_task` with no reference kept (`routers/slack_webhook.py:67`, `routers/whatsapp_webhook.py:77`).
 - `/app` static mount looks for `weebot-ui/dist` (`main.py:658-660`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:9`), so the mount is inert.
 - `ponytail` router imports from `cli.commands.ponytail` (`routers/ponytail.py:13`), an interfaces module reaching into the CLI package.
 
 ## Connected to
 - **Owns** `app.state.container`, `app.state.scheduler` (`main.py:234-244`), the Telegram, Signal and email adapters (`:261-336`), lazily the Discord, Slack and WhatsApp adapters (`routers/*_webhook.py`).
-- **Uses** the Event bus (`infrastructure/EventBus.md`), Mediator (`application/Mediator.md`), `TaskRunner`, `SQLiteStateRepository`, session deletion orchestrator (`weebot/interfaces/web/dependencies.py:300-324`).
+- **Uses** the Event bus (`infrastructure/EventBus.md`), Mediator (`application/Mediator.md`), `TaskRunner`, `SQLiteStateRepository`, session deletion orchestrator (`weebot/interfaces/web/dependencies.py:43-67`).
 - **Called by** the Web UI (`WebUI.md`).
 - **Looks like but is not:** the MCP server's SSE transport (`MCPServer.md`), a separate process on port 8765.
 

@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-23
-commit: 2be1ab8a
+commit: c2f39937
 ---
 
 # Browser adapter and session pool
@@ -30,7 +30,7 @@ The Playwright side of web browsing: `PlaywrightAdapter` owns one browser, one c
   - On release it clears cookies only (`:212-215`), then puts the session back (`:218-219`).
   - `close()` stops the loop and closes free and in-use sessions, then the driver (`:332-372`).
   - `reset()` re-runs `__init__()` with default arguments (`:394-401`).
-  - DI: the container registers `browser_pool` (`weebot/application/di/__init__.py:344`). `_create_browser_pool` reads `BROWSER_POOL_MIN`, `BROWSER_POOL_SIZE` and `BROWSER_HEADLESS` through `os.environ` (`application/di/_factories.py:536-549`). It says the pool "is started lazily on first use" (`:539`), but no code calls `start()` or `acquire()` on it. An unstarted `acquire()` raises (`session_pool.py:168-169`).
+  - DI: fixed 2026-10-23 (F72): the container no longer registers `browser_pool`. Its registration and `_create_browser_pool` factory were removed because no code ever called `start()` or `acquire()` on it. An unstarted `acquire()` raises (`session_pool.py:168-169`).
   - The deprecated module-global path `get_browser_pool` / `close_global_pool` / `reset_global_pool` remains (`:405-452`).
 - **`BrowserSessionManager`** (`session_manager.py:15`).
   - Files go in `<repo>/data/browser_sessions/<name>.json`, and the constructor creates the folder (`:32-35`). Names are reduced to `[A-Za-z0-9_-]` (`:40-45`).

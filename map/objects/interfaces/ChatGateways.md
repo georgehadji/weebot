@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-23
-commit: 2be1ab8a
+commit: c2f39937
 ---
 
 # Chat gateways
@@ -23,7 +23,7 @@ One base class holds what every platform needs: a `SafetyChecker` over the inbou
 | `TelegramAdapter` | `gateways/telegram.py:38` | long-poll `getUpdates` (`:77-107`) | web lifespan when `telegram_bot_token` is set (`weebot/interfaces/web/main.py:266-291`) | `GatewayFlowResolver` keyed by chat (`:200-208`); `/new`, `/reset` via `GatewayCommandDispatcher` (`:192-195`) |
 | `SignalAdapter` | `gateways/signal.py:25` | poll signal-cli REST (`:58-75`) | lifespan when `signal_account_number` is set (`main.py:295-310`) | new per message |
 | `EmailAdapter` | `gateways/email.py:35` | IMAP poll (`:78-95`) | lifespan when IMAP user and password are set (`main.py:314-336`) | new per message (`:127-128`) |
-| `SlackAdapter` | `gateways/slack.py:24` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:129-164`), HMAC (`slack.py:48`) | lazily on first callback | new per message (`slack.py:122-125`) |
+| `SlackAdapter` | `gateways/slack.py:24` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:33-68`), HMAC (`slack.py:48`) | lazily on first callback | new per message (`slack.py:122-125`) |
 | `DiscordAdapter` | `gateways/discord.py:30` | `POST /api/gateway/discord/interactions` (`routers/discord_webhook.py:28-60`), Ed25519 (`discord.py:70-85`) | lazily | new per message |
 | `WhatsAppAdapter` | `gateways/whatsapp.py:26` | `GET/POST /api/gateway/whatsapp/webhook` (`routers/whatsapp_webhook.py:35-79`), `X-Hub-Signature-256`, fail closed without app secret unless `whatsapp_allow_unsigned_webhooks` (`whatsapp.py:60-87`) | lazily | new per message |
 

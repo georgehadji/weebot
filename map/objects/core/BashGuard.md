@@ -5,8 +5,8 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-23
+commit: c2f39937
 ---
 
 # BashGuard
@@ -26,7 +26,7 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 ## How the tools use it (the part that matters)
 | Tool | Gates, in order | Source |
 |---|---|---|
-| `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses unless an HMAC override token matches `WEEBOT_ADMIN_SECRET`; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation also just returns an error) → sandbox | `tools/bash_tool.py:381-432, 250-330` |
+| `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses; the HMAC override token was retired by ADR-013; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation errors unless `GuardedTool` runs the call as human-approved, fixed 2026-10-23) → sandbox | `tools/bash_tool.py:353-417, 243-300` |
 | `python_execute` | BashGuard on the code string (only BLOCKED refuses) → `ExecApprovalPolicy` → sandbox | `tools/python_tool.py:148-165` |
 | `powershell` | `_validate_no_encoded_commands`, `_validate_path_safety`, `ExecApprovalPolicy` → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:179-203` |
 | other callers | `latex_compiler.py` (refuses BLOCKED), CLI `guard` command | `infrastructure/document/latex_compiler.py:26,143`, `cli/commands/guard.py` |

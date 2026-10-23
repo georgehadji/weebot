@@ -5,8 +5,8 @@ code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-23
+commit: c2f39937
 ---
 
 # Event store
@@ -28,7 +28,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 
 ## Connected to
 - **Registered as** `EventStorePort` in `configure_defaults` (`application/di/__init__.py:159`) and injected into `DurableEventBus` by `_create_event_bus`, with `AsyncEventBus` as the inner bus. A set `WEEBOT_VALKEY_URL` or `WEEBOT_REDIS_URL` makes it raise at start-up (W4.3, F24).
-- **Writers:** `DurableEventBus` (every agent and domain event, `event_bus.py:227-262`) is the only live writer found. The unused `infrastructure/event_logging.py` (`EventLogger`) was deleted in W4.2. Do not confuse it with `interfaces/cli/event_logger.py`, which subscribes to the bus and prints.
+- **Writers:** `DurableEventBus` (every agent and domain event, `event_bus.py:227-262`) is the only live writer found. The unused `EventLogger` (formerly infrastructure/event_logging.py) was deleted in W4.2. Do not confuse it with `interfaces/cli/event_logger.py`, which subscribes to the bus and prints.
 - **Readers:** `get_cost_window` backs `GetCostSummaryHandler`, which CLI `costs`, MCP `weebot://costs` and the ops API (`/api/costs/summary`, since W7.1) use. `get_cost_summary(session_id)` is used by `export_session`. Other methods are reached via `EventStorePort` by `completed.py`, `trajectory_handler.py`, `interfaces/web/dependencies.py`, `ports/dreamer_port.py` (mentions; per-method use not traced).
 - **Session deletion:** `tests/unit/interfaces/web/test_session_deletion_wiring.py` covers the purge wiring.
 - **Looks like but is not:** `AsyncEventBus` / `DurableEventBus` (live fan-out to subscribers); the state repository's `events_json`; `weebot/infrastructure/events/` (broker and Valkey/Redis bus code).
@@ -39,7 +39,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 
 ## Surfaces
 Audit data only. Cost views do **not** read this store:
-- `GetCostSummaryHandler` takes a `state_repo` but never uses it. It builds a fresh `Container()`, resolves the `"cascade_tracker"` binding and returns `tracker.summary()`, or all-zero defaults if anything raises; `window_hours` is only echoed into the result, not used to filter (`application/cqrs/handlers/active_queries.py:65-94`). That tracker is a per-container in-memory ring buffer (500 decisions, `core/model_cascade_tracker.py:64-96`); the one in a fresh container has no writer, because each `ExecutorAgent` creates its own `ModelCascadeTracker()` (`executor/_base.py:300`) and the Mediator path builds an executor per step. The binding's only reader is this handler. So the endpoint should return empty stats (read from source, not run). It is also affected by the `mediator.send` defect on the Mediator card.
+- Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:71-92`, `infrastructure/event_store.py:253`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
 - `python -m cli.main costs` prints hard-coded rows ("Today $2.45 / 12,340"; comment "Placeholder data", `cli/main.py:255-268`).
 - MCP `build_costs_json` reads a tracker only if one is passed to `WeebotMCPServer`; `run_mcp.py:59-63` does not pass one, so it returns its "Pass cascade_tracker=" note (`mcp/resources.py:219-229`).
 - `AsyncEventStore.get_cost_summary` computes real totals from this DB but nothing calls it.

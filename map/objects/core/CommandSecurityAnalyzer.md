@@ -5,8 +5,8 @@ code: CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-23
+commit: c2f39937
 ---
 
 # CommandSecurityAnalyzer
@@ -26,16 +26,15 @@ Defense in depth for the one tool that takes free-form shell text (`weebot/tools
 - Layers 1 to 3 can only return SAFE or DANGEROUS (`:269-278`, `:297-323`, `:351-392`). SUSPICIOUS comes from layer 4 alone.
 
 How `BashTool` uses it (`weebot/tools/bash_tool.py:244-310`):
-- DANGEROUS refuses unless `security_override` equals `hex(HMAC-SHA256(WEEBOT_ADMIN_SECRET, command))`; with no secret set, overrides are always rejected (`:262-279`, `:312-331`).
+- DANGEROUS is final: the HMAC `security_override` token was retired by ADR-013 (F11), so a DENY is never approvable and an ASK is approved per call through the approval channel (`bash_tool.py:247-250`).
 - SUSPICIOUS is logged and the command continues (`:281-291`).
 - An analyzer crash refuses the command (`:293-307`). If the analyzer could not be imported at construction, a legacy check runs instead (`:145-154`, `:308-310`).
 
 Consequences (read from source, not run):
-- SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:282-283`), but `ExecApprovalPolicy.evaluate(command)` is called with the command only, never with this verdict (`:425`).
-- The layer 3 entropy score is multiplied by 1.2 for base64-looking strings, "to match test expectations" (`bash_security.py:455-461`). The effective cut-off is therefore a raw entropy near 3.33. Any 20-character-plus token made only of letters, digits, `+`, `/`, `=` with at least one capital or digit can reach it, which includes long CamelCase identifiers and hex digests (a 40-character commit hash has raw entropy near 3.7). Such tokens come back DANGEROUS (`:363-377`). **Run 2026-10-22:** `git checkout <40-hex sha>`, `git log -1 <sha>` and `docker pull ...@sha256:<64-hex>` all return DANGEROUS from layer 3, so the bash tool refuses them (`tests/unit/fixes/test_f10_entropy_hex_digest.py`). The false-positive test (`tests/unit/tools/test_bash_security_falsifying.py:229-240`) uses its own command list and does not catch this.
+- SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:282-283`), but `ExecApprovalPolicy.evaluate(command)` is called with the command only, never with this verdict (`:393`).
+- Fixed in W3.6 (F10): the 1.2x entropy multiplier is gone. Layer 3 now refuses a base64 run only if it decodes to a shell command, or if it is a 40-character-plus run that is not pure hex, has a digit or `+/=`, is not a path, and has raw entropy above 4.0 bits/char (`bash_security.py:231-236`, `:296-304`, `:372-394`). Hex digests and CamelCase identifiers pass; `tests/unit/fixes/test_f10_entropy_hex_digest.py` pins `git checkout <40-hex sha>` and `docker pull ...@sha256:<64-hex>`. The false-positive test (`tests/unit/tools/test_bash_security_falsifying.py:229-240`) uses its own command list and does not catch this.
 - Layer 2's combination targets `|`, `.` and `+x` can never match, because the token set is built with a word-only regex (`:128-137`, `:305`). The `temp`/`tmp` combination flags any command that contains those words and `chmod` or `execute`.
 - The known-safe PowerShell allowlist is matched with `re.search` anywhere in the command (`:411-413`), so one safe-looking pipeline in a long command skips the chain-length and URL-chain checks for all of it. Layers 1 to 3 still run.
-- The override token is a function of the command text alone: no nonce, no expiry. Anyone who holds a token can replay it for that exact command. The secret is read with `os.environ.get` in the tool (`bash_tool.py:324`), not through `SecretAccessor`.
 - Rewritten 2026-10-22 (plan W3.6). The entropy, layer 2 and allowlist notes above describe `f00ea38`.
   - Rules are now data (`LAYER1_RULES`, `LAYER2_RULES`, `LAYER2_COMBINATIONS`).
   - Layer 3 flags base64 that decodes to a shell command (UTF-16LE included), or opaque 40+ char blobs that are not hex, identifiers or paths. There is no 1.2x multiplier.
