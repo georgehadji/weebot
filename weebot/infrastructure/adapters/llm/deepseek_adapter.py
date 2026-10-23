@@ -32,6 +32,16 @@ MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK_STRIPPED
 _log = logging.getLogger(__name__)
 
 
+def native_model_id(model: str) -> str:
+    """The DeepSeek API id for an OpenRouter-style DeepSeek id.
+
+    The API serves only the aliases ``deepseek-flash`` and ``deepseek-v4-pro``
+    and rejects versioned ids such as ``deepseek-v4.1-flash`` with 400.
+    """
+    name = model.split("/", 1)[-1].split(":", 1)[0].lower()
+    return "deepseek-v4-pro" if "pro" in name else "deepseek-flash"
+
+
 class DeepSeekAdapter(OpenAIAdapter):
     """Adapter for DeepSeek API (OpenAI-compatible) with thinking mode.
 
@@ -70,7 +80,7 @@ class DeepSeekAdapter(OpenAIAdapter):
             tools=tools,
             tool_choice=tool_choice,
             response_format=response_format,
-            model=model,
+            model=native_model_id(model or self._default_model),
             temperature=None,  # thinking mode ignores temperature
             max_tokens=max_tokens,
             reasoning_effort="high",
