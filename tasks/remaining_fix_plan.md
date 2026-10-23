@@ -203,6 +203,7 @@ After W4.2. Turns the F22 xfail into a plain test.
     - Deleted `flows/collaborators/event_emitter.py` (`EventEmitter`) and `flow_persistence.py` (`FlowPersistence`): extracted from `PlanActFlow`, never constructed.
     - Tests: `tests/unit/fixes/test_w53_chat_flow_persistence.py` (3), failing first.
     - **Seen, not fixed:** `PlanActFlow._persistence_adapter` is also never set, so plan-act saves skip the retrying adapter too. `interfaces/factories.create_flow("chat", ...)` passes no `state_repo`, so those chat flows do not persist at all.
+      - **Fixed (2026-10-23, `e0318704`):** `PlanActFlowConfig.persistence_adapter`; `create_flow` (plan-act and chat) and `_get_flow_factory` pass the cached `session_persistence`, and chat flows get `state_repo`. Test: `tests/unit/fixes/test_create_flow_persistence.py` (3), failing first.
   - **Batch 3 (2026-10-22), 39 -> 36:**
     - `CompletedState`'s skill-gap job and dream scan built a whole `Container()` on every flow completion to fetch `idea_gate`, `dreamer_agent` and `EventStorePort`. They now take them as arguments; `PlanActFlow` and `PlanActFlowConfig` carry `idea_gate`, `dreamer_agent`, `event_store`, and `factories.create_flow` fills them from its cached container. A missing one skips the job.
     - `ToolExecutor._get_egress_guard` constructs `EgressGuard()` directly. The DI factory is the same `EgressGuard()`, and a fresh container shares nothing.
