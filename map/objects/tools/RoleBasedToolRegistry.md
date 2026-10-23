@@ -4,9 +4,7 @@ name: RoleBasedToolRegistry
 code: RoleBasedToolRegistry
 cluster: tools
 universe: live
-status: verified
-verified: 2026-10-21
-commit: f00ea38
+status: stale
 ---
 
 # RoleBasedToolRegistry

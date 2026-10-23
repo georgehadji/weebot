@@ -15,7 +15,7 @@ Read this before changing code you did not write. The map is an index of nouns a
 
 ## Status of this map
 
-Slice 3 of `tasks/icm_plan.md` in progress. `objects/_index.md` has one line per noun; cards with bodies so far: PlanActFlow, FlowRouter, FlowState, PlannerAgent, ExecutorAgent, CascadeExecutor, Mediator, DI Container, SQLiteStateRepository, LLM adapters, Event store, Event bus, BashGuard, EgressGuard, ExecApprovalPolicy, CommandSecurityAnalyzer, ApprovalManager, model cascade config, WeebotSettings (core cluster complete), Sandbox, RoleBasedToolRegistry. The rest are stubs. Defects the cards found are planned in `tasks/icm_fix_plan.md`. `processes/` and `effects/` are not created until real cards exist.
+Every noun in `objects/_index.md` has a card (Wave G of `tasks/remaining_fix_plan.md` finished the domain, interfaces, browser and tools clusters on 2026-10-23). Defects the cards found are planned in `tasks/icm_fix_plan.md` (F38 onward for Wave G). `processes/` and `effects/` are not created until real cards exist.
 
 ## Rules for editing the map
 

@@ -57,6 +57,48 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F35 | Registry builds a throwaway `Container()` per tool that needs one, inside silent `except Exception: pass`; discovery instantiates every tool with no arguments; unknown tool names are skipped with a warning | RoleBasedToolRegistry | M |
 | F36 | The plan the user approves is not the plan that runs when DPPM planning is used. `PlanningState` replaces `context._plan` with the DPPM merge (`planning.py:256`) but emits no `PlanEvent`, and the resume restores the plan from the last `PlanEvent` (`Session.get_last_plan`, `plan_act_flow.py:634`). Seen in the real run of 2026-10-22: 8 DPPM steps were reviewed and approved, the 3 original steps ran. **Fixed 2026-10-22** (see the real-run check under Wave 3) | PlanActFlow | H |
 | F37 | CLI `flow run` prints the `PlanReviewEvent` as a raw Python repr with `session_id=''`, then the plan again (observed in the real run, not traced) | PlanActFlow | L |
+| F38 | MCP tools that write (Jira create/delete/transition, HubSpot batch create/update, Apify `call_actor`, Postiz uploads) did not ask: only `WEEBOT_OUTBOUND_TOOL_PATTERNS` names asked. **Fixed 89d20bd9**: MCP tools fail closed unless the name reads | IntegrationTools | H |
+| F39 | An ASK a human approved was refused again by bash/powershell/python_execute (`requires_confirmation`), so no shell approval ever ran; python_execute had no ASK route at all. **Fixed 009cb41a** | ExecTools | H |
+| F40 | `ToolCollection.teardown` never called `BaseTool.close()`; every browsing flow left Chromium running. **Fixed 138b033c** | Browser | H |
+| F41 | Browser navigation is not egress: `EgressGuard` matches only submit/post actions; `advanced_browser` `goto`/`fill`/`click`/`evaluate`, `browser_inspector` `navigate` and `web_scraper` pass unchecked, even tainted | BrowserTools | H |
+| F42 | A missing or misspelled skill `trust` loads as `trusted` (`skill_registry.py:129-131`), the only injection gate; imported ClawHub skills have no trust handling | SkillRegistry | H |
+| F43 | Gateway and `/api/webhook/run` flows are built with no mediator, so `PlanningState` errors and they cannot plan; same for sub-agent flows (`factories.py:333-341`) | ChatGateways | H |
+| F44 | `weebot` console script points at `cli.main:main`, which does not exist (`pyproject.toml:26`; entry is `_wrap_main`) | CLI | H |
+| F45 | The Next.js `/api` proxy makes every client loopback, and loopback skips auth; with no `WEEBOT_API_KEY` and the UI on `0.0.0.0:3000`, anyone reaching it can mutate | WebUI | H |
+| F46 | `apify_*` preset output is not untrusted: `trust_boundary.py:74` lists `apify_actor_tool`, the real names are `apify_web_scraper` etc., so scraped text is unfenced and not counted for egress | IntegrationTools | H |
+| F47 | `product` tool is never built: it needs `repo`, which `tool_wiring` lacks; documentation and product_manager roles lose it | IntegrationTools | M |
+| F48 | Sub-agent tools (debate, swarm, dispatch, workflow, MoA) error in web, webhook and gateway flows: `build_tools` gets no `llm_port`, so no flow factory; MCP scoping rebuilds without one | OrchestrationTools | M |
+| F49 | `dispatch_agents` and `workflow_orchestrator` call `state_repo.save_sync`, which exists nowhere, inside `except Exception: pass` | OrchestrationTools | M |
+| F50 | `image_gen` (SVG, fallback, xAI base64), `video_ingest` export and `voice_output` write `output_path` without the workspace check | MediaTools | M |
+| F51 | `design_system` runs `npm install -g skillui` on failure without asking; output not fenced | IntegrationTools | M |
+| F52 | Seven built-in skills ship only `manifest.json` and never load (incl. `multi_llm_orchestrator`, which root CLAUDE.md requires) | BuiltinSkills | M |
+| F53 | Tools in no role that skills tell the agent to use: `youtube_download`, `desktop_a11y`; also roleless `detect_elements`, `screenshot_ocr`, `ocr_structured`, `web_scraper`; `browser_navigator` is in roles but not a `BaseTool`, so never built | BrowserTools | M |
+| F54 | Spending tools never ask: `apify_*` presets, `image_gen`, `video_gen`, `mixture_of_agents` match no outbound pattern | IntegrationTools | M |
+| F55 | The web process has two DI containers (lifespan `Container()` vs `shared_container()`); sub-agent events miss the WebSocket broadcaster | WebAPI | M |
+| F56 | CLI, gateway and webhook flows run with no event bus (no domain events, no skill-gap subscription) | CLI | M |
+| F57 | `/api/webhook/run` with a `session_id` runs any stored session with no ownership check | WebAPI | M |
+| F58 | Reads with no tenant filter: `/api/sessions/search`, `/api/events/stream` (every event), `/api/dashboard/metrics` | WebAPI | M |
+| F59 | Behavior and ponytail mutations need no identity (`watch/start` watches any directory); behavior WebSockets accept any client when no key is set | WebAPI | M |
+| F60 | `APIKeyMiddleware` exempts `/api/live` and `/api/prometheus` (real: `/api/health/...`), blocks platform webhooks under `/api/gateway/*`, and rejects store-mode principal keys | WebAPI | M |
+| F61 | Web UI: calls a missing `/api/behavior/settings`; behavior, `/ops` and `/debug` calls send no API key; event types out of sync (`error` vs `failed`, no `tool_approval`) | WebUI | M |
+| F62 | `run_mcp.py` passes no discovery, skills, routing or products, so every MCP resource is a stub and no dynamic tools register | MCPServer | M |
+| F63 | `search_images` URLs and `vane_search` sources go to `data`/metadata, which the model never sees | WebTools | M |
+| F64 | Executor middleware builds `ToolResult(..., is_error=...)`; `is_error` is a property, so it raises `TypeError` when middleware rewrites output | BaseTool | M |
+| F65 | `ocr` reads any path; without pytesseract it sends the raw bytes to the vision provider; in the webhook role | WebTools | M |
+| F66 | `spacescraper` can run `docker-compose up -d`, unguarded, and stays in the `webhook` role that drops exec tools | WebTools | M |
+| F67 | `search_history` returns old content across all sessions, unfenced, in the webhook role | WebTools | M |
+| F68 | The inbound-mail gate fact can be evicted by the 100-fact cap (oldest by insertion) | Session | M |
+| F69 | A step the evidence audit downgrades resumes as COMPLETED: the downgrade is not an event | Step | M |
+| F70 | `Plan._heuristic_splits` is lost in `model_dump`/`model_validate`, so the misalignment signal never fires | Plan | M |
+| F71 | Built-in skills silently override project and user skills of the same name | SkillRegistry | M |
+| F72 | DI `browser_pool` is never started or acquired; `/health` reports it healthy from an import flag | Browser | M |
+| F73 | `PlaywrightAdapter.start()` has no lock or running check; two tools can each launch a browser | Browser | M |
+| F74 | `camofox_browser` redirect check misses hostnames that resolve private; DNS failure counts as public | BrowserTools | M |
+| F75 | `computer_use` skips the `require_window` focus check silently when pygetwindow fails, then types | BrowserTools | M |
+| F76 | Gateway `extract_media` attaches any absolute `.json/.yaml/.md/.txt/.csv` path named in a reply; email gateway authorizes on the `From` header | ChatGateways | M |
+| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file | CLI | M |
+| F78 | Personas with YAML frontmatter get the name `---` and overwrite each other's registry entry | Personas | M |
+| F79 | Low-severity notes (dead methods and ports, duplicated facts, swallowed exceptions, stale comments, timeout unit mismatch in `advanced_browser`, unclosed ApifyService sessions): listed in each card's Shape | (cards) | L |
 
 ## 3. Module, paradigm, pattern
 
@@ -347,7 +389,7 @@ Decisions 1-6 were taken on the recommendations, at the user's request ("suggest
 
 ## 6. Not covered
 
-Clusters without cards yet (the other tools, interfaces, browser, domain) may add findings; this plan covers the 35 recorded so far. Each new card that finds a defect adds a row to section 2 and a task here.
+Every cluster has a card since Wave G (2026-10-23), which added F38-F79. Each new card that finds a defect adds a row to section 2 and a task here.
 
 ---
 

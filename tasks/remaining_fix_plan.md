@@ -337,6 +337,7 @@ User request: "Make sure the ssot principal holds in the project". Audit and per
 
 ### Wave G (optional): map the uncovered clusters
 Cards for the other tools, interfaces, browser and domain clusters, following `map/_meta/schema.md`. Each defect found becomes a new F row and a task here. Size depends on how many clusters you want covered.
+- **Done 2026-10-23:** 21 new cards (domain 5, SkillRegistry, interfaces 5, browser 2, tools 8), every `_index.md` line now links a card; `RoleBasedToolRegistry.md` marked stale (line drift). Findings F38-F79 in `tasks/icm_fix_plan.md`. Fixed so far: F38 (`89d20bd9`), F39 (`009cb41a`), F40 (`138b033c`); the other H rows F41-F46 next.
 
 ## Parallel work
 C, D (after W4.2) and F touch separate files from B and can run in their own sessions. E overlaps B in DI and the registry, so it runs after B1 and B2. The B3 observe window keeps running throughout.
