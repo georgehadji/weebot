@@ -45,3 +45,17 @@ def test_sub_agent_flows_get_the_adapter(monkeypatch):
     )
     flow = factories._get_flow_factory(MagicMock())(Session(id="s1", task="t"))
     assert flow._get_persistence_adapter() is adapter
+
+
+def test_flows_built_without_a_mediator_get_the_containers(monkeypatch):
+    # Gateways and /api/webhook/run passed none, so PlanningState refused to
+    # plan ("requires a Mediator") on every message (F43).
+    from weebot.application.cqrs.mediator import Mediator
+
+    mediator = object()
+    monkeypatch.setattr(factories, "_cached", lambda key: mediator if key is Mediator else None)
+    for kind in ("plan_act", "chat"):
+        flow = factories.create_flow(
+            kind, session=Session(id=kind, task="t"), llm=MagicMock(), tools=ToolCollection()
+        )
+        assert flow._mediator is mediator, kind

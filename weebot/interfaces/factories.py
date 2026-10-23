@@ -227,6 +227,12 @@ def create_flow(
     """
     if task_route is not None:
         flow_type = task_route.flow_type
+    if mediator is None:
+        # Gateways and the webhook passed none, and PlanningState cannot plan
+        # without one (F43).
+        from weebot.application.cqrs.mediator import Mediator
+
+        mediator = _cached(Mediator)
 
     if flow_type == "plan_act":
         personality = _resolve_personality()
