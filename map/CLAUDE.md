@@ -8,6 +8,7 @@ Read this before changing code you did not write. The map is an index of nouns a
 |---|---|
 | What is X (a type, class or file kind)? | `objects/_index.md`, then the card |
 | What else moves if I change X? | the card's "If you change this", then `effects/CONTEXT.md` |
+| What outside the repo breaks if I move X? | `effects/inbound.md` |
 | How does a turn / guard / cascade run? | `processes/CONTEXT.md` |
 | How do I walk this map, what do names mean? | `CONTEXT.md` |
 | Card rules | `_meta/schema.md`, `_templates/` |

@@ -37,7 +37,7 @@ _os.environ.setdefault("WEEBOT_COVE_ENABLED", "false")
 _os.environ.setdefault("CONSTRAINT_CHECK_ENABLED", "false")
 _os.environ.setdefault("CONTEXT_AWARE_MODEL_SELECTION", "false")
 
-TASKS_DIR = PROJECT_ROOT / "tasks"
+TASKS_DIR = PROJECT_ROOT / "tasks" / "evals"
 
 TASK_CONFIGS = [
     {

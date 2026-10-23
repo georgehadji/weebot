@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-22
+---
+
 # ICM slice 0: inventory (read-only, nothing moved)
 
 Plan: `tasks/icm_plan.md`. Roles: catalog / contract / factory / product / dead. "Dead" is only a proposal until slice 1 checks markdown and external referrers.

@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-13
+---
+
 # awesome-agent-skills Integration Plan
 
 **Repo audited:** `heilcheng/awesome-agent-skills` (5,500+ stars)  

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-23
+---
+
 # P2.1 Audit Report — Security Remediation
 
 **Plan:** `implementation_plan.md` · Phase P2.1 Security Remediation  

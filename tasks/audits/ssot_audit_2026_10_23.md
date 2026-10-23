@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-23
+---
+
 # Single-source-of-truth audit, 2026-10-23
 
 User request: "Make sure the ssot principal holds in the project".

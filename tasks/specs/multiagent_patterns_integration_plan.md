@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-13
+---
+
 # Multi-Agent Patterns Integration Plan
 
 **Source:** [`victordibia/designing-multiagent-systems`](https://github.com/victordibia/designing-multiagent-systems) (PicoAgents v0.4.0 — MIT license)

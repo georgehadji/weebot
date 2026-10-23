@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-10
+---
+
 # Video Ingestion & Rule Extraction Skill — Implementation Plan
 
 **Status:** Draft  

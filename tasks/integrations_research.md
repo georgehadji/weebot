@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-22
+---
+
 # Integration research: agentic-inbox, Arroxy, Postiz
 
 Written 2026-10-22 from the repos' READMEs and source, read on GitHub. Nothing installed yet. This machine has Docker 29.8, winget 1.29 and wrangler 4.151 (fetched into the npm cache with `npx --yes wrangler`).

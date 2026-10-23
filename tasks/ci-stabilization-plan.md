@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-07-21
+---
+
 # CI Stabilization & Architecture-Debt Remediation Plan
 
 > **STATUS: IMPLEMENTED.** All groups below (A–E) have been fixed on

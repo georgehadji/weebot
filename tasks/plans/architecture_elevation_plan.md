@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-06-28
+note: plans/architecture_elevation_v2.md
+---
+
 # Architecture Elevation Plan — 7/10 → 9.5+/10
 
 **Source:** `architecture_audit_report.md`

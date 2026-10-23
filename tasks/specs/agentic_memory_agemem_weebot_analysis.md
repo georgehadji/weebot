@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-08-13
+note: specs/agentic_memory_fix_plan.md
+---
+
 # AgeMem (Agentic Memory) vs weebot — analysis and proposed changes
 
 Paper: *Agentic Memory: Learning Unified Long-Term and Short-Term Memory Management for

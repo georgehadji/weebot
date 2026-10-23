@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-28
+---
+
 # Fix Plan — VideoGenTool Audit Defects (D1–D3) + Improvements (I1–I4)
 
 **Source:** `implementation_audit_report.md`

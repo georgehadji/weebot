@@ -572,8 +572,11 @@ class ExecutingState(FlowState):
                 return
 
             # Collect the actual error message from any ErrorEvent in the batch
+            # `_current_step_events`, not the raw dicts in `eval_events`: an
+            # isinstance check never matches a dict, so every failure read as
+            # "step execution failed" and the 3-tier routing below was dead.
             _error_msg = "step execution failed"
-            for _ev in eval_events:
+            for _ev in _current_step_events:
                 if isinstance(_ev, ErrorEvent):
                     _error_msg = str(_ev.error or _error_msg)
 
@@ -587,7 +590,7 @@ class ExecutingState(FlowState):
                 step = step.model_copy(
                     update={"status": StepStatus.PENDING, "retry_count": step.retry_count + 1}
                 )
-                context._plan = context._plan.update_step(step)
+                context._plan = context._plan.replace_step(step.id, step)
                 context.set_state(ExecutingState())
             elif _severity == "full_replan":
                 logger.warning(

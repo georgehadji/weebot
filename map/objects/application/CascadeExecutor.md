@@ -5,8 +5,8 @@ code: CascadeExecutor
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-24
+commit: d4ffb555
 ---
 
 # CascadeExecutor
@@ -17,7 +17,7 @@ Makes one LLM call for `ExecutorAgent` by trying several models in a fixed order
 Cost and availability: try cheap or probable models first, spend more only on failure. Extracted from the old executor so LLM-calling logic is separate from step orchestration (`weebot/application/agents/executor/_cascade.py:1-6`). Several comments in the file record bugs that shaped it (probes billed but discarded, pool slot taken inside the timeout, rescue call outside the pool); keep those behaviours when editing.
 
 ## Shape
-`call_with_cascade` at `_cascade.py:394`. Candidate models come from `get_model_cascade_for_role(agent_role)` plus the model provider's choice for the step (`:406-420`).
+`call_with_cascade` at `_cascade.py:445`. Candidate models come from `get_model_cascade_for_role(agent_role)` plus the model provider's choice for the step (`:406-420`).
 
 1. **Credit filter** (`:445-448`): candidates = role primary, ACR list or task model, role fallback 1, de-duplicated. If remaining OpenRouter credit is under `OPENROUTER_MIN_CREDITS` (default 10000) OpenRouter-only models are dropped; unknown credit means no filtering (`:151-180`).
 2. **Phase 1, parallel probes** (`:450-509`): all candidates called at once with a 90 s timeout, tier FREE. Waits for the first *success* (not first finish), then cancels and awaits the rest in a `finally` (`:479-504`). Costs: every probe is a billed request.

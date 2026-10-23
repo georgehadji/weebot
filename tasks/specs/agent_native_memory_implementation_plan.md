@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-30
+---
+
 # Agent-Native Memory — Implementation Plan
 
 **Source paper:** *Are We Ready For An Agent-Native Memory System?* (Zhou et al., SJTU/MemTensor, arXiv:2606.24775v1)

@@ -5,8 +5,8 @@ code: PlannerAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-21
-commit: f00ea38
+verified: 2026-10-24
+commit: d4ffb555
 ---
 
 # PlannerAgent
@@ -24,13 +24,13 @@ The model returns JSON; everything after that is defensive, because a malformed 
 - JSON extraction is the shared `extract_json_text` (`:163-187`), no longer private.
 
 ## Connected to
-- **Invoked through the Mediator:** `CreatePlanHandler` builds a `PlannerAgent` and iterates `create_plan` (`cqrs/handlers/create_plan_handler.py:102-106`); `PlanningState` sends `CreatePlanCommand` (`states/planning.py:188`). `UpdatePlanHandler` (`update_plan_handler.py:52, 66`) and `UpdatingState` (`states/updating.py:183`, via `context._planner`) call `update_plan`.
-- **Other constructors:** `PlanActFlow` (`plan_act_flow.py:243`), `PlanningState` (`states/planning.py:286`), `model_selector.py:42`, `services/context_switcher.py:89`.
+- **Invoked through the Mediator:** `CreatePlanHandler` builds a `PlannerAgent` and iterates `create_plan` (`cqrs/handlers/create_plan_handler.py:108-112`); `PlanningState` sends `CreatePlanCommand` (`states/planning.py:196`). `UpdatePlanHandler` (`update_plan_handler.py:52, 66`) and `UpdatingState` (`states/updating.py:183`, via `context._planner`) call `update_plan`.
+- **Other constructors:** `PlanActFlow` (`plan_act_flow.py:255`), `PlanningState` (`states/planning.py:303`), `model_selector.py:42`, `services/context_switcher.py:89`.
 - **Produces:** `Plan` / `Step` (domain models), which `ExecutorAgent` consumes; `Step.context_scope` set here controls the executor's prompt.
 - **Looks like but is not:** `ExecutorAgent` (runs steps); `PlanCriticService` (scores plans, in `CritiquingState`); `ParallelPlanner` (`application/agents/parallel_planner.py`, not covered).
 
 ## If you change this
-**Hits:** `Plan`/`Step` shape (the parser reads fixed keys); the planner prompt files and PromptRegistry variants; the five construction sites above; step ids, which are positional and which `FlowRouter` relies on to reset per-step gate acks on re-plan (`flow_router.py:140-147`); tests `tests/unit/agents/test_agents_validate_their_json.py`, `tests/unit/test_cqrs_persistence.py`, `tests/unit/test_plan_template_cache_is_gated.py`, `tests/integration/test_website_generation.py`.
+**Hits:** `Plan`/`Step` shape (the parser reads fixed keys); the planner prompt files and PromptRegistry variants; the five construction sites above; step ids, which are positional and which `FlowRouter` relies on to reset per-step gate acks on re-plan (`flow_router.py:173-180`); tests `tests/unit/agents/test_agents_validate_their_json.py`, `tests/unit/test_cqrs_persistence.py`, `tests/unit/test_plan_template_cache_is_gated.py`, `tests/integration/test_website_generation.py`.
 **Does not hit:** model cascade and executor loops; tool registration.
 
 ## Surfaces

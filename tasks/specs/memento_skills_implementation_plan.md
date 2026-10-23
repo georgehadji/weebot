@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-15
+note: phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
+---
+
 # Memento-Skills → weebot: Deployment-Time Learning Implementation Plan
 
 **Status:** Draft for review

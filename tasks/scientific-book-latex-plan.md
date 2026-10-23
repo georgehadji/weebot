@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-07-21
+note: LLM drafting, TeX Live image, CLI/Web wiring missing
+---
+
 # Plan: Greek Scientific Book Generation via LaTeX
 
 **Status:** Draft — Phase 0/PoC verified (see §10)

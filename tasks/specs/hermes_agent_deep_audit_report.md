@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # Hermes-Agent Deep Technical Audit → WeeBot Optimization Report
 
 **Audit target:** `NousResearch/hermes-agent` @ `main` (v0.17.0), shallow-cloned 2026-06-22

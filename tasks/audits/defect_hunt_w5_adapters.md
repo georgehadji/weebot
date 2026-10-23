@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Wave 5 — LLM Adapters, Cascade & Cost
 
 Execution record for W5 of [`tasks/specs/defect_hunt_v7_execution_plan.md`](../specs/defect_hunt_v7_execution_plan.md).

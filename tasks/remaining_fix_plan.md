@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-10-23
+note: F28 type-safe mediator dispatch; container_construction ceiling still 8
+---
+
 # Plan: fix everything still open
 
 Status: DRAFT for review, written 2026-10-22. Nothing in it has started.

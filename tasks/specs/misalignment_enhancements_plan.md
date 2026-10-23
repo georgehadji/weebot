@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-13
+---
+
 # Misalignment Enhancements: Implementation Plan
 
 **Source:** "How Coding Agents Fail Their Users: A Large-Scale Analysis of Developer-Agent

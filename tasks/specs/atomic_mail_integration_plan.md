@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-22
+---
+
 # Implementation Plan — Atomic Mail Agentic Integration into weebot
 
 **Document version:** 1.0

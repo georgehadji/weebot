@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-28
+---
+
 # Weebot Enhancement Roadmap — Based on "Fundamentals of Building Autonomous LLM Agents"
 
 **Paper:** de Lamo Castrillo et al., arXiv:2510.09244v1, Oct 2025

@@ -17,6 +17,7 @@ Usage: python scripts/check_map_citations.py   (exit 1 on any broken citation)
 from __future__ import annotations
 
 import re
+from datetime import date
 import subprocess
 import sys
 from pathlib import Path
@@ -73,11 +74,102 @@ def broken_citations() -> list[str]:
     return problems
 
 
+def _lines_at(rev: str, path: str, cache: dict) -> list[str] | None:
+    if (rev, path) not in cache:
+        out = subprocess.run(
+            ["git", "show", f"{rev}:{path}"], cwd=ROOT, capture_output=True,
+            text=True, encoding="utf-8", errors="ignore",
+        )
+        cache[(rev, path)] = out.stdout.splitlines() if out.returncode == 0 else None
+    return cache[(rev, path)]
+
+
+def _relocate(block: list[str], new: list[str], old_start: int) -> int | None:
+    """1-based start of *block* in *new*, nearest to *old_start*; None if absent."""
+    n = len(block)
+    starts = [i + 1 for i in range(len(new) - n + 1) if new[i:i + n] == block]
+    return min(starts, key=lambda s: abs(s - old_start)) if starts else None
+
+
+def drifted_citations(fix: bool = False) -> list[str]:
+    """Citations whose lines no longer say what they said at the card's `commit`.
+
+    A shift (same text, new line numbers) is fixable: with *fix*, the card's
+    numbers are rewritten and, when every citation then holds, its commit and
+    date move to HEAD. Text that is gone needs a human re-read: *fix* marks
+    that card `stale` and the citation is reported.
+    """
+    tracked = _tracked()
+    tracked_set = set(tracked)
+    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                          capture_output=True, text=True, check=True).stdout.strip()
+    cache: dict = {}
+    problems: list[str] = []
+    for card in sorted((ROOT / "map" / "objects").rglob("*.md")):
+        text = card.read_text(encoding="utf-8")
+        commit = re.search(r"^commit:\s*([0-9a-f]{7,40})\b", text, re.M)
+        if "status: verified" not in text or not commit:
+            continue
+        rel = card.relative_to(ROOT).as_posix()
+        edits: list[tuple[int, int, str]] = []
+        gone: list[str] = []
+        for m in _CITE.finditer(text):
+            if not m.group(2):
+                continue
+            resolved = _resolve(m.group(1), tracked, tracked_set)
+            old = _lines_at(commit.group(1), resolved, cache) if resolved else None
+            new = _lines_at("HEAD", resolved, cache) if resolved else None
+            if old is None or new is None:
+                continue
+            first = int(m.group(2))
+            # "a-b" is a range; "a, b" two lines.
+            spans = ([(first, int(m.group(3)))] if m.group(3) and "-" in m.group(0)
+                     else [(first, first)] + ([(int(m.group(3)),) * 2] if m.group(3) else []))
+            moved = []
+            for a, b in spans:
+                block = old[a - 1:max(a, b)]
+                if new[a - 1:max(a, b)] == block:
+                    moved.append(a)
+                    continue
+                at = _relocate(block, new, a) if any(s.strip() for s in block) else None
+                if at is None:
+                    gone.append(f"{rel}: {m.group(1)}:{a} no longer says what it said at "
+                                f"{commit.group(1)}")
+                moved.append(at or a)
+            if moved != [a for a, _ in spans]:
+                cite = m.group(1) + ":" + (
+                    f"{moved[0]}-{moved[0] + spans[0][1] - spans[0][0]}"
+                    if m.group(3) and "-" in m.group(0)
+                    else ", ".join(str(x) for x in moved)
+                )
+                edits.append((m.start(1), m.end(), cite))
+                problems.append(f"{rel}: {m.group(0)[1:]} moved to {cite}")
+        problems.extend(gone)
+        if fix and (edits or gone):
+            for start, end, cite in sorted(edits, reverse=True):
+                text = text[:start] + cite + text[end:]
+            if gone:
+                text = text.replace("status: verified", "status: stale", 1)
+            else:
+                text = re.sub(r"^commit:.*$", f"commit: {head}", text, count=1, flags=re.M)
+                text = re.sub(r"^verified:.*$", f"verified: {date.today().isoformat()}",
+                              text, count=1, flags=re.M)
+            card.write_text(text, encoding="utf-8")
+    return problems
+
+
 def main() -> int:
     problems = broken_citations()
     for p in problems:
         print(p)
     print(f"{len(problems)} broken citation(s) in verified map cards")
+    if "--drift" in sys.argv or "--fix" in sys.argv:
+        drift = drifted_citations(fix="--fix" in sys.argv)
+        for p in drift:
+            print(p)
+        print(f"{len(drift)} drifted citation(s)" + (" (fixed or marked stale)" if "--fix" in
+                                                       sys.argv else "; run with --fix"))
+        problems += [] if "--fix" in sys.argv else drift
     return 1 if problems else 0
 
 

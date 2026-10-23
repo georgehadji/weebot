@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Wave 6 — External Interfaces & Non-Human Entry Points
 
 Execution record for W6. Threats **T1**, **T2**; classes **C1**, **C2**, **C3**.

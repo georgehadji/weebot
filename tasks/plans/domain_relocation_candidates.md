@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-28
+---
+
 # C4: Domain-Logic Relocation Candidates — 40 Services
 
 **Criteria:** Services in `application/services/` whose only `weebot.*` imports

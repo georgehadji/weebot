@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-23
+---
+
 # Model routing against current scores (2026-10-23)
 
 Source: Artificial Analysis leaderboard (artificialanalysis.ai/leaderboards/models), read 2026-10-23. Columns: Intelligence Index, cost per task (USD), end-to-end response time. Where AA lists several reasoning efforts, the row nearest Weebot's call is used (plain ids, no `:thinking`, so the provider default). Routing lives in `weebot/config/model_refs.py` (`ROLE_MODEL_CONFIG`).

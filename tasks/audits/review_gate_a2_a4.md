@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Part A, phases A2 and A4 — protection as code, and the two histories
 
 Execution record for A2 and A4 of

@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-17
+---
+
 # Spec: Vision-in-the-Loop for Computer-Use / Browser Agents
 
 **Status:** Phase 1 + Phase 2 implemented (unit-verified; smoke test PASSED)

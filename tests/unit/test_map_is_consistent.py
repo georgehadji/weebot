@@ -28,3 +28,17 @@ def test_the_object_index_is_the_generated_one():
 
 def test_verified_cards_cite_real_files_and_lines():
     assert _load("check_map_citations").broken_citations() == []
+
+
+def test_a_shifted_citation_is_found_at_its_new_line_and_a_changed_one_is_not():
+    relocate = _load("check_map_citations")._relocate
+    new = ["import x", "", "def f():", "    return 1", "def g():", "    return 1"]
+    assert relocate(["def f():", "    return 1"], new, 1) == 3
+    assert relocate(["    return 1"], new, 7) == 6  # nearest of two matches
+    assert relocate(["def h():"], new, 3) is None
+
+
+def test_the_tasks_index_is_the_generated_one():
+    gen = _load("gen_tasks_index")
+    current = (ROOT / "tasks" / "_index.md").read_text(encoding="utf-8")
+    assert current.replace("\r\n", "\n") == gen.render(), "run python scripts/gen_tasks_index.py"

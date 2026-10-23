@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-20
+---
+
 # Test-Suite & Evidence-Gate Repair Plan
 
 **Created:** 2026-08-20

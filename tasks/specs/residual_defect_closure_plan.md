@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-09-06
+---
+
 # Residual defect closure plan
 
 **Supersedes the version committed in `dab78ed3`, which was drafted from the

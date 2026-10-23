@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-10
+---
+
 # Weebot Enhancement Roadmap — Implementation Plan
 
 **Status:** Draft  

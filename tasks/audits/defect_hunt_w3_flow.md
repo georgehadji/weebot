@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Wave 3 — Flow State Machine & Concurrency
 
 Execution record for W3 of [`tasks/specs/defect_hunt_v7_execution_plan.md`](../specs/defect_hunt_v7_execution_plan.md).

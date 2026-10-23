@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Defect Hunt — Wave 0 Baseline & Instrument Repair
 
 **Executed:** 2026-09-05

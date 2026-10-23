@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-08-13
+---
+
 # ICM (Interpretable Context Methodology) vs Weebot — Gap Analysis
 
 **Paper**: Van Clief & McDermott, "Interpretable Context Methodology: Folder Structure as Agent Architecture" (March 2026, Eduba / University of Edinburgh)

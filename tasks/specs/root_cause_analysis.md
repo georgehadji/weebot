@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-23
+---
+
 # Root Cause Analysis — 10 QA-Discovered Bugs
 
 **Date:** 2026-06-22  

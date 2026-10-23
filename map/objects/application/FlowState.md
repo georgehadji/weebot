@@ -5,8 +5,8 @@ code: FlowState
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-23
-commit: c2f39937
+verified: 2026-10-24
+commit: 1a0e0052
 ---
 
 # FlowState
@@ -17,9 +17,9 @@ The abstract base for one step of the Plan-Act state machine, plus the 14 state 
 States are classes so each owns its status and transitions, and `PlanActFlow.set_state` needs no hard-coded table (`states/base.py:58-61`, `plan_act_flow.py:534-538`). A state gets the whole `PlanActFlow` as `context` and reaches into its private attributes (`context._session`, `context._plan`, `context._plan_critic`), so states are tightly bound to the flow, not independent units.
 
 ## Shape
-- `FlowState.execute(context, prompt)` → `AsyncGenerator[AgentEvent, None]`, abstract (`base.py:55-66`). `MetaAnalysisState` is a plain coroutine instead; the run loop accepts both (`plan_act_flow.py:763-769`).
+- `FlowState.execute(context, prompt)` → `AsyncGenerator[AgentEvent, None]`, abstract (`base.py:55-66`). `MetaAnalysisState` is a plain coroutine instead; the run loop accepts both (`plan_act_flow.py:768-774`).
 - `status: AgentStatus` class attribute (`base.py:61`); enum values idle, planning, executing, reviewing, updating, verifying, summarizing, completed (`base.py:15-25`). Several sub-states reuse `PLANNING` on purpose (`critiquing.py:35`, `plan_review.py:66`, `premortem.py:29`, `product_gate.py:90`).
-- `task_text(context, prompt)` (`base.py:28`): returns the turn prompt, or falls back to `_original_task` / `last_prompt`, because the run loop empties `prompt` after the first state yields (`plan_act_flow.py:757, 766`).
+- `task_text(context, prompt)` (`base.py:28`): returns the turn prompt, or falls back to `_original_task` / `last_prompt`, because the run loop empties `prompt` after the first state yields (`plan_act_flow.py:762, 771`).
 
 Transitions, from every `set_state` call in `states/` (grep, 2026-10-21):
 
@@ -31,7 +31,7 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-21):
 | `next_state_after_plan()` | `ExecutingState` if `settings.plan_review_enabled` is false, else `PlanReviewState` (`plan_review.py:49-60`) |
 | PlanReview | Executing (`:76,88`); otherwise sets WAITING and `plan_pending_approval` and pauses (`:96,108`) |
 | ProductGate | Planning (`product_gate.py:102,108,215`) |
-| Executing | Verifying, Updating, Executing, Planning (`executing.py:273-781`); Reviewing when `_code_reviewer` is set, the step is a code step and `retry_count < _MAX_REVIEW_RETRIES_GATE` (`:766-781`) |
+| Executing | Verifying, Updating, Executing, Planning (`executing.py:273-784`); Reviewing when `_code_reviewer` is set, the step is a code step and `retry_count < _MAX_REVIEW_RETRIES_GATE` (`:769-784`) |
 | Reviewing | Executing, Updating (`reviewing.py:60-147`) |
 | Updating | Executing (`updating.py:131,245`) |
 | Summarizing | MetaAnalysis (`summarizing.py:54`) |

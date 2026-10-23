@@ -5,8 +5,8 @@ code: PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtra
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-23
-commit: c2f39937
+verified: 2026-10-24
+commit: d4ffb555
 ---
 
 # Browser adapter and session pool
@@ -55,7 +55,7 @@ The Playwright side of web browsing: `PlaywrightAdapter` owns one browser, one c
 - **Pool.** The web app's shutdown calls `container.get("browser_pool").close()` inside `except Exception: pass` (`weebot/interfaces/web/main.py:364-370`).
 
 ## Guards on navigation
-None in this layer. `PlaywrightAdapter.navigate` (`playwright_adapter.py:227`) and `BrowserSessionManager.load_session` (`session_manager.py:116`) call `page.goto` with no host check. The tool-level gate is `EgressGuard`, run by `ToolExecutor` before each call (`application/agents/executor/_tool_executor.py:322-325`). It treats a browser call as egress only for form-submit action names or POST-data arguments (`weebot/core/egress_guard.py:161-174, 388-398`); see `tools/BrowserTools.md`.
+None in this layer. `PlaywrightAdapter.navigate` (`playwright_adapter.py:227`) and `BrowserSessionManager.load_session` (`session_manager.py:116`) call `page.goto` with no host check. The tool-level gate is `EgressGuard`, run by `ToolExecutor` before each call (`application/agents/executor/_tool_executor.py:349-352`). It treats a browser call as egress only for form-submit action names or POST-data arguments (`weebot/core/egress_guard.py:161-174, 388-398`); see `tools/BrowserTools.md`.
 
 ## Connected to
 - **Implements** `BrowserPort` (`application/ports/browser_port.py:151`); config `BrowserConfig` (`:113-144`).

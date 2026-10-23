@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-10-23
+---
+
 # ICM optimization research (2026-10-23)
 
 Question: where can the Interpretable Context Methodology (ICM: one folder one job, small routing files, load only what a step needs, files as state, human gates on editable outputs) make Weebot faster, cheaper or easier to change?

@@ -1,3 +1,9 @@
+---
+status: reference
+date: 2026-06-10
+note: website spec from an agent build run
+---
+
 # Global Design System & Navigation Specification
 
 ## Project: Web Designer Portfolio Website

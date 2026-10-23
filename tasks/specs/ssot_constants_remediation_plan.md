@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-06-30
+note: specs/arch_audit_2026_09_remediation_plan.md (phase 3.2)
+---
+
 # Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers
 
 **Status:** DRAFT — not started
