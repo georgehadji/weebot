@@ -19,6 +19,7 @@ from uuid import uuid4
 from weebot.application.ports.behavioral_learner_port import BehavioralLearnerPort
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 from weebot.domain.models.behavioral_rule import BehavioralRule
+from weebot.application.ports.state_roles_port import BehavioralRuleStore, as_role
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,8 @@ class BehavioralLearner(BehavioralLearnerPort):
         self._llm = llm
         self._min_corrections = min_corrections_for_rule
         self._store = store or []
-        self._state_repo = state_repo
+        # The BehavioralRuleStore role, or None: rules stay in memory (W5.1).
+        self._state_repo = as_role(state_repo, BehavioralRuleStore)
         self._recent_corrections: dict[str, int] = {}  # topic -> count
         self._hydrated = False
 

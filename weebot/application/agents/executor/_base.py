@@ -519,7 +519,12 @@ class ExecutorAgent:
             try:
                 import hashlib
 
-                repo = self._state_repo
+                from weebot.application.ports.state_roles_port import (
+                    MemoryMetadataStore,
+                    as_role,
+                )
+
+                repo = as_role(self._state_repo, MemoryMetadataStore)
                 if repo is not None:
                     key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
                     row = await repo.get_memory_entry(key)

@@ -19,6 +19,7 @@ from weebot.domain.models.session_constraint import (
     SessionConstraint,
     SessionConstraintRegistry,
 )
+from weebot.application.ports.state_roles_port import SessionConstraintStore, as_role
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,8 @@ class SessionConstraintAccumulator:
         self, extractor: Any, state_repo: Any | None = None, event_bus: Any | None = None
     ) -> None:
         self._extractor = extractor
-        self._state_repo = state_repo
+        # The SessionConstraintStore role, or None: constraints are not kept (W5.1).
+        self._state_repo = as_role(state_repo, SessionConstraintStore)
         self._event_bus = event_bus
 
     async def hydrate(self, session_id: str) -> SessionConstraintRegistry:

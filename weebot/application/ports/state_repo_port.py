@@ -31,6 +31,20 @@ class StateRepositoryPort(ABC):
         """List all sessions, optionally filtered by user, status, and paginated."""
         ...
 
+    async def count_sessions(self, user_id: str | None = None) -> int:
+        """How many sessions *user_id* has (all users when None).
+
+        A default over ``list_sessions`` so every repository answers it (W5.1);
+        SQLiteStateRepository overrides it with a COUNT query.
+        """
+        total, offset, page = 0, 0, 500
+        while True:
+            batch = await self.list_sessions(user_id=user_id, limit=page, offset=offset)
+            total += len(batch)
+            if len(batch) < page:
+                return total
+            offset += page
+
     @abstractmethod
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
         """Update just the status of a session."""

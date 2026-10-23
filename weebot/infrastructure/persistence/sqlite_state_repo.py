@@ -13,6 +13,16 @@ from datetime import datetime
 from pathlib import Path
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_roles_port import (  # W5.1: the roles it plays
+    BehavioralRuleStore,
+    CommitmentStore,
+    CorrectionStore,
+    MemoryMetadataStore,
+    OpportunityStore,
+    PlanTemplateStore,
+    PlanTemplateWriter,
+    SessionConstraintStore,
+)
 from weebot.domain.models.correction import CorrectionRecord
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.connection_pool import (
@@ -37,11 +47,27 @@ from weebot.infrastructure.persistence._behavioral_rule_repo import (
 )
 from weebot.infrastructure.persistence._correction_repo import CorrectionRecordRepo
 from weebot.infrastructure.persistence._session_constraint_repo import SessionConstraintRepo
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
 
-class SQLiteStateRepository(StateRepositoryPort):
+
+def _iso(value):
+    """A datetime as ISO text for a TEXT column; other values unchanged."""
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+class SQLiteStateRepository(
+    StateRepositoryPort,
+    BehavioralRuleStore,
+    CorrectionStore,
+    SessionConstraintStore,
+    OpportunityStore,
+    MemoryMetadataStore,
+    PlanTemplateWriter,
+    PlanTemplateStore,
+    CommitmentStore,
+):
     """Persist sessions to SQLite using connection pooling.
 
     Domain-specific operations are delegated to sub-repositories:
@@ -52,7 +78,7 @@ class SQLiteStateRepository(StateRepositoryPort):
 
     def __init__(
         self,
-        db_path: str = "./weebot_sessions.db",
+        db_path: str = DB_SESSIONS_PATH,
         database_router: DatabaseRouterPort | None = None,
     ):
         self._db_path = Path(db_path)
@@ -554,18 +580,6 @@ class SQLiteStateRepository(StateRepositoryPort):
             opp_id, prompt, source, evidence, confidence, estimated_effort
         )
 
-    async def list_opportunities(self, limit: int = 50) -> list[dict]:
-        await self._init_helpers()
-        return await self._opportunities.list(limit)  # type: ignore[union-attr]
-
-    async def mark_opportunity_presented(self, opp_id: str) -> None:
-        await self._init_helpers()
-        await self._opportunities.mark_presented(opp_id)  # type: ignore[union-attr]
-
-    async def accept_opportunity(self, opp_id: str) -> None:
-        await self._init_helpers()
-        await self._opportunities.accept(opp_id)  # type: ignore[union-attr]
-
     # ── Memory metadata ──────────────────────────────────────────
 
     async def upsert_memory_metadata(
@@ -623,17 +637,17 @@ class SQLiteStateRepository(StateRepositoryPort):
             context=getattr(commitment, "context", ""),
             source_session_id=getattr(commitment, "source_session_id", ""),
             source_event_id=getattr(commitment, "source_event_id", None),
-            due_at=getattr(commitment, "due_at", None),
+            due_at=_iso(getattr(commitment, "due_at", None)),
             status=getattr(commitment, "status", "pending"),
         )
 
-    async def list_commitments(self, status: str | None = None) -> list[dict]:
-        await self._init_helpers()
-        return await self._commitments.list(status)  # type: ignore[union-attr]
+    async def list_commitments(self, status: str | None = None) -> list:
+        """Commitments as domain objects (CommitmentStore, W5.1)."""
+        from weebot.domain.models.commitment import Commitment
 
-    async def get_pending_commitments(self) -> list[dict]:
         await self._init_helpers()
-        return await self._commitments.get_pending()  # type: ignore[union-attr]
+        rows = await self._commitments.list(status)  # type: ignore[union-attr]
+        return [Commitment.from_row(r) for r in rows]
 
     async def update_commitment_status(
         self, commitment_id: str, status: str, failure_reason: str | None = None

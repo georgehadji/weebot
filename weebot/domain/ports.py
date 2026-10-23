@@ -74,3 +74,45 @@ class EventPublisher(Protocol):
             True if delivery succeeded, False otherwise.
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Repository roles (W5.1, F26). StateRepositoryPort holds the session methods;
+# these are the other persistence roles a repository may also play. A caller
+# resolves its role with ``as_role`` and skips the feature when it is absent,
+# instead of duck typing into an AttributeError.
+# ---------------------------------------------------------------------------
+
+
+def as_role(obj: Any, role: type) -> Any:
+    """*obj* when it has every method of the *role* protocol, else None.
+
+    By attribute lookup rather than ``isinstance``: on Python 3.12 a
+    runtime-checkable protocol checks attributes statically, which a test
+    double built on ``MagicMock`` never satisfies.
+    """
+    if obj is None:
+        return None
+    members = getattr(role, "__protocol_attrs__", None) or {
+        name for name in vars(role) if not name.startswith("_")
+    }
+    return obj if all(callable(getattr(obj, name, None)) for name in members) else None
+
+
+@runtime_checkable
+class PlanTemplateStore(Protocol):
+    """Read side of the plan-template cache."""
+
+    async def find_plan_templates_by_hash(self, task_hash: str, limit: int = 3) -> list[dict]: ...
+    async def list_all_plan_templates(self, limit: int = 200) -> list[dict]: ...
+
+
+@runtime_checkable
+class CommitmentStore(Protocol):
+    """Commitments the agent made, as domain objects."""
+
+    async def save_commitment(self, commitment: Any, commit: bool = True) -> None: ...
+    async def list_commitments(self, status: str | None = None) -> list[Any]: ...
+    async def update_commitment_status(
+        self, commitment_id: str, status: str, failure_reason: str | None = None
+    ) -> None: ...

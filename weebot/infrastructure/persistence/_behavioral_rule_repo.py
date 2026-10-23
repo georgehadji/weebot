@@ -79,32 +79,6 @@ class OpportunityRepo:
                 (opp_id, prompt, source, evidence_json, confidence, estimated_effort, now),
             )
 
-    async def list(self, limit: int = 50) -> list[dict]:
-        """List opportunities, un-presented first."""
-        rows = await self._pool.execute_read(
-            """
-            SELECT * FROM pending_opportunities
-            ORDER BY presented ASC, confidence DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        return [dict(r) for r in rows]
-
-    async def mark_presented(self, opp_id: str) -> None:
-        """Mark an opportunity as presented."""
-        async with self._pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE pending_opportunities SET presented = 1 WHERE id = ?", (opp_id,)
-            )
-
-    async def accept(self, opp_id: str) -> None:
-        """Mark an opportunity as accepted."""
-        async with self._pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE pending_opportunities SET accepted = 1 WHERE id = ?", (opp_id,)
-            )
-
 
 class PlanTemplateRepo:
     """Manages the plan_templates table."""

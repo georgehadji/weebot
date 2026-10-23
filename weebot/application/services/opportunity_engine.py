@@ -16,6 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
+from weebot.application.ports.state_roles_port import OpportunityStore, as_role
 from weebot.domain.models.opportunity import OpportunityProposal
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,8 @@ class OpportunityEngine:
         """
         self._kg = knowledge_graph
         self._fts5 = fts5_search
-        self._state_repo = state_repo
+        # The OpportunityStore role, or None: proposals stay in memory (W5.1).
+        self._state_repo = as_role(state_repo, OpportunityStore)
         self._store: list[OpportunityProposal] = []
 
     # ── Public API ──────────────────────────────────────────────────
@@ -113,14 +115,9 @@ class OpportunityEngine:
         top = [p for p in proposals if p.confidence >= _CONFIDENCE_THRESHOLD]
         top = top[:_MAX_PROPOSALS_PER_CYCLE]
 
-        # Store in memory and persist to SQLite if available
+        # Store in memory and persist if the repository keeps opportunities
         self._store = top
-        if self._state_repo is not None:
-            for proposal in top:
-                try:
-                    await self._state_repo.save_opportunity(proposal)
-                except Exception as save_exc:
-                    logger.warning("Failed to persist opportunity: %s", save_exc)
+        await self._persist(top)
 
         # ── KG provenance ─────────────────────────────────────────
         if self._kg is not None:
@@ -144,6 +141,19 @@ class OpportunityEngine:
                 except Exception as kg_exc:
                     logger.debug("KG provenance for opportunity skipped: %s", kg_exc)
         return top
+
+    async def _persist(self, proposals: list[OpportunityProposal]) -> None:
+        """Save each proposal's fields. Passing the model raised TypeError on
+        every call, swallowed below, so no opportunity was ever stored."""
+        if self._state_repo is None:
+            return
+        for p in proposals:
+            try:
+                await self._state_repo.save_opportunity(
+                    p.id, p.prompt, p.source, p.evidence, p.confidence, p.estimated_effort
+                )
+            except Exception as save_exc:
+                logger.warning("Failed to persist opportunity: %s", save_exc)
 
     async def get_pending(self) -> list[OpportunityProposal]:
         """Get pending (unpresented) opportunities.

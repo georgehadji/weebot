@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from weebot.domain.models.plan_template import PlanTemplate
+from weebot.domain.ports import PlanTemplateStore, as_role
 
 logger = logging.getLogger(__name__)
 
@@ -157,8 +158,8 @@ async def find_matching_templates(
     on all templates (up to ``max_results``).
 
     Args:
-        repo: Repository with ``find_plan_templates_by_hash()`` and
-              ``list_all_plan_templates()`` methods.
+        repo: A repository; used only if it plays ``PlanTemplateStore``
+              (W5.1). Without that role there are no templates.
         task_description: The task description to match.
         threshold: Minimum Jaccard similarity (0.0-1.0). Default 0.4.
         max_results: Maximum number of templates to return.
@@ -166,16 +167,19 @@ async def find_matching_templates(
     Returns:
         List of matching PlanTemplate objects, best match first.
     """
+    store = as_role(repo, PlanTemplateStore)
+    if store is None:
+        return []
     task_hash = compute_task_hash(task_description)
 
     # Exact hash match (fast path)
-    exact = await repo.find_plan_templates_by_hash(task_hash, limit=max_results)
+    exact = await store.find_plan_templates_by_hash(task_hash, limit=max_results)
     if exact:
         return [row_to_template(r) for r in exact]
 
     # Jaccard similarity fallback (slower)
     query_tokens = tokenize(task_description)
-    all_templates = [row_to_template(r) for r in await repo.list_all_plan_templates(limit=200)]
+    all_templates = [row_to_template(r) for r in await store.list_all_plan_templates(limit=200)]
     scored: list[tuple[float, PlanTemplate]] = []
 
     for tpl in all_templates:

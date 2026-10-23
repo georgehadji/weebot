@@ -81,9 +81,15 @@ class CreatePlanHandler(CommandHandler):
                     if template_notes:
                         meta_list.append(template_notes)
                         # Increment use_count for matched templates (best-effort)
-                        for tpl in templates:
+                        from weebot.application.ports.state_roles_port import (
+                            PlanTemplateWriter,
+                            as_role,
+                        )
+
+                        writer = as_role(self._state_repo, PlanTemplateWriter)
+                        for tpl in templates if writer is not None else []:
                             try:
-                                await self._state_repo.increment_template_use(tpl.template_id)
+                                await writer.increment_template_use(tpl.template_id)
                             except Exception:
                                 logger.debug(
                                     "Failed to increment template use count", exc_info=True

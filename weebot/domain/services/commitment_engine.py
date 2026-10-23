@@ -15,6 +15,7 @@ import logging
 from datetime import datetime, UTC
 
 from weebot.domain.models.commitment import CommitmentStatus
+from weebot.domain.ports import CommitmentStore, as_role
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +23,16 @@ logger = logging.getLogger(__name__)
 class CommitmentEngine:
     """Manages the commitment lifecycle: extraction → tracking → surfacing.
 
-    Relies on an external persistence layer (``state_repo``) that implements
-    the commitment CRUD interface (``save_commitment``, ``get_pending_commitments``,
-    ``update_commitment_status``, ``list_commitments``).
+    Persistence is the ``CommitmentStore`` role (``weebot.domain.ports``). A
+    repository without that role leaves the engine inert: heartbeat checks
+    nothing and the summary is empty (W5.1).
 
     Args:
-        state_repo: A repository object with commitment CRUD methods.
-            Typically ``SQLiteStateRepository`` or a test mock.
+        state_repo: A repository; used only if it plays ``CommitmentStore``.
     """
 
     def __init__(self, state_repo, knowledge_graph=None) -> None:
-        self._repo = state_repo
+        self._repo = as_role(state_repo, CommitmentStore)
         self._kg = knowledge_graph
 
     # ── Heartbeat ───────────────────────────────────────────────────
@@ -45,8 +45,10 @@ class CommitmentEngine:
         """
         stats: dict = {"checked": 0, "marked_overdue": 0, "active_pending": 0}
 
+        if self._repo is None:
+            return stats
         try:
-            pending = await self._repo.list_commitments(status="pending", limit=200)
+            pending = (await self._repo.list_commitments(status="pending"))[:200]
         except Exception as exc:
             logger.warning("CommitmentEngine heartbeat: failed to list commitments: %s", exc)
             return stats
@@ -113,8 +115,14 @@ class CommitmentEngine:
             A string suitable for injection into session context or
             empty string if no pending commitments exist.
         """
+        if self._repo is None:
+            return ""
         try:
-            pending = await self._repo.get_pending_commitments(limit=limit)
+            # Overdue ones first: the summary below reports both kinds.
+            pending = (
+                await self._repo.list_commitments(status="overdue")
+                + await self._repo.list_commitments(status="pending")
+            )[:limit]
         except Exception as exc:
             logger.warning("CommitmentEngine surfacing: failed: %s", exc)
             return ""

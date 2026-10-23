@@ -13,6 +13,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from weebot.application.ports.state_roles_port import (
+    BehavioralRuleStore,
+    MemoryMetadataStore,
+    as_role,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +34,9 @@ class UserModelConsolidator:
 
     def __init__(self, state_repo: Any, llm: Any | None = None) -> None:
         self._repo = state_repo
+        # Roles this needs beyond the session port; None skips that part (W5.1).
+        self._rules = as_role(state_repo, BehavioralRuleStore)
+        self._memory = as_role(state_repo, MemoryMetadataStore)
         self._llm = llm
 
     async def consolidate(self) -> str:
@@ -39,7 +48,7 @@ class UserModelConsolidator:
         # 1. Load behavioral rules
         rules: list[str] = []
         try:
-            raw_rules = await self._repo.list_behavioral_rules()
+            raw_rules = await self._rules.list_behavioral_rules() if self._rules else []
             rules = [r["rule_text"] for r in raw_rules if r.get("rule_text")]
         except Exception as exc:
             logger.debug("UserModelConsolidator: failed to load rules: %s", exc)
@@ -60,11 +69,13 @@ class UserModelConsolidator:
         profile = await self._distill(rules, memories)
 
         # 4. Store the profile as a pinned memory entry
+        if self._memory is None:
+            return profile
         try:
             import hashlib
 
             key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-            await self._repo.upsert_memory_metadata(
+            await self._memory.upsert_memory_metadata(
                 entry_hash=key,
                 entry_text=profile[:1000],
                 source="user",

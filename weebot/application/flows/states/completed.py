@@ -222,19 +222,26 @@ class CompletedState(FlowState):
                     # four. Every call raised TypeError into the handler below,
                     # which logged it at DEBUG — so the plan_templates table has
                     # never held a row. (D75.)
-                    await context._state_repo.save_plan_template(
-                        template.template_id,
-                        template.task_hash,
-                        template.task_description,
-                        template.plan_json,
-                        template.success_score,
+                    from weebot.application.ports.state_roles_port import (
+                        PlanTemplateWriter,
+                        as_role,
                     )
-                    logger.info(
-                        "Saved plan template (hash=%s, score=%.2f) for session %s",
-                        template.task_hash,
-                        score,
-                        context._session.id[:8],
-                    )
+
+                    writer = as_role(context._state_repo, PlanTemplateWriter)
+                    if writer is not None:  # a repository without the role keeps none
+                        await writer.save_plan_template(
+                            template.template_id,
+                            template.task_hash,
+                            template.task_description,
+                            template.plan_json,
+                            template.success_score,
+                        )
+                        logger.info(
+                            "Saved plan template (hash=%s, score=%.2f) for session %s",
+                            template.task_hash,
+                            score,
+                            context._session.id[:8],
+                        )
                 except Exception as exc:
                     # WARNING, not DEBUG. A save that cannot happen is worth
                     # one line in a normal log; at DEBUG this hid a TypeError
@@ -318,7 +325,7 @@ class CompletedState(FlowState):
 
             stamp = SessionStamp(
                 flow_type="PlanActFlow",
-                model_used=getattr(context._executor, "_model", "") or "",
+                model_used=context._model or getattr(context._summary_executor, "_model", "") or "",
                 plan_fingerprint=fingerprint,
                 verification=verif_scores,
                 gate_failures=gate_failures,
@@ -427,7 +434,9 @@ class CompletedState(FlowState):
             )
 
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
-        _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
+        _gaps = list(getattr(context, "step_skill_gaps", []) or []) + list(
+            getattr(getattr(context, "_summary_executor", None), "_skill_gaps", []) or []
+        )
         if _gaps:
             _background().spawn(
                 _run_skill_gap_processing(
