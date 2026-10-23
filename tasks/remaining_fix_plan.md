@@ -304,6 +304,13 @@ Independent of C-E; it can go anywhere after A.
   - **OpenAI-direct works for luna models.** The factory's `openai` and `anthropic` branches read keys from `os.environ` only and sent "no-key"; both now use `_resolve_direct_key`. Direct OpenAI rejects `max_tokens` (it wants `max_completion_tokens`), and rejects tools with a reasoning effort on models where reasoning is optional. Both are handled, and the catalog spec resolves for bare ids. Live: `gpt-6-luna` and `gpt-5.6-luna` answer plain and tool calls.
   - **Limit:** `gpt-6.1-sol` cannot take tools on `/v1/chat/completions` at all; it needs the Responses API. Roles use `openai/` ids through OpenRouter, where Sol's tool calls work, so routing is unaffected.
 - **Executor model is now `deepseek/deepseek-v4.1-flash-1017` (2026-10-23, user pick):** half the max-provider price of `deepseek-v4.1-flash` ($0.15/$0.60 against $0.30/$1.20 per M). `MODEL_CASCADE_TIER1` and its quality profile moved; it is in the ACR pool. Via OpenRouter it answers as itself; DeepSeek-direct serves it as the `deepseek-flash` alias.
+- **Per-role VFM, hard tasks, billed (2026-10-23):** 23 hard auto-graded tasks, priced from OpenRouter's own `usage.cost`: coder algorithms against hidden edge-case tests, subtle bugs for the reviewer, competition-style arithmetic for the analyst, long-document counting and multi-hop for the researcher, a 10-node dependency order and constrained JSON for the planner. About $0.27 spent.
+  - **analyst:** the primary, GPT-6.1 Sol, is the only one at 6/6 (Haiku 5.5 and DeepSeek 1017 5/6). It stays.
+  - **coder:** all 6/6; Haiku 5.5 at $0.0027 against Sonnet 5.5 at $0.048 (18x) and faster.
+  - **reviewer:** all 6/6; Haiku at $0.0003 against Sol at $0.0033 (12x).
+  - **researcher:** all 3/3; Haiku at $0.0056 against MiMo Pro at $0.019 (3.4x), 3.6x faster.
+  - **planner:** all 2/2; Haiku at $0.0002 against Sol at $0.0019 (10x).
+  - These are single-turn tasks; multi-step tool loops differ (there DeepSeek beat Haiku on billed cost). Moving coder, reviewer, researcher and planner to Haiku is the user's call.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
