@@ -29,3 +29,14 @@ def test_persona_router_scores():
     router = PersonaRouter()
     scored = router.route([persona], "Improve frontend performance and accessibility", top_n=1)
     assert scored[0].score > 0
+
+
+def test_yaml_frontmatter_names_the_persona():
+    # A frontmatter block made every such persona "---" (F78), so they all
+    # collapsed to one id and overwrote each other's registry entry.
+    from weebot.agents.parser import AgentPersonaParser
+
+    content = "---\nname: Security Auditor\ndescription: Finds holes\n---\n\n# Security Auditor\n\n## Mission\nAudit.\n"
+    persona = AgentPersonaParser().parse(content, filename="security-auditor.md")
+    assert persona.name == "Security Auditor"
+    assert "---" not in persona.name
