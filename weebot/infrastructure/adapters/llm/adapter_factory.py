@@ -225,12 +225,17 @@ class AdapterFactory:
         if provider == "openai":
             # Strip provider prefix: "openai/gpt-4o-mini" → "gpt-4o-mini"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            return OpenAIAdapter(api_key=api_key, base_url=base_url, default_model=clean_model)
+            # The key lives in .env-backed settings; the adapter reads os.environ.
+            key = _resolve_direct_key("OPENAI_API_KEY") or api_key
+            return OpenAIAdapter(api_key=key, base_url=base_url, default_model=clean_model)
 
         elif provider == "anthropic":
             # Strip provider prefix: "anthropic/claude-3.5-haiku" → "claude-3.5-haiku"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            return AnthropicAdapter(api_key=api_key, default_model=clean_model)
+            return AnthropicAdapter(
+                api_key=_resolve_direct_key("ANTHROPIC_API_KEY") or api_key,
+                default_model=clean_model,
+            )
 
         elif provider == "deepseek":
             # Strip provider prefix: "deepseek/deepseek-v4-flash" → "deepseek-v4-flash"

@@ -66,3 +66,19 @@ def test_moonshot_direct_gets_its_own_key_not_the_callers_openrouter_key(monkeyp
         provider="moonshot", model="moonshotai/kimi-k2.6", api_key="or-key"
     )
     assert _direct_key_of(adapter) == "kimi-key"
+
+
+def test_openai_and_anthropic_direct_get_their_own_keys(monkeypatch):
+    # Same class of bug as DeepSeek: the keys live in .env-backed settings,
+    # the adapters read os.environ only, so provider "openai" sent "no-key".
+    from weebot.infrastructure.adapters.llm import adapter_factory as af
+
+    keys = {"OPENAI_API_KEY": "sk-openai-key", "ANTHROPIC_API_KEY": "sk-ant-key"}
+    monkeypatch.setattr(af, "_resolve_direct_key", lambda env_var: keys.get(env_var))
+    factory = af.AdapterFactory()
+    openai = factory._create_inner_adapter(provider="openai", model="gpt-6-luna", api_key=None)
+    assert openai._client.api_key == "sk-openai-key"
+    anthropic = factory._create_inner_adapter(
+        provider="anthropic", model="claude-sonnet-5.5", api_key=None
+    )
+    assert getattr(anthropic, "_client").api_key == "sk-ant-key"

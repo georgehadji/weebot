@@ -140,6 +140,9 @@ class OpenAIAdapter(LLMPort):
         # temperature for gpt-4.1 (which takes it) and sent it to Claude Sonnet 5
         # (which does not list it).
         spec = _catalog_spec(kwargs["model"])
+        direct_openai = "api.openai.com" in str(getattr(self._client, "base_url", ""))
+        if spec is None and direct_openai and "/" not in str(kwargs["model"]):
+            spec = _catalog_spec(f"openai/{kwargs['model']}")  # the catalog keys by vendor
         if spec is not None and spec.supports_temperature is not None:
             accepts_temperature = spec.supports_temperature
         else:
@@ -226,6 +229,14 @@ class OpenAIAdapter(LLMPort):
             kwargs["reasoning_effort"] = reasoning_effort
         if "reasoning_effort" in kwargs:
             kwargs["reasoning_effort"] = _fit_effort(kwargs["reasoning_effort"], spec)
+        # api.openai.com differs from OpenRouter on two params: it rejects
+        # max_tokens for current models, and on /v1/chat/completions it rejects
+        # tools with a reasoning effort for models where reasoning is optional.
+        if direct_openai:
+            if "max_tokens" in kwargs:
+                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+            if tools and not (spec is not None and spec.reasoning_mandatory):
+                kwargs["reasoning_effort"] = "none"
 
         return kwargs
 
