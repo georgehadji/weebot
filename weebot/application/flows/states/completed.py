@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
@@ -90,6 +93,27 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str, idea_gate
     except Exception:
         logger.debug("Phase 2 skill-gap background processing failed", exc_info=True)
 
+
+
+_DREAM_SCAN_MARKER = Path.home() / ".weebot" / "dream_scan_last"
+_DREAM_SCAN_INTERVAL_S = 6 * 3600
+
+
+def _dream_scan_due(now: float | None = None) -> bool:
+    """True at most once per interval, across processes (a marker file's mtime)."""
+    now = time.time() if now is None else now
+    try:
+        if now - _DREAM_SCAN_MARKER.stat().st_mtime < _DREAM_SCAN_INTERVAL_S:
+            return False
+    except OSError:
+        logger.debug("No dream-scan marker yet: the scan is due")
+    try:
+        _DREAM_SCAN_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        _DREAM_SCAN_MARKER.touch()
+        os.utime(_DREAM_SCAN_MARKER, (now, now))
+    except OSError:
+        logger.debug("Could not write the dream-scan marker", exc_info=True)
+    return True
 
 async def _run_dream_scan(dreamer=None, event_store=None, idea_gate=None) -> None:
     """Run DreamerAgent + IdeaGate as background task after completion.
@@ -446,14 +470,17 @@ class CompletedState(FlowState):
             )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
-        _background().spawn(
-            _run_dream_scan(
-                dreamer=context._dreamer_agent,
-                event_store=context._event_store,
-                idea_gate=context._idea_gate,
-            ),
-            name="dream-scan",
-        )
+        # It reads recent errors across all sessions, so once per interval is
+        # enough; per completion it cost a one-shot `flow run` a 10 s drain.
+        if _dream_scan_due():
+            _background().spawn(
+                _run_dream_scan(
+                    dreamer=context._dreamer_agent,
+                    event_store=context._event_store,
+                    idea_gate=context._idea_gate,
+                ),
+                name="dream-scan",
+            )
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:
