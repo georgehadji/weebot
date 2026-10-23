@@ -394,7 +394,10 @@ class WeebotSettings(BaseSettings):
     outbound_tool_patterns: str = Field(
         default=(
             "*schedulepost*,*deletepost*,*publish*,*send_email*,*send_mail*,*send_reply*,"
-            "*send_message*,*tweet*,*generate*,*clipping*"
+            "*send_message*,*tweet*,*generate*,*clipping*,"
+            # Paid per call (F54): Apify Actor runs, image/video generation, and
+            # mixture_of_agents (several model calls at once).
+            "apify_*,image_gen,video_gen,mixture_of_agents"
         ),
         alias="WEEBOT_OUTBOUND_TOOL_PATTERNS",
         description=(

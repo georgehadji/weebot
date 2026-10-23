@@ -72,7 +72,6 @@ def test_publishing_and_spending_tools_are_outbound(name):
         "mcp__postiz__triggerTool",  # reads provider data (ids, search) for settings
         "mcp__postiz__videoFunctionTool",  # reads voice ids and the like
         "web_search",
-        "image_gen",
         "camofox_browser",
     ],
 )
@@ -80,11 +79,19 @@ def test_reading_tools_are_not(name):
     assert not is_outbound_tool(name)
 
 
-def test_no_built_in_tool_is_outbound():
+def test_only_the_paid_built_in_tools_are_outbound():
+    # F54: paid generation and Actor runs ask first; nothing else built in does.
     from weebot.tools.tool_registry import RoleBasedToolRegistry
 
-    hits = [n for n in RoleBasedToolRegistry.build_tool_class_map() if is_outbound_tool(n)]
-    assert hits == []
+    hits = {n for n in RoleBasedToolRegistry.build_tool_class_map() if is_outbound_tool(n)}
+    assert hits == {"image_gen", "video_gen", "mixture_of_agents"}
+
+
+def test_apify_preset_runs_ask():
+    from weebot.tools.apify_presets import create_apify_preset_tools
+
+    names = [t.name for t in create_apify_preset_tools(object())]
+    assert names and all(is_outbound_tool(n) for n in names)
 
 
 def test_the_chain_asks_and_marks_it_enforced():
