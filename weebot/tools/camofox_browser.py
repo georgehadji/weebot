@@ -301,7 +301,8 @@ class CamofoxBrowserTool(BaseTool):
     async def _close_if_private(self, tab_id: str, result: dict[str, Any]) -> None:
         """A click or redirect can land on a local address; close the tab if so."""
         host = urlsplit(str(result.get("url") or "")).hostname
-        if host and _blocked_literal(host):
+        # Names too, not only literal IPs: a redirect to a name resolving private (F74).
+        if host and (_blocked_literal(host) or not await _is_public_host(host)):
             await self._call("DELETE", f"/tabs/{tab_id}")
             raise _CamofoxError(f"refused: the page went to {host}, a private or local address")
 

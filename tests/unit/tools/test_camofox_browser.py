@@ -219,3 +219,23 @@ def test_the_builtin_skill_says_when_to_use_it():
     skill = registry.get("camofox-browser")
     assert skill is not None
     assert "camofox_browser" in skill.content and "CAPTCHA" in skill.content
+
+
+async def test_a_redirect_to_a_privately_resolving_name_closes_the_tab(monkeypatch):
+    # _close_if_private checked only literal hosts, so a redirect to a name that
+    # resolves to a private address stayed open (F74).
+    async def _private(host):
+        return False
+
+    monkeypatch.setattr(cb, "_is_public_host", _private)
+    tool = CamofoxBrowserTool()
+    calls = []
+
+    async def _call(method, path, body=None, **params):
+        calls.append((method, path))
+        return {}
+
+    monkeypatch.setattr(tool, "_call", _call, raising=False)
+    with pytest.raises(cb._CamofoxError, match="intranet.example"):
+        await tool._close_if_private("t1", {"url": "http://intranet.example/admin"})
+    assert ("DELETE", "/tabs/t1") in calls
