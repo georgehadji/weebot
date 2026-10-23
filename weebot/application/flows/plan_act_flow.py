@@ -631,6 +631,10 @@ class PlanActFlow(BaseFlow):
             extra=self._session.context.extra if self._session.context else {},
         )
         if isinstance(initial_state, ExecutingState):
+            # The step handler reloads the plan from the repo, so routing's
+            # changes (an edited plan file, ICM B2) must be saved first.
+            if self._state_repo is not None:
+                await self._state_repo.save_session(self._session)
             last_plan = self._session.get_last_plan()
             self._plan = last_plan
             self.set_state(initial_state)

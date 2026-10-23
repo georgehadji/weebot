@@ -66,3 +66,53 @@ async def test_plan_review_writes_the_file_and_says_where(tmp_path, monkeypatch)
     wait = next(e for e in events if isinstance(e, WaitForUserEvent))
     assert "01_plan.md" in wait.question
     assert plan_file.read_steps("sess-9") == ["one", "two"]
+
+
+async def test_the_edited_plan_is_saved_before_the_first_step_runs(tmp_path, monkeypatch):
+    """The step handler reloads the plan from the repo, so an edit kept only in
+    memory sends `edited-N` ids it cannot find (STEP_NOT_FOUND)."""
+    import types
+
+    from weebot.application.cqrs.base import CommandResult
+    from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfig
+    from weebot.application.models.tool_collection import ToolCollection
+    from weebot.domain.models.session import SessionStatus
+
+    s, plan = _waiting_session(tmp_path, monkeypatch)
+    s = s.set_status(SessionStatus.WAITING)
+    plan_file.write(s.id, plan.title, [st.description for st in plan.steps])
+    p = plan_file.path_for(s.id)
+    p.write_text(p.read_text(encoding="utf-8") + "3. Save it\n", encoding="utf-8")
+
+    saved: dict = {}
+
+    class _Repo:
+        async def save_session(self, session):
+            saved["s"] = session
+
+        async def load_session(self, sid):
+            return saved.get("s")
+
+        def __getattr__(self, name):
+            async def _noop(*a, **k):
+                return None
+            return _noop
+
+    seen: list = []
+
+    class _Mediator:
+        async def send(self, cmd):
+            stored = saved.get("s")
+            seen.append([st.id for st in stored.get_last_plan().steps] if stored else None)
+            return CommandResult.fail(error="stop", error_code="TEST_STOP")
+
+    class _LLM:
+        async def chat(self, **_):
+            return types.SimpleNamespace(content="{}", model="x", usage=None)
+
+    flow = PlanActFlow(PlanActFlowConfig(
+        llm=_LLM(), tools=ToolCollection(), session=s, max_iterations=1,
+        state_repo=_Repo(), mediator=_Mediator()))
+    async for _ in flow.run("approve"):
+        pass
+    assert seen and seen[0] == ["s1", "s2", "edited-3"]
