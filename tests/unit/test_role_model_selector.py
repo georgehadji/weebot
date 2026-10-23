@@ -3,6 +3,7 @@
 import pytest
 
 from weebot.application.services.role_model_selector import RoleModelSelector
+from weebot.config.model_refs import ROLE_MODEL_CONFIG
 
 
 @pytest.fixture
@@ -11,15 +12,13 @@ def selector():
 
 
 def test_returns_primary_model_for_configured_role(selector):
-    """'critic' returns first model in ROLE_MODEL_CONFIG (cross-lab diversity: xAI vs Z.ai planner)."""
-    model = selector.select("critic")
-    assert model == "x-ai/grok-4.3:thinking"
+    """'critic' returns the first model in ROLE_MODEL_CONFIG, read from there:
+    a copied id here is a second home for a routing fact."""
+    assert selector.select("critic") == ROLE_MODEL_CONFIG["critic"][0]
 
 
-def test_planner_uses_glm_thinking(selector):
-    """'planner' returns GLM 5.2 :thinking (primary, reasoning xhigh, 1M ctx)."""
-    model = selector.select("planner")
-    assert model == "z-ai/glm-5.2:thinking"
+def test_planner_uses_its_role_primary(selector):
+    assert selector.select("planner") == ROLE_MODEL_CONFIG["planner"][0]
 
 
 def test_falls_back_to_default_for_unknown_role(selector):

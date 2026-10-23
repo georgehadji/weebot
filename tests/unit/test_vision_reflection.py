@@ -475,3 +475,21 @@ class TestReflectionErrorAttributionB1:
         ), "Compaction failure must be logged as a WARN quarantine message"
         # The parse/validate log line must NOT have appeared (that's a different error path)
         assert "parse/validate failed" not in caplog.text
+
+
+def test_reflection_defaults_off(monkeypatch):
+    """Off unless asked for (2026-10-23, value for money): with in-loop vision
+    on, reflection sends every screenshot twice and adds a round trip per
+    screenshot. WEEBOT_VISION_REFLECTION=1 turns it on."""
+    import importlib
+
+    import weebot.config.feature_flags as ff
+
+    monkeypatch.delenv("WEEBOT_VISION_REFLECTION", raising=False)
+    try:
+        assert importlib.reload(ff).VISION_REFLECTION_ENABLED is False
+        monkeypatch.setenv("WEEBOT_VISION_REFLECTION", "1")
+        assert importlib.reload(ff).VISION_REFLECTION_ENABLED is True
+    finally:
+        monkeypatch.delenv("WEEBOT_VISION_REFLECTION", raising=False)
+        importlib.reload(ff)

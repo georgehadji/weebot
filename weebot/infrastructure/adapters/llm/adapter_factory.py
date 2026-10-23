@@ -302,6 +302,14 @@ class AdapterFactory:
         elif provider == "openrouter":
             return OpenRouterAdapter(api_key=api_key, default_model=model)
 
+        elif model and "/" in model:
+            # A vendor/model id with no direct adapter here (google/, poolside/,
+            # microsoft/, ...) is an OpenRouter id. These raised "Unknown
+            # provider", so a role or fallback on such a model could not build.
+            return OpenRouterAdapter(
+                api_key=_resolve_direct_key("OPENROUTER_API_KEY") or api_key, default_model=model
+            )
+
         else:
             raise ValueError(f"Unknown provider: {provider}")
 

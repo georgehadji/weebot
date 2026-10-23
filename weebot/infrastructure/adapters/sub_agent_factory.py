@@ -26,7 +26,6 @@ def _get_tool_collection_cls():
 
 
 from weebot.domain.models.sub_agent import (
-    AgentTier,
     DispatchStrategy,
     SubAgentResult,
     SubAgentSpec,
@@ -36,14 +35,10 @@ from weebot.domain.models.event import MessageEvent, ErrorEvent
 
 logger = logging.getLogger(__name__)
 
-from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER
+from weebot.config.model_refs import SUBAGENT_TIER_MODEL
 
 # Default models per tier when spec.model is not set
-_TIER_MODEL: dict[AgentTier, str] = {
-    AgentTier.BUDGET: MODEL_CASCADE_TIER2,
-    AgentTier.STANDARD: MODEL_ROLE_CODER,
-    AgentTier.PREMIUM: MODEL_CASCADE_TIER4,
-}
+_TIER_MODEL = SUBAGENT_TIER_MODEL
 
 
 class SubAgentFactory(SubAgentFactoryPort):
@@ -163,7 +158,7 @@ class SubAgentFactory(SubAgentFactoryPort):
         Uses longest-summary heuristic — not true voting. Future: implement
         majority-vote consensus when eval data shows improvement.
         """
-        models = models or [MODEL_CASCADE_TIER2, MODEL_ROLE_CODER, MODEL_CASCADE_TIER4]
+        models = models or list(SUBAGENT_TIER_MODEL.values())
         specs = [spec.with_model(m) for m in models[:3]]
         results = await self.spawn_parallel(specs, max_concurrency=3)
         successes = [r for r in results if r.is_success]

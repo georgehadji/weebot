@@ -47,20 +47,23 @@ class CascadeExecutor:
     _TIER3_MODEL: str = MODEL_CASCADE_TIER3
     _TIER4_MODEL: str = MODEL_CASCADE_TIER4
 
-    # OpenRouter credit threshold — below this (in tokens), skip
-    # OpenRouter models to avoid 402 errors that waste cascade timeouts.
-    # Override via OPENROUTER_MIN_CREDITS env var (default: 10000).
-    _OPENROUTER_MIN_CREDITS: int = 10000
+    # OpenRouter balance (USD, as /auth/key reports it) below which the
+    # cascade skips OpenRouter-only models to avoid 402s that waste timeouts.
+    # Override via OPENROUTER_MIN_CREDIT_USD. It used to be 10000 "tokens"
+    # compared with a field OpenRouter does not send, so it always tripped.
+    _OPENROUTER_MIN_CREDIT_USD: float = 0.10
 
     @classmethod
-    def _get_credit_threshold(cls) -> int:
-        """Return the credit threshold, respecting env-var override."""
+    def _get_credit_threshold(cls) -> float:
+        """Return the credit threshold in USD, respecting env-var override."""
         import os as _os
 
         try:
-            return int(_os.environ.get("OPENROUTER_MIN_CREDITS", cls._OPENROUTER_MIN_CREDITS))
+            return float(
+                _os.environ.get("OPENROUTER_MIN_CREDIT_USD", cls._OPENROUTER_MIN_CREDIT_USD)
+            )
         except (TypeError, ValueError):
-            return cls._OPENROUTER_MIN_CREDITS
+            return cls._OPENROUTER_MIN_CREDIT_USD
 
     _TASK_CATEGORY_CACHE: dict[str, str] = {}  # description → category lookup cache
 
@@ -134,7 +137,7 @@ class CascadeExecutor:
 
     # ── OpenRouter credit pre-check ────────────────────────────────
 
-    async def _remaining_credits(self) -> int | None:
+    async def _remaining_credits(self) -> float | None:
         """Remaining OpenRouter credit, or None when unknown or not wired."""
         if self._provider_account is None:
             return None
@@ -144,10 +147,11 @@ class CascadeExecutor:
     def _is_openrouter_model(model_id: str) -> bool:
         """Return True if the model routes exclusively through OpenRouter.
 
-        Models with a native provider (x-ai, deepseek, moonshotai, minimax)
-        do NOT exclusively use OpenRouter, so they should NOT be filtered.
+        Models with a native adapter (x-ai, deepseek, moonshotai, recraft) do
+        NOT exclusively use OpenRouter, so they should NOT be filtered. minimax
+        is not one: its adapter only reaches OpenRouter (adapter_factory).
         """
-        known_direct = {"x-ai", "deepseek", "moonshotai", "minimax", "recraft"}
+        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft"}
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
@@ -175,7 +179,7 @@ class CascadeExecutor:
         if filtered != model_ids:
             skipped = len(model_ids) - len(filtered)
             logger.info(
-                "OpenRouter credits low (%d — need %d), skipping %d " "OpenRouter-only model(s)",
+                "OpenRouter balance low ($%.2f, need $%.2f), skipping %d OpenRouter-only model(s)",
                 credits,
                 threshold,
                 skipped,

@@ -116,11 +116,7 @@ class MixtureOfAgentsTool(BaseTool):
                 "when creating this tool."
             )
 
-        aggregator_model = aggregator_model or (
-            MODEL_MOA_REFERENCE[0]
-            if MODEL_MOA_REFERENCE
-            else "nvidia/nemotron-3-ultra-550b-a55b:free"
-        )
+        aggregator_model = aggregator_model or MODEL_MOA_REFERENCE[0]
         models = reference_models or _DEFAULT_REFERENCE_MODELS
         semaphore = asyncio.Semaphore(max_concurrency)
 

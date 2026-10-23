@@ -33,6 +33,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from weebot.config.model_refs import MODEL_FALLBACK_OPENROUTER_CHAIN
 from weebot.infrastructure.adapters.llm._client_policy import apply_client_policy
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 from weebot.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
@@ -98,12 +99,15 @@ async def test_one_chat_against_a_rate_limit_is_not_two_hundred_requests():
     `is_openrouter` is true and the chain is all ten entries. This is the
     common configuration, not a corner.
     """
-    unfixed, inner_u = _stack("z-ai/glm-5.2", policy=False)
+    # The chain head: the recorded 210 is 10 chain models x 21 requests, which
+    # holds when the primary is one of the chain's own models.
+    head = MODEL_FALLBACK_OPENROUTER_CHAIN[0]
+    unfixed, inner_u = _stack(head, policy=False)
     seen_u = _count_requests_through(inner_u._client)
     with pytest.raises(Exception):
         await unfixed.chat(messages=[{"role": "user", "content": "hi"}])
 
-    fixed, inner_f = _stack("z-ai/glm-5.2", policy=True)
+    fixed, inner_f = _stack(head, policy=True)
     seen_f = _count_requests_through(inner_f._client)
     with pytest.raises(Exception):
         await fixed.chat(messages=[{"role": "user", "content": "hi"}])

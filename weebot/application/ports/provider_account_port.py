@@ -23,8 +23,8 @@ class ModelListing:
 
 class ProviderAccountPort(ABC):
     @abstractmethod
-    async def remaining_credits(self) -> int | None:
-        """Remaining credit, or None when it cannot be determined.
+    async def remaining_credits(self) -> float | None:
+        """Remaining credit in USD, or None when it cannot be determined.
 
         None means "unknown", never "zero": a caller that filters models on a
         low balance must not strip them on a network blip.

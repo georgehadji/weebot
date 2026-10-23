@@ -1,381 +1,46 @@
-#!/usr/bin/env python3
-"""
-OpenRouter Model Cascade Configuration
-=======================================
+"""Cost estimate and context-size model switch, over the catalog and model_refs.
 
-Optimized model tiers for Weebot based on OpenRouter pricing and capabilities.
-Fetched from: https://openrouter.ai/api/v1/models
-Updated: 2026-06-09
+This module owns no model facts any more (W6.1, F18-F20). It used to keep a
+second ``ModelConfig`` dataclass with hand-copied per-task prices, which
+``estimate_cost`` fell back to and which had drifted from the catalog. Now:
 
-**This is a task-type model catalogue and price fallback, not the cascade's
-tier source.** ``CascadeExecutor.call_with_cascade()``
-(``weebot/application/agents/executor/_cascade.py``) takes its tiers from
-``weebot/config/model_refs.py`` (``MODEL_CASCADE_TIER2/3/4`` and
-``get_model_cascade_for_role``). From this module it uses only
-``estimate_cost``. Other readers: ``context_switcher`` (``select_model_by_tokens``)
-and ``model_refs.get_models_for_role_and_task`` (``get_cascade_for_task``).
+* prices come from the generated OpenRouter catalog
+  (``weebot.config.model_registry.get_model_config``);
+* which model serves a task comes from ``model_refs.TASK_MODEL_CASCADE``.
 
-Usage:
-    from weebot.core.model_cascade_config import get_models_for_task
-
-    free_coding_models = get_models_for_task("coding", tier="free")
-
-Pricing notes (2026-06-09, per 1M tokens):
-  - Models without the :free suffix route to paid endpoints even if they have
-    a free variant. Always use model_id:free to hit the free tier.
-  - deepseek/deepseek-v4-flash has NO free variant; use it as a budget model.
+Readers: ``CascadeExecutor`` (``estimate_cost``) and ``ContextSwitcher``
+(``select_model_by_tokens``).
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
+import logging
+
+from weebot.config.model_refs import TASK_MODEL_CASCADE
+
+logger = logging.getLogger(__name__)
+
+# At or above this many estimated tokens, the long-context cascade wins.
+LONG_CONTEXT_TOKENS = 50_000
 
 
-@dataclass
-class ModelConfig:
-    """Configuration for a specific model."""
-
-    id: str
-    name: str
-    tier: str  # free, budget, standard, premium
-    prompt_price: float  # per 1M tokens
-    completion_price: float  # per 1M tokens
-    context_length: int
-    timeout_seconds: int
-    max_retries: int
-    use_for: list[str]  # task types: coding, analysis, creative, chat
-    description: str
-    recommended: bool = False
-
-
-# ============================================================================
-# MODEL CASCADE CONFIGURATION
-# ============================================================================
-
-MODEL_CASCADE = {
-    "coding": [
-        # --- FREE tier ---
-        ModelConfig(
-            id="poolside/laguna-s-2.1:free",
-            name="Poolside Laguna S 2.1 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=60,
-            max_retries=2,
-            use_for=["coding", "refactoring", "debugging"],
-            description="Poolside flagship coding-agent model — optimised for complex SWE tasks.",
-        ),
-        ModelConfig(
-            id="poolside/laguna-xs-2.1:free",
-            name="Poolside Laguna XS 2.1 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["coding", "subagent"],
-            description="Poolside efficient coding model — fast, for subagent/inline tasks.",
-        ),
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="deepseek/deepseek-v4-flash:thinking",
-            name="DeepSeek V4 Flash :thinking",
-            tier="budget",
-            prompt_price=0.0983,
-            completion_price=0.1966,
-            context_length=1049000,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["coding", "refactoring", "debugging", "analysis"],
-            description="DeepSeek V4 Flash :thinking — $0.10/1M, 1M context, CoT reasoning for coding.",
-            recommended=True,
-        ),
-        ModelConfig(
-            id="qwen/qwen3-coder-30b-a3b-instruct",
-            name="Qwen3 Coder 30B",
-            tier="budget",
-            prompt_price=0.07,
-            completion_price=0.27,
-            context_length=160000,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["coding", "refactoring"],
-            description="Qwen3 Coder 30B — cheapest dedicated coding model at $0.07/1M.",
-        ),
-        ModelConfig(
-            id="minimax/minimax-m3",
-            name="MiniMax M3",
-            tier="budget",
-            prompt_price=0.30,
-            completion_price=1.20,
-            context_length=1000000,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "refactoring", "debugging"],
-            description="MiniMax M3 — 1M context, $0.30/1M.",
-            recommended=False,
-        ),
-        ModelConfig(
-            id="x-ai/grok-build-0.1",
-            name="Grok Build 0.1",
-            tier="budget",
-            prompt_price=1.0,
-            completion_price=2.0,
-            context_length=256000,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "analysis"],
-            description="Grok Build 0.1 — xAI agentic SWE model, $1/1M.",
-        ),
-    ],
-    "analysis": [
-        # --- FREE tier ---
-        ModelConfig(
-            id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="Nemotron 3 Ultra 550B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1000000,
-            timeout_seconds=90,
-            max_retries=2,
-            use_for=["analysis", "planning", "long_context"],
-            description="NVIDIA 550B frontier reasoning/orchestration model, 1M context.",
-        ),
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="deepseek/deepseek-v4-flash:thinking",
-            name="DeepSeek V4 Flash :thinking",
-            tier="budget",
-            prompt_price=0.0983,
-            completion_price=0.1966,
-            context_length=1049000,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["analysis", "chat", "summarization"],
-            description="DeepSeek V4 Flash :thinking — $0.10/1M, 1M context, CoT reasoning for analysis.",
-            recommended=True,
-        ),
-    ],
-    "chat": [
-        # --- FREE tier ---
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="deepseek/deepseek-v4-flash",
-            name="DeepSeek V4 Flash",
-            tier="budget",
-            prompt_price=0.0983,
-            completion_price=0.1966,
-            context_length=1049000,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["chat", "analysis"],
-            description="DeepSeek V4 Flash — $0.10/1M, 1M context, recommended for chat.",
-            recommended=True,
-        ),
-    ],
-    "planning": [
-        # --- FREE tier ---
-        ModelConfig(
-            id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="Nemotron 3 Ultra 550B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1000000,
-            timeout_seconds=90,
-            max_retries=2,
-            use_for=["planning", "analysis", "long_context"],
-            description="NVIDIA 550B frontier orchestration model — deep reasoning for plans.",
-        ),
-        # --- STANDARD tier ---
-        ModelConfig(
-            id="z-ai/glm-5.2:thinking",
-            name="GLM 5.2 :thinking",
-            tier="standard",
-            prompt_price=0.95,
-            completion_price=3.0,
-            context_length=1049000,
-            timeout_seconds=60,
-            max_retries=2,
-            use_for=["planning", "analysis", "coding"],
-            description="Z.ai GLM 5.2 :thinking — reasoning model (effort=xhigh), 1M context, Design Arena #1 coding.",
-            recommended=True,
-        ),
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="deepseek/deepseek-v4-flash",
-            name="DeepSeek V4 Flash",
-            tier="budget",
-            prompt_price=0.0983,
-            completion_price=0.1966,
-            context_length=1049000,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["planning", "analysis"],
-            description="DeepSeek V4 Flash — fast, 1M context, budget planning fallback.",
-        ),
-    ],
-    "subagent": [
-        # Lightweight models for frequent, short-lived subagent calls
-        ModelConfig(
-            id="poolside/laguna-xs-2.1:free",
-            name="Poolside Laguna XS 2.1 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=20,
-            max_retries=3,
-            use_for=["subagent", "coding"],
-            description="Poolside efficient coding subagent — fast, 262K context.",
-        ),
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="openai/gpt-4.1-nano",
-            name="GPT-4.1 Nano",
-            tier="budget",
-            prompt_price=0.1,
-            completion_price=0.4,
-            context_length=1048000,
-            timeout_seconds=20,
-            max_retries=3,
-            use_for=["subagent", "chat"],
-            description="OpenAI GPT-4.1 Nano — $0.10/1M, 1M context, recommended for subagent.",
-            recommended=True,
-        ),
-    ],
-    "long_context": [
-        ModelConfig(
-            id="minimax/minimax-m3",
-            name="MiniMax M3",
-            tier="budget",
-            prompt_price=0.30,
-            completion_price=1.20,
-            context_length=1000000,
-            timeout_seconds=60,
-            max_retries=2,
-            use_for=["long_context", "coding"],
-            description="MiniMax M3 — 1M context, $0.30/1M.",
-            recommended=False,
-        ),
-        # Models with >= 500K context for very large inputs
-        ModelConfig(
-            id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="Nemotron 3 Ultra 550B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1000000,
-            timeout_seconds=120,
-            max_retries=2,
-            use_for=["long_context", "analysis", "planning"],
-            description="NVIDIA 550B frontier model — 1M context, giant-input fallback.",
-        ),
-        ModelConfig(
-            id="nvidia/nemotron-3-super-120b-a12b:free",
-            name="Nemotron 3 Super 120B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1000000,
-            timeout_seconds=90,
-            max_retries=2,
-            use_for=["long_context", "analysis"],
-            description="NVIDIA 120B hybrid MoE — 1M context, efficient long-context fallback.",
-        ),
-        # --- BUDGET tier ---
-        ModelConfig(
-            id="meta-llama/llama-4-scout",
-            name="Llama 4 Scout",
-            tier="budget",
-            prompt_price=0.1,
-            completion_price=0.3,
-            context_length=10000000,
-            timeout_seconds=120,
-            max_retries=2,
-            use_for=["long_context", "analysis"],
-            description="Meta Llama 4 Scout — $0.10/1M, 10M context, recommended for long context.",
-            recommended=True,
-        ),
-    ],
-}
-
-
-# ============================================================================
-# CONTEXT-AWARE MODEL SELECTION (MEMORY_ARTICLE Implementation)
-# ============================================================================
-
-# Token thresholds based on MEMORY_ARTICLE insights
-TOKEN_THRESHOLDS = {
-    "short_context": 4000,  # < 4K: Full precision standard attention
-    "medium_context": 32000,  # 4K-32K: Standard models with good context
-    "long_context": 50000,  # 32K-50K: Extended context models
-}
-
-
-def select_model_by_tokens(task_type: str, estimated_tokens: int) -> ModelConfig:
-    """Select optimal model based on estimated token count."""
-    if estimated_tokens >= TOKEN_THRESHOLDS["long_context"]:
-        recommended = get_recommended_model("long_context")
-        if recommended:
-            return recommended
-
-    recommended = get_recommended_model(task_type)
-    if recommended:
-        return recommended
-
-    return get_recommended_model("coding")
-
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-
-def get_models_for_task(task_type: str, tier: str | None = None) -> list[ModelConfig]:
-    """Get models for a specific task type."""
-    models = MODEL_CASCADE.get(task_type, [])
-    if tier:
-        models = [m for m in models if m.tier == tier]
-    return models
-
-
-def get_recommended_model(task_type: str, tier: str | None = None) -> ModelConfig | None:
-    """Get the recommended model for a task."""
-    models = get_models_for_task(task_type, tier)
-    for model in models:
-        if model.recommended:
-            return model
-    return models[0] if models else None
-
-
-def get_cascade_for_task(task_type: str) -> list[ModelConfig]:
-    """Get the full cascade for a task (ordered by tier)."""
-    models = MODEL_CASCADE.get(task_type, [])
-    tier_order = ["free", "budget", "standard", "premium"]
-    return sorted(models, key=lambda m: tier_order.index(m.tier))
+def select_model_by_tokens(task_type: str, estimated_tokens: int) -> str:
+    """The first model of the task's cascade, or of ``long_context`` past the threshold."""
+    if estimated_tokens >= LONG_CONTEXT_TOKENS:
+        return TASK_MODEL_CASCADE["long_context"][0]
+    return TASK_MODEL_CASCADE.get(task_type, TASK_MODEL_CASCADE["coding"])[0]
 
 
 def estimate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """Estimate cost for using a model.
+    """Cost in USD from the catalog's split prompt/completion rates.
 
-    From the generated OpenRouter catalog first: this module's own list prices
-    about a dozen models, so the cascade tracker's cost accounting (published by
-    mcp/resources.py) read 0.0 for every other model it ran -- the residual risk
-    the W5 audit recorded. The catalog carries split prompt/completion rates for
-    every model OpenRouter lists; the list below remains the fallback.
+    A model the catalog does not list costs 0.0 here and is logged: a guessed
+    price is indistinguishable from a real one at the call site.
     """
     from weebot.config.model_registry import get_model_config
 
     config = get_model_config(model_id)
-    if config is not None:
-        return config.estimate_cost(prompt_tokens, completion_tokens)
-    for task_models in MODEL_CASCADE.values():
-        for model in task_models:
-            if model.id == model_id:
-                prompt_cost = (prompt_tokens / 1_000_000) * model.prompt_price
-                completion_cost = (completion_tokens / 1_000_000) * model.completion_price
-                return prompt_cost + completion_cost
-    return 0.0
+    if config is None:
+        logger.debug("estimate_cost: %r is not in the model catalog; costing 0.0", model_id)
+        return 0.0
+    return config.estimate_cost(prompt_tokens, completion_tokens)

@@ -1,4 +1,8 @@
-"""Agent capability profiles — static registry of what each role can do."""
+"""Agent capability profiles — static registry of what each role can do.
+
+Which model a role runs on is routing, not a capability: it lives in
+``weebot/config/model_refs.py`` (``ROLE_MODEL_CONFIG``).
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,6 @@ class AgentCapability(BaseModel):
     role: SubAgentRole
     tier: AgentTier = Field(default=AgentTier.STANDARD)
     default_tools: list[str] = Field(default_factory=list)
-    preferred_models: list[str] = Field(default_factory=list)
     max_concurrency: int = Field(default=4, ge=1, le=8)
     max_tool_calls: int = Field(default=15, ge=1, le=50)
     requires_fresh_context: bool = Field(default=False)
@@ -24,7 +27,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.RESEARCHER,
         tier=AgentTier.STANDARD,
         default_tools=["web_search", "browser_inspector", "knowledge", "file_editor"],
-        preferred_models=["minimax/minimax-m3", "qwen/qwen3.8-max-0902"],
         max_concurrency=4,
         max_tool_calls=20,
     ),
@@ -32,7 +34,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.ANALYST,
         tier=AgentTier.STANDARD,
         default_tools=["python_execute", "file_editor", "bash", "knowledge"],
-        preferred_models=["qwen/qwen3.8-max-0902", "minimax/minimax-m3"],
         max_concurrency=2,
         max_tool_calls=15,
     ),
@@ -40,7 +41,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.CODER,
         tier=AgentTier.STANDARD,
         default_tools=["bash", "python_execute", "file_editor", "web_search"],
-        preferred_models=["qwen/qwen3.8-max-0902", "deepseek/deepseek-v4-pro"],
         max_concurrency=2,
         max_tool_calls=30,
     ),
@@ -48,7 +48,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.DESIGNER,
         tier=AgentTier.PREMIUM,
         default_tools=["image_gen", "file_editor", "browser_inspector"],
-        preferred_models=["minimax/minimax-m3"],
         max_concurrency=3,
         max_tool_calls=20,
     ),
@@ -56,7 +55,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.REVIEWER,
         tier=AgentTier.BUDGET,
         default_tools=["file_editor", "web_search", "knowledge"],
-        preferred_models=["minimax/minimax-m3"],
         max_concurrency=2,
         max_tool_calls=10,
         requires_fresh_context=True,
@@ -65,7 +63,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.AUTOMATION,
         tier=AgentTier.STANDARD,
         default_tools=["bash", "computer_use", "file_editor", "python_execute"],
-        preferred_models=["minimax/minimax-m3", "qwen/qwen3.8-max-0902"],
         max_concurrency=2,
         max_tool_calls=25,
     ),
@@ -73,7 +70,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.PLANNER,
         tier=AgentTier.BUDGET,
         default_tools=["file_editor", "knowledge", "web_search"],
-        preferred_models=["minimax/minimax-m3"],
         max_concurrency=1,
         max_tool_calls=8,
     ),
@@ -81,7 +77,6 @@ AGENT_CAPABILITIES: dict[SubAgentRole, AgentCapability] = {
         role=SubAgentRole.DOCUMENTER,
         tier=AgentTier.BUDGET,
         default_tools=["file_editor", "knowledge", "web_search"],
-        preferred_models=["minimax/minimax-m3"],
         max_concurrency=2,
         max_tool_calls=12,
     ),

@@ -28,6 +28,8 @@ import os
 import sys
 from pathlib import Path
 
+from weebot.config.model_refs import MODEL_VISION_PRIMARY
+
 logger = logging.getLogger("desktopenv.experiment")
 
 
@@ -73,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     # Agent / model.
-    parser.add_argument("--model", type=str, default="openai/gpt-4o")
+    parser.add_argument("--model", type=str, default=MODEL_VISION_PRIMARY)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--max_tokens", type=int, default=1500)

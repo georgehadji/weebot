@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
 
 from weebot.config.constants import TEMPERATURE_PRECISE
+from weebot.config.model_refs import MODEL_BUDGET
 from weebot.domain.models.product_context import ProductContext, ProductAssumption
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ ambiguity than to pretend certainty."""
 # falls back to X.AI direct — but this adds latency.  The timeout below
 # must accommodate both the cascade fallback path and OpenRouter's
 # 429 retry-with-backoff cycle.
-_PRODUCT_GATE_MODEL: str = "x-ai/grok-build-0.1"
+_PRODUCT_GATE_MODEL: str = MODEL_BUDGET
 
 # Must cover cascade fallback (OpenRouter → X.AI direct) which can take
 # 60+ seconds when OpenRouter is rate-limiting.

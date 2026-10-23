@@ -365,24 +365,16 @@ class TestVSConstants:
 
         assert VS_TAIL_THRESHOLD == 0.10
 
-    def test_flags_default_off(self):
-        from weebot.config.constants import (
-            VS_ENABLE_RECOVERY,
-            VS_ENABLE_PLANNING,
-            VS_ENABLE_DREAMER,
-            VS_ENABLE_OPTIMIZER,
-            VS_ENABLE_CONTENT,
-        )
+    def test_no_dead_enable_flags(self):
+        """The five VS_ENABLE_* constants claimed to be env-overridable flags but
+        nothing read them; they were deleted (SSOT audit row 21)."""
+        from weebot.config import constants
 
-        assert VS_ENABLE_RECOVERY is False
-        assert VS_ENABLE_PLANNING is False
-        assert VS_ENABLE_DREAMER is False
-        assert VS_ENABLE_OPTIMIZER is False
-        assert VS_ENABLE_CONTENT is False
+        assert not [n for n in vars(constants) if n.startswith("VS_ENABLE_")]
 
     def test_vs_model_refs(self):
-        from weebot.config.model_refs import get_vs_model, MODEL_VS_CAPABLE
+        from weebot.config.model_refs import MODEL_CASCADE_TIER4, MODEL_VS_CAPABLE, get_vs_model
 
         model = get_vs_model()
         assert model == MODEL_VS_CAPABLE
-        assert model == "qwen/qwen3.8-max-0902"
+        assert model == MODEL_CASCADE_TIER4

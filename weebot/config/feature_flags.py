@@ -1,7 +1,8 @@
 """Feature flags for weebot — gating experimental or high-risk capabilities.
 
-Each flag defaults to OFF.  Flags should be toggled via environment variables
-or a config file, never hardcoded to True in production.
+Flags default to OFF unless their comment says otherwise (in-loop vision is
+on). Toggle them through environment variables, never by editing a default
+here for one deployment.
 
 HyperAgents Enhancement 7: METACOGNITIVE_IMPROVEMENT_ENABLED controls whether
 the SelfImprover can edit its own prompt and allowlist (self-referential
@@ -85,9 +86,10 @@ VISION_IN_LOOP_ENABLED: bool = _env_bool("WEEBOT_VISION_IN_LOOP", default=True)
 # Requires VISION_IN_LOOP_ENABLED=True and a vision-capable model.
 # COST: with both flags on, each screenshot is sent twice — once in the reflection
 # call here, and once in the buffer that the next main call reads — so expect ~2x
-# image tokens plus the extra round-trip. Keep off unless reflection earns its cost.
+# image tokens plus the extra round-trip. Off by default (2026-10-23, value for
+# money; it was on from 6710bdd): WEEBOT_VISION_REFLECTION=1 turns it on.
 # Plan: tasks/specs/picoagents_vision_in_loop_spec.md (Phase 2)
-VISION_REFLECTION_ENABLED: bool = _env_bool("WEEBOT_VISION_REFLECTION", default=True)
+VISION_REFLECTION_ENABLED: bool = _env_bool("WEEBOT_VISION_REFLECTION", default=False)
 
 
 # ── Knowledge-graph extraction in the execution loop ────────────────────────

@@ -27,6 +27,8 @@ import logging
 import re
 from typing import Any
 
+from weebot.config.model_refs import MODEL_VISION_PRIMARY
+
 logger = logging.getLogger("desktopenv.agent")
 
 # Special control tokens in the OSWorld pyautogui action space.
@@ -114,7 +116,7 @@ class WeebotOSWorldAgent:
 
     def __init__(
         self,
-        model: str = "openai/gpt-4o",
+        model: str = MODEL_VISION_PRIMARY,
         max_tokens: int = 1500,
         top_p: float = 0.9,
         temperature: float = 1.0,

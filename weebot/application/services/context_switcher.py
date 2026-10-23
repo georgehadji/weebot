@@ -57,16 +57,16 @@ class ContextSwitcher:
             return None
 
         estimated_tokens = self._tokenizer.estimate_session_tokens(session)
-        config = select_model_by_tokens("coding", estimated_tokens)
+        model = select_model_by_tokens("coding", estimated_tokens)
 
-        if config.id != current_model:
+        if model != current_model:
             logger.info(
                 "Context-aware model selection: %s -> %s for ~%d tokens",
                 current_model,
-                config.id,
+                model,
                 estimated_tokens,
             )
-            return config.id
+            return model
 
         return None
 

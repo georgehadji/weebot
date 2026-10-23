@@ -39,7 +39,7 @@ Adopt a **4-tier cost cascade** with per-role model configuration:
 
 Each agent role (planner, executor, reviewer, dreamer, summarizer,
 subagent) gets its own 3-model cascade [primary, fallback, fallback2].
-Configured in `config/model_refs.py` (`_ROLE_MODEL_CASCADE` dict).
+Configured in `config/model_refs.py` (`ROLE_MODEL_CONFIG`, the one role table since W6.1, 2026-10-23).
 
 ### Image and Video Cascades
 

@@ -5,15 +5,16 @@ from __future__ import annotations
 import httpx
 
 from weebot.application.ports.provider_account_port import ModelListing, ProviderAccountPort
+from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
-_API = "https://openrouter.ai/api/v1"
+_API = OPENROUTER_API_BASE
 
 
 class OpenRouterAccountAdapter(ProviderAccountPort):
     def __init__(self, api_key: str | None) -> None:
         self._api_key = api_key
 
-    async def remaining_credits(self) -> int | None:
+    async def remaining_credits(self) -> float | None:
         # No key reads as zero credit, so OpenRouter-only models are skipped:
         # without a key every request to them would fail anyway.
         if not self._api_key:
@@ -25,7 +26,11 @@ class OpenRouterAccountAdapter(ProviderAccountPort):
                 )
             if resp.status_code != 200:
                 return None
-            return int(resp.json().get("data", {}).get("credits", 0))
+            # USD left under the key's limit. /auth/key has no "credits" field;
+            # reading one returned 0 on every call. A key without a limit has
+            # limit_remaining None: unknown, not zero.
+            remaining = resp.json().get("data", {}).get("limit_remaining")
+            return None if remaining is None else float(remaining)
         except Exception:
             # None means "unknown", NOT "zero". Returning 0 here was described as
             # failing open but did the opposite: 0 >= threshold is false, so a

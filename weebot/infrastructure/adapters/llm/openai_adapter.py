@@ -14,6 +14,7 @@ from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
 from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.llm_response import LLMChunk
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
+from weebot.config.api_endpoints import DEEPSEEK_API_BASE, OPENROUTER_API_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,13 @@ def _catalog_spec(model_id: str):
     from weebot.config.model_registry import get_model_config
 
     return get_model_config(model_id)
+
+
+# On OpenRouter max_tokens covers reasoning plus the visible answer. A call this
+# short (a score, a verdict, a small JSON object) that names no effort runs at
+# the model's lowest effort, and a model that cannot stop reasoning gets this
+# much headroom on top of the caller's budget.
+SHORT_CALL_TOKENS = 1024
 
 
 def _fit_effort(effort: str, spec) -> str:
@@ -74,9 +82,9 @@ class OpenAIAdapter(LLMPort):
                 or key.startswith("sk-or-v1-")
                 or os.getenv("OPENROUTER_API_KEY") == key
             ):
-                url = "https://openrouter.ai/api/v1"  # kept inline — OPENROUTER_API_BASE in api_endpoints
+                url = OPENROUTER_API_BASE
             elif model_lower.startswith("deepseek/") or os.getenv("DEEPSEEK_API_KEY") == key:
-                url = "https://api.deepseek.com"
+                url = DEEPSEEK_API_BASE
 
         self._client = AsyncOpenAI(api_key=key, base_url=url)
         self._default_model = default_model
@@ -186,6 +194,18 @@ class OpenAIAdapter(LLMPort):
             # Grok always uses the extra_body form above, so the top-level
             # key must not be reintroduced below.
             kwargs.pop("reasoning_effort", None)
+
+        if (
+            reasoning_effort is None
+            and "reasoning_effort" not in kwargs
+            and "grok" not in model_id
+            and spec is not None
+            and spec.reasoning_efforts
+            and kwargs["max_tokens"] <= SHORT_CALL_TOKENS
+        ):
+            kwargs["reasoning_effort"] = "none"  # _fit_effort steps it to the lowest allowed
+            if spec.reasoning_mandatory:
+                kwargs["max_tokens"] += SHORT_CALL_TOKENS
 
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:

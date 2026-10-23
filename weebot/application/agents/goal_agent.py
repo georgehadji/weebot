@@ -5,7 +5,7 @@ the prompt, determines what sub-goals are needed, auto-generates role
 names and tool assignments, and returns a SwarmSpec ready for parallel
 execution via dispatch_parallel_tasks.
 
-Model: MODEL_CASCADE_TIER1 (Owl Alpha — free, agentic, tool-aware).
+Model: MODEL_CASCADE_TIER1 (``weebot/config/model_refs.py``).
 """
 
 from __future__ import annotations

@@ -25,11 +25,22 @@ from weebot.application.services.routing.constraint_checker import ConstraintChe
 from weebot.application.services.routing.utility_scorer import UtilityScorer
 from weebot.application.services.task_model_router import classify_step, model_for_step
 from weebot.config.capability_profiles import get_all_profiles, get_requirement
+from weebot.config.model_refs import PREMIUM_MODELS
+from weebot.config.model_registry import get_model_config
 from weebot.config.feature_flags import WEEBOT_ACR_BANDIT, WEEBOT_ACR_SHADOW, WEEBOT_ENABLE_ACR
 from weebot.core.model_cascade_tracker import CascadeDecision, CascadeOutcome, ModelCascadeTracker
 
 logger = logging.getLogger(__name__)
 
+
+
+def default_candidate_pool() -> list[str]:
+    """The quality-profiled models OpenRouter still serves.
+
+    The profiles are hand-scored and outlive the models they score; routing to
+    a retired one only adds a 404 to the cascade.
+    """
+    return [m for m in get_all_profiles() if get_model_config(m) is not None]
 
 class AdaptiveCapabilityRouter:
     """Closed-loop model router: classify → constrain → score → (bandit).
@@ -104,7 +115,7 @@ class AdaptiveCapabilityRouter:
 
             # 2. Build candidate pool
             if candidates is None:
-                candidates = list(get_all_profiles().keys())
+                candidates = default_candidate_pool()
             if not candidates:
                 logger.warning("ACR: empty candidate pool — falling back to static")
                 return [model_for_step(description)]
@@ -127,7 +138,7 @@ class AdaptiveCapabilityRouter:
             if self._bandit and self._bandit_enabled and len(scored) > 1:
                 bandit_used = True
                 utility_scores = {r.model_id: r.score for r in scored}
-                premium_models = {"x-ai/grok-4.3:thinking", "z-ai/glm-5.2:thinking"}
+                premium_models = set(PREMIUM_MODELS)
                 scored = self._bandit.select(
                     candidates=scored,
                     category=category.value,

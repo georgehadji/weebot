@@ -45,7 +45,7 @@ Format: `name` — `path:line` — status
 - ExecApprovalPolicy — `weebot/core/approval_policy.py:200` — verified 2026-10-21 — [card](core/ExecApprovalPolicy.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) — `weebot/tools/bash_security.py:43` — verified 2026-10-21 — [card](core/CommandSecurityAnalyzer.md)
 - ApprovalManager (tool-call grant store since ADR-013; was a ghost prompt layer) — `weebot/core/approval.py` — stale 2026-10-22 — [card](core/ApprovalManager.md)
-- Model cascade config (ModelConfig table, not the cascade driver) — `weebot/core/model_cascade_config.py:38` — verified 2026-10-21 — [card](core/ModelCascadeConfig.md)
+- Model cascade config (catalog cost estimate and context-size switch, not the cascade driver) — `weebot/core/model_cascade_config.py` — verified 2026-10-23 — [card](core/ModelCascadeConfig.md)
 - WeebotSettings — `weebot/config/settings.py:36` — verified 2026-10-21 — [card](core/WeebotSettings.md)
 
 ## tools
