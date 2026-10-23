@@ -264,6 +264,7 @@ SAFE_POWERSHELL_PIPELINES: tuple[str, ...] = (
 )
 
 _COMPILED = {r.id: re.compile(r.pattern, re.IGNORECASE) for r in LAYER1_RULES + LAYER2_RULES}
+_SINGLE_QUOTED = re.compile(r"'[^']*'")
 
 
 def _shannon_entropy(data: str) -> float:
@@ -326,7 +327,10 @@ class CommandSecurityAnalyzer:
     @staticmethod
     def _match_rules(command: str, rules: tuple[Rule, ...]) -> SecurityAssessment | None:
         for rule in rules:
-            match = _COMPILED[rule.id].search(command)
+            # Inside single quotes a backtick is literal in bash and PowerShell
+            # alike; markdown code spans written to a file are not injection.
+            text = _SINGLE_QUOTED.sub("''", command) if rule.id == "l1.nested-backtick" else command
+            match = _COMPILED[rule.id].search(text)
             if match:
                 return SecurityAssessment(
                     risk_level=rule.level,
