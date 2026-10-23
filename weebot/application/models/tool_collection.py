@@ -230,7 +230,9 @@ class ToolCollection:
 
         start_time = time.time()
         retry_count = 0
-        max_retries = kwargs.pop("_max_retries", self.DEFAULT_MAX_RETRIES)
+        # Arguments come from the model, so it must not choose the retry count.
+        kwargs.pop("_max_retries", None)
+        max_retries = self.DEFAULT_MAX_RETRIES
 
         async def _execute_with_semaphore():
             if _tool_semaphore is not None:
