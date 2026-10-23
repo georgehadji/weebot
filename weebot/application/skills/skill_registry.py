@@ -126,9 +126,12 @@ class SkillRegistry:
         from weebot.domain.models.skill import SkillMetadata, SkillProvenance
 
         # Phase 0: trust tier + provenance (defensive — bad values fall back safely)
+        # No trust key: a human wrote the file (trusted). A value that is set but
+        # not a tier (a typo like "quarantine") fails closed (F42).
         trust_val = meta.get("trust", "trusted") if isinstance(meta, dict) else "trusted"
         if trust_val not in ("quarantined", "candidate", "trusted"):
-            trust_val = "trusted"
+            _log.warning("Skill %s: unknown trust %r, quarantined", filepath, trust_val)
+            trust_val = "quarantined"
         prov_raw = meta.get("provenance", {}) if isinstance(meta, dict) else {}
         try:
             provenance = (
