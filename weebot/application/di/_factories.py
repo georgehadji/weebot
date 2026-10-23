@@ -333,15 +333,20 @@ class FactoriesMixin:
                         servers = yaml.safe_load(raw)
                     else:
                         servers = json.loads(raw)
-                    # Expand env vars in all string values
-                    servers = expand_env(servers)
-                    return MCPClientManager(config={"mcpServers": servers})
-        except ConfigError:
-            raise  # Let ConfigError propagate — it's a clear user-facing error
+                    # Expand env vars per server: one unset variable skips
+                    # its own server, not every configured one.
+                    loaded = {}
+                    for name, cfg in (servers or {}).items():
+                        try:
+                            loaded[name] = expand_env(cfg)
+                        except ConfigError as exc:
+                            _logging.getLogger(__name__).warning(
+                                "MCP server %s not loaded: %s", name, exc
+                            )
+                    return MCPClientManager(config={"mcpServers": loaded})
+                _logging.getLogger(__name__).warning("MCP config %s does not exist", config_path)
         except Exception as exc:
-            import logging
-
-            logging.getLogger(__name__).warning("Failed to load MCP config from settings: %s", exc)
+            _logging.getLogger(__name__).warning("Failed to load MCP config from settings: %s", exc)
 
         return MCPClientManager(config={})
 
