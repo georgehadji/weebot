@@ -60,12 +60,12 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F38 | MCP tools that write (Jira create/delete/transition, HubSpot batch create/update, Apify `call_actor`, Postiz uploads) did not ask: only `WEEBOT_OUTBOUND_TOOL_PATTERNS` names asked. **Fixed 89d20bd9**: MCP tools fail closed unless the name reads | IntegrationTools | H |
 | F39 | An ASK a human approved was refused again by bash/powershell/python_execute (`requires_confirmation`), so no shell approval ever ran; python_execute had no ASK route at all. **Fixed 009cb41a** | ExecTools | H |
 | F40 | `ToolCollection.teardown` never called `BaseTool.close()`; every browsing flow left Chromium running. **Fixed 138b033c** | Browser | H |
-| F41 | Browser navigation is not egress: `EgressGuard` matches only submit/post actions; `advanced_browser` `goto`/`fill`/`click`/`evaluate`, `browser_inspector` `navigate` and `web_scraper` pass unchecked, even tainted | BrowserTools | H |
-| F42 | A missing or misspelled skill `trust` loads as `trusted` (`skill_registry.py:129-131`), the only injection gate; imported ClawHub skills have no trust handling | SkillRegistry | H |
-| F43 | Gateway and `/api/webhook/run` flows are built with no mediator, so `PlanningState` errors and they cannot plan; same for sub-agent flows (`factories.py:333-341`) | ChatGateways | H |
-| F44 | `weebot` console script points at `cli.main:main`, which does not exist (`pyproject.toml:26`; entry is `_wrap_main`) | CLI | H |
-| F45 | The Next.js `/api` proxy makes every client loopback, and loopback skips auth; with no `WEEBOT_API_KEY` and the UI on `0.0.0.0:3000`, anyone reaching it can mutate | WebUI | H |
-| F46 | `apify_*` preset output is not untrusted: `trust_boundary.py:74` lists `apify_actor_tool`, the real names are `apify_web_scraper` etc., so scraped text is unfenced and not counted for egress | IntegrationTools | H |
+| F41 | Browser navigation is not egress: `EgressGuard` matches only submit/post actions; `advanced_browser` `goto`/`fill`/`click`/`evaluate`, `browser_inspector` `navigate` and `web_scraper` pass unchecked, even tainted. **Fixed d1b43463** | BrowserTools | H |
+| F42 | A missing or misspelled skill `trust` loads as `trusted` (`skill_registry.py:129-131`), the only injection gate; imported ClawHub skills have no trust handling. **Fixed a409e2c9** | SkillRegistry | H |
+| F43 | Gateway and `/api/webhook/run` flows are built with no mediator, so `PlanningState` errors and they cannot plan; same for sub-agent flows (`factories.py:333-341`). **Fixed 3abcb31e** | ChatGateways | H |
+| F44 | `weebot` console script points at `cli.main:main`, which does not exist (`pyproject.toml:26`; entry is `_wrap_main`). **Fixed 900a1b6d** | CLI | H |
+| F45 | The Next.js `/api` proxy makes every client loopback, and loopback skips auth; with no `WEEBOT_API_KEY` and the UI on `0.0.0.0:3000`, anyone reaching it can mutate. **Fixed 0dacf422** | WebUI | H |
+| F46 | `apify_*` preset output is not untrusted: `trust_boundary.py:74` lists `apify_actor_tool`, the real names are `apify_web_scraper` etc., so scraped text is unfenced and not counted for egress. **Fixed 7cddbca6** | IntegrationTools | H |
 | F47 | `product` tool is never built: it needs `repo`, which `tool_wiring` lacks; documentation and product_manager roles lose it | IntegrationTools | M |
 | F48 | Sub-agent tools (debate, swarm, dispatch, workflow, MoA) error in web, webhook and gateway flows: `build_tools` gets no `llm_port`, so no flow factory; MCP scoping rebuilds without one | OrchestrationTools | M |
 | F49 | `dispatch_agents` and `workflow_orchestrator` call `state_repo.save_sync`, which exists nowhere, inside `except Exception: pass` | OrchestrationTools | M |
