@@ -803,7 +803,10 @@ class PlanActFlow(BaseFlow):
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
 
             # If we reached COMPLETED state logic or it paused for HITL, we break
-            if self._session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING):
+            # FAILED too: CompletedState ends a run with failed steps that way.
+            if self._session.status in (
+                SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.FAILED
+            ):
                 break
 
             # If we are IDLE after state execution, we might be finished
