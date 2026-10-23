@@ -311,6 +311,9 @@ Independent of C-E; it can go anywhere after A.
   - **researcher:** all 3/3; Haiku at $0.0056 against MiMo Pro at $0.019 (3.4x), 3.6x faster.
   - **planner:** all 2/2; Haiku at $0.0002 against Sol at $0.0019 (10x).
   - These are single-turn tasks; multi-step tool loops differ (there DeepSeek beat Haiku on billed cost). Moving coder, reviewer, researcher and planner to Haiku is the user's call.
+- **Routing applied (2026-10-23):** planner, coder and researcher primaries moved to Haiku 5.5, each with the previous primary as fallback 1. The analyst stays on GPT-6.1 Sol. The reviewer stays on Sol so that it comes from a different lab than the Anthropic coder and the DeepSeek executor. Step execution is unchanged: since the hedge, the role primary (DeepSeek 1017) goes first and category models are fallbacks. The 45-task regression check passed 45/45. Fixed on the way:
+  - DeepSeek-direct forced high-effort thinking on every call: a planning call took 3.8 s, against 1.4 s without thinking and 2.6 s via OpenRouter. It now thinks only when an effort is requested; planning median went back from 3.8 s to 2.4 s.
+  - A REVISE from the code reviewer changed only the in-memory plan. `ExecuteStepHandler` reads the saved plan, so it refused the re-run ("already completed") and every REVISE was dropped. The revised plan is now persisted as a PlanEvent; live, the reviewer's fix to an invented-data CSV re-ran and the task passed.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
