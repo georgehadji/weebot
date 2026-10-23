@@ -99,15 +99,17 @@ _QWEN_FLASH = "qwen/qwen3.8-flash"
 
 ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # Reasoning-heavy, one call per plan: quality per dollar at the top end.
-    # Haiku 5.5 first for planner, coder and researcher: on the 2026-10-23
-    # billed hard-task eval it tied the previous primaries at 3x to 18x lower
-    # cost (tasks/remaining_fix_plan.md). The previous primary is fallback 1.
+    # Haiku 5.5 first for planner and researcher: on the 2026-10-23 billed
+    # hard-task eval it tied the previous primaries at 3x to 10x lower cost
+    # (tasks/remaining_fix_plan.md); the previous primary is fallback 1. The
+    # coder stays on Sonnet: in multi-step coding runs Haiku went 2/3 (it
+    # rewrote a task's input) against Sonnet's 3/3.
     "planner": [_HAIKU, _SOL, _ARGON, _MIMO_PRO],
     "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
     # Highest volume: the agentic tool loop.
     "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
     # Best independent terminal-coding score at half the top model's price.
-    "coder": [_HAIKU, _SONNET, _SOL, _DEEPSEEK],
+    "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
     # Review is a different lab from the coder (Anthropic) and executor (DeepSeek).
     "reviewer": [_SOL, _ARGON, _OPUS],
     "critic": [_SOL, _ARGON, _OPUS],
