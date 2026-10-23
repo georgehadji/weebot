@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from cli.commands.ponytail import read_ponytail_mode, write_ponytail_mode
+from weebot.interfaces.web.auth import require_mutation_identity
 
 router = APIRouter(prefix="/ponytail", tags=["ponytail"])
 
@@ -23,7 +24,7 @@ async def get_ponytail_mode() -> dict[str, str]:
     return {"mode": read_ponytail_mode()}
 
 
-@router.post("/mode/{mode}")
+@router.post("/mode/{mode}", dependencies=[Depends(require_mutation_identity)])
 async def set_ponytail_mode(mode: str) -> dict[str, str]:
     """Set the Ponytail mode to off, lite, full, or ultra."""
     normalized = mode.strip().lower()
