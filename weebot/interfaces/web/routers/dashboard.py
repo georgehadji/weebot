@@ -77,9 +77,11 @@ async def get_dashboard_metrics(
     # Database size — read from the session store file if available
     db_size = "0 MB"
     try:
-        from weebot.config.settings import WORKSPACE_ROOT
+        from pathlib import Path
 
-        db_path = WORKSPACE_ROOT / "weebot_sessions.db"
+        from weebot.config.constants import DB_SESSIONS_PATH
+
+        db_path = Path(DB_SESSIONS_PATH)
         if db_path.exists():
             size_bytes = db_path.stat().st_size
             if size_bytes < 1024 * 1024:

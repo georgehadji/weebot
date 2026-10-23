@@ -15,6 +15,7 @@ from typing import Any
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
+from weebot.config.constants import DB_SESSIONS_PATH
 
 
 class LegacyProjectAdapter:
@@ -27,7 +28,7 @@ class LegacyProjectAdapter:
 
     def __init__(self, repo: StateRepositoryPort) -> None:
         self._repo = repo
-        self._db_path = "./weebot_sessions.db"  # informational only
+        self._db_path = DB_SESSIONS_PATH  # informational only
 
     # ── project lifecycle ──────────────────────────────────────────
 

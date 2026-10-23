@@ -56,6 +56,23 @@ class ToolConfig:
 DEFAULT_TOOL_CONFIG = ToolConfig()
 
 
+def tool_config_from_settings(settings) -> ToolConfig:
+    """The ToolConfig for *settings*: every field WeebotSettings also has.
+
+    The rest (tool binary paths, ``max_tool_timeout``) stay at their defaults,
+    which for the paths means "read the environment at call time".
+    """
+    from dataclasses import fields
+
+    return ToolConfig(
+        **{
+            f.name: getattr(settings, f.name)
+            for f in fields(ToolConfig)
+            if f.name in type(settings).model_fields
+        }
+    )
+
+
 def resolve_setting(
     config: ToolConfig | None, attr: str, env_var: str, default: str | None = None
 ) -> str | None:

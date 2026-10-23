@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 interface WebSocketDebugHook {
   isConnected: boolean;
@@ -12,7 +13,7 @@ interface WebSocketDebugHook {
   clearLogs: () => void;
 }
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+const WS_BASE = ENDPOINTS.ws;
 
 export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
   const [isConnected, setIsConnected] = useState(false);

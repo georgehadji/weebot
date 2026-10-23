@@ -223,18 +223,5 @@ VS_DEFAULT_K: int = 5
 VS_TAIL_THRESHOLD: float = 0.10
 """Probability threshold for tail (low-typicality) filtering."""
 
-# Feature flags — default OFF, env-overridable
-VS_ENABLE_RECOVERY: bool = False
-"""Enable VS for ToT failure-recovery candidate generation (Phase 1)."""
-
-VS_ENABLE_PLANNING: bool = False
-"""Enable VS for multi-candidate plan generation (Phase 2)."""
-
-VS_ENABLE_DREAMER: bool = False
-"""Enable VS for diverent ideation (Phase 3)."""
-
-VS_ENABLE_OPTIMIZER: bool = False
-"""Enable VS for evolution-agent edit-pool diversification (Phase 4)."""
-
-VS_ENABLE_CONTENT: bool = False
-"""Enable VS for creative/content generation (Phase 6)."""
+DEFAULT_HARNESS_VERSION: str = "v0.2.0"
+"""Harness config used when WEEBOT_HARNESS_VERSION is unset (weebot/config/harness/<v>.yaml)."""

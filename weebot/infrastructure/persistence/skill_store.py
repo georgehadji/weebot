@@ -14,6 +14,7 @@ from pathlib import Path
 from weebot.application.ports.skill_store_port import SkillStorePort
 from weebot.domain.models.skill import Skill
 from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 class SkillStore(SkillStorePort):
     """SQLite adapter for SkillStorePort."""
 
-    def __init__(self, db_path: str = "./weebot_sessions.db"):
+    def __init__(self, db_path: str = DB_SESSIONS_PATH):
         self._db_path = Path(db_path)
         self._pool = None
         self._initialized = False

@@ -9,6 +9,8 @@ from datetime import datetime, UTC
 
 from typing import Any
 
+from weebot import __version__
+
 
 from fastapi import APIRouter, Request, Depends
 
@@ -502,7 +504,7 @@ async def detailed_status(
 
     status = {
         "status": "operational",
-        "version": "2.6.0",
+        "version": __version__,
         "timestamp": datetime.now(UTC).isoformat(),
         "features": {
             "resilient_adapters": True,

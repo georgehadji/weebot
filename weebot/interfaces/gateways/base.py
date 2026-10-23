@@ -158,7 +158,8 @@ class GatewayAdapter(ABC):
             ``(is_command, mode_or_none)``. When *mode_or_none* is ``None``
             the caller should reply with the current mode.
         """
-        allowed = {"off", "lite", "full", "ultra"}
+        from weebot.config.settings import PONYTAIL_MODES as allowed
+
         normalized = text.strip().lower()
         if normalized == "ponytail":
             return True, None

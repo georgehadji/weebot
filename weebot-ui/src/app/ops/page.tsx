@@ -9,6 +9,7 @@ import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
 import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
 import { api, ActiveSession } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 interface OpsMetrics {
   total_sessions: number;
@@ -32,7 +33,7 @@ interface LogEntry {
 }
 
 function getWsBase(): string {
-  const fallback = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+  const fallback = ENDPOINTS.ws;
   if (typeof window === "undefined") return fallback;
   return localStorage.getItem("weebot_ws_url")?.trim() || fallback;
 }

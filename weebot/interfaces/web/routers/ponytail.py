@@ -14,7 +14,7 @@ from cli.commands.ponytail import read_ponytail_mode, write_ponytail_mode
 
 router = APIRouter(prefix="/ponytail", tags=["ponytail"])
 
-_ALLOWED_MODES = {"off", "lite", "full", "ultra"}
+from weebot.config.settings import PONYTAIL_MODES as _ALLOWED_MODES  # noqa: E402
 
 
 @router.get("/mode")
@@ -28,6 +28,6 @@ async def set_ponytail_mode(mode: str) -> dict[str, str]:
     """Set the Ponytail mode to off, lite, full, or ultra."""
     normalized = mode.strip().lower()
     if normalized not in _ALLOWED_MODES:
-        raise HTTPException(status_code=400, detail=f"mode must be one of {_ALLOWED_MODES}")
+        raise HTTPException(status_code=400, detail=f"mode must be one of {sorted(_ALLOWED_MODES)}")
     await asyncio.to_thread(write_ponytail_mode, normalized)
     return {"mode": normalized}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from weebot.config.model_refs import MODEL_DI_SKILLOPT
+from weebot.config.constants import DB_SESSIONS_PATH
 
 
 class SkillOptMixin:
@@ -12,7 +13,7 @@ class SkillOptMixin:
     def configure_skillopt(
         self,
         *,
-        db_path="./weebot_sessions.db",
+        db_path=DB_SESSIONS_PATH,
         optimizer_model=MODEL_DI_SKILLOPT,
         target_model=None,
         harness="direct_chat",
@@ -40,7 +41,7 @@ class SkillOptMixin:
         use_planning=False,
         use_archive_search: bool = False,
         use_evaluator_slot: bool = False,
-        db_path: str = "./weebot_sessions.db",
+        db_path: str = DB_SESSIONS_PATH,
         harness: str = "direct_chat",
     ):
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
@@ -181,7 +182,9 @@ class SkillOptMixin:
             HarnessOptimizationTarget,
         )
 
-        version = os.getenv("WEEBOT_HARNESS_VERSION", "v0.2.0")
+        from weebot.config.constants import DEFAULT_HARNESS_VERSION
+
+        version = os.getenv("WEEBOT_HARNESS_VERSION", DEFAULT_HARNESS_VERSION)
         harness_path = Path("weebot") / "config" / "harness" / f"{version}.yaml"
         return HarnessOptimizationTarget(harness_path=harness_path)
 

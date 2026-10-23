@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ── persistence helpers ──────────────────────────────────────────────────────
 
 _PONYTAIL_MODE_FILE = Path.cwd() / ".weebot" / "ponytail_mode.json"
-_ALLOWED_MODES = {"off", "lite", "full", "ultra"}
+from weebot.config.settings import PONYTAIL_MODES as _ALLOWED_MODES  # noqa: E402
 
 
 def _mode_file() -> Path:
@@ -84,11 +84,11 @@ def _load_skill(name: str) -> str:
 
 def _get_llm() -> Any:
     """Resolve LLMPort from the shared DI container."""
-    from weebot.application.di import Container
     from weebot.application.ports.llm_port import LLMPort
 
-    container = Container()
-    container.configure_defaults()
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
     return container.get(LLMPort)
 
 

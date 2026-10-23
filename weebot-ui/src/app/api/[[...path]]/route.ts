@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ENDPOINTS } from "@/lib/endpoints";
 
-const API_BASE = process.env.BACKEND_URL || "http://localhost:8000/api";
+const API_BASE = process.env.BACKEND_URL || ENDPOINTS.api;
 
 async function handler(
   request: NextRequest,

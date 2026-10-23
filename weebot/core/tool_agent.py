@@ -13,6 +13,7 @@ from weebot.utils.cost_ledger import CostLedger
 from weebot.utils.prompt_loader import load_prompt_with_fallback
 
 from weebot.config.secret_accessor import SecretAccessor
+from weebot.config.api_endpoints import DEEPSEEK_API_BASE
 
 SYSTEM_PROMPT = load_prompt_with_fallback(
     "tool_agent_system.txt", "You are weebot, an autonomous AI agent.\nYou have access to tools.\n"
@@ -57,7 +58,7 @@ class ToolCallWeebotAgent:
         )
         base_url = None
         if not SecretAccessor.get("OPENAI_API_KEY") and SecretAccessor.get("DEEPSEEK_API_KEY"):
-            base_url = "https://api.deepseek.com"
+            base_url = DEEPSEEK_API_BASE
 
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self.model = (

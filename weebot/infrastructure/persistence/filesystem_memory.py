@@ -17,11 +17,7 @@ from weebot.application.ports.memory_port import MemoryPort
 logger = logging.getLogger(__name__)
 
 DELIMITER = "§"
-import os as _os
-
-DEFAULT_MEMORY_DIR = Path(
-    _os.environ.get("WEEBOT_MEMORY_DIR", str(Path.home() / ".weebot" / "memory"))
-)
+from weebot.config.settings import MEMORY_DIR as DEFAULT_MEMORY_DIR  # noqa: E402
 
 # Prompt injection / exfiltration patterns — reject writes containing these.
 _INJECTION_RE = re.compile(

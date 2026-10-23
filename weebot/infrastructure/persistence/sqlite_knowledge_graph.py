@@ -25,6 +25,7 @@ from weebot.domain.models.knowledge_graph import (
     KnowledgeSnapshot,
     ScoredNode,
 )
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ _MAX_NODES = 100_000
 class SQLiteKnowledgeGraph(KnowledgeGraphPort):
     """SQLite-backed knowledge graph adapter."""
 
-    def __init__(self, db_path: str = "./weebot_sessions.db", max_nodes: int = _MAX_NODES) -> None:
+    def __init__(self, db_path: str = DB_SESSIONS_PATH, max_nodes: int = _MAX_NODES) -> None:
         """Initialize the adapter.
 
         Args:

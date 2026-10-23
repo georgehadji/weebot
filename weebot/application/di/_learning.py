@@ -15,6 +15,7 @@ was removed in phase 2.3.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from weebot.config.constants import DB_SESSIONS_PATH
 
 if TYPE_CHECKING:
     pass
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 class LearningMixin:
     """DI bindings for the deployment-time learning subsystem."""
 
-    def configure_learning(self, *, db_path: str = "./weebot_sessions.db") -> None:
+    def configure_learning(self, *, db_path: str = DB_SESSIONS_PATH) -> None:
         """Register learning services.  Called from configure_defaults()."""
         self.register("skill_distiller", lambda: self._create_skill_distiller(db_path))
         self.register("skill_materializer", self._create_skill_materializer)

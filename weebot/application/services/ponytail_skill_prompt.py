@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ALLOWED_MODES = {"off", "lite", "full", "ultra"}
+from weebot.config.settings import PONYTAIL_MODES as _ALLOWED_MODES  # noqa: E402
 
 
 def _read_persisted_mode() -> str:

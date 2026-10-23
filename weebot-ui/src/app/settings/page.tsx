@@ -9,17 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, ExternalLink } from "lucide-react";
+import { ENDPOINTS } from "@/lib/endpoints";
 
 export default function SettingsPage() {
   const [backendUrl, setBackendUrl] = useState(
     typeof window !== "undefined"
-      ? localStorage.getItem("weebot_backend_url") || "http://localhost:8000"
-      : "http://localhost:8000"
+      ? localStorage.getItem("weebot_backend_url") || ENDPOINTS.origin
+      : ENDPOINTS.origin
   );
   const [wsUrl, setWsUrl] = useState(
     typeof window !== "undefined"
-      ? localStorage.getItem("weebot_ws_url") || "ws://localhost:8000/ws"
-      : "ws://localhost:8000/ws"
+      ? localStorage.getItem("weebot_ws_url") || ENDPOINTS.ws
+      : ENDPOINTS.ws
   );
   const [saved, setSaved] = useState(false);
 
@@ -51,7 +52,7 @@ export default function SettingsPage() {
                 id="backend-url"
                 value={backendUrl}
                 onChange={(e) => setBackendUrl(e.target.value)}
-                placeholder="http://localhost:8000"
+                placeholder={ENDPOINTS.origin}
               />
               <p className="text-xs text-muted-foreground">
                 Used by REST requests from this browser. Leave it blank only if
@@ -65,7 +66,7 @@ export default function SettingsPage() {
                 id="ws-url"
                 value={wsUrl}
                 onChange={(e) => setWsUrl(e.target.value)}
-                placeholder="ws://localhost:8000/ws"
+                placeholder={ENDPOINTS.ws}
               />
               <p className="text-xs text-muted-foreground">
                 Used directly by the browser for real-time event streaming.

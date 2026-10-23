@@ -10,6 +10,7 @@ has a single home: ``weebot/scheduling/default_jobs.py``, driven by
 from __future__ import annotations
 
 import logging
+from weebot.config.constants import DB_SESSIONS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 class CapabilitiesMixin:
     """Knowledge-graph service bindings."""
 
-    def configure_knowledge_graph(self, *, db_path: str = "./weebot_sessions.db") -> None:
+    def configure_knowledge_graph(self, *, db_path: str = DB_SESSIONS_PATH) -> None:
         """Register the knowledge-graph adapter and service.
 
         Called from ``configure_defaults()``.  The bindings are lazy, so

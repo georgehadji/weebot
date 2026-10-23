@@ -3,7 +3,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Constants - Use environment variable or current working directory.
@@ -24,20 +24,11 @@ MAX_RETRIES = 3
 CONFIRM_DELETE = True
 BROWSER_TIMEOUT = 30000  # ms
 HEADLESS = False
-MODEL_NAME = "x-ai/grok-build-0.1"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
 TEMPERATURE = 0.2
-POWERSHELL_PRIORITY_KEYWORDS = [
-    "file",
-    "delete",
-    "copy",
-    "move",
-    "directory",
-    "process",
-    "kill",
-    "system",
-    "registry",
-    "download",
-]
+
+
+# Ponytail lazy-senior-dev intensities, for every reader of the mode.
+PONYTAIL_MODES: frozenset[str] = frozenset({"off", "lite", "full", "ultra"})
 
 
 class WeebotSettings(BaseSettings):
@@ -76,7 +67,9 @@ class WeebotSettings(BaseSettings):
         )
 
     # AI API Keys (at least one required)
-    kimi_api_key: str | None = None
+    kimi_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("KIMI_API_KEY", "MOONSHOT_API_KEY")
+    )
     deepseek_api_key: str | None = None
     xai_api_key: str | None = None  # env: XAI_API_KEY
     anthropic_api_key: str | None = None
@@ -101,6 +94,7 @@ class WeebotSettings(BaseSettings):
     # Web API Auth
     weebot_api_key: str | None = None  # env: WEEBOT_API_KEY
     web_require_auth: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_WEB_REQUIRE_AUTH", "WEB_REQUIRE_AUTH"),
         default=True,
         description="When True and no weebot_api_key is set, refuse non-loopback requests.",
     )
@@ -108,9 +102,13 @@ class WeebotSettings(BaseSettings):
         default="127.0.0.1", description="Web API bind address (default loopback for security)."
     )
     webhook_api_key: str | None = Field(
+        validation_alias=AliasChoices("WEEBOT_WEBHOOK_API_KEY", "WEBHOOK_API_KEY"),
         default=None, description="Independent API key for the /api/webhook/run endpoint."
     )
     webhook_allow_exec_tools: bool = Field(
+        validation_alias=AliasChoices(
+            "WEEBOT_WEBHOOK_ALLOW_EXEC_TOOLS", "WEBHOOK_ALLOW_EXEC_TOOLS"
+        ),
         default=False,
         description="When True, webhook endpoint may use exec tools (bash, powershell, python_execute).",
     )
@@ -244,59 +242,6 @@ class WeebotSettings(BaseSettings):
             raise ValueError(f"sandbox_max_output_bytes must be >= 1024 bytes (got {v}).")
         return v
 
-    # ========================================================================
-    # DRIFT MONITORING SETTINGS (v2.4.0+)
-    # ========================================================================
-
-    # Enable/disable drift monitoring
-    drift_monitoring_enabled: bool = True
-
-    # Baseline window for comparison
-    drift_baseline_window_days: int = 7
-
-    # Detection check interval
-    drift_detection_interval_minutes: int = 5
-
-    # Performance drift thresholds (multipliers of baseline)
-    latency_p95_warning_multiplier: float = 1.20  # 20% increase
-    latency_p95_critical_multiplier: float = 1.50  # 50% increase
-    memory_warning_multiplier: float = 1.30  # 30% increase
-    memory_critical_multiplier: float = 1.50  # 50% increase
-
-    # Error rate drift thresholds (multipliers of baseline)
-    error_rate_warning_multiplier: float = 2.0  # 2x baseline
-    error_rate_critical_multiplier: float = 5.0  # 5x baseline
-
-    # Data distribution drift thresholds (KL divergence)
-    kl_divergence_warning: float = 0.5
-    kl_divergence_critical: float = 1.0
-
-    # Cooldown periods (minutes)
-    alert_cooldown_minutes: int = 15
-    performance_alert_cooldown_minutes: int = 30
-    data_drift_cooldown_minutes: int = 60
-
-    # Minimum samples for reliable detection
-    drift_min_samples: int = 1000
-
-    # =======================================================================
-    # HTTP CLIENT SETTINGS (v2.6.0+)
-    # =======================================================================
-
-    # Default timeouts for HTTP requests
-    http_timeout_default: float = 30.0
-    http_timeout_connect: float = 10.0
-    http_timeout_read: float = 60.0
-
-    # Connection pooling
-    http_max_connections: int = 20
-    http_max_keepalive: int = 10
-    http_keepalive: bool = True
-
-    # Retry settings
-    http_max_retries: int = 3
-    http_retry_backoff: float = 1.0
-
     # =======================================================================
     # MCP CLIENT SETTINGS (Track 1 — Hermes Audit)
     # =======================================================================
@@ -311,9 +256,6 @@ class WeebotSettings(BaseSettings):
         default=".weebot/mcp-tokens",
         description="Directory for OAuth token cache (relative to workspace root or absolute).",
     )
-    mcp_sampling_enabled: bool = Field(
-        default=True, description="Allow MCP servers to request sampling/createMessage."
-    )
     mcp_scoped_aggregation: bool = Field(
         default=True,
         description="Enable per-request scoped retrieval of MCP-bridged external tools.",
@@ -323,6 +265,9 @@ class WeebotSettings(BaseSettings):
         description="When True, also scope native tools per query so total tools stay <= 12.",
     )
     mcp_composite_tools_enabled: bool = Field(
+        validation_alias=AliasChoices(
+            "WEEBOT_MCP_COMPOSITE_TOOLS_ENABLED", "MCP_COMPOSITE_TOOLS_ENABLED"
+        ),
         default=True,
         description=(
             "Expose composite workflow tools and hide covered atomic tools " "on the MCP surface."
@@ -334,13 +279,14 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     ponytail_mode: str = Field(
+        validation_alias=AliasChoices("WEEBOT_PONYTAIL_MODE", "PONYTAIL_MODE"),
         default="off", description="Ponytail lazy-senior-dev intensity: off | lite | full | ultra"
     )
 
     @field_validator("ponytail_mode")
     @classmethod
     def validate_ponytail_mode(cls, v: str) -> str:
-        allowed = {"off", "lite", "full", "ultra"}
+        allowed = PONYTAIL_MODES
         normalized = str(v).strip().lower()
         if normalized not in allowed:
             raise ValueError(f"ponytail_mode must be one of {sorted(allowed)}, got {v!r}")
@@ -351,17 +297,20 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     gateway_session_ttl_seconds: int = Field(
+        validation_alias=AliasChoices(
+            "WEEBOT_GATEWAY_SESSION_TTL_SECONDS", "GATEWAY_SESSION_TTL_SECONDS"
+        ),
         default=7 * 24 * 60 * 60,  # 7 days
         description="TTL for gateway sessions before auto-close.",
     )
     gateway_max_sessions_per_platform: int = Field(
+        validation_alias=AliasChoices(
+            "WEEBOT_GATEWAY_MAX_SESSIONS_PER_PLATFORM", "GATEWAY_MAX_SESSIONS_PER_PLATFORM"
+        ),
         default=100, description="Max active sessions per platform (0 = unlimited)."
     )
-    gateway_allowed_platforms: list[str] = Field(
-        default_factory=lambda: ["telegram", "discord", "slack"],
-        description="List of enabled gateway platforms.",
-    )
     gateway_auth_enabled: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_GATEWAY_AUTH_ENABLED", "GATEWAY_AUTH_ENABLED"),
         default=True,
         description=(
             "Enforce the gateway allowlist (see `python -m cli.main gateway "
@@ -374,10 +323,6 @@ class WeebotSettings(BaseSettings):
     # CONTEXT ENGINE SETTINGS (Track 3 — Hermes Audit)
     # =======================================================================
 
-    context_engine: str = Field(
-        default="lossy",
-        description="Context engine type: 'lossy' (compression), 'none' (pass-through).",
-    )
     context_compression_threshold: int = Field(
         default=12000, description="Token count threshold that triggers compression."
     )
@@ -387,26 +332,6 @@ class WeebotSettings(BaseSettings):
     )
     context_compression_protect_last_n: int = Field(
         default=6, description="Preserve the last N messages when compressing."
-    )
-    prompt_caching_enabled: bool = Field(
-        default=False, description="Enable Anthropic/OpenRouter prompt caching breakpoints."
-    )
-    prompt_caching_ttl_seconds: int = Field(
-        default=300, description="TTL for cached prompt breakpoints."
-    )
-
-    # =======================================================================
-    # CRON AGENT TASK SETTINGS (Track 4 — Hermes Audit)
-    # =======================================================================
-
-    cron_agent_jobs_enabled: bool = Field(
-        default=False, description="Enable cron agent task execution."
-    )
-    cron_agent_max_runtime_seconds: int = Field(
-        default=300, description="Max runtime for a single cron agent job."
-    )
-    cron_agent_default_model: str | None = Field(
-        default=None, description="Default model override for cron agent sessions."
     )
 
     # Feature flags (migrated from os.getenv — see Phase 3c)
@@ -425,17 +350,6 @@ class WeebotSettings(BaseSettings):
         default=3,
         alias="WEEBOT_COVE_QUESTIONS",
         description="Max verification questions in CoVE step.",
-    )
-
-    # =======================================================================
-    # SKILLS HUB SETTINGS (Track 6 — Hermes Audit)
-    # =======================================================================
-
-    skills_hub_catalog_url: str | None = Field(
-        default=None, description="URL for remote skills hub catalog."
-    )
-    skill_blueprints_enabled: bool = Field(
-        default=False, description="Enable skill blueprint auto-suggestion."
     )
 
     # =======================================================================

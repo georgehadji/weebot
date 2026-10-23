@@ -19,10 +19,11 @@ from weebot.application.ports.rerank_port import RerankPort
 from weebot.config.model_refs import RERANK_MODEL_FAST, RERANK_MODEL_VERIFIED
 from weebot.domain.models.rerank import RerankResult
 from weebot.utils.backoff import BackoffConfig, RetryWithBackoff
+from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
 logger = logging.getLogger(__name__)
 
-_RERANK_URL = "https://openrouter.ai/api/v1/rerank"
+_RERANK_URL = f"{OPENROUTER_API_BASE}/rerank"
 _DEFAULT_TIMEOUT = 15.0  # seconds
 
 

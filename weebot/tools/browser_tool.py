@@ -13,6 +13,7 @@ from typing import Any, TYPE_CHECKING
 
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.tools.base import ToolResult
+from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
@@ -133,7 +134,7 @@ class BrowserTool:
             llm = ChatOpenAI(
                 model=_os.environ.get("OPENROUTER_MODEL", MODEL_DI_DEFAULT),
                 openai_api_key=or_key,
-                openai_api_base="https://openrouter.ai/api/v1",
+                openai_api_base=OPENROUTER_API_BASE,
                 temperature=TEMPERATURE_DETERMINISTIC,
             )
             logger.debug("BrowserTool using OpenRouter: %s", llm.model)

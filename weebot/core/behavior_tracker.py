@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Callable
 
+from weebot import __version__
+
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -149,7 +151,7 @@ class BehaviorEvent:
     event_type: str  # created, modified, deleted, moved
     path: str
     session_id: str
-    agent_version: str = "2.7.0"
+    agent_version: str = __version__
     sanctioned: bool = False
     dest_path: str | None = None  # For moved events
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -429,7 +431,7 @@ class WatcherHandler(FileSystemEventHandler):
         self.trust = trust
         self.ignore = ignore
         self.event_callback = event_callback
-        self.agent_version = "2.7.0"
+        self.agent_version = __version__
 
     def _create_event(
         self, event_type: str, src_path: str, dest_path: str | None = None

@@ -248,7 +248,7 @@ full list of gateway environment variables.
 
 | Command | Description |
 |---|---|
-| `python -m cli.main skills list` | List installed skills |
+| `python -m cli.main skill list` | List installed skills |
 | `python -m cli.main flow skillopt <name>` | Optimize a skill from trajectories |
 | `python -m cli.main agents list` | List available personas |
 | `python -m cli.main agents route "task"` | Route a task to the best persona |

@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from weebot.application.ports.database_router_port import DatabaseRouterPort
+from weebot.config.constants import DB_SESSIONS_PATH
 
 
 class DefaultDatabaseRouter(DatabaseRouterPort):
@@ -19,7 +20,7 @@ class DefaultDatabaseRouter(DatabaseRouterPort):
     ``SplitDatabaseRouter`` when the DB split is activated.
     """
 
-    def __init__(self, db_path: str | Path = "./weebot_sessions.db"):
+    def __init__(self, db_path: str | Path = DB_SESSIONS_PATH):
         self._default_path = Path(db_path).resolve()
         self._overrides: dict[str, Path] = {}
 

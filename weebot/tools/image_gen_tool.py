@@ -20,7 +20,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.api_endpoints import IDEOGRAM_GENERATION_URL, XAI_IMAGE_GENERATION_URL
+from weebot.config.api_endpoints import (
+    IDEOGRAM_GENERATION_URL,
+    OPENROUTER_API_BASE,
+    XAI_IMAGE_GENERATION_URL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -672,7 +676,7 @@ class ImageGenTool(BaseTool):
                 async with (
                     aiohttp.ClientSession() as session,
                     session.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
+                        f"{OPENROUTER_API_BASE}/chat/completions",
                         headers=headers,
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=120),

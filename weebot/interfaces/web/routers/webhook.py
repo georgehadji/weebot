@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webhook", tags=["webhook"])
 
-_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+from weebot.interfaces.web.auth import _LOOPBACK  # noqa: E402 -- one loopback set
 
 
 async def require_webhook_auth(request: Request) -> None:

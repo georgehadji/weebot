@@ -16,7 +16,7 @@ def vane_base_url():
 
 @pytest.mark.asyncio
 async def test_vane_integration_basic_search(vane_base_url):
-    settings = WeebotSettings()  # Load settings to get vane_base_url and http_timeout_default
+    settings = WeebotSettings()  # Load settings to get vane_base_url
     # Ensure we are not using the mocked settings from unit tests
     settings.vane_base_url = vane_base_url
 

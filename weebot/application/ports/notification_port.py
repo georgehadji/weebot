@@ -16,12 +16,12 @@ from typing import Any
 class NotificationLevel(Enum):
     """Severity levels for notifications."""
 
-    DEBUG = auto()
-    INFO = auto()
-    SUCCESS = auto()
-    WARNING = auto()
-    ERROR = auto()
-    CRITICAL = auto()
+    DEBUG = "debug"
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
 
 
 class NotificationChannel(Enum):
