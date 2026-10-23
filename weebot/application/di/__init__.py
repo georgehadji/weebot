@@ -487,7 +487,7 @@ class Container(
 
             try:
                 sandbox = self._maybe_get(SandboxPort)
-                registry = RoleBasedToolRegistry()
+                registry = RoleBasedToolRegistry(wiring=self.tool_wiring)
 
                 def _flow_factory(s):
                     return self._build_plan_act_flow_for_session(s)
@@ -623,7 +623,8 @@ class Container(
         from weebot.tools.tool_registry import RoleBasedToolRegistry
 
         sandbox = self._maybe_get(SandboxPort)
-        registry = RoleBasedToolRegistry()
+        # Unwired, every tool with collaborators was skipped from sub-agents.
+        registry = RoleBasedToolRegistry(wiring=self.tool_wiring)
 
         def _flow_factory(s):
             return self._build_plan_act_flow_for_session(s)
