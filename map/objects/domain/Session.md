@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 1a0e0052
 ---
 
 # Session
@@ -30,7 +30,7 @@ Consequences (read from source, not run):
 - Fact provenance is written but never used: no code passes `FactSource.AUDIT`, `FactSource.USER` or `verified_by`, and `get_fact_source` has no caller.
 - `archived`, `archived_at`, `archive_ttl_days` and `detected_language` are never read or written outside this file; the language detector's docstring claims it stores into `detected_language` (`application/services/language_detector.py:7`).
 - The 100-fact cap drops by insertion order. Per-step keys accumulate (`correction_original:<step>`, `reviewing.py:125-127`; `constraint_gate_ack:<step>`, `executing.py:328, 345`). A gate flag rewritten late, such as `atomic_mail_inbound_pending` (`executing.py:296, 503`), moves to newest on each write and is not the first evicted (F68, `tests/unit/fixes/test_fact_cap_keeps_fresh_flags.py`); a key written once early and never rewritten can still be evicted in a long session, and `get_fact` then returns `None`.
-- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:1130`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:43-63`, called from `executing.py:685-690`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
+- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:1130`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:43-63`, called from `executing.py:688-693`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
 - `SessionMemory` keeps at most 100 indices per event type (`session_memory.py:14-17`); with more than 100 `step` events after the last plan, the oldest are not reconciled. `copy()` always rebuilds with the default 100 (`:74`).
 - The comments at `session.py:249-252` and `session_memory.py:69-70` say `model_copy()` drops private attributes. With pydantic in `.venv` (checked 2026-10-24) `set_status()` returns a session that shares the same `_memory_index` object. Harmless today, because only `add_event` and `replace_events` mutate the index and both copy it first.
 - A session built from a DB row has an empty index (`infrastructure/persistence/sqlite_state_repo.py:510`), so `get_last_plan` falls back to the full scan until a new `PlanEvent` is added.

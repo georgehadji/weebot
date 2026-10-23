@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 1a0e0052
 ---
 
 # Step
@@ -27,8 +27,8 @@ Consequences (read from source, not run):
 - The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`application/flows/states/executing.py:415, 566-570, 693-695`, `application/flows/states/evidence_gate.py:44-56`).
 - `evidence_refs` is written only by the dead `mark_completed`/`mark_unverified` and read by nothing.
 - `acceptance_criteria` is asked for in the planner prompt (`weebot/config/prompts/planner_system.txt:15, 56`) and parsed (`application/agents/planner.py:336-381`); no Python code reads it afterwards. It reaches a model only if a prompt serialises the whole step.
-- `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`executing.py:584-591`), step validation (`:613-639`), the evidence audit (`evidence_gate.py:43-50`); review has its own cap on the same field (`application/flows/states/reviewing.py:64, 131`). A step retried by one gate has no retry left for the next.
-- The `minor_fix` retry calls `context._plan.update_step(step)` (`executing.py:590`), and `Plan` has no `update_step` method (`weebot/domain/models/plan.py:154-286`), so that branch raises `AttributeError` (read from source, not run; no test reaches it).
+- `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`executing.py:587-594`), step validation (`:616-642`), the evidence audit (`evidence_gate.py:43-50`); review has its own cap on the same field (`application/flows/states/reviewing.py:64, 131`). A step retried by one gate has no retry left for the next.
+- The `minor_fix` retry puts the step back as PENDING through `Plan.replace_step` (`executing.py:593`). The severity is classified from the reconstructed `ErrorEvent` (`:576-582`); until 2026-10-24 it read raw dicts, so every failure went to UPDATING and the `update_step` call that crashed was never reached (`tests/unit/fixes/test_minor_fix_retry_and_list_projects.py`).
 - `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:582-587`). A new enum member falls back to `full` silently (`_prompt_builder.py:106`).
 
 ## Connected to

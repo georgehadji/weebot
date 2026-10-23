@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 1a0e0052
 ---
 
 # Event
@@ -25,7 +25,7 @@ One union type gives one deserialiser: `TypeAdapter(AgentEvent)` picks the subcl
 
 Consequences (read from source, not run):
 - Never constructed in `weebot/` or `cli/` (grep 2026-10-24): `TrajectoryDiagnosisEvent`, `SkillEditProposed`, `MemoryCompacted`. `MemoryCompacted` has a subscriber branch (`infrastructure/events/subscriber.py:26`) that cannot fire.
-- `ErrorEvent.failure_severity` (`:51`) is never set by a constructor or read; the executing state classifies severity as a plain string instead (`application/agents/executor/_error_handler.py:144`, `application/flows/states/executing.py:583-584`). The `FailureSeverity` docstring says "3-tier" over four members (`:14, 20-23`).
+- `ErrorEvent.failure_severity` (`:51`) is never set by a constructor or read; the executing state classifies severity as a plain string instead (`application/agents/executor/_error_handler.py:144`, `application/flows/states/executing.py:586-587`). The `FailureSeverity` docstring says "3-tier" over four members (`:14, 20-23`).
 - `PlanStepCompleted` is published for every `StepEvent`, including STARTED and FAILED (`application/flows/event_publisher.py:143-145`: the check is only `event.type == "step"`).
 - `_emit_domain_event` has one home: `event_publisher.py:136`, called at `:76`.
 - `reconstruct_events` logs and drops a dict it cannot parse (`event_reconstructor.py:49-57`); `_row_to_session` turns it into a `MessageEvent(**e)` instead (`sqlite_state_repo.py:498-502`). Two policies for the same failure.

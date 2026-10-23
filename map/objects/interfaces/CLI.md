@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 1a0e0052
 ---
 
 # CLI
@@ -22,7 +22,7 @@ Root commands in `cli/main.py`:
 | Command | Line | What it does |
 |---|---|---|
 | `create`, `status`, `run`, `resume`, `checkpoint` | `cli/main.py:169-228` | print "deprecated, use flow"; nothing else |
-| `list-projects` | `cli/main.py:177-195` | `state_repo.list_sessions()` from the shared container; prints `session.session_id` (`:190`), an attribute `Session` does not have (`weebot/domain/models/session.py:204-212`), so it raises once any session exists (read from source, not run) |
+| `list-projects` | `cli/main.py:177-195` | `state_repo.list_sessions()` from the shared container; prints `session.id` (`:190`; it read `session_id` and raised until 2026-10-24, `tests/unit/fixes/test_minor_fix_retry_and_list_projects.py`) |
 | `delete` | `cli/main.py:231-240` | prints that projects no longer exist and nothing was removed, exits 1 |
 | `export` | `cli/main.py:243-257` | dumps one session to JSON |
 | `costs` | `cli/main.py:266-291` | `GetCostSummaryHandler` over a fresh `EventStore()` (`:260-263`) |
