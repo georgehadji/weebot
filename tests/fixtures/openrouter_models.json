@@ -3,6 +3,59 @@
   {
    "architecture": {
     "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+video->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other"
+   },
+   "context_length": 1048576,
+   "expiration_date": null,
+   "id": "moonshotai/kimi-k3.1-pro",
+   "name": "MoonshotAI: Kimi K3.1 Pro",
+   "pricing": {
+    "completion": "0.00001",
+    "input_cache_read": "0.0000002",
+    "prompt": "0.000002"
+   },
+   "reasoning": {
+    "default_effort": "max",
+    "default_enabled": true,
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low",
+     "none"
+    ]
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "max_tokens",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "stop",
+    "structured_outputs",
+    "tool_choice",
+    "tools"
+   ],
+   "top_provider": {
+    "context_length": 1048576,
+    "is_moderated": false,
+    "max_completion_tokens": 943718
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -3353,8 +3406,8 @@
    "name": "DeepSeek: DeepSeek Pro Latest",
    "pricing": {
     "completion": "0.000008",
-    "input_cache_read": "0.00000026",
-    "prompt": "0.0000002565"
+    "input_cache_read": "0.00000012",
+    "prompt": "0.0000001188"
    },
    "reasoning": {
     "default_effort": "high",
@@ -4973,8 +5026,8 @@
    "id": "tencent/hy4-preview",
    "name": "Tencent: Hy4 preview",
    "pricing": {
-    "completion": "0.000002501",
-    "input_cache_read": "0.000000042",
+    "completion": "0.0000022509",
+    "input_cache_read": "0.0000000378",
     "overrides": [
      {
       "completion": "0.000002501",
@@ -4991,7 +5044,7 @@
       "utc_start": 1600
      }
     ],
-    "prompt": "0.000000834"
+    "prompt": "0.0000007506"
    },
    "reasoning": {
     "default_effort": "high",
@@ -5166,9 +5219,9 @@
    "id": "z-ai/glm-5.3-flash",
    "name": "Z.ai: GLM 5.3 Flash",
    "pricing": {
-    "completion": "0.0000001985",
-    "input_cache_read": "0.0000000052",
-    "prompt": "0.0000000052"
+    "completion": "0.0000005",
+    "input_cache_read": "0.00000003",
+    "prompt": "0.00000015"
    },
    "reasoning": {
     "default_effort": "max",
@@ -5204,9 +5257,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1048576,
+    "context_length": 1048575,
     "is_moderated": false,
-    "max_completion_tokens": 943718
+    "max_completion_tokens": 943717
    }
   },
   {
@@ -6630,9 +6683,9 @@
    "id": "~deepseek/deepseek-v4-flash-latest",
    "name": "DeepSeek: DeepSeek V4 Flash Latest",
    "pricing": {
-    "completion": "0.0000001568",
-    "input_cache_read": "0.000000028",
-    "prompt": "0.0000000475"
+    "completion": "0.0000001729",
+    "input_cache_read": "0.0000000275",
+    "prompt": "0.0000000422"
    },
    "reasoning": {
     "default_effort": "high",
@@ -6692,9 +6745,9 @@
    "id": "deepseek/deepseek-v4-flash-0731",
    "name": "DeepSeek: DeepSeek V4 Flash 0731",
    "pricing": {
-    "completion": "0.00000132",
-    "input_cache_read": "0.000000014",
-    "prompt": "0.00000044"
+    "completion": "0.00000013332",
+    "input_cache_read": "0.000000001414",
+    "prompt": "0.00000004444"
    },
    "reasoning": {
     "default_effort": "high",
@@ -7639,7 +7692,7 @@
    "id": "moonshotai/kimi-k3",
    "name": "MoonshotAI: Kimi K3",
    "pricing": {
-    "completion": "0.000011936",
+    "completion": "0.0000108",
     "input_cache_read": "0.00000021",
     "prompt": "0.000000239"
    },
@@ -8802,8 +8855,8 @@
    "id": "tencent/hy3",
    "name": "Tencent: Hy3",
    "pricing": {
-    "completion": "0.000000528",
-    "input_cache_read": "0.000000033",
+    "completion": "0.00000033",
+    "input_cache_read": "0.000000020625",
     "overrides": [
      {
       "completion": "0.000000528",
@@ -8820,7 +8873,7 @@
       "utc_start": 1600
      }
     ],
-    "prompt": "0.000000132"
+    "prompt": "0.0000000825"
    },
    "reasoning": {
     "default_effort": "high",
@@ -9409,7 +9462,7 @@
    "name": "MoonshotAI: Kimi K2.7 Code",
    "pricing": {
     "completion": "0.00000335",
-    "input_cache_read": "0.00000018",
+    "input_cache_read": "0.00000015",
     "prompt": "0.0000006712"
    },
    "reasoning": {
@@ -11047,7 +11100,7 @@
    "id": "~moonshotai/kimi-latest",
    "name": "MoonshotAI: Kimi Latest",
    "pricing": {
-    "completion": "0.000016",
+    "completion": "0.000024",
     "input_cache_read": "0.000000228",
     "prompt": "0.000000238"
    },
@@ -11689,9 +11742,9 @@
    "id": "deepseek/deepseek-v4-pro",
    "name": "DeepSeek: DeepSeek V4 Pro 0423",
    "pricing": {
-    "completion": "0.00000191052",
-    "input_cache_read": "0.000000079605",
-    "prompt": "0.00000095526"
+    "completion": "0.000001588272",
+    "input_cache_read": "0.000000066178",
+    "prompt": "0.000000794136"
    },
    "reasoning": {
     "default_effort": "high",
@@ -12336,9 +12389,9 @@
    "id": "google/gemma-4-26b-a4b-it",
    "name": "Google: Gemma 4 26B A4B ",
    "pricing": {
-    "completion": "0.0000003",
-    "input_cache_read": "0.00000005",
-    "prompt": "0.00000009"
+    "completion": "0.000000225",
+    "input_cache_read": "0.0000000375",
+    "prompt": "0.0000000675"
    },
    "reasoning": {
     "default_enabled": false,
