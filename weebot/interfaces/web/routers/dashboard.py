@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import SessionStatus
+from weebot.interfaces.web.auth import get_current_user_id
 from weebot.interfaces.web.schemas.responses import DashboardMetricsResponse, CostData, ModelUsage
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
 
 @router.get("/metrics", response_model=DashboardMetricsResponse)
 async def get_dashboard_metrics(
+    http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> DashboardMetricsResponse:
     """Get dashboard metrics including sessions, costs, and system stats."""
@@ -32,7 +34,8 @@ async def get_dashboard_metrics(
     completed_sessions = 0
 
     try:
-        all_sessions = await state_repo.list_sessions()
+        # The caller's sessions only, as GET /api/sessions (F58).
+        all_sessions = await state_repo.list_sessions(user_id=get_current_user_id(http_request))
         total_sessions = len(all_sessions)
         active_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.RUNNING)
         completed_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.COMPLETED)

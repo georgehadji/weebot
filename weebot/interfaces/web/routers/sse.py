@@ -49,6 +49,28 @@ async def stream_events(request: Request):
     except (AttributeError, KeyError):
         return JSONResponse(status_code=503, content={"error": "Event bus not available"})
 
+    # Only the caller's sessions (F58): this streamed every user's events.
+    from fastapi import HTTPException
+
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
+    from weebot.interfaces.web.auth import verify_session_ownership
+
+    state_repo = container.get(StateRepositoryPort)
+    allowed: dict[str, bool] = {}
+
+    async def _visible(event: AgentEvent) -> bool:
+        sid = getattr(event, "session_id", "") or ""
+        if not sid:
+            return True  # process-level notices carry no session
+        if sid not in allowed:
+            session = await state_repo.load_session(sid)
+            try:
+                await verify_session_ownership(request, session.user_id if session else None)
+                allowed[sid] = True
+            except HTTPException:
+                allowed[sid] = False
+        return allowed[sid]
+
     async def event_generator():
         """Yield SSE messages for each AgentEvent published on the bus."""
         queue: BoundedDropOldestQueue[AgentEvent | None] = BoundedDropOldestQueue(
@@ -67,6 +89,8 @@ async def stream_events(request: Request):
                 event = await queue.get()
                 if event is None:
                     break  # Sentinel — shutdown
+                if not await _visible(event):
+                    continue
 
                 dropped = queue.take_dropped_count()
                 if dropped > 0:
