@@ -96,7 +96,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F74 | `camofox_browser` redirect check misses hostnames that resolve private; DNS failure counts as public. **Fixed 84fe44ef** | BrowserTools | M |
 | F75 | `computer_use` skips the `require_window` focus check silently when pygetwindow fails, then types. **Fixed 914e93d0** | BrowserTools | M |
 | F76 | Gateway `extract_media` attaches any absolute `.json/.yaml/.md/.txt/.csv` path named in a reply; email gateway authorizes on the `From` header. **extract_media fixed 0170e5ba**; the email `From` check is open | ChatGateways | M |
-| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file | CLI | M |
+| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **`delete` fixed 260e1b5c**; cancel/retry/undo and cron_agent open | CLI | M |
 | F78 | Personas with YAML frontmatter get the name `---` and overwrite each other's registry entry. **Fixed 574d991e** | Personas | M |
 | F79 | Low-severity notes (dead methods and ports, duplicated facts, swallowed exceptions, stale comments, timeout unit mismatch in `advanced_browser`, unclosed ApifyService sessions): listed in each card's Shape | (cards) | L |
 
