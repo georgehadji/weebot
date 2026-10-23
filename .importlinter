@@ -161,9 +161,7 @@ ignore_imports =
     weebot.interfaces.factories -> weebot.application.di
     weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
     # CLI agent runner resolves services from DI.
-    weebot.interfaces.cli.agent_runner -> weebot.application.di
     # Gateway adapters use DI fallback for SafetyChecker LLMPort.
-    weebot.interfaces.gateways.base -> weebot.application.di
     # Windows-specific interfaces wire native platform adapters.
     weebot.interfaces.windows -> weebot.infrastructure.adapters.windows_desktop
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications

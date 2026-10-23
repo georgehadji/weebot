@@ -210,7 +210,13 @@ After W4.2. Turns the F22 xfail into a plain test.
     - Tests: `tests/unit/fixes/test_w53_completion_jobs.py` (4) and one more in `test_w53_container_construction.py`, all failing first.
     - **Not migrated, on purpose:** `core/agent.py` (`RecursiveWeebotAgent`, LangChain, sunset 2027-03-01 per ADR-009).
     - **Other PlanActFlow builders** (`_agent_tools`, `_skillopt`, `harness_opt_flow`, the DI `"plan_act"` registry entry) do not pass the three, so their completions skip the two jobs. Before, they ran them through a new container.
-  - **Left (was 41):** 35 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
+  - **Batch 4 (2026-10-23), 36 -> 34:**
+    - `GatewayAdapter.__init__` requires `llm_port`. Its `None` branch built a whole `Container()`; every subclass already requires and passes `llm`.
+    - `AgentRunner` takes `retention_agent`. Its constructor built a `Container()` to fetch it, for every runner. `Container.build_agent_runner`, `flow run`, `dream build` and `run.py` pass their own container's; the other CLI runners (`resume`, `list`, `cancel`, `undo`) never reach the retention review.
+    - Tests: `tests/unit/fixes/test_w53_interface_roots.py` (4), failing first.
+    - Also lowered: `import_exemptions` 75 to 73 (the two `-> application.di` exemptions for `agent_runner` and `gateways.base` removed from `.importlinter`), `silent_except_handlers` 125 to 124 and `bandit_b110` 63 to 62 (AgentRunner's `except Exception: pass`).
+    - **Not migrated:** the MCP server's reranker lookup (`mcp/server.py`). `run_mcp.py` builds no container, so moving the lookup there would not lower the count; it waits until `run_mcp.py` is given one composition-root container.
+  - **Left (was 41):** 33 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
 
 ### Wave F: model config (W6.1; F20, F18 rest)
 Independent of C-E; it can go anywhere after A.

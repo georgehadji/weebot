@@ -168,7 +168,11 @@ def dream_build(contract_id: str) -> None:
         # Was container.get("mediator"). Mediator is bound by type, not by that
         # string, so building an idea raised KeyError before the runner existed.
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, mediator=container.get(Mediator), use_rich=False
+            llm=llm,
+            state_repo=state_repo,
+            mediator=container.get(Mediator),
+            use_rich=False,
+            retention_agent=container.get("retention_agent"),
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 

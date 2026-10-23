@@ -192,6 +192,7 @@ def run_interactive(
             skill_prompt=skill_prompt,
             steering=steering,
             mediator=_container.get(Mediator),
+            retention_agent=_container.get("retention_agent"),
         )
 
         while True:

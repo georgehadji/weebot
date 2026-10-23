@@ -109,7 +109,12 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
         mediator = _get_mediator()
         run_session_id = session_id or str(uuid.uuid4())
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, mediator=mediator, model=model, use_rich=False
+            llm=llm,
+            state_repo=state_repo,
+            mediator=mediator,
+            model=model,
+            use_rich=False,
+            retention_agent=_container.get("retention_agent"),
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 

@@ -418,6 +418,7 @@ class Container(
             mcp_config=mcp_config,
             use_rich=use_rich,
             mediator=self._maybe_get(Mediator),
+            retention_agent=self._maybe_get_str("retention_agent"),
         )
 
     def build_mediator(self) -> Mediator:

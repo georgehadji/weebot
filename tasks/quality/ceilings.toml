@@ -41,8 +41,10 @@
 # wraps its base64 decode in `except Exception: pass`.
 # 126 -> 125 with ADR-014: DockerLinuxSandbox._resolve_image logs the failed
 # `docker image inspect` instead of `except Exception: pass`.
+# 125 -> 124 with W5.3 batch 4: AgentRunner's `except Exception: pass` around
+# its Container() lookup went with the lookup.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 125
+silent_except_handlers = 124
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -81,8 +83,10 @@ bare_env_reads = 71
 # 127 -> 126.
 # 64 -> 63 with ADR-014: the same _resolve_image handler as
 # silent_except_handlers 126 -> 125.
+# 63 -> 62 with W5.3 batch 4: the same AgentRunner handler as
+# silent_except_handlers 125 -> 124.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 63
+bandit_b110 = 62
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -203,8 +207,10 @@ unregistered_di_keys = 0
 # deleted, so its import of application.services.model_selection is gone.
 # 76 -> 75 with W7.1 (F22): ops_router takes the mediator and state repo from
 # the lifespan container on app.state, so it no longer imports application.di.
+# 75 -> 73 with W5.3 batch 4: interfaces.cli.agent_runner and
+# interfaces.gateways.base no longer import application.di.
 # Measured by: scripts/lint_import_exemptions.py
-import_exemptions = 75
+import_exemptions = 73
 
 # Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
 # (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
@@ -236,5 +242,8 @@ settings_construction = 0
 # 39 -> 36: CompletedState's skill-gap job and dream scan take idea_gate,
 # dreamer_agent and event_store from the flow (factories.create_flow fills
 # them), and ToolExecutor constructs its EgressGuard directly.
+# 36 -> 34: GatewayAdapter requires its llm_port (every subclass already
+# passed one), and AgentRunner receives its retention_agent from the entry
+# point instead of building a Container in its constructor.
 # Measured by: scripts/lint_container_construction.py
-container_construction = 36
+container_construction = 34

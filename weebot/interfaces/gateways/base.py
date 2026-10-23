@@ -58,13 +58,9 @@ _DOCUMENT_DIRECTIVE = "[[as_document]]"
 class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
 
-    def __init__(self, llm_port: LLMPort | None = None) -> None:
-        if llm_port is None:
-            from weebot.application.di import Container
-
-            c = Container()
-            c.configure_defaults()
-            llm_port = c.get(LLMPort)
+    def __init__(self, llm_port: LLMPort) -> None:
+        # Required: every adapter gets `llm` from the entry point's container.
+        # A None here used to build a whole second Container (W5.3, F28).
         self._safety = SafetyChecker(llm=llm_port)
         self._auth = GatewayAuth()
 

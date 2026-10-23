@@ -45,6 +45,7 @@ class AgentRunner:
         skill_prompt: str | None = None,
         steering=None,  # SteeringPort (Phase 5)
         router: TaskRouterPort | None = None,  # Enhancement 6 — Neural Task Router
+        retention_agent=None,  # RetentionAgentPort — reviews sessions older than 24h
     ) -> None:
         self._llm = llm
         self._state_repo = state_repo
@@ -58,15 +59,9 @@ class AgentRunner:
         self._router = router  # Enhancement 6
         self._task_runner = _get_task_runner()(state_repo=state_repo, event_bus=event_bus)
         self._tools: ToolCollection | None = None
-        self._retention_agent = None
-        try:
-            from weebot.application.di import Container
-
-            _c = Container()
-            _c.configure_defaults()
-            self._retention_agent = _c.get("retention_agent")
-        except Exception:
-            pass
+        # Passed in by the entry point. It was fetched from a Container() built
+        # here, in every runner's constructor (W5.3, F28).
+        self._retention_agent = retention_agent
 
         if event_bus and use_rich:
             CLIEventSubscriber(use_rich=use_rich).subscribe_to(event_bus)
