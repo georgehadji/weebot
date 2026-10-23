@@ -72,3 +72,16 @@ async def test_build_tools_without_an_llm_still_wires_sub_agent_tools(monkeypatc
     tools = await factories.build_tools(role="admin")
     debate = tools.get_tool("debate")
     assert debate is not None and debate._flow_factory is not None
+
+
+def test_flows_built_without_a_bus_get_the_containers(monkeypatch):
+    # Gateway and webhook flows passed no event bus: no domain events, and the
+    # web UI never saw their progress (F56).
+    from weebot.application.ports.event_bus_port import EventBusPort
+
+    bus = object()
+    monkeypatch.setattr(factories, "_cached", lambda key: bus if key is EventBusPort else None)
+    flow = factories.create_flow(
+        "plan_act", session=Session(id="g1", task="t"), llm=MagicMock(), tools=ToolCollection()
+    )
+    assert flow._event_bus is bus

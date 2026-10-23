@@ -233,6 +233,12 @@ def create_flow(
         from weebot.application.cqrs.mediator import Mediator
 
         mediator = _cached(Mediator)
+    if event_bus is None:
+        # Gateway and webhook flows passed none: no domain events, and the
+        # web UI never saw their progress (F56).
+        from weebot.application.ports.event_bus_port import EventBusPort
+
+        event_bus = _cached(EventBusPort)
 
     if flow_type == "plan_act":
         personality = _resolve_personality()

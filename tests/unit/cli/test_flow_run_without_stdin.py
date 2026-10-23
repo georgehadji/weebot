@@ -28,6 +28,9 @@ class _Runner:
         if False:
             yield None
 
+    async def close(self):
+        pass
+
 
 class _Container:
     def get(self, key):
