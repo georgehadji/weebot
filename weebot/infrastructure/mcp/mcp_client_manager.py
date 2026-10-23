@@ -37,6 +37,11 @@ class MCPClientManager:
         self._config = config or {}
         self._clients: dict[str, ClientSession] = {}
         self._exit_stack = AsyncExitStack()
+        # One holder task per server: anyio contexts must exit in the task that
+        # entered them, so each server opens and closes in its own task, and
+        # the servers connect in parallel.
+        self._holders: dict[str, asyncio.Task] = {}
+        self._stop = asyncio.Event()
         self._tools_cache: dict[str, list[Any]] = {}
         self._initialized = False
         self._max_retries = max_retries
@@ -54,21 +59,52 @@ class MCPClientManager:
         if self._initialized:
             return
         servers = self._config.get("mcpServers", {})
+        # Config files carry "_comment" strings next to the server entries.
+        wanted = {
+            name: cfg
+            for name, cfg in servers.items()
+            if isinstance(cfg, dict) and cfg.get("enabled", True)
+        }
+        results = await asyncio.gather(
+            *(self._start_holder(name, cfg) for name, cfg in wanted.items()),
+            return_exceptions=True,
+        )
         failed: list[str] = []
-        for server_name, server_config in servers.items():
-            # Config files carry "_comment" strings next to the server entries.
-            if not isinstance(server_config, dict) or not server_config.get("enabled", True):
-                continue
-            try:
-                await self._connect_with_retry(server_name, server_config)
-            except Exception as exc:
-                logger.error("Failed to connect to MCP server %s: %s", server_name, exc)
+        for server_name, result in zip(wanted, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Failed to connect to MCP server %s: %s", server_name, result)
                 failed.append(server_name)
         self._initialized = True
         if failed and not self._clients:
             raise RuntimeError(f"All MCP servers failed to connect: {', '.join(failed)}")
 
-    async def _connect_with_retry(self, server_name: str, server_config: dict[str, Any]) -> None:
+    async def _start_holder(self, server_name: str, server_config: dict[str, Any]) -> None:
+        """Connect *server_name* in its own task; return once it is ready or failed."""
+        ready: asyncio.Future = asyncio.get_running_loop().create_future()
+
+        async def _hold() -> None:
+            async with AsyncExitStack() as stack:
+                try:
+                    await self._connect_with_retry(server_name, server_config, stack)
+                except BaseException as exc:
+                    if not ready.done():
+                        ready.set_exception(exc)
+                    return
+                ready.set_result(None)
+                await self._stop.wait()
+
+        self._holders[server_name] = asyncio.create_task(_hold(), name=f"mcp:{server_name}")
+        await ready
+
+    async def _stop_holder(self, server_name: str) -> None:
+        task = self._holders.pop(server_name, None)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def _connect_with_retry(
+        self, server_name: str, server_config: dict[str, Any], stack: AsyncExitStack
+    ) -> None:
         """Connect to a server with exponential backoff retry.
 
         Raises:
@@ -77,7 +113,7 @@ class MCPClientManager:
         last_exc: Exception | None = None
         for attempt in range(1, self._max_retries + 1):
             try:
-                await self._connect_server(server_name, server_config)
+                await self._connect_server(server_name, server_config, stack)
                 self._connection_attempts[server_name] = attempt
                 logger.info("Connected to MCP server %s on attempt %d", server_name, attempt)
                 return
@@ -98,7 +134,9 @@ class MCPClientManager:
             f"MCP server {server_name!r} failed after {self._max_retries} attempts"
         ) from last_exc
 
-    async def _connect_server(self, server_name: str, server_config: dict[str, Any]) -> None:
+    async def _connect_server(
+        self, server_name: str, server_config: dict[str, Any], stack: AsyncExitStack
+    ) -> None:
         transport = server_config.get("transport", "stdio")
         valid_transports = {"stdio", "http", "sse", "streamable-http"}
         if transport not in valid_transports:
@@ -107,13 +145,15 @@ class MCPClientManager:
                 f"Valid transports: {valid_transports}"
             )
         if transport == "stdio":
-            await self._connect_stdio(server_name, server_config)
+            await self._connect_stdio(server_name, server_config, stack)
         elif transport in ("http", "sse"):
-            await self._connect_sse(server_name, server_config)
+            await self._connect_sse(server_name, server_config, stack)
         elif transport == "streamable-http":
-            await self._connect_streamable_http(server_name, server_config)
+            await self._connect_streamable_http(server_name, server_config, stack)
 
-    async def _connect_stdio(self, server_name: str, config: dict[str, Any]) -> None:
+    async def _connect_stdio(
+        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
+    ) -> None:
         command = config.get("command")
         args = config.get("args", [])
         env = config.get("env", {})
@@ -121,30 +161,34 @@ class MCPClientManager:
         if not command:
             raise ValueError(f"Server {server_name} missing command")
         params = StdioServerParameters(command=command, args=args, env={**os.environ, **env})
-        transport = await self._exit_stack.enter_async_context(stdio_client(params))
+        transport = await stack.enter_async_context(stdio_client(params))
         read_stream, write_stream = transport
-        session = await self._exit_stack.enter_async_context(
+        session = await stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
         await asyncio.wait_for(session.initialize(), timeout=timeout)
         self._clients[server_name] = session
         await self._cache_tools(server_name, session)
 
-    async def _connect_sse(self, server_name: str, config: dict[str, Any]) -> None:
+    async def _connect_sse(
+        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
+    ) -> None:
         url = config.get("url")
         timeout = config.get("timeout_seconds", 30)
         if not url:
             raise ValueError(f"Server {server_name} missing url")
-        transport = await self._exit_stack.enter_async_context(sse_client(url))
+        transport = await stack.enter_async_context(sse_client(url))
         read_stream, write_stream = transport
-        session = await self._exit_stack.enter_async_context(
+        session = await stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
         await asyncio.wait_for(session.initialize(), timeout=timeout)
         self._clients[server_name] = session
         await self._cache_tools(server_name, session)
 
-    async def _connect_streamable_http(self, server_name: str, config: dict[str, Any]) -> None:
+    async def _connect_streamable_http(
+        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
+    ) -> None:
         if not HAS_STREAMABLE_HTTP:
             raise RuntimeError("streamable-http client not available in this MCP version")
         url = config.get("url")
@@ -160,12 +204,12 @@ class MCPClientManager:
         params: dict[str, Any] = {"url": url}
         if headers:
             params["headers"] = headers
-        transport = await self._exit_stack.enter_async_context(streamablehttp_client(**params))
+        transport = await stack.enter_async_context(streamablehttp_client(**params))
         if len(transport) == 3:
             read_stream, write_stream, _ = transport
         else:
             read_stream, write_stream = transport
-        session = await self._exit_stack.enter_async_context(
+        session = await stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
         await asyncio.wait_for(session.initialize(), timeout=timeout)
@@ -190,8 +234,9 @@ class MCPClientManager:
             return False
         self._clients.pop(server_name, None)
         self._tools_cache.pop(server_name, None)
+        await self._stop_holder(server_name)
         try:
-            await self._connect_with_retry(server_name, server_config)
+            await self._start_holder(server_name, server_config)
             return True
         except Exception as exc:
             logger.error("Reconnection failed for %s: %s", server_name, exc)
@@ -270,6 +315,10 @@ class MCPClientManager:
         return text or "OK"
 
     async def cleanup(self) -> None:
+        self._stop.set()
+        await asyncio.gather(*self._holders.values(), return_exceptions=True)
+        self._holders.clear()
+        self._stop = asyncio.Event()
         await self._exit_stack.aclose()
         self._clients.clear()
         self._tools_cache.clear()

@@ -22,7 +22,7 @@ async def test_comment_keys_in_the_config_are_not_servers(monkeypatch):
     top-level "_comment" string; initialize() called .get on it and crashed."""
     connected: list[str] = []
 
-    async def _connect(self, name, cfg):
+    async def _connect(self, name, cfg, stack):
         connected.append(name)
 
     monkeypatch.setattr(MCPClientManager, "_connect_with_retry", _connect)
@@ -87,7 +87,7 @@ async def test_initialize_succeeds_when_at_least_one_server_connects(monkeypatch
     # MCP server — just simulate a successful connection.
     original_connect = mgr._connect_server
 
-    async def fake_connect(name, cfg):
+    async def fake_connect(name, cfg, stack):
         if name == "good":
             # Simulate success: create a minimal fake session
             class FakeSession:
@@ -104,7 +104,7 @@ async def test_initialize_succeeds_when_at_least_one_server_connects(monkeypatch
             mgr._tools_cache[name] = []
             return
         # Let "bad" fail normally
-        await original_connect(name, cfg)
+        await original_connect(name, cfg, stack)
 
     monkeypatch.setattr(mgr, "_connect_server", fake_connect)
 
@@ -118,7 +118,12 @@ async def test_retry_exhaustion_raises():
     """After max_retries attempts, _connect_with_retry must raise."""
     mgr = MCPClientManager(config={"mcpServers": {}}, max_retries=2)
 
+    from contextlib import AsyncExitStack
+
     with pytest.raises(RuntimeError, match="failed after 2 attempts"):
-        await mgr._connect_with_retry(
-            "doomed", {"transport": "stdio", "command": "/definitely/does/not/exist", "args": []}
-        )
+        async with AsyncExitStack() as stack:
+            await mgr._connect_with_retry(
+                "doomed",
+                {"transport": "stdio", "command": "/definitely/does/not/exist", "args": []},
+                stack,
+            )
