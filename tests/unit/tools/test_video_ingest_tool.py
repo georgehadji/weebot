@@ -15,6 +15,12 @@ from weebot.infrastructure.persistence.sqlite_tool_repo import SQLiteToolReposit
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _tmp_is_the_project(tmp_path, monkeypatch):
+    # export_jsonl writes only inside the project root (F50); tests write to tmp.
+    monkeypatch.setattr("weebot.core.output_path._PROJECT_ROOT", tmp_path.resolve())
+
+
 @pytest.fixture
 def vt(tmp_path):
     """Fresh VideoIngestTool backed by a temp-file ToolRepository."""

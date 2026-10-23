@@ -900,6 +900,12 @@ class ImageGenTool(BaseTool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = ImageGenParams(**{k: v for k, v in kwargs.items() if v is not None})
+        if params.output_path:
+            # Every branch writes output_path; only _download_image checked it (F50).
+            try:
+                self._sanitize_output_path(params.output_path)
+            except ValueError as exc:
+                return ToolResult(output="", error=str(exc))
 
         # Route to the appropriate generator
         generators = {

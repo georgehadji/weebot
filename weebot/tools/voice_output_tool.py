@@ -76,6 +76,12 @@ class VoiceOutputTool(BaseTool):
 
         if not output_path:
             output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}.wav")
+        try:
+            from weebot.core.output_path import output_path as _in_project
+
+            output_path = _in_project(output_path)  # writes stay in the project (F50)
+        except ValueError as exc:
+            return ToolResult(error=str(exc), output="")
 
         try:
             audio = await self._speech.synthesize(text, voice=voice or None)
