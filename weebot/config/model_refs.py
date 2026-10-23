@@ -110,8 +110,10 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
     # Highest volume: the agentic tool loop.
     "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
-    # Best independent terminal-coding score at half the top model's price.
-    "coder": [_SONNET, _SOL, _GLM, _DEEPSEEK],
+    # Sol first: billed 2026-10-23 coding eval, 5 tasks pinned per model, Sol
+    # 5/5 in 333 s vs Sonnet 4/5 in 1141 s, at ~1/3 the AA cost per task
+    # (tasks/audits/model_routing_2026_10_23.md). Sonnet is fallback 1.
+    "coder": [_SOL, _SONNET, _GLM, _DEEPSEEK],
     # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
     # Sol (another lab than the Anthropic coder) is fallback 1.
     "reviewer": [_HAIKU, _SOL, _KIMI, _OPUS],

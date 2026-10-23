@@ -28,7 +28,7 @@ Source: Artificial Analysis leaderboard (artificialanalysis.ai/leaderboards/mode
 | critic, analyst | GPT-6.1 Sol | keep | Best index per dollar above 50 (52 at $0.72; 50 at $0.32). |
 | premium fallback (planner, reviewer, critic, analyst) | Kimi K3.1 Pro | **changed** from Argon | 55 vs 53 at the same cost and 36 s vs 60 s; live tool call verified (3.5 s vs 5.3 s). |
 | automation, admin | DeepSeek V4.1 Flash | **changed** from MiniMax | 45 vs 43, 14 s vs 30 s, +$0.04 per task. |
-| coder | Sonnet 5.5 | keep, open question | Sol (high) scores 50 at $0.32 against Sonnet's 47 at $0.88, but the index is not a coding score and Sonnet won the billed multi-step coding runs (3/3). A billed Sonnet-vs-Sol coding eval decides it. |
+| coder | GPT-6.1 Sol | **changed** from Sonnet 5.5 | Billed eval, five coding tasks (debug, write, unit tests, SQL, refactor) through `flow run --model`: Sol 5/5 in 333 s, Sonnet 4/5 in 1141 s (unit-test task timed out at 360 s). AA: Sol (high) 50 at $0.32 against Sonnet's 47 at $0.88. Sonnet is fallback 1. |
 | verifier | DeepSeek V4.1 Flash | keep | Same reasoning as the executor. |
 | dreamer, product_manager, designer | MiMo-V2.6-Pro | keep | Background roles, latency does not matter: 46 at $0.13 is the best value. |
 | summarizer, documentation | Haiku 5.5 | keep | Cheap at high effort, fast. |
