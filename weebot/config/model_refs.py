@@ -124,8 +124,10 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "designer": [_MIMO_PRO, _SONNET, _DEEPSEEK],
     "documentation": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
     "summarizer": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
-    "automation": [_MINIMAX, _DEEPSEEK, _MIMO_FLASH],
-    "admin": [_MINIMAX, _DEEPSEEK, _MIMO_PRO],
+    # DeepSeek first (AA 45, $0.26/task, 14 s) over MiniMax (43, $0.22, 30 s):
+    # tasks/audits/model_routing_2026_10_23.md.
+    "automation": [_DEEPSEEK, _MINIMAX, _MIMO_FLASH],
+    "admin": [_DEEPSEEK, _MINIMAX, _MIMO_PRO],
     "subagent": [_LUNA, _MIMO_FLASH, _HAIKU, _GLM_FLASH],
     "vision": [MODEL_VISION_PRIMARY, _HAIKU, "google/gemini-3.8-flash", _MIMO_FLASH],
 }
