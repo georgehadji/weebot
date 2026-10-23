@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from weebot.application.ports.provider_account_port import ModelListing, ProviderAccountPort
@@ -11,14 +13,27 @@ _API = OPENROUTER_API_BASE
 
 
 class OpenRouterAccountAdapter(ProviderAccountPort):
+    # The cascade asks before every LLM call; one answer serves this long.
+    _TTL_S: float = 60.0
+
     def __init__(self, api_key: str | None) -> None:
         self._api_key = api_key
+        self._cached: tuple[float, float | None] | None = None  # (monotonic time, value)
 
     async def remaining_credits(self) -> float | None:
         # No key reads as zero credit, so OpenRouter-only models are skipped:
         # without a key every request to them would fail anyway.
         if not self._api_key:
             return 0
+        now = time.monotonic()
+        if self._cached is not None and now - self._cached[0] < self._TTL_S:
+            return self._cached[1]
+        value = await self._fetch_remaining()
+        if value is not None:  # an unknown is retried next call, never cached
+            self._cached = (now, value)
+        return value
+
+    async def _fetch_remaining(self) -> float | None:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(

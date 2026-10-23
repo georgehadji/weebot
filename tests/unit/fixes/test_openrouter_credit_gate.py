@@ -71,3 +71,20 @@ async def test_an_empty_balance_drops_openrouter_only_models():
         ["openai/gpt-6.1-sol", "minimax/minimax-m3.1-flash", "x-ai/grok-4.7"]
     )
     assert kept == ["x-ai/grok-4.7"]
+
+
+@pytest.mark.asyncio
+async def test_the_balance_is_read_once_per_ttl_not_per_llm_call(monkeypatch):
+    """The cascade asks before every LLM call; each ask was an HTTP round trip
+    (up to 5 s) on the hot path. One answer now serves for the TTL."""
+    calls = []
+
+    async def _get(self, url, headers=None):
+        calls.append(url)
+        return _Resp({"limit": 10, "limit_remaining": 3.0})
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _get)
+    account = OpenRouterAccountAdapter("k")
+    for _ in range(5):
+        assert await account.remaining_credits() == pytest.approx(3.0)
+    assert len(calls) == 1
