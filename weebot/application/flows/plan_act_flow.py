@@ -479,26 +479,6 @@ class PlanActFlow(BaseFlow):
         publisher._session = self._session
         self._session = await publisher.emit(event)
 
-    async def _emit_domain_event(self, event: AgentEvent) -> None:
-        """Publish domain events derived from agent events."""
-        from weebot.domain.models.event import PlanStepCompleted, FactDiscovered
-
-        # Plan step completion
-        if event.type == "step":
-            step_id = getattr(event, "step_id", None) or getattr(event, "id", "unknown")
-            domain_event = PlanStepCompleted(session_id=self._session.id, step_id=str(step_id))
-            await self._event_bus.publish_domain_event(domain_event)
-
-        # Facts discovered (MessageEvent from assistant with new info)
-        if event.type in ("message", "thought") and hasattr(event, "message"):
-            msg = getattr(event, "message", "")
-            if isinstance(msg, str) and len(msg) > 50:
-                from hashlib import md5
-
-                key = md5(msg.encode()).hexdigest()[:12]
-                domain_event = FactDiscovered(session_id=self._session.id, key=key, value=msg[:500])
-                await self._event_bus.publish_domain_event(domain_event)
-
     async def _extract_session_constraints(self, prompt: str) -> None:
         """Extract, persist, and publish any side constraints in *prompt*.
 
