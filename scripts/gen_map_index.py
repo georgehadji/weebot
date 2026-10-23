@@ -46,7 +46,11 @@ def _see(text: str) -> str:
 def render() -> str:
     parts = [HEADER]
     for cluster in CLUSTERS:
-        cards = sorted((OBJECTS / cluster).glob("*.md")) if (OBJECTS / cluster).is_dir() else []
+        cards = (
+            sorted((OBJECTS / cluster).glob("*.md"), key=lambda p: p.name.lower())
+            if (OBJECTS / cluster).is_dir()
+            else []
+        )  # by lowercased name: Path order is case-insensitive only on Windows
         if not cards:
             continue
         parts.append(f"\n## {cluster}\n")

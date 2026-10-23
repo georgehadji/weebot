@@ -9,6 +9,7 @@ and its output is untrusted (fenced, egress-tainting).
 
 from __future__ import annotations
 
+import os
 import pytest
 
 from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
@@ -174,7 +175,7 @@ def test_child_env_has_no_secrets_and_puts_the_venv_first(monkeypatch, tmp_path)
     env = ar._child_env()
     assert "OPENROUTER_API_KEY" not in env
     # doctor runs here too; without the venv on PATH it reported yt-dlp missing.
-    assert env["PATH"].split(";")[0] == str(tmp_path / "Scripts")
+    assert env["PATH"].split(os.pathsep)[0] == str(tmp_path / "Scripts")
 
 
 async def test_a_missing_program_says_how_to_install_it(monkeypatch):
