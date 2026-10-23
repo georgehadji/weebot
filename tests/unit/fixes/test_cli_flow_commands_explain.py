@@ -1,4 +1,4 @@
-"""`flow cancel` / `flow retry` say why they did nothing (F77).
+"""`flow cancel` reaches other processes; `flow retry` says why it did nothing (F77).
 
 Both act on state held only by the process that runs the session (TaskRunner's
 task map and cached flow factory). From a fresh CLI process they could never
@@ -15,14 +15,20 @@ from click.testing import CliRunner
 from cli.commands.flow import flow
 
 
-def test_cancel_explains_it_only_reaches_the_running_process():
+def test_cancel_files_a_request_for_a_run_in_another_process(tmp_path, monkeypatch):
+    from weebot.core import cancel_requests
+    from weebot.domain.models.session import Session, SessionStatus
+
+    monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
     runner = MagicMock()
     runner.cancel_session = AsyncMock(return_value=False)
-    with patch("cli.commands.flow.AgentRunner", return_value=runner), \
-         patch("cli.commands.flow.ModelSelectionService"), \
-         patch("cli.commands.flow._get_state_repo"):
+    repo = MagicMock()
+    # WAITING: a resumed run keeps that status in the store while it works.
+    repo.load_session = AsyncMock(return_value=Session(id="s1", status=SessionStatus.WAITING))
+    repo.update_session_status = AsyncMock()
+    with patch("cli.commands.flow.AgentRunner", return_value=runner),          patch("cli.commands.flow.ModelSelectionService"),          patch("cli.commands.flow._get_state_repo", return_value=repo):
         out = CliRunner().invoke(flow, ["cancel", "s1"]).output
-    assert "/api/sessions/s1/cancel" in out
+    assert "Cancel requested" in out and cancel_requests.take("s1")
 
 
 def test_retry_explains_the_same():

@@ -23,6 +23,7 @@ from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.core import cancel_requests
 from weebot.core.structured_logger import StructuredLogger
 from weebot.application.termination.base import TerminationContext
 from weebot.application.services.memory_compactor import MemoryCompactor
@@ -716,6 +717,11 @@ class PlanActFlow(BaseFlow):
 
         while iteration_count <= max_iterations:
             iteration_count += 1
+            if cancel_requests.take(self._session.id):  # `flow cancel` from any process
+                self._session = self._session.set_status(SessionStatus.FAILED)
+                await self._emit(ErrorEvent(error="Cancelled on request (flow cancel)."))
+                yield ErrorEvent(error="Cancelled on request (flow cancel).")
+                return
 
             current_state_type = type(self._state)
 

@@ -232,15 +232,33 @@ def flow_cancel(session_id: str) -> None:
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
-        ok = await runner.cancel_session(session_id)
-        if ok:
+        if await runner.cancel_session(session_id):
             console.print(f"[green]Cancelled session {session_id}[/green]")
-        else:
-            # Only the process running the session holds its task (F77).
+            return
+        # Another process may be running it (F77): file a request it checks
+        # every iteration; a session nobody is running is marked failed here.
+        from weebot.core import cancel_requests
+        from weebot.domain.models.session import SessionStatus
+
+        session = await state_repo.load_session(session_id)
+        if session is None:
+            console.print(f"[yellow]Session {session_id} not found[/yellow]")
+        elif session.status in (
+            SessionStatus.RUNNING, SessionStatus.WAITING, SessionStatus.PENDING
+        ):
+            # A resumed run keeps WAITING in the store while it works, so file the
+            # request for every open status; mark it failed too in case nothing runs it.
+            cancel_requests.request(session_id)
+            if session.status != SessionStatus.RUNNING:
+                await state_repo.update_session_status(session_id, SessionStatus.FAILED)
             console.print(
-                f"[yellow]Session {session_id} is not running in this process. A session "
-                f"started by the web server is cancelled there: "
-                f"POST /api/sessions/{session_id}/cancel[/yellow]"
+                f"[green]Cancel requested for {session_id}; a process running it stops "
+                f"at its next step.[/green]"
+            )
+        else:
+            console.print(
+                f"[yellow]Session {session_id} is {session.status.value}; nothing to cancel"
+                f"[/yellow]"
             )
 
     _run_async(_run)
