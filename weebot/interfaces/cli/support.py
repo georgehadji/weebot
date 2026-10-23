@@ -260,6 +260,19 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
         )
     )
 
+    # Sessions that failed to save (SessionPersistenceAdapter dead letters)
+    import weebot.config.constants as _spa
+
+    pending = len(list(_spa.DEAD_LETTER_DIR.glob("*.json"))) if _spa.DEAD_LETTER_DIR.is_dir() else 0
+    checks.append(
+        DoctorCheck(
+            name="dead_letters",
+            status="warn" if pending else "ok",
+            details=f"{pending} unsaved session(s) in {_spa.DEAD_LETTER_DIR}"
+            + (" (SessionPersistenceAdapter.replay_dead_letters re-saves them)" if pending else ""),
+        )
+    )
+
     # Database health (projects.db)
     db_path = root / "projects.db"
     if not db_path.exists():

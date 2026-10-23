@@ -36,6 +36,11 @@ MAX_EVENTS_JSON_BYTES: int = 10 * 1024 * 1024  # 10 MB
 """Max serialized events JSON before oldest events are dropped."""
 
 DB_SESSIONS_PATH: str = SESSIONS_DB
+
+from pathlib import Path  # noqa: E402
+
+DEAD_LETTER_DIR: Path = Path.home() / ".weebot" / "dead_letter"
+"""Sessions that failed to save, for every process (not the start folder); `doctor` reports them."""
 """Default SQLite path for session storage (from WEEBOT_SESSIONS_DB)."""
 
 DB_PROJECTS_PATH: str = "./projects.db"
