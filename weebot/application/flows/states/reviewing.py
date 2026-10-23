@@ -137,6 +137,17 @@ class ReviewingState(FlowState):
                 }
             )
             context._plan = context._plan.replace_step(self._step.id, revised_step)
+            # Persist it: ExecuteStepHandler reads the plan from the saved
+            # session, and refused the re-run of a step it still saw as
+            # completed, so every REVISE verdict was dropped.
+            from weebot.domain.models.event import PlanEvent
+            from weebot.domain.models.plan import PlanStatus
+
+            plan_event = PlanEvent(
+                status=PlanStatus.UPDATED, plan=context._plan.model_dump(mode="json")
+            )
+            await context._emit(plan_event)
+            yield plan_event
             context.set_state(ExecutingState())
 
         else:  # "reject"
