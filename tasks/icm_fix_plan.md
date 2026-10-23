@@ -74,29 +74,29 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F52 | Seven built-in skills ship only `manifest.json` and never load (incl. `multi_llm_orchestrator`, which root CLAUDE.md requires). **Fixed 8cc38eeb** | BuiltinSkills | M |
 | F53 | Tools in no role that skills tell the agent to use: `youtube_download`, `desktop_a11y`; also roleless `detect_elements`, `screenshot_ocr`, `ocr_structured`, `web_scraper`; `browser_navigator` is in roles but not a `BaseTool`, so never built. **Fixed 5da0014b** | BrowserTools | M |
 | F54 | Spending tools never ask: `apify_*` presets, `image_gen`, `video_gen`, `mixture_of_agents` match no outbound pattern | IntegrationTools | M |
-| F55 | The web process has two DI containers (lifespan `Container()` vs `shared_container()`); sub-agent events miss the WebSocket broadcaster | WebAPI | M |
-| F56 | CLI, gateway and webhook flows run with no event bus (no domain events, no skill-gap subscription) | CLI | M |
+| F55 | The web process has two DI containers (lifespan `Container()` vs `shared_container()`); sub-agent events miss the WebSocket broadcaster. **Fixed ce4f82fd** | WebAPI | M |
+| F56 | CLI, gateway and webhook flows run with no event bus (no domain events, no skill-gap subscription). **Fixed ce4f82fd, a4c81d54** | CLI | M |
 | F57 | `/api/webhook/run` with a `session_id` runs any stored session with no ownership check. **Fixed be6044c5** | WebAPI | M |
-| F58 | Reads with no tenant filter: `/api/sessions/search`, `/api/events/stream` (every event), `/api/dashboard/metrics` | WebAPI | M |
+| F58 | Reads with no tenant filter: `/api/sessions/search`, `/api/events/stream` (every event), `/api/dashboard/metrics`. **Fixed eb646fe3** | WebAPI | M |
 | F59 | Behavior and ponytail mutations need no identity (`watch/start` watches any directory); behavior WebSockets accept any client when no key is set. **Fixed 606e5e0f** | WebAPI | M |
 | F60 | `APIKeyMiddleware` exempts `/api/live` and `/api/prometheus` (real: `/api/health/...`), blocks platform webhooks under `/api/gateway/*`, and rejects store-mode principal keys. **Fixed 22b546e0** | WebAPI | M |
-| F61 | Web UI: calls a missing `/api/behavior/settings`; behavior, `/ops` and `/debug` calls send no API key; event types out of sync (`error` vs `failed`, no `tool_approval`) | WebUI | M |
-| F62 | `run_mcp.py` passes no discovery, skills, routing or products, so every MCP resource is a stub and no dynamic tools register | MCPServer | M |
+| F61 | Web UI: calls a missing `/api/behavior/settings`; behavior, `/ops` and `/debug` calls send no API key; event types out of sync (`error` vs `failed`, no `tool_approval`). **Fixed 935aee50** | WebUI | M |
+| F62 | `run_mcp.py` passes no discovery, skills, routing or products, so every MCP resource is a stub and no dynamic tools register. **Fixed af06f447** | MCPServer | M |
 | F63 | `search_images` URLs and `vane_search` sources go to `data`/metadata, which the model never sees. **Fixed edad6487** | WebTools | M |
 | F64 | Executor middleware builds `ToolResult(..., is_error=...)`; `is_error` is a property, so it raises `TypeError` when middleware rewrites output. **Fixed 1d214b34** | BaseTool | M |
-| F65 | `ocr` reads any path; without pytesseract it sends the raw bytes to the vision provider; in the webhook role | WebTools | M |
+| F65 | `ocr` reads any path; without pytesseract it sends the raw bytes to the vision provider; in the webhook role. **Fixed c2265eeb** | WebTools | M |
 | F66 | `spacescraper` can run `docker-compose up -d`, unguarded, and stays in the `webhook` role that drops exec tools. **Fixed 715a6d6b** | WebTools | M |
 | F67 | `search_history` returns old content across all sessions, unfenced, in the webhook role. **Fixed 715a6d6b** | WebTools | M |
 | F68 | The inbound-mail gate fact can be evicted by the 100-fact cap (oldest by insertion). **Fixed 843bd6c6** | Session | M |
-| F69 | A step the evidence audit downgrades resumes as COMPLETED: the downgrade is not an event | Step | M |
+| F69 | A step the evidence audit downgrades resumes as COMPLETED: the downgrade is not an event. **Fixed e28a5015** | Step | M |
 | F70 | `Plan._heuristic_splits` is lost in `model_dump`/`model_validate`, so the misalignment signal never fires. **Fixed 45698189** | Plan | M |
 | F71 | Built-in skills silently override project and user skills of the same name. **Fixed 531bb5b0** | SkillRegistry | M |
-| F72 | DI `browser_pool` is never started or acquired; `/health` reports it healthy from an import flag | Browser | M |
+| F72 | DI `browser_pool` is never started or acquired; `/health` reports it healthy from an import flag. **Fixed f9f68bb7** | Browser | M |
 | F73 | `PlaywrightAdapter.start()` has no lock or running check; two tools can each launch a browser. **Fixed 1daa3473** | Browser | M |
 | F74 | `camofox_browser` redirect check misses hostnames that resolve private; DNS failure counts as public. **Fixed 84fe44ef** | BrowserTools | M |
 | F75 | `computer_use` skips the `require_window` focus check silently when pygetwindow fails, then types. **Fixed 914e93d0** | BrowserTools | M |
-| F76 | Gateway `extract_media` attaches any absolute `.json/.yaml/.md/.txt/.csv` path named in a reply; email gateway authorizes on the `From` header. **extract_media fixed 0170e5ba**; the email `From` check is open | ChatGateways | M |
-| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **`delete` fixed 260e1b5c**; cancel/retry/undo and cron_agent open | CLI | M |
+| F76 | Gateway `extract_media` attaches any absolute `.json/.yaml/.md/.txt/.csv` path named in a reply; email gateway authorizes on the `From` header. **Fixed 0170e5ba (attachments), 9b94e943 (email sender authentication)** | ChatGateways | M |
+| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **Fixed: `delete` 260e1b5c, cron_agent 2ac3672c; cancel/retry now say they act only in the running process (5c574b1b). Open: cancelling a CLI run from another process needs the flow to watch a stored flag** | CLI | M |
 | F78 | Personas with YAML frontmatter get the name `---` and overwrite each other's registry entry. **Fixed 574d991e** | Personas | M |
 | F79 | Low-severity notes (dead methods and ports, duplicated facts, swallowed exceptions, stale comments, timeout unit mismatch in `advanced_browser`, unclosed ApifyService sessions): listed in each card's Shape | (cards) | L |
 
