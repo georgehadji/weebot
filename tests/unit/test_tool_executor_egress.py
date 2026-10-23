@@ -194,7 +194,8 @@ class TestLocalPagesDoNotTaint:
     @pytest.mark.asyncio
     async def test_writing_a_file_does_not_taint_but_viewing_one_does(self):
         ex, _ = make_executor(make_guard())
-        await ex.execute_tool("file_editor", {"command": "create", "path": "a.html", "file_text": "x"})
+        create = {"command": "create", "path": "a.html", "file_text": "x"}
+        await ex.execute_tool("file_editor", create)
         assert ex._untrusted_context_active is False
         await ex.execute_tool("file_editor", {"command": "view", "path": "downloaded.html"})
         assert ex._untrusted_context_active is True
@@ -203,7 +204,8 @@ class TestLocalPagesDoNotTaint:
     async def test_viewing_a_file_this_session_wrote_does_not_taint(self):
         ex, _ = make_executor(make_guard())
         ex.set_step_context("step-2", "sess-own-file")
-        await ex.execute_tool("file_editor", {"command": "create", "path": "o/form.html", "file_text": "x"})
+        create = {"command": "create", "path": "o/form.html", "file_text": "x"}
+        await ex.execute_tool("file_editor", create)
         nxt, _ = make_executor(make_guard())
         nxt.set_step_context("step-3", "sess-own-file")
         await nxt.execute_tool("file_editor", {"command": "view", "path": "o/form.html"})

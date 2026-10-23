@@ -21,5 +21,6 @@ async def test_variables_are_expanded(monkeypatch):
     monkeypatch.setattr(mta.MCPClientManager, "initialize", _noop)
     monkeypatch.setattr(mta.MCPClientManager, "get_all_tools", _none)
     adapter = mta.MCPToolkitAdapter()
-    await adapter.initialize({"mcpServers": {"s": {"headers": {"Authorization": "Bearer ${WB_TEST_TOKEN}"}}}})
+    headers = {"Authorization": "Bearer ${WB_TEST_TOKEN}"}
+    await adapter.initialize({"mcpServers": {"s": {"headers": headers}}})
     assert adapter._manager._config["mcpServers"]["s"]["headers"]["Authorization"] == "Bearer tok"

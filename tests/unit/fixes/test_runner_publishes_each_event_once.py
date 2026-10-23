@@ -9,7 +9,6 @@ the runner's publish.
 from __future__ import annotations
 
 from weebot.domain.models.event import MessageEvent
-from weebot.domain.models.session import Session
 from weebot.interfaces.cli import agent_runner as ar
 
 

@@ -47,4 +47,5 @@ async def test_completed_state_with_a_failed_step_runs_once():
 
     terminal = [e for e in events if isinstance(e, PlanEvent) and e.status == PlanStatus.FAILED]
     assert len(terminal) == 1
-    assert not any(isinstance(e, ErrorEvent) and "Max iterations" in (e.error or "") for e in events)
+    errors = [e.error or "" for e in events if isinstance(e, ErrorEvent)]
+    assert not any("Max iterations" in e for e in errors)

@@ -277,9 +277,12 @@ class TestRescuePicksByPrice:
         from weebot.application.ports.provider_account_port import ModelListing
 
         executor._provider_account = _Account([
-            ModelListing(id="anthropic/claude-opus-5.5", context_length=1_000_000, supports_tools=True),
-            ModelListing(id="deepseek/deepseek-v4.1-flash-1017", context_length=1_000_000, supports_tools=True),
-            ModelListing(id="unknown/vendor-model", context_length=2_000_000, supports_tools=True),
+            ModelListing(id=m, context_length=ctx, supports_tools=True)
+            for m, ctx in [
+                ("anthropic/claude-opus-5.5", 1_000_000),
+                ("deepseek/deepseek-v4.1-flash-1017", 1_000_000),
+                ("unknown/vendor-model", 2_000_000),
+            ]
         ])
         tried = []
 

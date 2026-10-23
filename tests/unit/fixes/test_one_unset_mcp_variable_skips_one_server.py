@@ -17,7 +17,10 @@ def test_the_other_servers_still_load(tmp_path, monkeypatch):
     cfg = tmp_path / "mcp.json"
     cfg.write_text(json.dumps({
         "good": {"url": "https://example.test/mcp"},
-        "needs_key": {"url": "https://x.test", "headers": {"Authorization": "Bearer ${WB_TEST_UNSET_KEY}"}},
+        "needs_key": {
+            "url": "https://x.test",
+            "headers": {"Authorization": "Bearer ${WB_TEST_UNSET_KEY}"},
+        },
     }), encoding="utf-8")
     monkeypatch.delenv("WB_TEST_UNSET_KEY", raising=False)
     monkeypatch.setenv("WEEBOT_ENABLE_X_MCP", "1")
