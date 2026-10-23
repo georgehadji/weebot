@@ -675,7 +675,7 @@ class VerifyingState(FlowState):
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_VERDICT,
             )
-            return "yes" in (response.content or "").lower()
+            return (response.content or "").strip().lower().startswith("yes")
         except LLMAuthenticationError:
             # Propagate (E6): an unreachable LLM is an infra problem for
             # execute()'s auth-retry counter to handle (→ NOT_RUN after

@@ -73,3 +73,25 @@ def test_an_answer_the_evidence_cannot_give_is_not_a_contradiction():
     it as an inconsistency rewrote correct summaries on most runs."""
     assert VerifyingState._is_unverifiable("UNKNOWN: the evidence shows no file writes")
     assert not VerifyingState._is_unverifiable("README.md has 348 lines.")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [("YES", True), ("Yes.", True), ("NO", False), ("No - saying yes would need more", False)],
+)
+async def test_the_verdict_is_the_leading_yes_or_no(reply, expected):
+    """`"yes" in reply` read a NO that mentions yes as consistent."""
+
+    class _Reply:
+        content = reply
+
+    class _VerdictLLM:
+        async def chat(self, messages, **kw):
+            return _Reply()
+
+    class _Flow:
+        _verifier_llm = _VerdictLLM()
+        _llm = _verifier_llm
+
+    assert await VerifyingState()._check_consistency(_Flow(), "q", "a", "s") is expected
