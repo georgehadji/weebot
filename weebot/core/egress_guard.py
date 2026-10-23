@@ -173,6 +173,14 @@ _BROWSER_EGRESS_ACTIONS: frozenset[str] = frozenset(
     }
 )
 
+# Browser calls that can carry data out without a form submit (F41). A URL whose
+# text holds a secret is egress anywhere; writing into a page (typed text, JS)
+# is egress once the session has read untrusted content. Plain browsing is not.
+_BROWSER_NAV_TOOLS: frozenset[str] = frozenset(
+    {"advanced_browser", "browser_inspector", "web_scraper"}
+)
+_BROWSER_PAGE_WRITE_ACTIONS: frozenset[str] = frozenset({"fill", "type", "select", "evaluate"})
+
 # notification / messaging tools that always send outbound
 _NOTIFICATION_TOOLS: frozenset[str] = frozenset(
     {
@@ -304,6 +312,8 @@ class EgressGuard:
         # 1. Is this an egress vector?
         recipient, is_egress = self._detect_egress(tool_name, args)
         if not is_egress:
+            recipient, is_egress = self._browser_egress(tool_name, args, untrusted_context_active)
+        if not is_egress:
             return decision
 
         decision.is_egress = True
@@ -334,6 +344,20 @@ class EgressGuard:
 
         decision.requires_approval = bool(decision.reasons)
         return decision
+
+    def _browser_egress(
+        self, tool_name: str, args: dict[str, Any], tainted: bool
+    ) -> tuple[str | None, bool]:
+        """(recipient, is_egress) for browser calls _detect_egress does not cover (F41)."""
+        if tool_name not in _BROWSER_NAV_TOOLS:
+            return None, False
+        url = str(args.get("url", ""))
+        if url and self._scan_sensitive(url):
+            return self._normalize_host(url), True
+        action = str(args.get("action", "")).lower()
+        if tainted and tool_name == "advanced_browser" and action in _BROWSER_PAGE_WRITE_ACTIONS:
+            return None, True  # the page's scripts see it; the host is the tab's, unknown here
+        return None, False
 
     def network_use(self, tool_name: str, args: dict[str, Any]) -> tuple[bool, str | None]:
         """Does this shell call reach the network, and which host? (W3.9)
