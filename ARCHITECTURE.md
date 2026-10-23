@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-07 (Architecture 9 Plan — Phase 1–2, 11/15 steps)
 **Architecture score:** 9.0/10 (post-Architecture 9 Plan — Phase 1 Foundation + Phase 2 Structural Consolidation)
-**Last audit:** implementation_audit_report.md — APPROVED WITH CONDITIONS (2026-07-07)
+**Last audit:** _archive/root-2026-10-23/reports/implementation_audit_report.md — APPROVED WITH CONDITIONS (2026-07-07)
 **Maturity:** Production
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
 
