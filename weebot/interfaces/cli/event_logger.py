@@ -49,7 +49,10 @@ def _format_event(event: AgentEvent) -> str:
     if isinstance(event, DoneEvent):
         return "\n[bold green]✨ Done[/bold green]"
     if isinstance(event, VerificationEvent):
-        verdict = "consistent" if event.consistent else "inconsistent"
+        if (event.answer or "").strip().lower().startswith("unknown"):
+            verdict = "unverifiable"
+        else:
+            verdict = "consistent" if event.consistent else "inconsistent"
         return f"    [dim]🔎 Check: {event.question} ({verdict})[/dim]"
     # Never the pydantic repr: an unlisted type prints its name, one line.
     return f"    [dim]· {getattr(event, 'type', type(event).__name__)}[/dim]"
