@@ -219,7 +219,12 @@ def flow_cancel(session_id: str) -> None:
         if ok:
             console.print(f"[green]Cancelled session {session_id}[/green]")
         else:
-            console.print(f"[yellow]Session {session_id} was not active[/yellow]")
+            # Only the process running the session holds its task (F77).
+            console.print(
+                f"[yellow]Session {session_id} is not running in this process. A session "
+                f"started by the web server is cancelled there: "
+                f"POST /api/sessions/{session_id}/cancel[/yellow]"
+            )
 
     _run_async(_run)
 
@@ -247,8 +252,9 @@ def flow_retry(session_id: str) -> None:
             console.print(f"[green]Retrying failed session {session_id}[/green]")
         else:
             console.print(
-                f"[yellow]Session {session_id} is not in FAILED status "
-                f"or has no flow factory cached[/yellow]"
+                f"[yellow]Session {session_id} is not FAILED, or was not run by this "
+                f"process: retry works only in the process that ran it (the web "
+                f"server). From the CLI, start it again with 'flow run'.[/yellow]"
             )
 
     _run_async(_run)
