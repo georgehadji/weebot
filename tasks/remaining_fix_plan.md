@@ -297,6 +297,8 @@ Independent of C-E; it can go anywhere after A.
   - `build_mediator` and the sub-agent factory built unwired tool registries, so knowledge, audit, memory, voice and OCR-vision were missing from those tool sets.
   - A refused inline script now names `python_execute`, and the bash and powershell descriptions say so up front.
   - Open: 12 of 45 runs lost time to refused ASKs (8 inline `python -c`, 8 `exec_approval_policy`). Three false DENYs: "nested backtick injection" on markdown code spans written through the shell; that is a security-analyzer change left for review.
+- **Refusal rerun (2026-10-23):** the 12 tasks that had hit a refused ASK, rerun with the inline-Python steering: runs with refusals went from 12 to 7, refusals from 13 to 8, and inline-script refusals from 8 to 3. 11 of 12 passed. The one fail was a real bug: PowerShell 5.1 wrote piped output in the console code page while the sandbox decodes UTF-8, so "12°C" reached the agent as "12A�C". Fixed (`[Console]::OutputEncoding` set to UTF-8; `tests/unit/infrastructure/sandbox/test_powershell_utf8_output.py`).
+- **Catalog refresh (2026-10-23):** 460 models, no membership change. Three prices moved, among them DeepSeek V4.1 Flash at its most expensive provider ($0.30/$1.20 per M).
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
