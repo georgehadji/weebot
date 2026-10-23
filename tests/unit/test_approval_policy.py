@@ -1,5 +1,7 @@
 """Unit tests for ExecApprovalPolicy."""
 
+import os
+
 from weebot.core.approval_policy import ExecApprovalPolicy, ApprovalMode, CommandRule
 
 
@@ -145,14 +147,23 @@ class TestOutputDirectoryAllowlist:
         self.policy = ExecApprovalPolicy()
 
     def test_remove_item_in_output_dir_auto_approved(self):
-        result = self.policy.evaluate("Remove-Item 'E:\\Output\\marina-kotsi\\temp'")
+        root = os.getcwd()
+        result = self.policy.evaluate(f"Remove-Item '{root}\\Output\\marina-kotsi\\temp'")
         assert result.approved is True
         assert result.requires_confirmation is False
 
     def test_remove_item_in_output_dir_case_insensitive(self):
-        result = self.policy.evaluate("Remove-Item C:/output/project/node_modules")
+        result = self.policy.evaluate("Remove-Item output/project/node_modules")
         assert result.approved is True
         assert result.requires_confirmation is False
+
+    def test_an_output_folder_outside_the_workspace_still_asks(self):
+        # The old regex matched `\Output\` on any drive.
+        for command in (
+            "Remove-Item 'E:\\Output\\marina-kotsi\\temp'",
+            "Remove-Item C:/output/project/node_modules",
+        ):
+            assert self.policy.evaluate(command).requires_confirmation is True, command
 
     def test_remove_item_outside_output_dir_still_asks(self):
         result = self.policy.evaluate("Remove-Item 'C:\\Windows\\System32\\cmd.exe'")

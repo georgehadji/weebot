@@ -55,8 +55,8 @@ def test_destructive_verb_alone_asks(command):
 
 
 def test_output_carve_out_covers_only_its_own_segment():
-    allowed = _POLICY.evaluate("Remove-Item C:\\x\\Output\\a")
-    chained = _POLICY.evaluate("Remove-Item C:\\x\\Output\\a; Format-Volume -DriveLetter C")
+    allowed = _POLICY.evaluate("Remove-Item Output\\a")
+    chained = _POLICY.evaluate("Remove-Item Output\\a; Format-Volume -DriveLetter C")
     assert (_rank(allowed), _rank(chained)) == (0, 2)
 
 

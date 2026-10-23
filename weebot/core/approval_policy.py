@@ -10,7 +10,9 @@ CRITICAL: This policy runs on Windows 11 + PowerShell 5.1.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import shlex
 import types
 from dataclasses import dataclass
 from enum import Enum
@@ -63,14 +65,9 @@ _DESTRUCTIVE_KEYWORDS: set[str] = {
 
 # Built-in defaults: destructive → ask, format → deny, rest → auto
 _DEFAULT_RULES: tuple[CommandRule, ...] = (
-    # Allow Remove-Item / python writes inside the Output\ working directory
-    # (checked before the blanket remove-item rule because longest-match wins)
-    CommandRule(
-        # Anchored to the whole command so chained commands don't match
-        r"^remove-item\s+['\"]?[A-Za-z]:[\\\/][^;&|]*[Oo]utput[\\\/][^;&|]*$",
-        ApprovalMode.AUTO_APPROVE,
-        is_regex=True,
-    ),
+    # Python writes inside the Output\ working directory. Shell file cmdlets
+    # there are judged by _output_scoped() instead: the Remove-Item regex that
+    # stood here matched any `\Output\` on any drive (C:\Windows\Output\x).
     CommandRule(
         r"open\s*\(\s*['\"].*[Oo]utput[\\\/].*['\"],\s*['\"]w",
         ApprovalMode.AUTO_APPROVE,
@@ -233,6 +230,7 @@ class ExecApprovalPolicy:
     def __init__(self, rules: list[CommandRule] | None = None) -> None:
         # User rules first, then built-in defaults (frozen tuple — cast to list)
         self._rules = list(rules or []) + list(_DEFAULT_RULES)
+        self._n_user_rules = len(rules or [])  # the Output/ carve-out never overrides these
 
         # Pre-compile regex patterns at init time so evaluate() never raises
         # re.error at runtime.
@@ -295,7 +293,7 @@ class ExecApprovalPolicy:
         # DENY > ASK > AUTO_APPROVE. The chained-keyword check used to
         # `return` ASK before DENY rules were read, so
         # `Format-Volume D; rm x` was asked about instead of denied.
-        segments = split_segments(command)
+        segments = _inline_literal_vars(split_segments(command))
         chained = len(segments) > 1
         decisions = [self._evaluate_segment(segment, chained) for segment in segments]
         worst = max(decisions, key=lambda d: d.rank, default=_NO_MATCH)
@@ -343,6 +341,9 @@ class ExecApprovalPolicy:
             )
         ]
         denies = [r for r in matches if r.mode is ApprovalMode.DENY]
+        user_rule_matched = any(r in self._rules[: self._n_user_rules] for r in matches)
+        if not denies and not user_rule_matched and _output_scoped(segment):
+            return _NO_MATCH
         if denies or matches:
             best = max(denies or matches, key=lambda r: len(r.pattern))
             if best.mode is ApprovalMode.DENY:
@@ -377,6 +378,124 @@ _RANK: dict[ApprovalMode, int] = {
     ApprovalMode.DENY: 2,
 }
 _NO_MATCH = _SegmentDecision(_RANK[ApprovalMode.AUTO_APPROVE])
+
+
+# File cmdlets the agent uses on its own Output/ work, and how each takes its
+# positional arguments: "paths" (every one is a path), "path+value" (the first
+# is a path, the rest are content), "path+name" (a path, then a bare new name).
+_OUTPUT_CMDLETS: dict[str, str] = {
+    "set-content": "path+value",
+    "add-content": "path+value",
+    "out-file": "path+value",
+    "clear-content": "paths",
+    "new-item": "paths",
+    "remove-item": "paths",
+    "move-item": "paths",
+    "copy-item": "paths",
+    "rename-item": "path+name",
+}
+_PATH_PARAMS = {"-path", "-literalpath", "-destination", "-filepath"}
+_VALUE_PARAMS = {"-value", "-encoding", "-itemtype", "-filter", "-include", "-exclude"}
+_NAME_PARAMS = {"-newname", "-name"}
+_SWITCHES = {"-force", "-recurse", "-nonewline", "-append", "-passthru", "-confirm:$false"}
+
+
+def _in_output(path: str) -> bool:
+    """True when *path* is strictly inside this workspace's Output/ folder."""
+    p = path.strip("'\"").replace("\\", "/")
+    if not p or "$" in p or "~" in p or ".." in p.split("/"):
+        return False
+    root = os.getcwd().replace("\\", "/").rstrip("/") + "/"
+    if p.lower().startswith(root.lower()):
+        p = p[len(root) :]
+    elif re.match(r"^[A-Za-z]:/|^/", p):
+        return False  # absolute, and not under this workspace
+    p = p.removeprefix("./")
+    head, _, rest = p.partition("/")
+    return head.lower() == "output" and bool(rest)
+
+
+def _output_scoped(segment: str) -> bool:
+    """A file cmdlet whose every path argument is inside Output/ (fail closed)."""
+    try:
+        tokens = shlex.split(segment, posix=False)
+    except ValueError:
+        return False
+    if not tokens or tokens[0].lower() not in _OUTPUT_CMDLETS:
+        return False
+    shape = _OUTPUT_CMDLETS[tokens[0].lower()]
+    paths: list[str] = []
+    names: list[str] = []
+    positional: list[str] = []
+    i = 1
+    while i < len(tokens):
+        tok = tokens[i]
+        low = tok.lower()
+        if low in _SWITCHES:
+            i += 1
+            continue
+        if low in _PATH_PARAMS | _VALUE_PARAMS | _NAME_PARAMS:
+            if i + 1 >= len(tokens):
+                return False
+            value = tokens[i + 1]
+            if low in _PATH_PARAMS:
+                paths.append(value)
+            elif low in _NAME_PARAMS:
+                names.append(value)
+            elif "$" in value:
+                return False  # content built from a variable
+            i += 2
+            continue
+        if tok.startswith("-"):
+            return False  # a parameter this check does not know
+        positional.append(tok)
+        i += 1
+    if shape == "paths":
+        paths += positional
+    elif positional:
+        paths.append(positional[0])
+        if shape == "path+name":
+            names += positional[1:]
+        elif any("$" in v for v in positional[1:]):
+            return False
+    if any("/" in n or "\\" in n or ".." in n or "$" in n for n in names):
+        return False
+    return bool(paths) and all(_in_output(p) for p in paths)
+
+
+_ASSIGN = re.compile(r"^\$(\w+)\s*=\s*(.*)$", re.S)
+_LITERAL = re.compile(r"""^(["'])([^"'$`]*)\1$""")
+
+
+def _inline_literal_vars(segments: list[str]) -> list[str]:
+    """Substitute `$name` where it is assigned once, to a plain string literal.
+
+    The agent writes `$dir = "...\\Output\\x"; Set-Content "$dir\\a.txt" ...`.
+    Without this the Output/ check saw `$dir` and failed closed. A variable
+    assigned twice, or to anything but a literal free of `$` and backticks,
+    is left alone, so that check still sees `$` and fails closed.
+    """
+    seen: dict[str, int] = {}
+    literals: dict[str, str] = {}
+    for segment in segments:
+        m = _ASSIGN.match(segment)
+        if not m:
+            continue
+        name = m.group(1).lower()
+        seen[name] = seen.get(name, 0) + 1
+        lit = _LITERAL.match(m.group(2).strip())
+        if lit:
+            literals[name] = lit.group(2)
+    safe = {n: v for n, v in literals.items() if seen[n] == 1}
+    if not safe:
+        return segments
+
+    def _sub(match: re.Match) -> str:
+        return safe.get(match.group(1).lower(), match.group(0))
+
+    return [
+        s if _ASSIGN.match(s) else re.sub(r"\$(\w+)\b(?!:)", _sub, s) for s in segments
+    ]
 
 
 def split_segments(command: str) -> list[str]:
