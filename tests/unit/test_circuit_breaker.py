@@ -341,7 +341,9 @@ class TestCircuitBreakerMetrics:
         )
 
         await cb.record_failure("entity_recovery")
-        await asyncio.sleep(0.06)
+        # 3x the cooldown: 0.06 left 10 ms, under Windows' ~15.6 ms timer tick,
+        # and failed under full-suite load.
+        await asyncio.sleep(0.15)
         await cb.evaluate("entity_recovery")
         await cb.record_success("entity_recovery")
 
