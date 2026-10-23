@@ -901,7 +901,6 @@ def test_core_no_global_singletons_outside_di():
         "structured_logger.py",  # _correlation_id — contextvar, not plain global
         "alerting.py",  # WP-3: alert registry singleton
         "behavior_integration.py",  # WP-3: integration state singleton
-        "error_system_handler.py",  # WP-3: error handler singleton
         "memory_monitor.py",  # WP-3: memory monitor singleton
     }
 
@@ -1610,7 +1609,7 @@ def test_no_direct_agent_calls_in_mutating_states():
         # SummarizingState has a documented fallback with DeprecationWarning
         if sf == "summarizing.py":
             assert (
-                "DeprecationWarning" in content or "context._executor.summarize" not in content
+                "DeprecationWarning" in content or "context._summary_executor.summarize" not in content
             ), f"{sf}: direct executor call must have DeprecationWarning"
         else:
             assert "context._mediator.send" in content, f"{sf}: must route through CQRS mediator"
@@ -1618,7 +1617,7 @@ def test_no_direct_agent_calls_in_mutating_states():
                 "context._planner.create_plan" not in content
             ), f"{sf}: direct planner call bypassing mediator"
             assert (
-                "context._executor.summarize" not in content
+                "context._summary_executor.summarize" not in content
             ), f"{sf}: direct executor call bypassing mediator"
 
 

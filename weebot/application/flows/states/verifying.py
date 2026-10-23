@@ -414,8 +414,8 @@ class VerifyingState(FlowState):
             failures.append("unresolved_errors")
 
         # Gate 4: Token budget — check executor token usage
-        if flow._executor and hasattr(flow._executor, "token_usage"):
-            usage = flow._executor.token_usage
+        if hasattr(flow, "token_usage"):
+            usage = flow.token_usage
             if usage.get("total_tokens", 0) > 100_000:
                 failures.append("token_budget_exceeded")
 

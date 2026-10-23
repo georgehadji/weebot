@@ -454,6 +454,7 @@ class ExecutingState(FlowState):
                 # `effective_prompt`, not `prompt`: this sent the ORIGINAL,
                 # so steering was polled, logged and dropped (P3-2 in the audit).
                 user_input=effective_prompt,
+                step_context=context.step_execution_context(),  # ADR-015
             )
         )
         _step_elapsed = _time.monotonic() - _step_t0
@@ -461,6 +462,9 @@ class ExecutingState(FlowState):
             yield ErrorEvent(error=f"Step execution rejected: {cmd_result.error}")
             context.set_state(UpdatingState())
             return
+
+        _data = cmd_result.data
+        context.record_step_usage(_data.get("token_usage"), _data.get("skill_gaps"))
 
         # Consume events from the mediator result via shared reconstructor.
         from weebot.application.cqrs.event_reconstructor import reconstruct_events

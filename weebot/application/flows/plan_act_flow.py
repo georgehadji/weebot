@@ -284,7 +284,14 @@ class PlanActFlow(BaseFlow):
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
-        self._executor = ExecutorAgent(**executor_kwargs)
+        # Steps run on ExecuteStepHandler's executor, which gets these settings
+        # through step_execution_context(); this one serves summarize (ADR-015).
+        self._summary_executor = ExecutorAgent(**executor_kwargs)
+        _keys = ("skill_prompt", "skill_retriever", "profile_name", "personality", "agent_role",
+                 "behavioral_learner", "middleware_chain", "trajectory_config", "max_steps")
+        self._step_settings = {k: executor_kwargs.get(k) for k in _keys}
+        self._step_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        self.step_skill_gaps: list = []
 
         # Enhancement 5: subscribe to SkillGapDetected domain events
         if self._event_bus is not None and self._misalignment_journal is not None:
@@ -631,7 +638,7 @@ class PlanActFlow(BaseFlow):
                 logger=self._stdlib_logger,
             )
         self._tools = await self._tool_assembler.assemble(
-            effective_prompt=effective_prompt, tools=self._tools, executor=self._executor
+            effective_prompt=effective_prompt, tools=self._tools, executor=self._summary_executor
         )
 
         # ── Resolve initial state via FlowRouter ───────────────────────────
@@ -725,7 +732,7 @@ class PlanActFlow(BaseFlow):
 
                 _term_ctx = TerminationContext(
                     iteration=iteration_count,
-                    total_tokens=self._executor.token_usage.get("total_tokens", 0),
+                    total_tokens=self.token_usage.get("total_tokens", 0),
                     elapsed_seconds=_term_time.monotonic() - self._flow_started_at,
                 )
                 for _tc in self._termination_conditions:
@@ -751,11 +758,11 @@ class PlanActFlow(BaseFlow):
                     # ExecutorAgent._call_with_cascade() and does not propagate
                     # back.  Phase 7+ may add a post-step callback to track
                     # which model actually responded and re-resolve.
-                    model_id = self._model or self._executor._model or ""
+                    model_id = self._model or self._summary_executor._model or ""
                     resolved_block = self._harness_resolver.resolve_instruction_block(model_id)
                     if resolved_block and resolved_block != self._harness_instruction_block:
                         self._harness_instruction_block = resolved_block
-                        self._executor.set_harness_block(resolved_block)
+                        self._summary_executor.set_harness_block(resolved_block)
                 except Exception as exc:
                     self._stdlib_logger.debug(
                         "Per-step harness resolution failed: %s — using previous block", exc
@@ -926,10 +933,28 @@ class PlanActFlow(BaseFlow):
 
     @property
     def token_usage(self) -> dict[str, int]:
-        """Cumulative token usage for this flow's executor."""
-        if self._executor and hasattr(self._executor, "token_usage"):
-            return self._executor.token_usage
-        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        """Cumulative token usage: every step's executor plus the summary one."""
+        total = dict(self._step_token_usage)
+        own = getattr(self._summary_executor, "token_usage", None) or {}
+        for key in total:
+            total[key] += int(own.get(key, 0) or 0)
+        return total
+
+    def step_execution_context(self):
+        """This flow's settings for the executor that runs the next step (ADR-015)."""
+        from weebot.application.models.step_execution_context import StepExecutionContext
+
+        return StepExecutionContext(
+            tools=self._tools,
+            harness_instruction_block=self._harness_instruction_block or None,
+            **self._step_settings,
+        )
+
+    def record_step_usage(self, usage: dict | None, skill_gaps: list | None) -> None:
+        """Add one step's token usage and skill gaps, as ExecuteStepHandler reports them."""
+        for key in self._step_token_usage:
+            self._step_token_usage[key] += int((usage or {}).get(key, 0) or 0)
+        self.step_skill_gaps.extend(skill_gaps or [])
 
     def _get_persistence_adapter(self):
         """Return the session persistence adapter injected at construction time.
