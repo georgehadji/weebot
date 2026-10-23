@@ -131,4 +131,4 @@ pytest-timeout==2.4.0
 hypothesis>=6.100
 
 # Linting (drives test_no_b006_violations in test_architecture_fitness.py)
-ruff>=0.8.0
+ruff>=0.16.10
