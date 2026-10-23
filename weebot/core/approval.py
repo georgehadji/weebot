@@ -13,6 +13,8 @@ import hashlib
 import json
 import logging
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from collections.abc import Callable, Coroutine, Mapping
@@ -129,6 +131,27 @@ def call_fingerprint(tool_name: str, arguments: Mapping[str, Any]) -> str:
     """
     canonical = json.dumps(dict(arguments), sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(f"{tool_name}\0{canonical}".encode()).hexdigest()
+
+
+# The tool whose current call a human approved at the guard chain (GuardedTool).
+# The shell tools re-run ExecApprovalPolicy themselves; without this they refused
+# the approved call as "requires user confirmation".
+_HUMAN_APPROVED_TOOL: ContextVar[str | None] = ContextVar("human_approved_tool", default=None)
+
+
+@contextmanager
+def human_approved_call(tool_name: str):
+    """Mark the call run inside this block as approved by a human."""
+    token = _HUMAN_APPROVED_TOOL.set(tool_name)
+    try:
+        yield
+    finally:
+        _HUMAN_APPROVED_TOOL.reset(token)
+
+
+def is_human_approved(tool_name: str) -> bool:
+    """True inside ``human_approved_call(tool_name)``."""
+    return _HUMAN_APPROVED_TOOL.get() == tool_name
 
 
 class ApprovalManager:

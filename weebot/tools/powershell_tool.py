@@ -13,6 +13,7 @@ from pydantic import ConfigDict, PrivateAttr
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.config.settings import WORKSPACE_ROOT as _WORKSPACE_ROOT
 from weebot.config.tool_config import ToolConfig
+from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -194,7 +195,7 @@ class PowerShellTool(BaseTool):
         approval = policy.evaluate(command)
         if not approval.approved:
             return ToolResult(output="", error=f"Command denied by policy: {approval.reason}")
-        if approval.requires_confirmation:
+        if approval.requires_confirmation and not is_human_approved(self.name):
             return ToolResult(
                 output="", error=f"Command requires confirmation: {approval.undo_hint}"
             )

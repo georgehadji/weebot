@@ -163,6 +163,8 @@ class ApprovalPolicyAdapter:
 
     def check(self, tool_name: str, args: Mapping[str, Any]) -> GuardVerdict | None:
         command = _shell_command(tool_name, args)
+        if command is None and tool_name == "python_execute" and args.get("code"):
+            command = str(args["code"])  # python_execute runs the same policy on its code
         if command is None:
             return None
         result = self._policy.evaluate(command)
@@ -430,6 +432,10 @@ class GuardedTool(BaseTool):
             refused = await self._resolve_ask(kwargs, result)
             if refused is not None:
                 return refused
+            from weebot.core.approval import human_approved_call
+
+            with human_approved_call(self._inner.name):
+                return await self._inner.execute(**kwargs)
         return await self._inner.execute(**kwargs)
 
     async def _resolve_ask(self, kwargs: dict[str, Any], result: ChainResult) -> ToolResult | None:
