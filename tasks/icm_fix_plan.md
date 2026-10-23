@@ -73,7 +73,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F51 | `design_system` runs `npm install -g skillui` on failure without asking; output not fenced. **Fixed 3c1ca3f5** | IntegrationTools | M |
 | F52 | Seven built-in skills ship only `manifest.json` and never load (incl. `multi_llm_orchestrator`, which root CLAUDE.md requires). **Fixed 8cc38eeb** | BuiltinSkills | M |
 | F53 | Tools in no role that skills tell the agent to use: `youtube_download`, `desktop_a11y`; also roleless `detect_elements`, `screenshot_ocr`, `ocr_structured`, `web_scraper`; `browser_navigator` is in roles but not a `BaseTool`, so never built. **Fixed 5da0014b** | BrowserTools | M |
-| F54 | Spending tools never ask: `apify_*` presets, `image_gen`, `video_gen`, `mixture_of_agents` match no outbound pattern | IntegrationTools | M |
+| F54 | Spending tools never ask: `apify_*` presets, `image_gen`, `video_gen`, `mixture_of_agents` match no outbound pattern. **Fixed ea833110** | IntegrationTools | M |
 | F55 | The web process has two DI containers (lifespan `Container()` vs `shared_container()`); sub-agent events miss the WebSocket broadcaster. **Fixed ce4f82fd** | WebAPI | M |
 | F56 | CLI, gateway and webhook flows run with no event bus (no domain events, no skill-gap subscription). **Fixed ce4f82fd, a4c81d54** | CLI | M |
 | F57 | `/api/webhook/run` with a `session_id` runs any stored session with no ownership check. **Fixed be6044c5** | WebAPI | M |
@@ -96,7 +96,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F74 | `camofox_browser` redirect check misses hostnames that resolve private; DNS failure counts as public. **Fixed 84fe44ef** | BrowserTools | M |
 | F75 | `computer_use` skips the `require_window` focus check silently when pygetwindow fails, then types. **Fixed 914e93d0** | BrowserTools | M |
 | F76 | Gateway `extract_media` attaches any absolute `.json/.yaml/.md/.txt/.csv` path named in a reply; email gateway authorizes on the `From` header. **Fixed 0170e5ba (attachments), 9b94e943 (email sender authentication)** | ChatGateways | M |
-| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **Fixed: `delete` 260e1b5c, cron_agent 2ac3672c; cancel/retry now say they act only in the running process (5c574b1b). Open: cancelling a CLI run from another process needs the flow to watch a stored flag** | CLI | M |
+| F77 | Dead CLI commands: `flow cancel`/`retry`/`undo` act on per-process state; `delete` deletes nothing; `cron_agent` overwrites an unreadable jobs file. **Fixed: `delete` 260e1b5c, cron_agent 2ac3672c; cancel/retry now say they act only in the running process (5c574b1b). Cross-process cancel 48bac27e** | CLI | M |
 | F78 | Personas with YAML frontmatter get the name `---` and overwrite each other's registry entry. **Fixed 574d991e** | Personas | M |
 | F79 | Low-severity notes (dead methods and ports, duplicated facts, swallowed exceptions, stale comments, timeout unit mismatch in `advanced_browser`, unclosed ApifyService sessions): listed in each card's Shape | (cards) | L |
 
