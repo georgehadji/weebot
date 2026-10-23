@@ -31,7 +31,9 @@ class PowerShellTool(BaseTool):
         f"Execute a PowerShell command on Windows 11. "
         f"Working directory / workspace root: {_WORKSPACE_ROOT}. "
         "Accepts optional 'timeout' in seconds (default: 30, max: 300). "
-        "Diagnostic shortcuts: system_info, processes, network_test, list_workspace."
+        "Diagnostic shortcuts: system_info, processes, network_test, list_workspace. "
+        "Run Python with the python_execute tool, not `python -c` here (inline scripts "
+        "need approval), and write file contents with file_editor."
     )
     parameters: dict = {
         "type": "object",

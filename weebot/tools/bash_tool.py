@@ -60,7 +60,9 @@ class BashTool(BaseTool):
         "Uses PowerShell on Windows (primary) or WSL2 bash (if use_wsl=True). "
         "Pass 'timeout' in seconds (default: 30, max: MAX_TOOL_TIMEOUT env, ceiling: 300). "
         "Dangerous commands are blocked by multi-layer security analysis. "
-        "Destructive commands require user confirmation."
+        "Destructive commands require user confirmation. "
+        "Run Python with the python_execute tool, not `python -c` here (inline scripts "
+        "need approval), and write file contents with file_editor."
     )
     parameters: dict = {
         "type": "object",

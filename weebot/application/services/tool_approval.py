@@ -264,13 +264,17 @@ def pending_result(request: ToolCallApproval) -> ToolResult:
 
 
 def denied_result(request: ToolCallApproval) -> ToolResult:
-    return ToolResult(
-        output="",
-        error=(
-            f"Tool call needs approval by {request.guard}: {request.reason}. No interactive "
-            "approval channel is available here; run it from the CLI or the web UI to approve."
-        ),
+    error = (
+        f"Tool call needs approval by {request.guard}: {request.reason}. No interactive "
+        "approval channel is available here; run it from the CLI or the web UI to approve."
     )
+    if "inline script" in request.reason.lower():
+        # Without a route the agent tried shape after shape (one task: 145 s).
+        error += (
+            " To run Python, use the python_execute tool, or write the script to a file"
+            " under Output/ and run that file; both run without approval."
+        )
+    return ToolResult(output="", error=error)
 
 
 def mark_tool_approval_pending(session: Any, event: Any) -> Any:
