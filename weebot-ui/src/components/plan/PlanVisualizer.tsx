@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import ReactFlow, {
   Node,
   Edge,
@@ -69,7 +69,7 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
 
   return (
     <div
-      className={`px-4 py-3 rounded-lg border-2 bg-white shadow-xs min-w-[200px] ${getBorderColor()}`}
+      className={`min-w-[200px] rounded-lg border-2 bg-card px-4 py-3 text-card-foreground shadow-xs ${getBorderColor()}`}
     >
       <div className="flex items-center gap-2">
         {getIcon()}
@@ -127,17 +127,11 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
     return edges;
   }, [steps]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  const onConnect = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (params: any) => setEdges((eds) => [...eds, params]),
-    [setEdges]
-  );
+  const [nodes, setNodes] = useNodesState(initialNodes);
+  const [edges] = useEdgesState(initialEdges);
 
   // Update nodes when steps change
-  useMemo(() => {
+  useEffect(() => {
     setNodes(
       steps.map((step, index) => ({
         id: step.id,
@@ -166,10 +160,10 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
         nodeTypes={nodeTypes}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
         fitView
         attributionPosition="bottom-right"
       >

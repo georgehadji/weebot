@@ -27,22 +27,34 @@ export function useSessionList() {
   const [error, setError] = useState<string | null>(null);
   const presence = useSessionPresence();
 
+  const refresh = async () => {
+    try {
+      const data = await api.sessions.list({ limit: "100" });
+      setSessions(data.sessions);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load sessions");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    api.sessions
-      .list({ limit: "100" })
-      .then((data) => {
+    const load = async () => {
+      try {
+        const data = await api.sessions.list({ limit: "100" });
         if (!cancelled) {
           setSessions(data.sessions);
           setError(null);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load sessions");
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -55,5 +67,5 @@ export function useSessionList() {
     [sessions, presence]
   );
 
-  return { sessions: liveSessions, loading, error };
+  return { sessions: liveSessions, loading, error, refresh };
 }

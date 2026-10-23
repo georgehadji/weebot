@@ -3,15 +3,14 @@
 /**
  * ConversationPane — the timeline + composer for one session.
  *
- * Fixes RC-7 (auto-scroll wrote to ScrollArea's non-scrolling Root
- * instead of its Viewport) via ScrollArea's new `viewportRef` prop, and
- * only auto-scrolls when the user was already at the bottom — so reading
- * scrollback while new events stream in doesn't get yanked away.
+ * Uses a native, explicitly overflowed timeline so every message remains
+ * reachable by mouse wheel, trackpad, keyboard, and touch. It only
+ * auto-scrolls when the operator was already at the bottom.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ArrowDown, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Composer, SessionLifecycleStatus } from "./Composer";
 import { EventRenderer } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
@@ -45,6 +44,7 @@ export function ConversationPane({
   });
   const viewportRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const addOptimisticMessage = (event: MessageEvent) => {
     setState((prev) => sessionReducer(prev, event));
@@ -59,6 +59,15 @@ export function ConversationPane({
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottomRef.current = distanceFromBottom < STICK_TO_BOTTOM_THRESHOLD_PX;
+    setShowJumpToLatest(!atBottomRef.current);
+  };
+
+  const jumpToLatest = () => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
+    atBottomRef.current = true;
+    setShowJumpToLatest(false);
   };
 
   useEffect(() => {
@@ -71,29 +80,49 @@ export function ConversationPane({
 
   return (
     <div className="flex h-full flex-col">
-      <ScrollArea className="flex-1" viewportRef={viewportRef}>
-        <div className="space-y-3 p-4" onScroll={handleScroll}>
-          {items.length === 0 ? (
-            <div className="flex h-full items-center justify-center py-16 text-sm text-muted-foreground">
-              {sessionId ? "Waiting for events…" : "Start a conversation below."}
-            </div>
-          ) : (
-            items.map((item) =>
-              item.kind === "gap" ? (
-                <GapMarkerRow key={item.key} droppedCount={item.droppedCount} />
-              ) : (
-                <EventRenderer key={item.event.id} event={item.event} />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={viewportRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          onScroll={handleScroll}
+          aria-label="Conversation messages"
+          tabIndex={0}
+        >
+          <div className="space-y-3 p-4">
+            {items.length === 0 ? (
+              <div className="flex h-full items-center justify-center py-16 text-sm text-muted-foreground">
+                {sessionId ? "Waiting for events…" : "Start a conversation below."}
+              </div>
+            ) : (
+              items.map((item) =>
+                item.kind === "gap" ? (
+                  <GapMarkerRow key={item.key} droppedCount={item.droppedCount} />
+                ) : (
+                  <EventRenderer key={item.event.id} event={item.event} />
+                )
               )
-            )
-          )}
-          {isRunning && (
-            <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Agent is working…</span>
-            </div>
-          )}
+            )}
+            {isRunning && (
+              <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Agent is working…</span>
+              </div>
+            )}
+          </div>
         </div>
-      </ScrollArea>
+        {showJumpToLatest && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
+            onClick={jumpToLatest}
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Jump to latest
+          </Button>
+        )}
+      </div>
 
       {isRunning && sessionId && <RunControls sessionId={sessionId} />}
 

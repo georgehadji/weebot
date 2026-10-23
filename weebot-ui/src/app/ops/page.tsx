@@ -101,7 +101,7 @@ export default function OpsPage() {
     const fetchActiveSessions = async () => {
       try {
         const result = await api.ops.activeSessions(20);
-        if (result.ok) setActiveSessions(result.data);
+        if (result.ok) setActiveSessions(result.data.sessions);
       } catch {
         // ignore
       }
@@ -257,14 +257,14 @@ export default function OpsPage() {
                 <div className="space-y-3">
                   {activeSessions.map((s) => (
                     <div
-                      key={s.id}
+                      key={s.session_id}
                       className="flex items-center justify-between p-3 rounded-lg border bg-card"
                     >
                       <div>
-                        <p className="font-mono text-sm font-medium">{s.id}</p>
+                        <p className="font-mono text-sm font-medium">{s.session_id}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {s.steps_completed}/{s.step_count} steps · {s.tool_calls} tool calls ·{" "}
-                          {s.event_count} events
+                          {s.elapsed_events} events
                         </p>
                       </div>
                       <Badge
@@ -377,8 +377,9 @@ function PlanVizTab() {
     try {
       const result = await api.ops.planViz(sessionId.trim());
       if (result.ok) {
+        const plan = result.data.plan;
         setPlanData({
-          nodes: result.data.nodes.map((n) => ({
+          nodes: (plan?.nodes ?? []).map((n) => ({
             id: n.id,
             description: n.label,
             status: (n.status as StepStatus) || "pending",

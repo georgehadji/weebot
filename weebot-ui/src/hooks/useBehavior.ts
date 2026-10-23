@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ENDPOINTS } from "@/lib/endpoints";
-import { authHeaders, withToken } from "@/lib/api";
+import { authHeaders, getApiBase, withToken } from "@/lib/api";
 
 
 export interface BehaviorEvent {
@@ -34,6 +34,15 @@ interface UseBehaviorReturn {
   recentActions: RecentAction[];
   sendPing: () => void;
   refreshTrust: () => void;
+}
+
+interface UseBehaviorRestReturn {
+  trustScore: TrustScore | null;
+  recentActions: RecentAction[];
+  isLoading: boolean;
+  isUnavailable: boolean;
+  refreshAll: () => Promise<void>;
+  markOverride: (timestamp: string, reason: string) => Promise<boolean>;
 }
 
 export interface RecentAction {
@@ -113,8 +122,12 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
         }
       };
 
-      ws.onerror = (e) => {
-        console.error("[Behavior] WebSocket error:", e);
+      ws.onerror = () => {
+        // Browsers deliberately expose no useful detail for WebSocket errors.
+        // `onclose` below moves the panel into its REST polling fallback and
+        // retries in the background, so logging an opaque `{}` only creates
+        // a false-alarm developer overlay for the operator.
+        setIsConnected(false);
       };
 
       ws.onclose = () => {
@@ -164,46 +177,53 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
 }
 
 // Hook for REST API fallback
-const API_URL = ENDPOINTS.api;
-
 export function useBehaviorREST(sessionId?: string) {
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recentActions, setRecentActions] = useState<RecentAction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUnavailable, setIsUnavailable] = useState(false);
 
   const fetchTrust = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/behavior/trust`, { headers: authHeaders() });
+      const res = await fetch(`${getApiBase()}/behavior/trust`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setTrustScore(data);
+        setIsUnavailable(false);
+      } else {
+        setIsUnavailable(true);
       }
-    } catch (e) {
-      console.error("[Behavior] Failed to fetch trust:", e);
+    } catch {
+      // This is the expected fallback path while the local backend is
+      // starting, stopped, or unreachable. Surface it as UI state rather
+      // than repeatedly triggering the development error overlay.
+      setIsUnavailable(true);
     }
   }, []);
 
   const fetchRecent = useCallback(async (count = 10) => {
     try {
-      const url = new URL(`${API_URL}/behavior/recent`);
-      url.searchParams.set("count", String(count));
+      const params = new URLSearchParams({ count: String(count) });
       if (sessionId) {
-        url.searchParams.set("session_id", sessionId);
+        params.set("session_id", sessionId);
       }
       
-      const res = await fetch(url.toString(), { headers: authHeaders() });
+      const res = await fetch(`${getApiBase()}/behavior/recent?${params}`, { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setRecentActions(data);
+        setIsUnavailable(false);
+      } else {
+        setIsUnavailable(true);
       }
-    } catch (e) {
-      console.error("[Behavior] Failed to fetch recent:", e);
+    } catch {
+      setIsUnavailable(true);
     }
   }, [sessionId]);
 
   const markOverride = useCallback(async (timestamp: string, reason: string) => {
     try {
-      const res = await fetch(`${API_URL}/behavior/override`, {
+      const res = await fetch(`${getApiBase()}/behavior/override`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ timestamp, reason })
@@ -244,7 +264,8 @@ export function useBehaviorREST(sessionId?: string) {
     trustScore,
     recentActions,
     isLoading,
+    isUnavailable,
     refreshAll,
     markOverride
-  };
+  } satisfies UseBehaviorRestReturn;
 }

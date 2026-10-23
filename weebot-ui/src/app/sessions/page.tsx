@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { Plus, RefreshCw, Trash2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -110,11 +111,9 @@ export default function SessionsPage() {
           <Button variant="outline" size="icon" onClick={loadSessions} aria-label="Refresh sessions">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Link href="/">
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              New Session
-            </Button>
+          <Link href="/" className={cn(buttonVariants(), "gap-2")}>
+            <Plus className="h-4 w-4" />
+            New Session
           </Link>
         </div>
       </div>
@@ -138,8 +137,8 @@ export default function SessionsPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <p className="mb-4">No sessions yet</p>
-                <Link href="/">
-                  <Button>Create your first session</Button>
+                <Link href="/" className={buttonVariants()}>
+                  Create your first session
                 </Link>
               </CardContent>
             </Card>

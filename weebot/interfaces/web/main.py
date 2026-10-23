@@ -573,6 +573,10 @@ def create_app() -> FastAPI:
         )
 
     # Include routers
+    # Operations routes must precede the general ``/sessions/{session_id}``
+    # route. Otherwise FastAPI interprets ``/sessions/active`` as a session
+    # ID and the active-sessions dashboard can never resolve.
+    app.include_router(ops_router)
     app.include_router(sessions_router, prefix="/api")
     app.include_router(models_router, prefix="/api")
     app.include_router(health_router, prefix="/api")
@@ -584,7 +588,6 @@ def create_app() -> FastAPI:
     app.include_router(discord_router)
     app.include_router(slack_router)
     app.include_router(whatsapp_router)
-    app.include_router(ops_router)
     app.include_router(ponytail_router, prefix="/api")
 
     # Metrics endpoint — Prometheus scrape target

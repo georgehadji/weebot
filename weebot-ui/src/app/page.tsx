@@ -9,19 +9,19 @@
  * sent. This renders a usable composer with zero clicks.
  */
 
-import { useRouter } from "next/navigation";
 import { ConsoleShell } from "@/components/shell/ConsoleShell";
 import { ConversationPane } from "@/components/conversation/ConversationPane";
 
 export default function Home() {
-  const router = useRouter();
-
   return (
     <ConsoleShell title="New conversation">
       <ConversationPane
         sessionId={null}
         status="none"
-        onSessionCreated={(id) => router.push(`/sessions/${id}`)}
+        // A hard navigation is deliberate: Next's router can be unavailable
+        // during a Turbopack hot-reload while the first session is created.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        onSessionCreated={(id) => window.location.assign(`/sessions/${id}`)}
       />
     </ConsoleShell>
   );

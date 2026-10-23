@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { PanelLeft, PanelRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SessionRail } from "./SessionRail";
@@ -29,16 +28,16 @@ export function ConsoleShell({ title, isConnected, dock, children }: ConsoleShel
   const [railOpen, setRailOpen] = useState(false);
   const [dockOpen, setDockOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const router = useRouter();
   const { toggleTheme } = useTheme();
+  const navigate = (path: string) => window.location.assign(path);
 
   useRegisterCommands([
-    { id: "nav.new-session", title: "New conversation", shortcut: "⌘N", run: () => router.push("/") },
-    { id: "nav.sessions", title: "Go to Sessions", run: () => router.push("/sessions") },
-    { id: "nav.ops", title: "Go to Ops", run: () => router.push("/ops") },
-    { id: "nav.models", title: "Go to Models", run: () => router.push("/models") },
-    { id: "nav.behavior", title: "Go to Behavior", run: () => router.push("/behavior") },
-    { id: "nav.settings", title: "Go to Settings", run: () => router.push("/settings") },
+    { id: "nav.new-session", title: "New conversation", shortcut: "⌘N", run: () => navigate("/") },
+    { id: "nav.sessions", title: "Go to Sessions", run: () => navigate("/sessions") },
+    { id: "nav.ops", title: "Go to Ops", run: () => navigate("/ops") },
+    { id: "nav.models", title: "Go to Models", run: () => navigate("/models") },
+    { id: "nav.behavior", title: "Go to Behavior", run: () => navigate("/behavior") },
+    { id: "nav.settings", title: "Go to Settings", run: () => navigate("/settings") },
     { id: "theme.toggle", title: "Toggle light/dark theme", run: toggleTheme },
   ]);
 

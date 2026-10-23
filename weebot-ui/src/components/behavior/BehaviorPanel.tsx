@@ -51,6 +51,11 @@ export function BehaviorPanel({
             </span>
           ) : isLoading ? (
             <span className="text-[11px] text-muted-foreground">Loading...</span>
+          ) : rest.isUnavailable ? (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-idle" />
+              Unavailable
+            </span>
           ) : (
             <span className="flex items-center gap-1 text-[11px] text-status-waiting">
               <span className="h-1.5 w-1.5 rounded-full bg-status-waiting" />

@@ -58,6 +58,19 @@ const BASE_RECONNECT_DELAY_MS = 1000;
 
 const EventStreamContext = createContext<EventStreamContextValue | null>(null);
 
+/** Avoid browser noise when React Strict Mode tears down a socket mid-handshake. */
+function closeSocketAfterOpen(socket: WebSocket | null): void {
+  if (!socket) return;
+  if (socket.readyState === WebSocket.CONNECTING) {
+    socket.onopen = () => socket.close();
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    return;
+  }
+  if (socket.readyState === WebSocket.OPEN) socket.close();
+}
+
 function getWsToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -95,7 +108,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
   const closeSessionConnection = useCallback((sessionId: string, conn: SessionConnection) => {
     if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer);
-    conn.ws?.close();
+    closeSocketAfterOpen(conn.ws);
     conn.sseController?.abort();
     conn.ws = null;
     conn.sseController = null;
@@ -276,7 +289,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
         presenceListeners.current.delete(listener);
         if (presenceListeners.current.size === 0) {
           if (presenceTimerRef.current) clearTimeout(presenceTimerRef.current);
-          presenceWsRef.current?.close();
+          closeSocketAfterOpen(presenceWsRef.current);
           presenceWsRef.current = null;
         }
       };
@@ -288,7 +301,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
     const connections = sessionConnections.current;
     return () => {
       connections.forEach((conn, id) => closeSessionConnection(id, conn));
-      presenceWsRef.current?.close();
+      closeSocketAfterOpen(presenceWsRef.current);
     };
   }, [closeSessionConnection]);
 

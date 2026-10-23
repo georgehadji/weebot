@@ -1,6 +1,7 @@
 import { AgentEvent, ModelInfo, Session } from "@/types/events";
 
-function getApiBase(): string {
+/** Same-origin API base by default; respects an explicitly configured backend. */
+export function getApiBase(): string {
   if (typeof window === "undefined") return "/api";
   try {
     const configured = localStorage.getItem("weebot_backend_url")?.trim();
@@ -79,26 +80,36 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export interface PlanVizData {
-  plan_status: string;
-  nodes: { id: string; label: string; status: string; result?: string }[];
-  edges: { source: string; target: string }[];
+  session_id: string;
+  plan: {
+    status: string;
+    nodes: { id: string; label: string; status: string; result?: string }[];
+    edges: { from: string; to: string }[];
+  } | null;
 }
 
 export interface CostSummaryData {
-  total_decisions: number;
-  total_cost_usd: number;
-  avg_latency_ms: number;
-  cascade_hit_rate: number;
-  tiers: Record<string, { success: number; failure: number; circuit_open: number }>;
+  /** Mirrors EventStorePort.get_cost_window() exactly. */
+  total_cost: number;
+  total_tokens: number;
+  calls: number;
+  by_model: Record<string, { cost: number; tokens: number; calls: number }>;
+  window_hours: number;
 }
 
 export interface ActiveSession {
-  id: string;
+  session_id: string;
   status: string;
   step_count: number;
   steps_completed: number;
   tool_calls: number;
-  event_count: number;
+  elapsed_events: number;
+}
+
+export interface ActiveSessionsData {
+  sessions: ActiveSession[];
+  total: number;
+  limit: number;
 }
 
 export const api = {
@@ -182,7 +193,7 @@ export const api = {
 
   ops: {
     activeSessions: (limit?: number) =>
-      fetchApi<{ ok: boolean; data: ActiveSession[] }>(
+      fetchApi<{ ok: boolean; data: ActiveSessionsData }>(
         `/sessions/active${limit ? `?limit=${limit}` : ""}`
       ),
 

@@ -13,12 +13,14 @@ interface ScrollAreaProps extends ScrollAreaPrimitive.Root.Props {
    * read/drive scroll position (e.g. "stick to bottom" chat panes).
    */
   viewportRef?: React.Ref<HTMLDivElement>
+  /** Handler for the element that actually scrolls, rather than the Root wrapper. */
+  onViewportScroll?: React.UIEventHandler<HTMLDivElement>
 }
 
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps
->(function ScrollArea({ className, children, viewportRef, ...props }, ref) {
+>(function ScrollArea({ className, children, viewportRef, onViewportScroll, ...props }, ref) {
   return (
     <ScrollAreaPrimitive.Root
       ref={ref}
@@ -28,6 +30,7 @@ const ScrollArea = React.forwardRef<
     >
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
+        onScroll={onViewportScroll}
         data-slot="scroll-area-viewport"
         className="size-full rounded-[inherit] transition-[color,box-shadow] outline-hidden focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >

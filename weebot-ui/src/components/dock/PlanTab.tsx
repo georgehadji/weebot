@@ -31,8 +31,9 @@ export function PlanTab({ sessionId }: PlanTabProps) {
       .then((result) => {
         if (cancelled) return;
         if (result.ok) {
+          const plan = result.data.plan;
           setNodes(
-            result.data.nodes.map((n) => ({
+            (plan?.nodes ?? []).map((n) => ({
               id: n.id,
               description: n.label,
               status: (n.status as StepStatus) || "pending",
