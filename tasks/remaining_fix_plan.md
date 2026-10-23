@@ -332,7 +332,7 @@ Independent of C-E; it can go anywhere after A.
 - **Decision models (2026-10-23):** where a decision API such as Perplexity Decisions could replace chat calls: [tasks/audits/decision_models_2026_10_23.md](audits/decision_models_2026_10_23.md). Not adopted; no key or A/B yet.
 
 ### SSOT pass (2026-10-23)
-User request: "Make sure the ssot principal holds in the project". Audit and per-row status: `tasks/audits/ssot_audit_2026_10_23.md`. Every row is done or deferred with its reason; none open. Deferred: 12 (agree at runtime), 14 (tools differ on purpose), 20 (name collision, not a duplicated fact), parts of 9, 16, 24, 25, 29. One decision for the user: `WEEBOT_VISION_REFLECTION` defaults on and doubles image tokens.
+User request: "Make sure the ssot principal holds in the project". Audit and per-row status: `tasks/audits/ssot_audit_2026_10_23.md`. Every row is done or deferred with its reason; none open. Deferred: 12 (agree at runtime), 14 (tools differ on purpose), 20 (name collision, not a duplicated fact), parts of 9, 16, 24, 25, 29. `WEEBOT_VISION_REFLECTION` now defaults off (it doubled image tokens); `=1` turns it on.
 
 ### Wave G (optional): map the uncovered clusters
 Cards for the other tools, interfaces, browser and domain clusters, following `map/_meta/schema.md`. Each defect found becomes a new F row and a task here. Size depends on how many clusters you want covered.
