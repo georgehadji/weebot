@@ -166,6 +166,20 @@ _EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
 )
 
 
+def _merge_middleware_result(result: ToolResult, mw: Any) -> ToolResult:
+    """The tool result with middleware's output (and error, if it set one).
+
+    Built with ``dataclasses.replace``: ``is_error`` is a property, so passing it
+    to ``ToolResult(...)`` raised TypeError, and data/metadata were dropped (F64).
+    """
+    import dataclasses
+
+    error = mw.error or result.error
+    if mw.is_error and not error:
+        error = "Tool output rejected by middleware"
+    return dataclasses.replace(result, output=mw.output, error=error, success=error is None)
+
+
 def _load_executor_system_prompt() -> str:
     """Load the executor system prompt from the package or filesystem.
 
@@ -952,12 +966,7 @@ class ExecutorAgent:
                     )
                     # If middleware modified the output, update the result
                     if _mw_result.output != (result.output or ""):
-                        result = ToolResult(
-                            output=_mw_result.output,
-                            error=_mw_result.error or result.error,
-                            is_error=_mw_result.is_error or result.is_error,
-                            base64_image=result.base64_image,
-                        )
+                        result = _merge_middleware_result(result, _mw_result)
 
                 yield ToolEvent(
                     tool_call_id=tc["id"],
