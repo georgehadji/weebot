@@ -112,3 +112,29 @@ def test_a_literal_path_variable_inside_output_is_followed(command):
 )
 def test_a_variable_that_is_not_a_single_safe_literal_still_asks(command):
     assert _asks(command), command
+
+
+# Seen under enforce (2026-10-23): the delete sits in an existence guard.
+@pytest.mark.parametrize(
+    "command",
+    [
+        rf'$dst = "{_W}\Output\observe\zipme.zip"; '
+        r"if (Test-Path $dst) { Remove-Item $dst -Force }; "
+        r"Compress-Archive -Path Output/observe/zipme -DestinationPath $dst -Force",
+        r"if(Test-Path Output/x.zip){Remove-Item Output/x.zip -Force}",
+    ],
+)
+def test_an_existence_guarded_cmdlet_inside_output_is_auto_approved(command):
+    assert not _asks(command), command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        r"if (Test-Path Output/x) { Remove-Item README.md }",  # body outside Output/
+        r"if (Set-Content README.md x) { Remove-Item Output/x }",  # condition writes
+        r"if (Test-Path Output/x) { Remove-Item Output/x; Remove-Item README.md }",  # two cmdlets
+    ],
+)
+def test_a_guard_that_hides_anything_else_still_asks(command):
+    assert _asks(command), command

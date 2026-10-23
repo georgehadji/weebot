@@ -415,8 +415,20 @@ def _in_output(path: str) -> bool:
     return head.lower() == "output" and bool(rest)
 
 
+_IF_GUARD = re.compile(
+    r"^if\s*\(\s*test-path\s+(?P<path>\"[^\"]*\"|'[^']*'|[^\s(){}]+)\s*\)\s*\{\s*(?P<body>[^{}]+?)\s*\}$",
+    re.IGNORECASE,
+)
+
+
 def _output_scoped(segment: str) -> bool:
-    """A file cmdlet whose every path argument is inside Output/ (fail closed)."""
+    """A file cmdlet whose every path argument is inside Output/ (fail closed).
+
+    `if (Test-Path <p>) { <cmdlet> }` counts when <p> and the one cmdlet do.
+    """
+    guard = _IF_GUARD.match(segment.strip())
+    if guard:
+        return _in_output(guard.group("path")) and _output_scoped(guard.group("body"))
     try:
         tokens = shlex.split(segment, posix=False)
     except ValueError:
@@ -490,12 +502,19 @@ def _inline_literal_vars(segments: list[str]) -> list[str]:
     if not safe:
         return segments
 
-    def _sub(match: re.Match) -> str:
-        return safe.get(match.group(1).lower(), match.group(0))
+    def _inline(segment: str) -> str:
+        def _sub(match: re.Match) -> str:
+            value = safe.get(match.group(1).lower())
+            if value is None:
+                return match.group(0)
+            # Bare `$dst` becomes a quoted literal, so a path with spaces
+            # stays one argument; inside "..." it is spliced as is.
+            inside_quotes = segment[: match.start()].count('"') % 2 == 1
+            return value if inside_quotes else f'"{value}"'
 
-    return [
-        s if _ASSIGN.match(s) else re.sub(r"\$(\w+)\b(?!:)", _sub, s) for s in segments
-    ]
+        return re.sub(r"\$(\w+)\b(?!:)", _sub, segment)
+
+    return [s if _ASSIGN.match(s) else _inline(s) for s in segments]
 
 
 def split_segments(command: str) -> list[str]:
