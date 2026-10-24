@@ -42,6 +42,9 @@ class MemoryEventStore(EventStorePort):
             if r["session_id"] == session_id and (event_type is None or r["event_type"] == event_type)
         ]
 
+    async def count_events(self, session_ids):  # pragma: no cover - unused
+        return {sid: sum(r["session_id"] == sid for r in self.rows) for sid in session_ids}
+
     async def get_cost_summary(self, session_id):  # pragma: no cover - unused
         return {}
 

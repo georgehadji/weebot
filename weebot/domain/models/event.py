@@ -73,6 +73,7 @@ class ToolEvent(BaseEvent):
     function_args: dict[str, Any] = Field(default_factory=dict)
     status: ToolStatus = Field(default=ToolStatus.CALLING)
     result: str | None = Field(default=None)
+    is_error: bool = Field(default=False)
     artifact: Any | None = Field(default=None)
 
 

@@ -1075,6 +1075,7 @@ class ExecutorAgent:
                     function_args=event_args,
                     status=ToolStatus.CALLED,
                     result=str(result),
+                    is_error=bool(result.is_error),
                 )
 
                 if result.data:

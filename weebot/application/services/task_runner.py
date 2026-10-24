@@ -279,7 +279,14 @@ class TaskRunner:
             run_prompt = prompt if prompt is not None else session.context.get("last_prompt", "")
             async for event in flow.run(run_prompt):
                 session = session.add_event(event)
+                # The planner's title replaces the one derived from the prompt, and the
+                # rail learns of it through the presence event published below.
+                new_title = getattr(event, "title", "") if event.type == "title" else ""
+                if new_title and new_title != session.title:
+                    session = session.set_title(new_title)
                 await self._state_repo.save_session(session)
+                if new_title:
+                    await self._publish_presence(session)
                 # Only publish from the runner when the flow has no event_bus of its
                 # own.  When the flow carries an event_bus (the DI container always
                 # provides one), flow._emit() already published the event; publishing

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -214,6 +215,23 @@ class AsyncEventStore(EventStorePort):
                 (session_id,),
             )
         return [self._row_to_event(r).to_dict() for r in rows]
+
+    async def count_events(self, session_ids: Sequence[str]) -> dict[str, int]:
+        """Number of stored events per session (one grouped query per 500 ids)."""
+        counts = {sid: 0 for sid in session_ids}
+        pool = await self._get_pool()
+        ids = list(counts)
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            marks = ",".join("?" * len(chunk))
+            rows = await pool.execute_read(
+                f"SELECT session_id, COUNT(*) AS n FROM events "  # noqa: S608 - marks only
+                f"WHERE session_id IN ({marks}) GROUP BY session_id",
+                tuple(chunk),
+            )
+            for row in rows:
+                counts[row["session_id"]] = row["n"]
+        return counts
 
     async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
         """Get cost summary for a session."""

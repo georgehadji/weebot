@@ -7,8 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.services.session_title import derive_session_title
 from weebot.interfaces.web.auth import (
     get_current_user_id,
     require_mutation_identity,
@@ -33,25 +35,54 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
     return container.get(StateRepositoryPort)
 
 
-def _session_to_response(session: Session) -> SessionResponse:
-    """Convert Session domain model to API response."""
+def _displayed_title(session: Session, context: dict[str, Any]) -> str | None:
+    """The one place that decides the title: the stored one, else one derived from the prompt."""
+    if session.title:
+        return session.title
+    prompt = context.get("original_task") or context.get("last_prompt") or ""
+    return derive_session_title(str(prompt)) or None
+
+
+def _session_to_response(session: Session, event_count: int = 0) -> SessionResponse:
+    """Convert Session domain model to API response.
+
+    *event_count* comes from the event store (``EventStorePort.count_events``): the events live
+    there, not on the ``Session`` row, so ``len(session.events)`` was always 0.
+    """
+    # SessionResponse.context is a dict; the model made every POST a 500.
+    # A dict also occurs: model_copy(update=...) skips validation.
+    context = (
+        session.context
+        if isinstance(session.context, dict)
+        else session.context.model_dump(mode="json")
+    )
     return SessionResponse(
         id=session.id,
         user_id=session.user_id,
         agent_id=session.agent_id,
         status=session.status.value,
-        title=session.title,
-        # SessionResponse.context is a dict; the model made every POST a 500.
-        # A dict also occurs: model_copy(update=...) skips validation.
-        context=(
-            session.context
-            if isinstance(session.context, dict)
-            else session.context.model_dump(mode="json")
-        ),
+        title=_displayed_title(session, context),
+        context=context,
         created_at=session.created_at,
         updated_at=session.updated_at,
-        event_count=len(session.events),
+        event_count=event_count,
     )
+
+
+async def _event_counts(request: Request, session_ids: list[str]) -> dict[str, int]:
+    """Event counts for *session_ids* in one store call; 0 for all if no store is wired."""
+    try:
+        store = request.app.state.container.get(EventStorePort)
+        return await store.count_events(session_ids)
+    except Exception:
+        logger.warning("event counts unavailable", exc_info=True)
+        return {}
+
+
+async def _respond(request: Request, session: Session) -> SessionResponse:
+    """`_session_to_response` for one session, with its event count."""
+    counts = await _event_counts(request, [session.id])
+    return _session_to_response(session, counts.get(session.id, 0))
 
 
 @router.get("", response_model=SessionListResponse)
@@ -69,7 +100,10 @@ async def list_sessions(
     )
     total = await state_repo.count_sessions(user_id=effective_user)
 
-    return SessionListResponse(sessions=[_session_to_response(s) for s in sessions], total=total)
+    counts = await _event_counts(http_request, [s.id for s in sessions])
+    return SessionListResponse(
+        sessions=[_session_to_response(s, counts.get(s.id, 0)) for s in sessions], total=total
+    )
 
 
 @router.post("", response_model=SessionResponse)
@@ -94,13 +128,14 @@ async def create_session(
         id=body.session_id or str(uuid.uuid4()),
         user_id=current_user,
         agent_id=body.agent_id,
+        title=derive_session_title(body.prompt) or None,
         context=context,
     )
 
     await state_repo.save_session(session)
     logger.info("Created session %s", session.id)
 
-    return _session_to_response(session)
+    return await _respond(http_request, session)
 
 
 @router.get("/search")
@@ -140,7 +175,7 @@ async def get_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    return _session_to_response(session)
+    return await _respond(http_request, session)
 
 
 @router.get("/{session_id}/events")
@@ -221,7 +256,7 @@ async def cancel_session(
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     logger.info("Cancelled session %s", session_id)
-    return _session_to_response(session)
+    return await _respond(http_request, session)
 
 
 @router.post("/{session_id}/resume", response_model=SessionResponse)
@@ -250,7 +285,7 @@ async def resume_session(
     # no flow running (found in plan B2c).
     result = await _dispatch_input(http_request, session, request.answer, state_repo)
     logger.info("Resumed session %s", session_id)
-    return _session_to_response(result.session)
+    return await _respond(http_request, result.session)
 
 
 @router.post("/{session_id}/run", response_model=SessionResponse)
@@ -316,7 +351,7 @@ async def run_session(
         raise HTTPException(status_code=500, detail="Failed to start task") from None
 
     logger.info("Started background task for session %s", session_id)
-    return _session_to_response(session)
+    return await _respond(http_request, session)
 
 
 @router.post("/{session_id}/steer")
@@ -388,7 +423,7 @@ async def send_session_input(
         client_msg_id=request.client_msg_id,
     )
     logger.info("Dispatched %s input for session %s", result.verb, session_id)
-    return {"verb": result.verb, "session": _session_to_response(result.session)}
+    return {"verb": result.verb, "session": await _respond(http_request, result.session)}
 
 
 async def _dispatch_input(
