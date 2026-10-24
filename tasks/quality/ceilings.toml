@@ -22,6 +22,20 @@
 # These numbers may only go DOWN. Lower one in the same commit that removes
 # the debt.
 
+# Floors are the mirror image: a number that may only go UP. Coverage is the
+# only one. A floor fails below the number and passes above it (coverage moves
+# with the environment, so exact equality would flap); `--verify-not-raised`
+# fails a pull request that lowers one. Keep this table ABOVE [ceilings]: new
+# ceilings are appended at the end of the file and must land under [ceilings].
+[floors]
+
+# Unit-test line coverage of weebot/, in percent (pytest --cov, tests/unit).
+# Measured 65.12% on 2026-10-24 (6264 tests, local venv, after the remediation's own
+# tests; 62.26% before them). The floor is 64, one point under the measurement,
+# because CI skips and runs a few tests differently. It used to be a literal
+# --cov-fail-under=52 in architecture.yml.
+unit_coverage_floor = 64
+
 [ceilings]
 
 # Handlers whose body is exactly `pass` or `...`, by AST.
@@ -52,11 +66,20 @@
 # workflow_orchestrator (F49).
 # 117 -> 116: computer_use's advisory focus check now refuses (F75).
 # 116 -> 115: the dead browser-pool shutdown hook in web/main.py (F72).
-silent_except_handlers = 115
+# 115 -> 113 with plan 1.2 (SEC-2): web/auth.py's two copies of the key check
+# swallowed a failed touch_last_used with `except Exception: pass`; the one
+# shared resolver logs it.
+# 113 -> 112 with plan 1.3 (CON-1): bash_tool's `except RuntimeError: pass` around
+# get_running_loop() went with the loop lookup; execute() is a coroutine, so a
+# loop is always running there.
+silent_except_handlers = 112
 
 # Blocking calls inside `async def`.
+# 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
+# read_text/write_text methods were false positives); 25 -> 0: every remaining
+# site is wrapped in asyncio.to_thread. At 0 this is a ban, like un-awaited coroutines.
 # Measured by: scripts/lint_async_io.py
-blocking_io_in_async = 29
+blocking_io_in_async = 0
 
 # print() in production code (weebot/, cli/), excluding tests.
 # 143 -> 105 with phase 2.1: 38 of them were in three modules nothing imported
@@ -100,7 +123,8 @@ bare_env_reads = 71
 # 58 -> 56: the same two save_sync handlers (F49).
 # 56 -> 55: the same handler (F75).
 # 55 -> 54: the same handler (F72).
-bandit_b110 = 54
+# 54 -> 52: the same two web/auth.py handlers as silent_except_handlers 115 -> 113.
+bandit_b110 = 52
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -223,8 +247,17 @@ unregistered_di_keys = 0
 # the lifespan container on app.state, so it no longer imports application.di.
 # 75 -> 73 with W5.3 batch 4: interfaces.cli.agent_runner and
 # interfaces.gateways.base no longer import application.di.
+# 73 -> 72 with plan 1.2 (SEC-2): web/auth.py resolves keys through ApiKeyPort
+# and core/api_key_crypto.py, so it no longer imports the SQLite key store.
 # Measured by: scripts/lint_import_exemptions.py
-import_exemptions = 73
+# 72 -> 64 with plan Phase 3: 3.1 (-4: infrastructure imports the domain BaseTool,
+# not the tools package) and 3.5 (-4: core/agent.py deleted, D3).
+# 64 -> 63 with plan 3.7: application.di -> interfaces.** is gone (the DI flow builder
+# no longer imports the interfaces layer).
+# 63 -> 62 with plan 3.2: the registry's Playwright, tool_discovery's and templates'
+# tool_registry exemptions are gone; interfaces/factories gains flow_builder and the
+# registry (its hidden dynamic imports became visible).
+import_exemptions = 62
 
 # Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
 # (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
@@ -274,4 +307,44 @@ settings_construction = 0
 # container (harness db_path/model, skillopt), is a separate entry point
 # (web lifespan, run_mcp.py, the shared root itself) or is ADR-009 legacy.
 # 9 -> 8: the web lifespan uses shared_container() (F55).
-container_construction = 8
+# 8 -> 7 with plan 3.5: core/agent.py's hand-built Container() went with the file.
+container_construction = 7
+
+# Import cycles between modules of weebot/ (Tarjan SCC, AST, TYPE_CHECKING
+# excluded, lazy imports and literal import_module targets included). Three
+# when added: flows/states (8 modules), application.di <-> interfaces (3), and
+# the templates package (3). import-linter checks layers, not loops inside one.
+# Measured by: scripts/lint_module_cycles.py
+# 3 -> 2 with plan 3.8: templates stops importing its own package back.
+# 2 -> 1 with plan 3.6: flow states name successors by StateId through the registry
+# in states/base.py; no state imports a sibling, so the 8-module cycle is gone.
+# 1 -> 0 with plan 3.7: application.di no longer imports interfaces.factories/agent_runner.
+module_cycles = 0
+
+# Literal importlib.import_module("weebot.…") / __import__ targets. Each hides
+# an edge from import-linter. 19 by AST; the audit's grep said 18.
+# Measured by: scripts/lint_import_exemptions.py
+# 19 -> 18 with plan 3.7: flow_builder imports ChatFlow statically.
+# 18 -> 15 with plan 3.2: interfaces/factories imports the registry, BaseTool and
+# ToolCollection statically from application/domain.
+dynamic_weebot_imports = 15
+
+# Functions longer than 150 lines in weebot/ (AST, def line to last line).
+# 28 when added; ExecutorAgent.execute_step (558), ExecutingState.execute (512)
+# and PlanActFlow.run (282) are the god methods the Sep plan's section 4.3 owns.
+# Measured by: scripts/lint_long_functions.py
+functions_over_150_lines = 28
+
+# Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
+# CI's blocking selector is F821,E9 only; this catches growth in the rest.
+# Fragile to ruff upgrades (0.17.2 when added); the script prints the version.
+# Measured by: scripts/lint_ruff_violations.py
+# 743 -> 741 with plan 1.2: the two SIM105 try/except/pass blocks in web/auth.py.
+ruff_violations = 741
+
+# Container bindings registered under a string literal (untyped at every use).
+# 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in
+# weebot/application/di/keys.py with plan 2.1/2.4 (43). Migrate the rest as they
+# are touched; each Key replaces every use of its string in one change.
+# Measured by: scripts/lint_di_wiring.py
+string_di_keys = 43

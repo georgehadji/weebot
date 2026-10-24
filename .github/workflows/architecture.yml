@@ -49,6 +49,20 @@ jobs:
         # while the log reported one. There is no legitimate instance to
         # grandfather, so the ceiling is zero.
         run: make lint-unawaited
+      - name: print() ratchet
+        # BLOCKING above the ceiling. In `make check` but was missing here (CI-1).
+        run: make lint-no-print
+      - name: map/ and tasks/ indexes generated, citations resolve
+        # BLOCKING. In `make check` but was missing here (CI-1).
+        run: make lint-map
+      - name: Module-cycle ratchet
+        # BLOCKING. import-linter checks layers, not loops inside one layer.
+        run: make lint-module-cycles
+      - name: Ruff violation ratchet
+        # BLOCKING above the ceiling. The step above this block selects only F821,E9.
+        run: make lint-ruff
+      - name: Long-function ratchet
+        run: make lint-long-functions
       - name: Entry-file twins match CLAUDE.md
         # BLOCKING. AGENTS.md, GEMINI.md and QWEN.md are generated from
         # CLAUDE.md; fix a failure with `make gen-entry-twins`, never by
@@ -168,7 +182,8 @@ jobs:
         continue-on-error: true
         run: pip-audit 2>&1 | head -20
       - name: Run unit tests with coverage
-        run: pytest tests/unit/ -v --tb=short --cov=weebot --cov-report=term --cov-fail-under=52
+        # The floor lives in tasks/quality/ceilings.toml ([floors]) and may only go up.
+        run: pytest tests/unit/ -v --tb=short --cov=weebot --cov-report=term --cov-fail-under=$(python scripts/quality_ceilings.py --get-floor unit_coverage_floor)
 
   persistence:
     name: Persistence Tests
