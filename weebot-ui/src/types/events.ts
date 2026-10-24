@@ -137,6 +137,14 @@ export interface Session {
   event_count: number;
 }
 
+/** One agent role: its built-in model cascade, the user's pick, and the model tried first. */
+export interface RoleModel {
+  role: string;
+  default: string[];
+  override: string | null;
+  effective: string;
+}
+
 export interface ModelInfo {
   id: string;
   name: string;

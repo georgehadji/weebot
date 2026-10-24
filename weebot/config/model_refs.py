@@ -152,7 +152,12 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
         else list(_DEFAULT_ROLE_CASCADE)
     )
     local = _local_model_for_role(role)
-    return [local, *cascade] if local else cascade
+    cascade = [local, *cascade] if local else cascade
+    # The user's pick from the UI goes first; everything else stays as its fallback.
+    from weebot.config.role_overrides import get_overrides
+
+    chosen = get_overrides().get(role or "")
+    return [chosen, *(m for m in cascade if m != chosen)] if chosen else cascade
 
 
 def _local_model_for_role(role: str | None) -> str | None:

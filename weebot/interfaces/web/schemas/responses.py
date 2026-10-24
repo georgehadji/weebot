@@ -48,6 +48,15 @@ class ModelInfoResponse(BaseModel):
     strengths: list[str] = Field(default_factory=list, description="Model strengths")
 
 
+class RoleModelResponse(BaseModel):
+    """One agent role and the model that serves it."""
+
+    role: str
+    default: list[str] = Field(description="Built-in cascade, primary first")
+    override: str | None = Field(default=None, description="The model the user picked, if any")
+    effective: str = Field(description="First model the role tries now")
+
+
 class HealthComponent(BaseModel):
     """Health status of a single component."""
 
