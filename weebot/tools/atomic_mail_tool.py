@@ -17,7 +17,8 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.core.circuit_breaker import CircuitBreaker
@@ -73,6 +74,8 @@ class AtomicMailTool(BaseTool):
         Return embedded docs, presets list, and troubleshooting hints.
         Optional: topic (str).
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "atomic_mail"
     description: str = (

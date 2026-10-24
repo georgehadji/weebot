@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from weebot.core.egress_guard import EgressGuard
-from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 from weebot.tools import camofox_browser as cb
 from weebot.tools.camofox_browser import CamofoxBrowserTool
 
@@ -51,7 +51,8 @@ def server(monkeypatch):
 
 
 def test_camofox_is_on_the_trust_boundary():
-    assert is_untrusted_tool("camofox_browser") and taints_egress_context("camofox_browser")
+    trust = trust_of(CamofoxBrowserTool)
+    assert must_fence(trust) and must_taint(trust, False)
 
 
 async def test_open_returns_the_tab_and_its_snapshot_with_the_access_key(server):
@@ -204,7 +205,7 @@ async def test_a_missing_install_says_how_to_install(monkeypatch, tmp_path):
 
 
 def test_the_registry_offers_it_to_research_roles():
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     for role in ("researcher", "admin", "webhook"):
         assert "camofox_browser" in RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS[role]

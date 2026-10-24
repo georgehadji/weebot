@@ -12,9 +12,11 @@ All concrete tools continue to import from ``weebot.tools.base``
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
+
+from weebot.domain.models.output_trust import OutputTrust
 
 
 class BaseTool(ABC, BaseModel):
@@ -44,6 +46,15 @@ class BaseTool(ABC, BaseModel):
     # Phase 4: Truncation strategy for oversized output.
     # "head" = keep start (default), "tail" = keep end, "boundary" = last record boundary.
     truncation_strategy: str = "head"
+
+    # SEC-1: who can choose the text this tool returns. The default is the safe
+    # one -- fenced and tainting -- so a new tool is untrusted until a reviewer
+    # declares it LOCAL. Wrappers override ``resolved_output_trust``.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
+
+    def resolved_output_trust(self) -> OutputTrust:
+        """The trust that applies to this instance (a wrapper delegates to what it wraps)."""
+        return type(self).output_trust
 
     @abstractmethod
     async def execute(self, **kwargs: Any) -> ToolResult:  # noqa: F821 — forward ref

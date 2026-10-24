@@ -405,6 +405,11 @@ class GuardedTool(BaseTool):
     def inner(self) -> BaseTool:
         return self._inner
 
+    def resolved_output_trust(self):
+        # A guard wrapper adds no trust of its own: what comes back is the wrapped
+        # tool's output, so the wrapped tool's declaration decides (SEC-1).
+        return self._inner.resolved_output_trust()
+
     async def execute(self, **kwargs: Any) -> ToolResult:
         result = self._chain.evaluate(self.name, kwargs)
         verdict = result.verdict

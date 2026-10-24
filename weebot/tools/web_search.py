@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 import aiohttp
 from pydantic import PrivateAttr
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(BaseTool):
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
     default_timeout_seconds: int = 25
     truncation_strategy: str = "boundary"
     name: str = "web_search"

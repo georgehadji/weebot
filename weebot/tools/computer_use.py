@@ -7,6 +7,7 @@ import base64
 import logging
 from io import BytesIO
 from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 try:
     import pyautogui
@@ -30,6 +31,8 @@ class ComputerUseTool(BaseTool):
     Use ``dpi_scale`` param when the VM/remote screen has a different DPI
     than the local display (e.g., OSWorld VM at 1.0 DPI on a 1.5 DPI host).
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 30
@@ -388,6 +391,8 @@ class ComputerUseTool(BaseTool):
 class ScreenshotWithOCRTool(BaseTool):
     """Take screenshot with optional OCR text extraction."""
 
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
+
     name: str = "screenshot_ocr"
     description: str = (
         "Take a screenshot and optionally extract text using OCR. "
@@ -489,6 +494,8 @@ class ScreenshotWithOCRTool(BaseTool):
 
 class ElementDetectorTool(BaseTool):
     """Detect clickable elements (buttons, links, text fields) on screen."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "detect_elements"
     description: str = (

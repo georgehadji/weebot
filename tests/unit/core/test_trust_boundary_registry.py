@@ -1,16 +1,16 @@
-"""Trust-boundary list must stay in step with the tool registry.
+"""Every concrete tool declares what it trusts, and the reviewed LOCAL list is pinned.
 
-Wave 1 of the V7 defect hunt found ``UNTRUSTED_OUTPUT_TOOLS`` keyed on module
-file names rather than ``BaseTool.name`` values. ``browser_tool`` is the module
-that registers the tool named ``browser_navigator``; the list matched neither
-the fence in ``_base.py`` nor the egress taint in ``_tool_executor.py``, so the
-real browser tool's output entered the prompt unfenced *and* left the session
-untainted for the egress trifecta check.
+History: ``UNTRUSTED_OUTPUT_TOOLS`` was a hand-kept set of tool names, and it
+drifted three times (module file names instead of ``BaseTool.name``, missing
+Apify presets, missing registered tools). Each drift left a real tool unfenced
+and untainted for the egress trifecta check, and each one passed every test that
+asserted a *string* was in the set.
 
-The existing trust-boundary tests all assert that a *string* is in the set.
-Every one of them passed while the control was off for the tool users actually
-call. These tests assert the correspondence instead, so a rename cannot
-silently disable the control again.
+SEC-1 removed the list: trust is an ``output_trust`` attribute on the tool type
+and a tool nobody classified defaults to ``EXTERNAL``. What can still go wrong
+is a tool declared ``LOCAL`` (or ``FIXED_SCHEMA``) that should not be. So this
+file pins those two sets. Adding a name to either is a security decision and
+shows up as an edit here, in review.
 """
 
 from __future__ import annotations
@@ -21,184 +21,183 @@ import pathlib
 import pytest
 
 from weebot.core.egress_guard import _BROWSER_EGRESS_TOOLS
-from weebot.core.trust_boundary import UNTRUSTED_OUTPUT_TOOLS, is_untrusted_tool
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 
-_TOOLS_DIR = pathlib.Path(__file__).resolve().parents[3] / "weebot" / "tools"
+_ROOT = pathlib.Path(__file__).resolve().parents[3]
+_TOOLS_DIR = _ROOT / "weebot" / "tools"
+_MCP_DIR = _ROOT / "weebot" / "infrastructure" / "mcp"
+
+# Reviewed 2026-10-24 (plan 1.1): behaviour-preserving. Every name here was
+# unfenced and untainting before the list was removed. Candidates to revisit:
+# computer_use and voice_input (screen and microphone content a third party can
+# influence), bash/python_execute/powershell (stdout can carry fetched text).
+# They stay LOCAL because making them EXTERNAL taints nearly every session and
+# trains users to disable the egress guard (trust_boundary.must_taint).
+REVIEWED_LOCAL = frozenset(
+    {
+        "audit_session",
+        "ask_human",
+        "bash",
+        "berb",
+        "computer_use",
+        "debate",
+        "design_system",
+        "desktop_a11y",
+        "detect_elements",
+        "dispatch_parallel_tasks",
+        "image_gen",
+        "knowledge",
+        "mixture_of_agents",
+        "persistent_memory",
+        "powershell",
+        "product",
+        "python_execute",
+        "reasoner",
+        "remotion_video",
+        "schedule",
+        "screen_capture",
+        "swarm",
+        "terminate",
+        "todo_write",
+        "video_gen",
+        "voice_input",
+        "voice_output",
+        "workflow_orchestrator",
+    }
+)
+
+# Fixed-schema, single-origin endpoints whose text no third party chooses.
+REVIEWED_FIXED_SCHEMA = frozenset({"weather"})
 
 
-def _registered_tool_names() -> set[str]:
-    """Every ``name: str = "..."`` class attribute under weebot/tools.
+def _declared_trust(cls: ast.ClassDef) -> str | None:
+    for stmt in cls.body:
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == "output_trust"
+            and isinstance(stmt.value, ast.Attribute)
+        ):
+            return stmt.value.attr
+    return None
+
+
+def _tool_name(cls: ast.ClassDef) -> str | None:
+    for stmt in cls.body:
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == "name"
+            and isinstance(stmt.value, ast.Constant)
+            and isinstance(stmt.value.value, str)
+            and stmt.value.value
+        ):
+            return stmt.value.value
+    return None
+
+
+def _tool_classes() -> list[tuple[str, str, str | None, str | None]]:
+    """``(file, class, tool name, declared trust)`` for each concrete tool.
 
     Parsed rather than imported: importing every tool drags in optional
-    third-party dependencies that need not be installed to check a name.
+    third-party dependencies that need not be installed to read a class body.
+    A class is a tool if it derives from ``BaseTool`` or carries a ``name``
+    string (the duck-typed ``BrowserTool`` has no base).
     """
-    names: set[str] = set()
-    for path in _TOOLS_DIR.rglob("*.py"):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (SyntaxError, UnicodeDecodeError, OSError):
-            continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ClassDef):
+    found = []
+    for directory in (_TOOLS_DIR, _MCP_DIR):
+        for path in sorted(directory.rglob("*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except (SyntaxError, UnicodeDecodeError, OSError):
                 continue
-            for stmt in node.body:
-                if (
-                    isinstance(stmt, ast.AnnAssign)
-                    and isinstance(stmt.target, ast.Name)
-                    and stmt.target.id == "name"
-                    and isinstance(stmt.value, ast.Constant)
-                    and isinstance(stmt.value.value, str)
-                    and stmt.value.value
-                ):
-                    names.add(stmt.value.value)
-    return names
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                bases = {
+                    b.id if isinstance(b, ast.Name) else getattr(b, "attr", "")
+                    for b in node.bases
+                }
+                name = _tool_name(node)
+                if "BaseTool" in bases or name is not None:
+                    found.append((path.name, node.name, name or node.name, _declared_trust(node)))
+    return found
 
 
-# Registered tools that return content originating outside this process.
-# Adding a tool that reaches the network or reads third-party media means
-# adding it here AND to UNTRUSTED_OUTPUT_TOOLS.
-EXTERNAL_CONTENT_TOOLS = frozenset(
-    {
-        "web_search",
-        "vane_search",
-        "advanced_browser",
-        "browser_navigator",
-        "browser_inspector",
-        "web_scraper",
-        "moli_fetch",
-        "agent_reach",
-        "camofox_browser",
-        "spacescraper",
-        "search_images",
-        "weather",
-        "video_ingest",
-        "youtube_download",
-        "ocr",
-        "ocr_structured",
-        "screenshot_ocr",
-        "atomic_mail",
-        "file_editor",
-    }
-)
-
-# Names kept in UNTRUSTED_OUTPUT_TOOLS that match no registered tool. Retaining
-# them is harmless (an unmatched name fences nothing); the point of pinning the
-# set is that a *new* unmatched name is a typo until proven otherwise.
-KNOWN_UNMATCHED_NAMES = frozenset(
-    {
-        "browser_tool",  # legacy module-name spelling of browser_navigator
-        "browser_inspect",  # documented alias of browser_inspector
-        "video_ingest_tool",  # legacy module-name spelling of video_ingest
-        "knowledge_tool",  # legacy; "knowledge" is a LOCAL store, not fenced
-        "apify_actor_tool",
-        "mcp_tool",
-        "mcp_call",
-        # Gateway tools reserved for channels not yet implemented as BaseTools.
-        "discord_tool",
-        "email_tool",
-        "signal_tool",
-        "slack_tool",
-        "telegram_tool",
-        "whatsapp_tool",
-    }
-)
-
-
-class TestRegistryCorrespondence:
-    def test_registry_parse_finds_known_tools(self):
+class TestEveryToolDeclaresItsTrust:
+    def test_the_parse_finds_the_tools(self):
         """Guard the guard: a parser returning nothing would pass everything."""
-        names = _registered_tool_names()
-        assert len(names) > 30, f"tool-name parse looks broken: {sorted(names)}"
-        assert {"bash", "browser_navigator", "web_search"} <= names
+        names = {name for _, _, name, _ in _tool_classes()}
+        assert len(names) > 30, f"tool parse looks broken: {sorted(names)}"
+        assert {"bash", "browser_navigator", "web_search", "weather"} <= names
 
-    @pytest.mark.parametrize("tool", sorted(EXTERNAL_CONTENT_TOOLS))
-    def test_every_external_tool_is_fenced(self, tool):
-        assert is_untrusted_tool(tool) is True, (
-            f"{tool!r} returns external content but is not in "
-            f"UNTRUSTED_OUTPUT_TOOLS — its output enters the prompt unfenced "
-            f"and does not taint the session for the egress trifecta check."
+    def test_every_concrete_tool_assigns_output_trust_explicitly(self):
+        missing = [f"{file}:{cls}" for file, cls, _, trust in _tool_classes() if trust is None]
+        assert not missing, (
+            "these tools rely on the inherited default (EXTERNAL). That is safe, but "
+            "the default is for tools nobody has looked at: state the choice with "
+            f"`output_trust: ClassVar[OutputTrust] = OutputTrust.X`.\n{missing}"
         )
 
-    def test_external_content_list_names_real_tools(self):
-        """EXTERNAL_CONTENT_TOOLS must not drift into naming nonexistent tools."""
-        unknown = EXTERNAL_CONTENT_TOOLS - _registered_tool_names()
-        assert not unknown, f"not registered BaseTool names: {sorted(unknown)}"
-
-    def test_no_new_unmatched_names(self):
-        """A new entry must be a real BaseTool.name, or explicitly grandfathered."""
-        unmatched = UNTRUSTED_OUTPUT_TOOLS - _registered_tool_names()
-        surprising = unmatched - KNOWN_UNMATCHED_NAMES
-        assert not surprising, (
-            f"{sorted(surprising)} match no registered tool. Use the "
-            f"BaseTool.name value, not the module file name."
+    def test_the_local_list_is_pinned(self):
+        local = {name for _, _, name, trust in _tool_classes() if trust == "LOCAL"}
+        assert local == REVIEWED_LOCAL, (
+            "LOCAL output is neither fenced nor tainting. Adding a tool to it is a "
+            "security decision: update REVIEWED_LOCAL with the reasoning in review.\n"
+            f"added: {sorted(local - REVIEWED_LOCAL)}  removed: {sorted(REVIEWED_LOCAL - local)}"
         )
 
-    def test_browser_egress_set_names_real_tools(self):
-        """EgressGuard carried the same stale spelling as the trust boundary."""
-        assert "browser_navigator" in _BROWSER_EGRESS_TOOLS
-        unmatched = _BROWSER_EGRESS_TOOLS - _registered_tool_names()
-        assert unmatched <= KNOWN_UNMATCHED_NAMES, f"stale: {sorted(unmatched)}"
+    def test_the_fixed_schema_list_is_pinned(self):
+        fixed = {name for _, _, name, trust in _tool_classes() if trust == "FIXED_SCHEMA"}
+        assert fixed == REVIEWED_FIXED_SCHEMA, (
+            "FIXED_SCHEMA exempts a tool from the egress trifecta check. It requires "
+            "a fixed-schema, single-origin endpoint whose text no third party can choose."
+        )
 
 
-class TestProofOfDefect:
-    """Red before the Wave 1 fix, green after."""
+class TestRuntimeAgreesWithTheSource:
+    def test_every_imported_tool_subclass_declares_it_in_its_own_body(self):
+        """The AST pass can miss an aliased base; the class hierarchy cannot."""
+        import importlib
 
-    def test_browser_navigator_is_untrusted(self):
-        assert is_untrusted_tool("browser_navigator") is True
+        from weebot.domain.models.base_tool import BaseTool
 
-    def test_video_ingest_is_untrusted(self):
-        assert is_untrusted_tool("video_ingest") is True
+        for path in sorted(_TOOLS_DIR.glob("*.py")):
+            if path.stem.startswith("_"):
+                continue
+            try:
+                importlib.import_module(f"weebot.tools.{path.stem}")
+            except Exception:  # optional dependency missing: the AST test covers the file
+                continue
 
-    def test_spacescraper_is_untrusted(self):
-        assert is_untrusted_tool("spacescraper") is True
-
-
-class TestBoundaries:
-    def test_local_knowledge_store_is_not_fenced(self):
-        """"knowledge" persists the agent's own notes via ToolRepositoryPort.
-
-        Fencing it would taint a session for reading back its own memory and
-        make every later egress require approval.
-        """
-        assert is_untrusted_tool("knowledge") is False
-
-    def test_local_execution_tools_are_not_fenced(self):
-        for tool in ("bash", "python_execute", "powershell", "terminate", "ask_human"):
-            assert is_untrusted_tool(tool) is False, tool
-
-    def test_unknown_tool_is_not_fenced(self):
-        assert is_untrusted_tool("some_tool_that_does_not_exist") is False
+        undeclared = []
+        stack = list(BaseTool.__subclasses__())
+        while stack:
+            cls = stack.pop()
+            stack.extend(cls.__subclasses__())
+            if cls.__module__.startswith(("weebot.tools", "weebot.infrastructure.mcp")):
+                if "output_trust" not in cls.__dict__ and "output_trust" not in getattr(
+                    cls, "__annotations__", {}
+                ):
+                    undeclared.append(f"{cls.__module__}.{cls.__name__}")
+        assert not undeclared, f"BaseTool subclasses without their own output_trust: {undeclared}"
 
 
-class TestFenceTaintDecoupling:
-    """The fence is free; the egress taint is sticky and session-wide.
-
-    is_untrusted_tool() gated both, so fencing a low-risk source also made every
-    later send in that session require approval. The two now have separate
-    predicates.
-    """
-
-    def test_taint_is_a_subset_of_the_fence(self):
-        """Nothing may taint without also being fenced."""
-        from weebot.core.trust_boundary import FENCE_ONLY_TOOLS, taints_egress_context
-
-        for tool in sorted(UNTRUSTED_OUTPUT_TOOLS | EXTERNAL_CONTENT_TOOLS):
-            if taints_egress_context(tool):
-                assert is_untrusted_tool(tool) is True, tool
-        for tool in sorted(FENCE_ONLY_TOOLS):
-            assert is_untrusted_tool(tool) is True, f"{tool} must still be fenced"
-            assert taints_egress_context(tool) is False, f"{tool} must not taint"
-
-    def test_attacker_authored_sources_still_taint(self):
-        """Anything a third party can write to must keep gating egress."""
-        from weebot.core.trust_boundary import taints_egress_context
-
-        for tool in (
+class TestKnownTools:
+    @pytest.mark.parametrize(
+        "name",
+        [
             "web_search",
-            "browser_navigator",
+            "vane_search",
             "advanced_browser",
+            "browser_navigator",
+            "browser_inspector",
             "web_scraper",
+            "moli_fetch",
+            "agent_reach",
+            "camofox_browser",
             "spacescraper",
+            "search_images",
             "video_ingest",
             "youtube_download",
             "ocr",
@@ -206,35 +205,31 @@ class TestFenceTaintDecoupling:
             "screenshot_ocr",
             "atomic_mail",
             "file_editor",
-            "search_images",
-            "mcp__anything__here",
-        ):
-            assert taints_egress_context(tool) is True, tool
-
-    def test_exemption_set_stays_small_and_justified(self):
-        """A large exemption set would quietly rebuild the hole this closed."""
-        from weebot.core.trust_boundary import FENCE_ONLY_TOOLS
-
-        assert FENCE_ONLY_TOOLS == frozenset({"weather"}), (
-            "Adding to FENCE_ONLY_TOOLS exempts a tool from the egress trifecta "
-            "check. It requires a fixed-schema, single-origin endpoint whose "
-            "text no third party can choose."
+            "search_history",
+        ],
+    )
+    def test_attacker_authored_sources_are_external(self, name):
+        declared = {n: t for _, _, n, t in _tool_classes()}
+        assert declared[name] == "EXTERNAL", (
+            f"{name!r} returns content a third party can write; it must fence and taint"
         )
-
-    def test_trusted_tools_neither_fenced_nor_tainting(self):
-        from weebot.core.trust_boundary import taints_egress_context
-
-        for tool in ("bash", "python_execute", "terminate", "knowledge"):
-            assert is_untrusted_tool(tool) is False, tool
-            assert taints_egress_context(tool) is False, tool
 
 
 def test_apify_preset_output_is_untrusted():
-    # The presets are named apify_<actor>; only the stale "apify_actor_tool" was
-    # listed, so scraped web, X and Reddit text went unfenced (F46).
-    from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
+    """The presets are named apify_<actor>; they inherit the class declaration (F46)."""
     from weebot.tools.apify_presets import create_apify_preset_tools
 
-    names = [t.name for t in create_apify_preset_tools(object())]
-    assert names and all(n.startswith("apify_") for n in names)
-    assert all(is_untrusted_tool(n) and taints_egress_context(n) for n in names)
+    tools = create_apify_preset_tools(object())
+    assert tools and all(t.name.startswith("apify_") for t in tools)
+    for tool in tools:
+        trust = trust_of(tool)
+        assert must_fence(trust) and must_taint(trust, False), tool.name
+
+
+def test_browser_egress_set_names_real_tools():
+    """EgressGuard carried the same stale spelling as the trust boundary did."""
+    registered = {name for _, _, name, _ in _tool_classes()}
+    assert "browser_navigator" in _BROWSER_EGRESS_TOOLS
+    # "browser_tool" is the module-name spelling, kept deliberately: an unmatched
+    # egress name over-gates nothing.
+    assert _BROWSER_EGRESS_TOOLS - registered <= {"browser_tool"}

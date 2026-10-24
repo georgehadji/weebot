@@ -6,12 +6,15 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 
 
 class DesignSystemTool(BaseTool):
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
     name: str = "design_system"
     description: str = (
         "Extract a complete design system from any website, GitHub repo, or "

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import ConfigDict, PrivateAttr
 
@@ -24,6 +25,8 @@ class PowerShellTool(BaseTool):
     Accepts optional 'timeout' in seconds (default: 30, max: 300).
     Diagnostic shortcuts: system_info, processes, network_test, list_workspace.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     default_timeout_seconds: int = 300
     truncation_strategy: str = "tail"

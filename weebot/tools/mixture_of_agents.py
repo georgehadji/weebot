@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import ConfigDict
 
@@ -58,6 +59,8 @@ class MixtureOfAgentsTool(BaseTool):
     that the ``model`` kwarg routes each call to the correct provider.
     Register via ``RoleBasedToolRegistry`` with ``llm_port`` supplied.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

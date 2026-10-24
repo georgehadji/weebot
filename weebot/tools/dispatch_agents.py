@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 from collections.abc import Callable
 
 from pydantic import ConfigDict
@@ -33,6 +34,8 @@ class DispatchAgentsTool(BaseTool):
         _flow_factory: Callable[[Session], BaseFlow] — builds a flow per session.
         _state_repo: StateRepositoryPort — persists ephemeral sessions.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

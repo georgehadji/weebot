@@ -5,9 +5,9 @@ agents: it runs page JavaScript but skips layout and paint, so a fetch costs far
 less than starting Chromium. This tool only reads.
 
 Security:
-- The output is third-party text. ``moli_fetch`` is in
-  ``core.trust_boundary.UNTRUSTED_OUTPUT_TOOLS``: the executor fences it and the
-  session is tainted for the egress check.
+- The output is third-party text. ``moli_fetch`` declares
+  ``OutputTrust.EXTERNAL``: the executor fences it and the session is tainted
+  for the egress check.
 - The command line is fixed. The model chooses only the URL, a text format,
   a timeout and a size; never ``--eval``, headers, cookies or a profile.
 - Private and loopback addresses are always blocked (``--block-private-networks``),
@@ -22,7 +22,8 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -61,6 +62,8 @@ def _binary(config: ToolConfig | None) -> str | None:
 
 class MoliFetchTool(BaseTool):
     """Fetch one URL and return its content as Markdown or a semantic tree."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "moli_fetch"
     description: str = (

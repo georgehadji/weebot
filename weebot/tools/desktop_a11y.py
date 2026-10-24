@@ -13,6 +13,9 @@ Backends (tried in order):
 
 from __future__ import annotations
 
+from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
+
 import json
 import logging
 
@@ -50,6 +53,8 @@ class DesktopA11yTool(BaseTool):
         desktop_a11y()  →  JSON array of UI elements from active window
         desktop_a11y(window_title="Settings")  →  target specific window
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "desktop_a11y"
     description: str = (

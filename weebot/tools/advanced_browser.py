@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
+
 import base64
 import logging
 
@@ -49,6 +52,8 @@ class AdvancedBrowserTool(BaseTool):
     Receives a shared PlaywrightAdapter via DI (injected by tool_registry)
     so BrowserInspectorTool and other tools share the same browser session.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 120
@@ -410,6 +415,8 @@ class AdvancedBrowserTool(BaseTool):
 
 class WebScraperTool(BaseTool):
     """Advanced web scraping with data extraction patterns."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "web_scraper"
     description: str = (

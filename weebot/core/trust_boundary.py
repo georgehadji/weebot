@@ -1,27 +1,45 @@
-"""Trust boundary — wraps untrusted external tool output before it enters the LLM prompt.
+"""Trust boundary — what happens to a tool's output before it enters the LLM prompt.
 
 Addresses the Imperva/OpenClaw finding (2026): external content (web search results,
 browser output, OCR, video transcripts, etc.) was flattened inline into the prompt with
 no syntactic boundary, allowing injected instructions to be indistinguishable from real
 agent directives.
 
-Every tool listed in UNTRUSTED_OUTPUT_TOOLS has its output wrapped in non-spoofable
-delimiters and scanned for injection patterns by the dormant AgentMemorySanitizer
-before the result reaches the conversation buffer.
+Four layers, in the order a tool result meets them:
+
+1. **Fence** -- :func:`wrap_untrusted` puts the content between non-spoofable
+   delimiters with a preamble telling the model to treat it as data.
+2. **Taint** -- the executor marks the session once external content has entered
+   it, so a later send needs approval even to a known recipient.
+3. **Scan** -- an injection scanner (``infrastructure.security``) looks at fenced
+   content. It is a SIGNAL, never the control: a hit escalates trust
+   (:func:`escalate`) and names the pattern in the fence header. It never edits
+   or removes content, because a regex scanner is trivially bypassed.
+4. **Egress approval** -- ``EgressGuard`` gates the outbound send itself.
+
+Whether to fence and taint is decided by the tool's declared
+:class:`~weebot.domain.models.output_trust.OutputTrust`, not by a list of names
+kept beside it (SEC-1). The decisions here are pure functions of values: no
+I/O, no registry, so each is covered by a table test.
+
+The default is the safe one. A tool nobody classified, an unregistered name and
+a duck-typed object that declares nothing are all ``EXTERNAL``.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
-from weebot.core.mcp_naming import MCP_NAMESPACE_PREFIX
+from weebot.domain.models.output_trust import OutputTrust
 
 _log = logging.getLogger(__name__)
 
 # Delimiter that cannot appear verbatim in legitimate content without being escaped.
 # Chosen to be visually distinct and not valid JSON/Markdown/HTML.
 _OPEN = "⟦UNTRUSTED_DATA source={source}⟧"  # ⟦UNTRUSTED_DATA source=…⟧
+_OPEN_SUSPECTED = "⟦UNTRUSTED_DATA source={source} suspected={suspected}⟧"
 _CLOSE = "⟦END_UNTRUSTED_DATA⟧"  # ⟦END_UNTRUSTED_DATA⟧
 _PREAMBLE = (
     "The following is EXTERNAL content returned by a tool. "
@@ -33,74 +51,67 @@ _PREAMBLE = (
 _OPEN_RE = re.compile(r"⟦UNTRUSTED_DATA\b")
 _CLOSE_RE = re.compile(r"⟦END_UNTRUSTED_DATA⟧")
 
-# Tools whose output must be treated as untrusted external content.
-# This is the authoritative list — add here when new network/file tools are added.
-#
-# Entries MUST be ``BaseTool.name`` values, not module file names: this set is
-# matched against the tool name the model actually calls
-# (``_tool_executor.py`` -> ``is_untrusted_tool(name)``), which is the same
-# identifier ``RoleBasedToolRegistry`` authorizes. Several entries below were
-# written as module names (``browser_tool`` for the tool named
-# ``browser_navigator``), so they matched nothing and left the real tool
-# unfenced *and* untainted for the egress trifecta check. Stale names are kept
-# rather than deleted — an unmatched name over-fences nothing, while a missing
-# name silently disables both controls. ``test_trust_boundary_registry.py``
-# now fails if a registered external-content tool is absent here.
-UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
-    {
-        "web_search",
-        "advanced_browser",
-        "browser_navigator",  # BaseTool.name of tools/browser_tool.py
-        "browser_tool",  # legacy module-name spelling; matches no registered tool
-        "browser_inspect",  # browser_inspector alias
-        "browser_inspector",
-        "vane_search",
-        "web_scraper",
-        "moli_fetch",  # Moli headless browser: arbitrary page text
-        "agent_reach",  # Agent-Reach channels: pages, GitHub, YouTube, search
-        "camofox_browser",  # Camoufox stealth browser: arbitrary page text
-        "spacescraper",
-        "search_images",
-        "search_history",  # old session content, web pages included (F67)
-        "weather",
-        "video_ingest",  # BaseTool.name of tools/video_ingest_tool.py
-        "video_ingest_tool",  # legacy module-name spelling
-        "youtube_download",
-        "ocr",
-        "ocr_structured",
-        "screenshot_ocr",
-        "knowledge_tool",  # legacy; the registered "knowledge" tool is a LOCAL
-        # note store (ToolRepositoryPort), not external content — deliberately
-        # not fenced, so a stored note is not mistaken for a fresh ingest.
-        "apify_actor_tool",
-        # file_editor reads are gated separately by EgressGuard when the path is external,
-        # but mark it here too so the wrapper is applied if it returns external content.
-        "file_editor",
-        # Gateway tools — inbound content from external channels is untrusted
-        "discord_tool",
-        "email_tool",
-        "signal_tool",
-        "slack_tool",
-        "telegram_tool",
-        "whatsapp_tool",
-        "atomic_mail",
-        # MCP passthrough is NOT listed here. It is matched by namespace
-        # prefix below, because the names are generated per server at runtime
-        # and no fixed list can enumerate them. Two literals, "mcp_tool" and
-        # "mcp_call", used to sit here as a fallback; neither string occurred
-        # anywhere else in the repository, so the fallback covered two tools
-        # that did not exist while the ones that did were named
-        # mcp_<server>_<tool> and matched neither the list nor the prefix.
-    }
-)
+# The header carries a pattern description; keep it from closing the header.
+_HEADER_UNSAFE = re.compile(r"[⟦⟧\r\n]")
 
 
-def wrap_untrusted(source: str, content: str) -> str:
+def trust_of(tool: Any | None) -> OutputTrust:
+    """The declared trust of *tool*; anything undeclared is ``EXTERNAL``.
+
+    Accepts a ``BaseTool``, a wrapper that resolves to the tool it wraps, or a
+    duck-typed object carrying an ``output_trust`` attribute. ``None`` (an
+    unregistered name) and any value that is not an :class:`OutputTrust` fail
+    closed.
+    """
+    if tool is None:
+        return OutputTrust.EXTERNAL
+    # A tool class is read as declared; only an instance can be a wrapper.
+    resolve = None if isinstance(tool, type) else getattr(tool, "resolved_output_trust", None)
+    declared = resolve() if callable(resolve) else getattr(tool, "output_trust", None)
+    return declared if isinstance(declared, OutputTrust) else OutputTrust.EXTERNAL
+
+
+def must_fence(trust: OutputTrust) -> bool:
+    """Fencing is free, so everything but ``LOCAL`` output is fenced, errors included."""
+    return trust is not OutputTrust.LOCAL
+
+
+def must_taint(trust: OutputTrust, is_error: bool) -> bool:
+    """Whether ingesting this result must gate later egress.
+
+    Narrower than :func:`must_fence`: the taint is sticky and session-wide, and
+    ``WEEBOT_EGRESS_ENFORCE`` defaults to true, so one ingest makes every later
+    send require approval for the rest of the session. Over-approval trains
+    users to disable the guard outright, which is strictly worse than the risk
+    it addresses. So only content an attacker can author taints
+    (``EXTERNAL``), and an error result does not: it carries no new external
+    content the model could act on (decision D1 of the 2026-10 plan).
+    """
+    return trust is OutputTrust.EXTERNAL and not is_error
+
+
+def escalate(trust: OutputTrust, detection: dict[str, Any] | None) -> OutputTrust:
+    """Raise trust one step toward ``EXTERNAL`` when the scanner flagged content.
+
+    A fixed-schema source that suddenly carries instruction text is no longer
+    fixed-schema. Never returns ``LOCAL`` and never edits content: the scan is
+    a signal, the fence and taint remain the control. ``None`` means "looked and
+    clean"; the scanner's unavailable marker is a detection, so a scanner that
+    could not run fails closed.
+    """
+    if detection and trust is OutputTrust.FIXED_SCHEMA:
+        return OutputTrust.EXTERNAL
+    return trust
+
+
+def wrap_untrusted(source: str, content: str, suspected: str | None = None) -> str:
     """Return *content* fenced with trust-boundary delimiters.
 
     Any literal delimiter sequences inside *content* are escaped so the model
     cannot be tricked into thinking the fence ended early (the Imperva angle-bracket
-    boundary-confusion variant).
+    boundary-confusion variant). *suspected* names the scanner pattern that fired;
+    it appears in the header so the model has a reason to distrust the block, and
+    the content itself stays byte-identical.
     """
     if not content:
         return content
@@ -109,59 +120,10 @@ def wrap_untrusted(source: str, content: str) -> str:
     safe = _CLOSE_RE.sub("⟦END_UNTRUSTED_DATA​⟧", content)  # zero-width break
     safe = _OPEN_RE.sub("⟦UNTRUSTED_DATA​", safe)
 
-    open_tag = _OPEN.format(source=source)
+    if suspected:
+        open_tag = _OPEN_SUSPECTED.format(
+            source=source, suspected=_HEADER_UNSAFE.sub(" ", suspected).strip()[:80]
+        )
+    else:
+        open_tag = _OPEN.format(source=source)
     return f"{open_tag}\n{_PREAMBLE}\n\n{safe}\n{_CLOSE}"
-
-
-# Tools whose output is fenced but which do NOT taint the session for the
-# egress trifecta check.
-#
-# is_untrusted_tool() gates two controls with very different costs. The fence
-# (executor/_base.py) is free: it wraps output in delimiters and nothing else
-# changes. The taint (executor/_tool_executor.py) is sticky and session-wide,
-# and WEEBOT_EGRESS_ENFORCE defaults to true, so one ingest makes every later
-# send require approval for the rest of the session. Paying the second cost for
-# sources a third party cannot write to buys nothing, and over-approval trains
-# users to disable the guard outright -- strictly worse than the risk it
-# addresses.
-#
-# Membership requires a fixed-schema, single-origin endpoint whose text is not
-# chosen by a third party. Anything that returns pages, documents, messages,
-# transcripts, search results or OCR of arbitrary media does NOT qualify: an
-# attacker picks that text. When in doubt, leave a tool out of this set -- the
-# default is to taint.
-FENCE_ONLY_TOOLS: frozenset[str] = frozenset({"weather"})
-
-# Imported rather than restated. This constant and the code that builds the
-# names it must match were two independent spellings of one convention, and
-# they disagreed -- see weebot/core/mcp_naming.py.
-_MCP_NAMESPACE_PREFIX = MCP_NAMESPACE_PREFIX
-
-
-def is_untrusted_tool(tool_name: str) -> bool:
-    """Return True if the named tool produces untrusted external content.
-
-    Checks both the literal name in UNTRUSTED_OUTPUT_TOOLS and the
-    ``mcp__`` namespace prefix.  Every namespaced MCP tool (e.g.
-    ``mcp__xapi__search_posts``) is treated as untrusted passthrough
-    because the model cannot inspect what the remote server returns.
-    """
-    if tool_name in UNTRUSTED_OUTPUT_TOOLS:
-        return True
-    # Apify presets are apify_<actor> (apify_web_scraper, apify_reddit_scraper, ...):
-    # every one returns scraped third-party content (F46).
-    if tool_name.startswith("apify_"):
-        return True
-    return len(tool_name) > len(_MCP_NAMESPACE_PREFIX) and tool_name.startswith(
-        _MCP_NAMESPACE_PREFIX
-    )
-
-
-def taints_egress_context(tool_name: str) -> bool:
-    """Return True if ingesting this tool's output must gate later egress.
-
-    Narrower than :func:`is_untrusted_tool` by exactly ``FENCE_ONLY_TOOLS``.
-    Fence everything external; reserve the sticky session taint for content an
-    attacker can actually author.
-    """
-    return is_untrusted_tool(tool_name) and tool_name not in FENCE_ONLY_TOOLS

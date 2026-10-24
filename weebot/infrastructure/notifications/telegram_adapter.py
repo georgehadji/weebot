@@ -137,13 +137,15 @@ class TelegramAdapter(NotificationPort):
             import asyncio as _asyncio
 
             try:
-                loop = _asyncio.get_running_loop()
+                _asyncio.get_running_loop()
             except RuntimeError:
                 # No running loop — safe to call asyncio.run()
                 _asyncio.run(self._http_client.close())
             else:
-                # Running loop exists — schedule close on it
-                loop.create_task(self._http_client.close())
+                # Running loop exists — schedule close on it, owned so a failure is logged
+                from weebot.core.background_tasks import get_background_tasks
+
+                get_background_tasks().spawn(self._http_client.close(), name="telegram-http-close")
 
     def _format_message(self, notification: Notification) -> str:
         """Format notification as Telegram message.

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
+
 
 from pydantic import ConfigDict, PrivateAttr
 
@@ -40,6 +43,8 @@ class PythonExecuteTool(BaseTool):
     ``format``) is blocked; code matching ALWAYS_ASK is blocked pending
     explicit user confirmation.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "python_execute"
     description: str = (

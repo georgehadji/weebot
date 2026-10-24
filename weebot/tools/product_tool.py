@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -32,6 +33,8 @@ class ProductTool(BaseTool):
     generate_prd      -- Produce a markdown PRD from all approved requirements
     get_roadmap       -- Return a structured JSON roadmap grouped by category
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "product"
     description: str = (

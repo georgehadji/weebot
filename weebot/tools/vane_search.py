@@ -1,10 +1,13 @@
 import os
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 import httpx
 from weebot.tools.base import BaseTool, ToolResult
 
 
 class VaneSearchTool(BaseTool):
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
     name: str = "vane_search"
     description: str = (
         "AI-powered search that returns cited answers. Use for deep research, "

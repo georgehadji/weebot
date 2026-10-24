@@ -16,7 +16,7 @@ import logging
 import pytest
 
 from weebot.application.services.tool_guards import GuardedTool
-from weebot.core.trust_boundary import is_untrusted_tool
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 from weebot.interfaces import factories
 
 
@@ -60,7 +60,7 @@ async def test_configured_mcp_tools_join_the_collection_guarded(manager):
     listing = tools.get_tool("mcp__postiz__postsListTool")
     assert isinstance(post, GuardedTool)
     assert listing is not None and not isinstance(listing, GuardedTool)
-    assert is_untrusted_tool("mcp__postiz__postsListTool")
+    assert must_fence(trust_of(listing)) and must_taint(trust_of(listing), False)
     assert (await listing.execute()).output == "called mcp__postiz__postsListTool"
 
 

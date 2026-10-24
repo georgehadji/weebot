@@ -20,7 +20,8 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -182,6 +183,8 @@ class VideoIngestTool(BaseTool):
     list_sources    -- browse ingested sources
     export_jsonl    -- export chunks as crash-resumable JSONL
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "video_ingest"
     description: str = (

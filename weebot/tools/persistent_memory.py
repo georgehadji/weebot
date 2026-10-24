@@ -15,7 +15,8 @@ Entry delimiter: § (section sign, rare in natural text).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.infrastructure.persistence.filesystem_memory import DELIMITER, FileSystemMemoryAdapter
 from weebot.application.ports.memory_port import MemoryPort
@@ -49,6 +50,8 @@ class PersistentMemoryTool(BaseTool):
         agent — ~/.weebot/memory/AGENT.md (agent knowledge)
         user  — ~/.weebot/memory/USER.md  (user profile/preferences)
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "persistent_memory"
     description: str = (

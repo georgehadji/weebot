@@ -9,12 +9,13 @@ any object with ``async def push(event: ActivityEvent) -> None`` and
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+from weebot.core.background_tasks import get_background_tasks
 
 _log = logging.getLogger(__name__)
 
@@ -73,10 +74,12 @@ class ActivityStream:
 
         # Fan out to analytics sinks (best-effort, fire-and-forget)
         for sink in self._sinks:
+            push = self._safe_push(sink, event)
             try:
                 # Schedule the async push; don't await — we don't block the caller.
-                asyncio.ensure_future(self._safe_push(sink, event))
+                get_background_tasks().spawn(push, name=f"activity-sink-{type(sink).__name__}")
             except Exception:
+                push.close()  # no running loop: never awaited, so close it quietly
                 _log.debug("Failed to schedule sink push for %s", type(sink).__name__)
 
     async def _safe_push(self, sink: Any, event: ActivityEvent) -> None:

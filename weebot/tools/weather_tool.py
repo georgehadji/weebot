@@ -1,7 +1,8 @@
 """WeatherTool — get current weather and forecasts via wttr.in (free, no API key)."""
 
 from __future__ import annotations
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 import aiohttp
 
@@ -13,6 +14,8 @@ _WTTR_URL = WEATHER_WTTR_URL
 
 
 class WeatherTool(BaseTool):
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.FIXED_SCHEMA
     name: str = "weather"
     description: str = (
         "Get current weather or forecast for any location using wttr.in. "

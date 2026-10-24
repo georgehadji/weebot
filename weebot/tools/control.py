@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
+
 from weebot.tools.base import BaseTool, ToolResult
 
 
 class TerminateTool(BaseTool):
     """Signals the agent that the task is complete. The agent should stop looping."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "terminate"
     description: str = (
@@ -32,6 +37,8 @@ class TerminateTool(BaseTool):
 
 class AskHumanTool(BaseTool):
     """Pauses the agent to ask the human operator a question and wait for input."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "ask_human"
     description: str = (

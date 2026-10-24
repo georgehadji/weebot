@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 # NOTE: langchain BaseTool import is deferred to __init__ because
 # importing langchain triggers network calls at module load time.
@@ -39,6 +40,8 @@ class BrowserTool:
 
     Can use Weebot's LLMPort for model selection, or fallback to OpenAI.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 60

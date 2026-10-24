@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
 from weebot.tools.base import BaseTool, ToolResult
@@ -69,6 +70,8 @@ Return ONLY a JSON object:
 
 class DebateTool(BaseTool):
     """Analyze a question from multiple opposing perspectives and reconcile."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "debate"
     description: str = (

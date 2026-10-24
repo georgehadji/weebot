@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.config.settings import WORKSPACE_ROOT
@@ -17,6 +18,8 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class VoiceOutputTool(BaseTool):
     """Synthesize text to speech and save to a file."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 30

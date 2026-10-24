@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 from weebot.tools.moli_fetch import MoliFetchTool
 
 
@@ -44,8 +44,9 @@ def fake_moli(monkeypatch, tmp_path):
 
 
 def test_moli_fetch_is_on_the_trust_boundary():
-    assert is_untrusted_tool("moli_fetch")
-    assert taints_egress_context("moli_fetch")
+    trust = trust_of(MoliFetchTool)
+    assert must_fence(trust)
+    assert must_taint(trust, False)
 
 
 async def test_a_page_comes_back_as_markdown_with_a_fixed_safe_command(fake_moli):
@@ -108,7 +109,7 @@ async def test_a_missing_binary_says_how_to_configure_it(monkeypatch, tmp_path):
 
 
 def test_the_registry_offers_it_to_browsing_roles():
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     for role in ("researcher", "admin", "webhook"):
         assert "moli_fetch" in RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS[role]

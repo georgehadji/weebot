@@ -11,7 +11,8 @@ Emits TodoEvent into the event bus whenever called.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 class TodoWriteTool(BaseTool):
     """Track subtask progress within the current step."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "todo_write"
     description: str = (

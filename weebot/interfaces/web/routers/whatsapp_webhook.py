@@ -22,10 +22,11 @@ Returns:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, Response
+
+from weebot.core.background_tasks import get_background_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ async def whatsapp_events(request: Request):
     payload = await request.json()
     messages = adapter.parse_incoming(payload)
     for msg in messages:
-        asyncio.create_task(_handle_message(adapter, msg))
+        get_background_tasks().spawn(_handle_message(adapter, msg), name="whatsapp-webhook-message")
 
     return {"status": "ok"}
 
