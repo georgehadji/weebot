@@ -8,6 +8,7 @@ import logging
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
+from weebot.domain.services.session_lessons import project_key
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
 from weebot.application.flows.base_flow import BaseFlow
@@ -117,6 +118,7 @@ class PlanActFlow(BaseFlow):
         correction_tracker: Any | None = None,
         persistence_adapter: Any | None = None,  # retrying session saver
         cost_meter: Any | None = None,  # SessionCostMeter (plan 2.4)
+        misalignment_journal: Any | None = None,  # MisalignmentJournalPort
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -162,6 +164,7 @@ class PlanActFlow(BaseFlow):
                 correction_tracker=correction_tracker,
                 persistence_adapter=persistence_adapter,
                 cost_meter=cost_meter,
+                misalignment_journal=misalignment_journal,
             )
 
         self._llm = cfg.llm
@@ -400,7 +403,7 @@ class PlanActFlow(BaseFlow):
 
         entry = MisalignmentEntry(
             session_id=self._session.id,
-            project_path=(str(self._session.context.working_dir) if self._session.context else ""),
+            project_path=project_key(self._session.context.get("working_dir")),
             symptom="decomposition_quality",
             step_description=f"total_steps={total_steps}",
             constraint_text="; ".join(signals),

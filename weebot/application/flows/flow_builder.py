@@ -155,6 +155,8 @@ def build_flow(
             event_store=resolve(EventStorePort),
             persistence_adapter=resolve("session_persistence"),
             cost_meter=resolve(SESSION_COST_METER),
+            # Lessons and violations that outlive the session, keyed per project.
+            misalignment_journal=resolve("misalignment_journal"),
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

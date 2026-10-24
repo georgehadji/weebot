@@ -8,7 +8,11 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.domain.services.session_lessons import session_lessons
+from weebot.domain.services.session_lessons import (
+    journal_lessons,
+    project_key,
+    session_lessons,
+)
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -184,9 +188,11 @@ class PlanningState(FlowState):
         _avoidance_notes: list[str] = []
         _journal = getattr(context, "_misalignment_journal", None)
         if _journal is not None:
-            _project_path = context._session.context.get("working_dir", "")
+            _project_path = project_key(context._session.context.get("working_dir"))
             try:
-                _recent = await _journal.get_recent(_project_path, limit=3)
+                _recent = await _journal.get_recent(_project_path, limit=10)
+                _avoidance_notes += journal_lessons(_recent, context._session.context.meta_notes)
+                _recent = [e for e in _recent if e.symptom != "session_lesson"][:3]
                 for _entry in _recent:
                     if _entry.symptom == "constraint_violation" and _entry.constraint_text:
                         _avoidance_notes.append(

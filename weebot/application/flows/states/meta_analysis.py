@@ -81,6 +81,7 @@ class MetaAnalysisState(FlowState):
             if result.meta_note and result.meta_note != "No actionable insights":
                 context._session = context._session.add_meta_note(result.meta_note)
                 context._log.info("Meta-analysis produced note: %s", result.meta_note[:120])
+                await _file_lesson(context, result.meta_note)
             else:
                 context._log.debug("Meta-analysis produced no actionable insights")
         except Exception as exc:
@@ -93,6 +94,27 @@ class MetaAnalysisState(FlowState):
         from weebot.application.flows.states.verifying import VerifyingState
 
         context.set_state(VerifyingState())
+
+
+async def _file_lesson(context: PlanActFlow, note: str) -> None:
+    """Persist the note per project so later sessions' planners see it (best-effort)."""
+    journal = getattr(context, "_misalignment_journal", None)
+    if journal is None:
+        return
+    try:
+        from weebot.domain.models.misalignment_entry import MisalignmentEntry
+        from weebot.domain.services.session_lessons import project_key
+
+        await journal.record(
+            MisalignmentEntry(
+                session_id=context._session.id,
+                project_path=project_key(context._session.context.get("working_dir")),
+                symptom="session_lesson",
+                correction_text=note[:500],
+            )
+        )
+    except Exception as exc:
+        context._log.warning("Filing the session lesson failed (non-blocking): %s", exc)
 
 
 async def _maybe_distil_skill(

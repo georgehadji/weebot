@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
+from weebot.domain.services.session_lessons import project_key
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -269,7 +270,7 @@ class ExecutingState(FlowState):
             await journal.record(
                 MisalignmentEntry(
                     session_id=context._session.id,
-                    project_path=context._session.context.get("working_dir", ""),
+                    project_path=project_key(context._session.context.get("working_dir")),
                     symptom="constraint_violation",
                     constraint_text=constraint_text,
                     step_description=step.description,

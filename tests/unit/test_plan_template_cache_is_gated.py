@@ -108,7 +108,14 @@ def _flow(repo) -> PlanActFlow:
 
 
 def test_the_flag_is_off_by_default():
-    assert flags.PLAN_TEMPLATE_CACHE_ENABLED is False
+    # Hermetic: a developer's .env may enable it.
+    env = {k: v for k, v in __import__("os").environ.items() if k != "WEEBOT_PLAN_TEMPLATE_CACHE"}
+    with patch.dict("os.environ", env, clear=True):
+        reloaded = importlib.reload(flags)
+        try:
+            assert reloaded.PLAN_TEMPLATE_CACHE_ENABLED is False
+        finally:
+            importlib.reload(flags)
 
 
 def test_the_environment_variable_turns_it_on():
