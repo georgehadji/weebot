@@ -5,7 +5,9 @@ Optional dependency.  Clean errors when deps are missing.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from pathlib import Path
 
 from weebot.application.ports.speech_port import SpeechPort
 
@@ -66,8 +68,7 @@ class WhisperSpeechAdapter(SpeechPort):
         engine.save_to_file(text, temp_path)
         engine.runAndWait()
 
-        with open(temp_path, "rb") as f:
-            audio_bytes = f.read()
+        audio_bytes = await asyncio.to_thread(Path(temp_path).read_bytes)
 
         import os
 

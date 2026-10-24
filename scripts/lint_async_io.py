@@ -83,12 +83,16 @@ def _check_file(path: Path) -> list[str]:
     except SyntaxError:
         return []
 
+    # `await self.read_text(...)` is an async method that merely shares a name
+    # with a blocking pattern; an awaited call cannot be the blocking one.
+    awaited = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Await)}
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.AsyncFunctionDef):
             continue
 
         for child in _own_body(node):
-            if not isinstance(child, ast.Call):
+            if not isinstance(child, ast.Call) or id(child) in awaited:
                 continue
 
             call_line = getattr(child, "lineno", 0)

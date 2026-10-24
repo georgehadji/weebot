@@ -521,8 +521,8 @@ class SchedulingManager:
         try:
             import yaml
 
-            with open(config_path) as f:
-                data = yaml.safe_load(f)
+            text = await asyncio.to_thread(config_path.read_text)
+            data = yaml.safe_load(text)
 
             loaded = 0
             for job_def in data.get("jobs", []):
@@ -572,7 +572,7 @@ class SchedulingManager:
         import json
 
         try:
-            data = json.loads(jobs_path.read_text(encoding="utf-8"))
+            data = json.loads(await asyncio.to_thread(jobs_path.read_text, encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.error("Failed to read cron jobs from %s: %s", jobs_path, exc)
             return 0
@@ -622,7 +622,7 @@ class SchedulingManager:
             from weebot.domain.models.cron_job import CronJobRecord
 
             try:
-                raw = json.loads(jobs_path.read_text(encoding="utf-8"))
+                raw = json.loads(await asyncio.to_thread(jobs_path.read_text, encoding="utf-8"))
                 data = raw.get(job_id)
                 if data is None:
                     logger.error("Cron job %s not found in %s", job_id, jobs_path)
@@ -640,7 +640,9 @@ class SchedulingManager:
                 raw[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
                 raw[job_id]["last_result"] = result[:500]
                 raw[job_id]["run_count"] = data.get("run_count", 0) + 1
-                jobs_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+                await asyncio.to_thread(
+                    jobs_path.write_text, json.dumps(raw, indent=2), encoding="utf-8"
+                )
             except Exception as exc:
                 logger.error("Cron agent job %s failed: %s", job_id, exc)
 

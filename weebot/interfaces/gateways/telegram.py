@@ -327,12 +327,13 @@ class TelegramAdapter(GatewayAdapter):
                         data = aiohttp.FormData()
                         data.add_field("chat_id", chat_id)
                         data.add_field("caption", caption)
-                        with open(path, "rb") as f:
-                            data.add_field(
-                                endpoint.replace("send", "").lower(),
-                                f,
-                                filename=_os.path.basename(path),
-                            )
+                        # Read up front: the old `with open` closed the file before the POST.
+                        content = await asyncio.to_thread(Path(path).read_bytes)
+                        data.add_field(
+                            endpoint.replace("send", "").lower(),
+                            content,
+                            filename=_os.path.basename(path),
+                        )
                         async with s.post(url, data=data) as resp:
                             if resp.status not in (200, 201):
                                 error_body = await resp.text()

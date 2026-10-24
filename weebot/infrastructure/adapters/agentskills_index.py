@@ -27,8 +27,11 @@ The agentskills.io format:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import tarfile
+import tempfile
 
 import httpx
 
@@ -100,8 +103,6 @@ class AgentskillsIndexAdapter(SkillIndexPort):
         GitHubSkillIndexAdapter pattern.
         """
         import hashlib
-        import tarfile
-        import tempfile
 
         try:
             resp = await self._client.get(skill.download_url)
@@ -119,11 +120,7 @@ class AgentskillsIndexAdapter(SkillIndexPort):
                 return False
 
         try:
-            with tempfile.TemporaryFile() as tmp:
-                tmp.write(content)
-                tmp.seek(0)
-                with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
-                    tar.extractall(path=target_dir, filter="data")
+            await asyncio.to_thread(_extract_tarball, content, target_dir)
         except (tarfile.TarError, OSError) as exc:
             logger.warning("Skill extraction failed: %s", exc)
             return False
@@ -132,6 +129,15 @@ class AgentskillsIndexAdapter(SkillIndexPort):
 
     async def close(self) -> None:
         await self._client.aclose()
+
+
+def _extract_tarball(content: bytes, target_dir) -> None:
+    """Sync tar extraction, run off the event loop via ``asyncio.to_thread``."""
+    with tempfile.TemporaryFile() as tmp:
+        tmp.write(content)
+        tmp.seek(0)
+        with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
+            tar.extractall(path=target_dir, filter="data")
 
 
 def _parse_agentskills_skill(raw: dict) -> RemoteSkill:

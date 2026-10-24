@@ -153,7 +153,7 @@ def skill_install(source: str, name: str | None) -> None:
             if not skill_md.exists() or skill_md.name != "SKILL.md":
                 console.print(f"[red]✗[/red] Expected SKILL.md at {source}")
                 return
-            if not skill_md.read_bytes()[:200].startswith(b"---"):
+            if not (await asyncio.to_thread(skill_md.read_bytes))[:200].startswith(b"---"):
                 console.print("[red]✗[/red] Missing YAML frontmatter")
                 return
             target.mkdir(parents=True, exist_ok=True)

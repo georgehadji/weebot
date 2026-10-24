@@ -25,6 +25,7 @@ Index format:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -163,11 +164,7 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
 
         # Extract tarball
         try:
-            with tempfile.TemporaryFile() as tmp:
-                tmp.write(content)
-                tmp.seek(0)
-                with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
-                    tar.extractall(path=target_dir, filter="data")
+            await asyncio.to_thread(_extract_tarball, content, target_dir)
         except (tarfile.TarError, OSError) as exc:
             logger.warning("Skill extraction failed: %s", exc)
             return False
@@ -183,6 +180,15 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
 
 
 # ── helper ──────────────────────────────────────────────────────────
+
+
+def _extract_tarball(content: bytes, target_dir) -> None:
+    """Sync tar extraction, run off the event loop via ``asyncio.to_thread``."""
+    with tempfile.TemporaryFile() as tmp:
+        tmp.write(content)
+        tmp.seek(0)
+        with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
+            tar.extractall(path=target_dir, filter="data")
 
 
 def _parse_skill(raw: dict) -> RemoteSkill:

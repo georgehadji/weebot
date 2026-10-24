@@ -101,7 +101,9 @@ def benchmark_batch(
         )
         results = await runner.run_batch(tasks, concurrency=concurrency)
         records = [r.to_dict() for r in results]
-        Path(output).write_text(json.dumps(records, indent=2), encoding="utf-8")
+        await asyncio.to_thread(
+            Path(output).write_text, json.dumps(records, indent=2), encoding="utf-8"
+        )
 
         passed = sum(1 for r in results if r.passed)
         console.print(f"[green]{passed}[/green]/{len(results)} passed. Results → {output}")

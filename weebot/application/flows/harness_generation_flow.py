@@ -10,6 +10,7 @@ Follows the 6-phase approach from revfactory/harness.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, UTC
 from pathlib import Path
@@ -116,20 +117,26 @@ class HarnessGenerationFlow:
         for agent in arch.agents:
             agent_path = agents_dir / f"{agent.name}.md"
             agent_path.parent.mkdir(parents=True, exist_ok=True)
-            agent_path.write_text(self._render_agent(agent), encoding="utf-8")
+            await asyncio.to_thread(
+                agent_path.write_text, self._render_agent(agent), encoding="utf-8"
+            )
             logger.info("Wrote agent: %s", agent_path)
 
         # Write skill files
         for skill in arch.skills:
             skill_path = skills_dir / skill.name / "SKILL.md"
             skill_path.parent.mkdir(parents=True, exist_ok=True)
-            skill_path.write_text(self._render_skill(skill), encoding="utf-8")
+            await asyncio.to_thread(
+                skill_path.write_text, self._render_skill(skill), encoding="utf-8"
+            )
             logger.info("Wrote skill: %s", skill_path)
 
         # Write orchestrator skill
         orch_path = skills_dir / f"{arch.pattern.value}-orchestrator" / "SKILL.md"
         orch_path.parent.mkdir(parents=True, exist_ok=True)
-        orch_path.write_text(self._render_orchestrator(arch), encoding="utf-8")
+        await asyncio.to_thread(
+            orch_path.write_text, self._render_orchestrator(arch), encoding="utf-8"
+        )
         logger.info("Wrote orchestrator: %s", orch_path)
 
         # Update CLAUDE.md pointer
@@ -461,7 +468,11 @@ class HarnessGenerationFlow:
     async def _update_claude_md(self, arch: TeamArchitecture) -> None:
         """Append a harness pointer to CLAUDE.md."""
         claude_path = self._output_dir / "CLAUDE.md"
-        existing = claude_path.read_text(encoding="utf-8") if claude_path.exists() else ""
+        existing = (
+            await asyncio.to_thread(claude_path.read_text, encoding="utf-8")
+            if claude_path.exists()
+            else ""
+        )
 
         pointer = (
             f"\n## Harness: {arch.domain}\n\n"
@@ -485,5 +496,7 @@ class HarnessGenerationFlow:
                     new_lines.append(line)
             existing = "\n".join(new_lines).strip()
 
-        claude_path.write_text(existing + "\n" + pointer, encoding="utf-8")
+        await asyncio.to_thread(
+            claude_path.write_text, existing + "\n" + pointer, encoding="utf-8"
+        )
         logger.info("Updated CLAUDE.md with harness pointer")

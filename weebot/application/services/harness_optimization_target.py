@@ -14,6 +14,7 @@ Version mapping:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -240,14 +241,13 @@ class HarnessOptimizationTarget(OptimizationTarget):
         self._output_dir.mkdir(parents=True, exist_ok=True)
         out_path = self._output_dir / f"v{new_version}.yaml"
 
-        with open(out_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(
-                candidate.model_dump(exclude_none=True),
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-            )
+        text = yaml.safe_dump(
+            candidate.model_dump(exclude_none=True),
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+        await asyncio.to_thread(out_path.write_text, text, encoding="utf-8")
 
         self._current = candidate
         logger.info("Saved harness %s → %s", new_version, out_path)

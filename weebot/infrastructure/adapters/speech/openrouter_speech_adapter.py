@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -38,7 +39,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
 
         import base64
 
-        audio_bytes = path.read_bytes()
+        audio_bytes = await asyncio.to_thread(path.read_bytes)
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         ext = path.suffix.lstrip(".").lower() or "wav"
 

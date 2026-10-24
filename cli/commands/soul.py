@@ -90,7 +90,7 @@ def soul_edit(profile: str | None) -> None:
                 editor = "nano"
 
         console.print(f"[dim]Opening {path} with {editor}...[/dim]")
-        subprocess.run([editor, str(path)], check=False)
+        await asyncio.to_thread(subprocess.run, [editor, str(path)], check=False)
         console.print(
             f"[green]Done. Run 'weebot soul show{' --profile ' + profile if profile else ''}' to review.[/green]"
         )

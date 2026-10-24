@@ -175,7 +175,8 @@ class QMDMCPClient:
         cmd = [self._qmd_path, "mcp"]
 
         try:
-            self._process = subprocess.Popen(
+            self._process = await asyncio.to_thread(
+                subprocess.Popen,
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -255,8 +256,8 @@ class QMDMCPClient:
         try:
             # DEVNULL rather than PIPE: nothing reads either stream, and an
             # undrained pipe blocks the child once its 64KB buffer fills.
-            self._http_process = subprocess.Popen(
-                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            self._http_process = await asyncio.to_thread(
+                subprocess.Popen, cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             # Wait for server to start
             await asyncio.sleep(2)

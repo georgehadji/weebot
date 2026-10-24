@@ -17,6 +17,7 @@ live retriever's index so the skill becomes retrievable in the same process.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from pathlib import Path
@@ -76,7 +77,7 @@ class SkillMaterializer:
         skill_dir = self._skills_dir / skill.name
         skill_dir.mkdir(parents=True, exist_ok=True)
         skill_file = skill_dir / "SKILL.md"
-        skill_file.write_text(self._render(skill), encoding="utf-8")
+        await asyncio.to_thread(skill_file.write_text, self._render(skill), encoding="utf-8")
         logger.info("Materialized skill '%s' -> %s", skill.name, skill_file)
 
         self._registry.add_search_path(self._skills_dir)
