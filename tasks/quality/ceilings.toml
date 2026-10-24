@@ -348,3 +348,13 @@ ruff_violations = 741
 # are touched; each Key replaces every use of its string in one change.
 # Measured by: scripts/lint_di_wiring.py
 string_di_keys = 43
+
+# weebot-ui debt, counted by scripts/lint_ui_debt.py (plan: tasks/specs/ui_ux_remediation_plan.md).
+# Targets: orientation 0, tiny text 0, vh 0, main 1 (one landmark per page), static onClick 0,
+# layer violations 0. Lower each as its phase lands; never raise.
+ui_orientation_selectors = 0
+ui_tiny_text = 0
+ui_viewport_height = 0
+ui_main_landmarks = 1
+ui_click_on_static = 0
+ui_layer_violations = 0

@@ -74,6 +74,13 @@ _EXPECTED = {
     "ruff_violations",
     # String-keyed container bindings; Key[T] replaces them. See scripts/lint_di_wiring.py.
     "string_di_keys",
+    # weebot-ui debt, counted by scripts/lint_ui_debt.py (UI/UX remediation plan, Phase 0.4).
+    "ui_orientation_selectors",
+    "ui_tiny_text",
+    "ui_viewport_height",
+    "ui_main_landmarks",
+    "ui_click_on_static",
+    "ui_layer_violations",
 }
 
 
