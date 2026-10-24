@@ -28,6 +28,7 @@ from weebot.application.ports.event_store_port import EventStorePort
 logger = logging.getLogger(__name__)
 
 RECORDED = "effect_recorded"
+FLAG = "session_flag"
 REPLAYED = "effect_replayed"
 _SUMMARY_CHARS = 500
 
@@ -76,6 +77,23 @@ class EffectLedger:
             REPLAYED,
             {"key": key, "tool": tool, "at": datetime.now(UTC).isoformat()},
         )
+
+    # ── per-session security state (plan Phase 8, input to Sep 5.3) ────────────
+    # The executor's taint, local-tab and written-file sets used to live only in process
+    # dicts, so a restart changed security decisions. They are appended here as small
+    # ``session_flag`` rows and replayed once per session per process.
+
+    async def note_flag(self, session_id: str, kind: str, **data: Any) -> None:
+        await self._log(session_id, FLAG, {"kind": kind, **data})
+
+    async def flags(self, session_id: str) -> list[dict[str, Any]]:
+        """Every flag row for the session, oldest first ([] when the store is unreadable)."""
+        try:
+            rows = await self._store.get_session_events(session_id, FLAG)
+        except Exception:
+            logger.warning("session flags unreadable for %s", session_id, exc_info=True)
+            return []
+        return [row.get("data", row) for row in rows]
 
     async def _log(self, session_id: str, event_type: str, data: dict[str, Any]) -> None:
         try:

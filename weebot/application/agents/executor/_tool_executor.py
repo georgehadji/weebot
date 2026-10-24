@@ -19,6 +19,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import is_enforcing
+from weebot.core.background_tasks import get_background_tasks
 from weebot.core.effect_key import effect_key, step_scope
 from weebot.core.log_context import bind_step
 from weebot.core.trust_boundary import must_taint, trust_of
@@ -130,13 +131,16 @@ def _is_local_url(url: str) -> bool:
 
 
 # Sessions whose context holds untrusted external content (see ToolExecutor).
-# shortcut: in-process only, so a resume in a new process starts untainted;
-# move it to a session fact if resumes cross processes in practice.
+# A cache: every change is also appended to the event store as a session_flag row
+# and replayed by _hydrate_session_state, so a resume in a new process keeps it.
 _TAINTED_SESSIONS: set[str] = set()
 # Session id -> whether its browser tab was last navigated to a local page.
 _LOCAL_TAB: dict[str, bool] = {}
 # Session id -> paths file_editor wrote in it (viewing them adds no external content).
 _WRITTEN_FILES: dict[str, set[str]] = {}
+# Sessions whose three sets above were already replayed from the event store in this
+# process (plan Phase 8). The dicts are caches; the store is the record.
+_HYDRATED: set[str] = set()
 
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
@@ -172,6 +176,8 @@ class ToolExecutor:
         # after that point always needs approval — the injected content is the
         # payload (the "lethal trifecta" escalation in egress_guard.py).
         self._tainted_here: bool = False
+        # Flag writes started by the sync taint setter, awaited before a result is returned.
+        self._pending_flags: list[asyncio.Task] = []
 
     @property
     def _untrusted_context_active(self) -> bool:
@@ -182,7 +188,9 @@ class ToolExecutor:
     def _untrusted_context_active(self, value: bool) -> None:
         self._tainted_here = value
         if value and self._current_session_id:
-            _TAINTED_SESSIONS.add(self._current_session_id)
+            if self._current_session_id not in _TAINTED_SESSIONS:
+                _TAINTED_SESSIONS.add(self._current_session_id)
+                self._persist_flag("tainted")
 
     # ── Dynamic context ────────────────────────────────────────────
 
@@ -193,6 +201,45 @@ class ToolExecutor:
         self._current_step_scope = step_scope(step_description)
         # Every log record from this step's tools, cascade and adapters carries the ids.
         bind_step(step_id, session_id)
+
+    def _persist_flag(self, kind: str, **data: Any) -> None:
+        """Append a security-state change to the event store without blocking the caller."""
+        if self._effect_ledger is None or not self._current_session_id:
+            return
+        try:
+            self._pending_flags.append(
+                get_background_tasks().spawn(
+                    self._effect_ledger.note_flag(self._current_session_id, kind, **data),
+                    name=f"session-flag-{kind}",
+                )
+            )
+        except RuntimeError:
+            logger.debug("no running loop; %s flag not persisted", kind)
+
+    async def _flush_flags(self) -> None:
+        """Wait for this executor's flag writes, so a result is never returned ahead of them.
+
+        The setter that taints a session is sync, so it can only start the write. A crash
+        after the caller sees the result can therefore no longer lose the taint row.
+        """
+        pending, self._pending_flags = self._pending_flags, []
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _hydrate_session_state(self) -> None:
+        """Replay this session's persisted taint, local-tab and written-file state once."""
+        sid = self._current_session_id
+        if self._effect_ledger is None or not sid or sid in _HYDRATED:
+            return
+        _HYDRATED.add(sid)
+        for row in await self._effect_ledger.flags(sid):
+            kind = row.get("kind")
+            if kind == "tainted":
+                _TAINTED_SESSIONS.add(sid)
+            elif kind == "local_tab":
+                _LOCAL_TAB[sid] = bool(row.get("local"))
+            elif kind == "file_written" and row.get("path"):
+                _WRITTEN_FILES.setdefault(sid, set()).add(str(row["path"]))
 
     def _effect_id(self, name: str, args: dict[str, Any]) -> str:
         """The ledger key of this call: session, step, tool and canonical arguments."""
@@ -328,6 +375,8 @@ class ToolExecutor:
                     )
         else:
             args = arguments or {}
+
+        await self._hydrate_session_state()
 
         # Determine effective timeout
         tool_obj = self._tools.get_tool(name)
@@ -479,7 +528,10 @@ class ToolExecutor:
         # does not taint. shortcut: tracked per session from the last navigate,
         # not the shared browser's real tab; read the tab URL if that drifts.
         if name == "advanced_browser" and args.get("url"):
-            _LOCAL_TAB[self._current_session_id] = _is_local_url(str(args["url"]))
+            now_local = _is_local_url(str(args["url"]))
+            if _LOCAL_TAB.get(self._current_session_id) != now_local:
+                self._persist_flag("local_tab", local=now_local)
+            _LOCAL_TAB[self._current_session_id] = now_local
         local_page = name == "advanced_browser" and _LOCAL_TAB.get(self._current_session_id, False)
         # Writing a file returns only a confirmation; `view` returns its content,
         # which is new only if this session did not write the file.
@@ -489,11 +541,14 @@ class ToolExecutor:
             written = _WRITTEN_FILES.setdefault(self._current_session_id, set())
             own_file = args.get("command") != "view" or path in written
             if args.get("command") != "view" and not getattr(result, "is_error", False):
+                if path not in written:
+                    self._persist_flag("file_written", path=path)
                 written.add(path)
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):
             self._untrusted_context_active = True
+        await self._flush_flags()
         return result
 
     def taint_session(self, tool_name: str, is_error: bool) -> None:
