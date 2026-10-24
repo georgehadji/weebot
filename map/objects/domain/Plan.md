@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-24
-commit: 1a0e0052
+commit: eeb0e80e
 ---
 
 # Plan
@@ -14,11 +14,11 @@ commit: 1a0e0052
 The ordered list of `Step`s a flow runs against, plus a title, a summary and a `PlanStatus`. `PlanCritique` (same file) is the critic's verdict on a plan before execution; it lives here because it has no behaviour of its own.
 
 ## Why this shape
-Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:180-220`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:415, 641, 693`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`:222-231`), `is_successful()` needs every step COMPLETED (`:233-243`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`:236-241`).
+Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:180-220`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:421, 646, 701`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`:222-231`), `is_successful()` needs every step COMPLETED (`:233-243`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`:236-241`).
 
 ## Shape
 - `PlanStatus` (`:19-35`): `created`, `updated`, `running`, `completed`, `failed`. The comment at `:29-34` says `FAILED` is backend only and the UI type omits `running`; that is out of date: `weebot-ui/src/types/events.ts:6` lists all five values.
-- `Plan` fields (`weebot/domain/models/plan.py:157-165`): `title`, `message`, `steps: list[Step]`, `status`, `heuristic_splits: int` (a field, not a private attribute, so it survives `model_dump`/`model_validate`; `:161-164`).
+- `Plan` fields (`weebot/domain/models/plan.py:157-165`): `title`, `message`, `steps: list[Step]`, `status`, `heuristic_splits: int` (a field, not a private attribute, so it survives `model_dump`/`model_validate`; `:161-165`).
 - Reads: `get_next_step` (first not-done step, `:167-172`), `get_pending_steps` (`:174-175`), `get_completed_steps` (`:177-178`), `failed_steps` (`:245-247`).
 - Writes: `replace_step` (`:180-183`), `update_step_status` (`:185-198`), `merge` (`:200-220`): keeps done and UNVERIFIED steps, appends fresh steps from the update, drops any whose id or first 80 lowercased characters of description match a kept step; stamps `UPDATED`.
 - Checks: `is_complete`, `is_successful` (above); `is_valid` (`:251-266`), `remaining_budget` (`:268-271`), `validate_step_descriptions` (`:273-286`).
@@ -26,15 +26,15 @@ Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/doma
 
 Consequences (read from source, not run):
 - `is_valid`, `remaining_budget` and `validate_step_descriptions` have no caller in `weebot/` or `cli/` (grep 2026-10-24); `PlanStatus.RUNNING` is never assigned.
-- `heuristic_splits` reaches the flow. The planner passes it to the constructor (`application/agents/planner.py:385-390`) and yields `plan.model_dump()` (`:271`); `PlanningState` rebuilds with `Plan.model_validate` (`application/flows/states/planning.py:221`), which keeps a field, so misalignment signal 4 in `plan_act_flow.py:382-385` can fire. Pinned by `tests/unit/fixes/test_heuristic_splits_survive.py`.
-- `PlanCritique.verdict` defaults to `"approved"` (`weebot/domain/models/plan.py:151`); a consumer that ignores `degraded` reads a default as approval. `CritiquingState` checks `degraded` first (`application/flows/states/critiquing.py:95`); the critic gate in `UpdatingState` reads only `overall_confidence` (`application/flows/states/updating.py:232`).
+- `heuristic_splits` reaches the flow. The planner passes it to the constructor (`application/agents/planner.py:386-390`) and yields `plan.model_dump()` (`:271`); `PlanningState` rebuilds with `Plan.model_validate` (`application/flows/states/planning.py:229`), which keeps a field, so misalignment signal 4 in `plan_act_flow.py:391-394` can fire. Pinned by `tests/unit/fixes/test_heuristic_splits_survive.py`.
+- `PlanCritique.verdict` defaults to `"approved"` (`weebot/domain/models/plan.py:151`); a consumer that ignores `degraded` reads a default as approval. `CritiquingState` checks `degraded` first (`application/flows/states/critiquing.py:96`); the critic gate in `UpdatingState` reads only `overall_confidence` (`application/flows/states/updating.py:239`).
 - `step_scores` is written by the critic (`application/services/plan_critic.py:93`) and read by nothing; the critic's own comment says so (`:109`).
 
 ## Connected to
-- **Owns** `Step` (see the Step card). **Built by** `PlannerAgent._parse_plan` (`application/agents/planner.py:326`) and merged by `PlannerAgent.update_plan` (`:305`). **Held by** the flow as `context._plan`; set in `PlanningState` (`planning.py:221, 239, 271`) and changed in `ExecutingState`, `ReviewingState` (`reviewing.py:139, 155`), `UpdatingState` (`updating.py:126, 207`). `CompletedState` stamps `FAILED` or `COMPLETED` from `failed_steps()` (`completed.py:173-177`).
+- **Owns** `Step` (see the Step card). **Built by** `PlannerAgent._parse_plan` (`application/agents/planner.py:326`) and merged by `PlannerAgent.update_plan` (`:305`). **Held by** the flow as `context._plan`; set in `PlanningState` (`planning.py:229, 247, 278`) and changed in `ExecutingState`, `ReviewingState` (`reviewing.py:145, 161`), `UpdatingState` (`updating.py:133, 214`). `CompletedState` stamps `FAILED` or `COMPLETED` from `failed_steps()` (`completed.py:173-177`).
 - **Persisted only as events:** a `PlanEvent.plan` dict inside `Session.events`; rebuilt by `Session.get_last_plan` (Session card).
 - **Scored by** `PlanOutcomeScorer` via `is_successful()` (`infrastructure/scoring/plan_outcome_scorer.py:62`).
-- `PlanCritique` **produced by** `PlanCriticService` (`application/services/plan_critic.py:53`) behind `PlanCriticPort` (`application/ports/plan_critic_port.py:20`), **read by** `CritiquingState` (`critiquing.py:77-152`), `UpdatingState` (`updating.py:232`), `PlanActFlow` misalignment signals (`plan_act_flow.py:378`).
+- `PlanCritique` **produced by** `PlanCriticService` (`application/services/plan_critic.py:53`) behind `PlanCriticPort` (`application/ports/plan_critic_port.py:20`), **read by** `CritiquingState` (`critiquing.py:77-152`), `UpdatingState` (`updating.py:239`), `PlanActFlow` misalignment signals (`plan_act_flow.py:387`).
 - **Looks like but is not:** legacy `Task`/`Project` dataclasses in `weebot/domain/legacy_models.py:70, 125` (still re-exported by `weebot/domain/models/__init__.py:13-26`); workflow templates in `weebot/templates/`; `CodeReviewResult` in `domain/models/code_review.py` (same shape idea, one step).
 
 ## If you change this

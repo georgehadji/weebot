@@ -5,8 +5,8 @@ code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-23
-commit: c2f39937
+verified: 2026-10-24
+commit: 50a5d748
 ---
 
 # Event store
@@ -27,7 +27,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 - `delete_session` exists so a deleted session's journal does not survive: the port docstring says `DurableEventBus` journals every agent event here (`event_store_port.py`, `delete_session` doc).
 
 ## Connected to
-- **Registered as** `EventStorePort` in `configure_defaults` (`application/di/__init__.py:159`) and injected into `DurableEventBus` by `_create_event_bus`, with `AsyncEventBus` as the inner bus. A set `WEEBOT_VALKEY_URL` or `WEEBOT_REDIS_URL` makes it raise at start-up (W4.3, F24).
+- **Registered as** `EventStorePort` in `configure_defaults` (`application/di/__init__.py:161`) and injected into `DurableEventBus` by `_create_event_bus`, with `AsyncEventBus` as the inner bus. A set `WEEBOT_VALKEY_URL` or `WEEBOT_REDIS_URL` makes it raise at start-up (W4.3, F24).
 - **Writers:** `DurableEventBus` (every agent and domain event, `event_bus.py:227-262`) is the only live writer found. The unused `EventLogger` (formerly infrastructure/event_logging.py) was deleted in W4.2. Do not confuse it with `interfaces/cli/event_logger.py`, which subscribes to the bus and prints.
 - **Readers:** `get_cost_window` backs `GetCostSummaryHandler`, which CLI `costs`, MCP `weebot://costs` and the ops API (`/api/costs/summary`, since W7.1) use. `get_cost_summary(session_id)` is used by `export_session`. Other methods are reached via `EventStorePort` by `completed.py`, `trajectory_handler.py`, `interfaces/web/dependencies.py`, `ports/dreamer_port.py` (mentions; per-method use not traced).
 - **Session deletion:** `tests/unit/interfaces/web/test_session_deletion_wiring.py` covers the purge wiring.

@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: eeb0e80e
 ---
 
 # Sandbox
@@ -23,12 +23,12 @@ One port so tools do not care where code runs (`weebot/application/ports/sandbox
 - `WSL2Sandbox` (`wsl2.py:18`): prefixes the command with `wsl` (`:86-92`). `allow_network` is read only to report a capability (`:81-82`); nothing enforces network off.
 - `DockerLinuxSandbox` (`docker_linux.py:24`): requires image `weebot-tool-env:latest`, no fallback; `execute` refuses with a build hint when it is missing (`:48-53, 76-99, 264-274`). `docker run --rm -i --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --read-only --user 1000:1000 --tmpfs /tmp`, a pip cache volume (`:162-189`); `workspace_dir` read-only at `/workspace` and its `Output/` read-write (`:190-195`); `-m` when a memory limit is set (`:197-200`); `--network none` unless `network_allowed` (`:202-204`); `-e`, extra `-v` mounts (paths containing `..` skipped, `:206-222`); `-w` maps the host cwd into `/workspace` (`:101-112, 224-227`). Reports `NETWORK_ISOLATION` (`:136-148`). No CPU limit.
 - `SandboxFactory` (`factory.py:38`): priority Docker, WSL2, native (`:63-64`); knows Native, WSL2 and (if the import works) Docker (`:68-74`); `create_default(mode)` is async and availability-checked (`:127-191`); `create_fallback_chain` (`:193-208`). `create_default_sandbox()` uses it only for a forced mode (`:419`), not its priority order.
-- `ModalSandboxBackend` (`modal_backend.py:41`) is a port implementation outside the factory, referenced only by a test; `osworld.py` is the leftover `weebot/osworld` backend and the one place that defaults to `allow_network=True` (`osworld.py:59`).
+- `ModalSandboxBackend` (`modal_backend.py:41`) is a port implementation outside the factory, referenced only by a test; `osworld.py` is the leftover `weebot/osworld` backend and the one place that defaults to `allow_network=True` (`osworld.py:60`).
 
-Who gets which: DI binds `SandboxPort` to `create_default_sandbox()` (`application/di/_factories.py:105-108`, `di/__init__.py:145`); `BashTool`, `PowerShellTool` and `PythonTool` call it themselves when none is injected (`bash_tool.py:127-129`, `powershell_tool.py:62-64`, `python_tool.py:99-101`). Settings: `sandbox_mode`, `sandbox_require_isolation`, `sandbox_max_output_bytes`, `sandbox_allow_network` (`weebot/config/settings.py:176-185`); `bash_timeout` and `python_timeout` reach the tools through `ToolConfig` (`bash_tool.py:161`, `python_tool.py:116`).
+Who gets which: DI binds `SandboxPort` to `create_default_sandbox()` (`application/di/_factories.py:105-108`, `di/__init__.py:147`); `BashTool`, `PowerShellTool` and `PythonTool` call it themselves when none is injected (`bash_tool.py:133-135`, `powershell_tool.py:65-67`, `python_tool.py:104-106`). Settings: `sandbox_mode`, `sandbox_require_isolation`, `sandbox_max_output_bytes`, `sandbox_allow_network` (`weebot/config/settings.py:179-188`); `bash_timeout` and `python_timeout` reach the tools through `ToolConfig` (`bash_tool.py:167`, `python_tool.py:121`).
 
 Consequences (read from source, not run):
-- Per-call network: `_clear_network_use` asks `EgressGuard.network_use` whether the call reaches the network; a known host (or detect-only mode) is cleared, otherwise the first host asks for approval (`application/agents/executor/_tool_executor.py:75-95`); a cleared call runs inside `network_cleared_for_call()` (`:379-392`). `python_execute` code that imports a network library counts as network use (`weebot/core/egress_guard.py:114-116, 443-445`; see EgressGuard card).
+- Per-call network: `_clear_network_use` asks `EgressGuard.network_use` whether the call reaches the network; a known host (or detect-only mode) is cleared, otherwise the first host asks for approval (`application/agents/executor/_tool_executor.py:79-99`); a cleared call runs inside `network_cleared_for_call()` (`:379-392`). `python_execute` code that imports a network library counts as network use (`weebot/core/egress_guard.py:114-116, 443-445`; see EgressGuard card).
 - On native Windows and WSL2 "network off" is not enforced: dead proxy variables, or nothing. Only `SANDBOX_MODE=docker` (or `docker_first` with the image built) or strict mode closes that.
 - On Linux in `auto` mode the Docker backend is chosen without checking Docker or the image, so on a host without either every call returns an error result (`docker_linux.py:255-274`).
 - The MCP server runs `BashTool()` and `PythonExecuteTool()` outside `ToolExecutor` (`weebot/mcp/server.py:383-392`), so no call there is ever network-cleared; with `SANDBOX_ALLOW_NETWORK` false those tools get network off (best effort on Windows).
@@ -36,7 +36,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Owned by** the DI container and, as a fallback, each of the three shell tools. The MCP server's `BashTool()` / `PythonExecuteTool()` take the same fallback.
-- **Opened per call by** `ToolExecutor` (`_tool_executor.py:379-392`) on `EgressGuard.network_use` (EgressGuard card).
+- **Opened per call by** `ToolExecutor` (`_tool_executor.py:468-481`) on `EgressGuard.network_use` (EgressGuard card).
 - **Related:** `BashTool`, `PowerShellTool`, `PythonTool` (callers); `ExecApprovalPolicy`, `BashGuard`, `CommandSecurityAnalyzer` (gates that run before the sandbox); `ToolConfig` (`weebot/config/tool_config.py`).
 - **Looks like but is not:** `EgressGuard` (decides whether to allow an outbound action or clear a call's network; does not stop a process); `BashGuard` (rates text).
 

@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 50a5d748
 ---
 
 # Event bus
@@ -25,7 +25,7 @@ Publishers must never be slowed or broken by listeners. Each subscriber call is 
 **Valkey is off by design (read from source, not run):** `ValkeyEventBus.subscribe` only stores the handler and forwards it to the in-memory fallback if that exists (`redis_event_bus.py:130-138`), and no code reads the Valkey channels back. Rather than drop events silently, the DI factory refuses a configured URL and a connected bus refuses to publish. `docker-compose.yml` sets only `VALKEY_PASSWORD`, not `WEEBOT_VALKEY_URL` (`docker-compose.yml:78`). Pinned by `tests/unit/fixes/test_f24_valkey_drops_local_events.py` and `tests/unit/fixes/test_w43_valkey_fail_fast.py`.
 
 ## Connected to
-- **Subscribers (real code):** `WebSocketEventBroadcaster.publish` at app start (`interfaces/web/main.py:211`); SSE route handler per connection (`interfaces/web/routers/sse.py:85`); `interfaces/cli/event_logger.py:86` (CLI printer); `interfaces/sse_event_subscriber.py:36`; `infrastructure/notifications/windows_toast.py:261` and `interfaces/windows_toast_subscriber.py:88`; `SessionScopedEventBus` wraps another bus, stamps `session_id` on publish and delegates subscriptions (`application/services/session_scoped_event_bus.py:28-32, 37-41`); `PlanActFlow` subscribes a domain handler for `SkillGapDetected` when a misalignment journal is wired (`plan_act_flow.py:298-301`).
+- **Subscribers (real code):** `WebSocketEventBroadcaster.publish` at app start (`interfaces/web/main.py:217`); SSE route handler per connection (`interfaces/web/routers/sse.py:85`); `interfaces/cli/event_logger.py:86` (CLI printer); `interfaces/sse_event_subscriber.py:36`; `infrastructure/notifications/windows_toast.py:261` and `interfaces/windows_toast_subscriber.py:88`; `SessionScopedEventBus` wraps another bus, stamps `session_id` on publish and delegates subscriptions (`application/services/session_scoped_event_bus.py:28-32, 37-41`); `PlanActFlow` subscribes a domain handler for `SkillGapDetected` when a misalignment journal is wired (`plan_act_flow.py:307-310`).
 - **Publishers:** `PlanActFlow._emit` and the executor (`ExecutorAgent._emit`), plus anything given an `EventBusPort`/`EventPublisherPort`.
 - **Looks like but is not:** the Mediator (commands to one handler); the event store (history, not live fan-out); `swarm_event_bus.py` (a separate topic bus for sub-agents); `EventBrokerAdapter` (`events/broker_adapter.py`, kept for old `EventBroker` callers, not covered).
 

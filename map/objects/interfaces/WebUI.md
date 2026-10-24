@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-24
-commit: d4ffb555
+commit: 50a5d748
 ---
 
 # Web UI
@@ -27,17 +27,17 @@ Backend calls:
 - `/ops` opens a socket to `{ws}` (with `withToken`) for its log view (`weebot-ui/src/app/ops/page.tsx:36-40, 61-77`).
 
 Consequences (read from source, not run):
-- The proxy forwards from the Next server, so the backend sees a loopback client. `require_mutation_identity` and `FailClosedMiddleware` exempt loopback (`weebot/interfaces/web/auth.py:198-205`, `weebot/interfaces/web/main.py:531-532`), and the Docker image binds the Next server on `0.0.0.0:3000` (`weebot-ui/Dockerfile:41-44`). `npm run dev` / `start` bind loopback only (F45), but with no `WEEBOT_API_KEY` any client that reaches port 3000 of the Docker image gets loopback rights on `/api/*`.
+- The proxy forwards from the Next server, so the backend sees a loopback client. `require_mutation_identity` and `FailClosedMiddleware` exempt loopback (`weebot/interfaces/web/auth.py:211-218`, `weebot/interfaces/web/main.py:546-547`), and the Docker image binds the Next server on `0.0.0.0:3000` (`weebot-ui/Dockerfile:41-44`). `npm run dev` / `start` bind loopback only (F45), but with no `WEEBOT_API_KEY` any client that reaches port 3000 of the Docker image gets loopback rights on `/api/*`.
 - The proxy parses every response as JSON (`route.ts:35`): SSE (`/api/chat/stream`, `/api/events/stream`) and text (`/api/health/prometheus`) come back as `null` through it. The SSE fallback avoids this only because it fetches `ENDPOINTS.api` directly.
 - `/ops` "live log" listens on `/ws`, which only receives events without a `session_id` (`weebot/interfaces/web/event_broadcaster.py:39-43`), so it shows presence events, not session activity.
-- Socket tokens go in the query string (`EventStreamProvider.tsx:159, 238`; `withToken`, `weebot-ui/src/lib/api.ts:31-35`, used by `useBehavior.ts:65`, `weebot-ui/src/app/ops/page.tsx:62`, `weebot-ui/src/hooks/useWebSocketDebug.ts:44`), the path the backend marks deprecated and logs (`weebot/interfaces/web/main.py:713-724`).
+- Socket tokens go in the query string (`EventStreamProvider.tsx:159, 238`; `withToken`, `weebot-ui/src/lib/api.ts:31-35`, used by `useBehavior.ts:65`, `weebot-ui/src/app/ops/page.tsx:62`, `weebot-ui/src/hooks/useWebSocketDebug.ts:44`), the path the backend marks deprecated and logs (`weebot/interfaces/web/main.py:728-739`).
 - `next.config.mjs:20-25` also rewrites `/api/:path*` to a hard-coded `http://localhost:8000`, a second routing rule beside the route handler that ignores `BACKEND_URL`.
 - Backend endpoints with no UI caller: all of `/api/chat/*`, `/api/sessions/search`, `/api/sessions/{id}/steer`, `/api/sessions/{id}/resume` (`api.sessions.resume` is defined, unused), `/api/ponytail/*`, `/api/models/available`, `/api/health/ready` and `/live` (defined in `api.ts:161-162`, unused), behavior `watch/*`, `report/*`, `session/{id}`, `self-knowledge/regenerate`, `/api/webhook/run` (machine caller).
 
 ## Connected to
 - **Calls** the Web API (`WebAPI.md`). **Owns** no backend state; per-browser settings only.
 - **Types** mirror backend events in `src/types/events.ts`; the session reducer is `src/lib/session-reducer.ts`.
-- **Looks like but is not:** the test page the backend serves at `/` (`weebot/interfaces/web/main.py:75-176, 599-602`).
+- **Looks like but is not:** the test page the backend serves at `/` (`weebot/interfaces/web/main.py:76-177, 599-602`).
 
 ## If you change this
 **Hits:** every page; tests `weebot-ui/src/lib/endpoints.test.ts`, `src/lib/session-reducer.test.ts`, `src/hooks/useSessionEvents.test.ts`, `weebot-ui/tests/smoke.test.tsx` (vitest `**/*.test.{ts,tsx}`, `vitest.config.ts:9`; Playwright `testDir: ./tests`, `playwright.config.ts:4`). Backend tests do not cover the UI.
