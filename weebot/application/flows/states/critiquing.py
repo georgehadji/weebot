@@ -14,7 +14,16 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    ConfidentThresholds,
+    FlowState,
+    StateId,
+    new_state,
+    next_state_after_plan,
+    register_state,
+    task_text,
+)
 from weebot.application.services.plan_critic import PlanCriticService
 from weebot.domain.models.event import AgentEvent, ErrorEvent
 from weebot.domain.models.plan import PlanCritique
@@ -22,13 +31,7 @@ from weebot.domain.models.plan import PlanCritique
 logger = logging.getLogger(__name__)
 
 
-class ConfidentThresholds:
-    """Confidence thresholds for plan critique verdicts."""
-
-    REVISE_THRESHOLD = 0.5
-    WARN_THRESHOLD = 0.8
-
-
+@register_state(StateId.CRITIQUING)
 class CritiquingState(FlowState):
     """Validates a plan before allowing execution to proceed."""
 
@@ -44,9 +47,7 @@ class CritiquingState(FlowState):
         self._critic = critic
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.planning import PlanningState
 
-        from weebot.application.flows.states.plan_review import next_state_after_plan
 
         if self._critic is None:
             logger.info("No plan critic available — proceeding to execution")
@@ -104,25 +105,22 @@ class CritiquingState(FlowState):
                 "; ".join(critique.flaws) or "no reason recorded",
             )
             context._plan_critique = critique
-            from weebot.application.flows.states.premortem import PremortmState
 
-            context.set_state(PremortmState())
+            context.set_state(new_state(StateId.PREMORTEM))
 
         elif critique.overall_confidence >= _warn:
             # High confidence — proceed to pre-mortem then execution
             logger.info("Plan approved with high confidence")
-            from weebot.application.flows.states.premortem import PremortmState
 
-            context.set_state(PremortmState())
+            context.set_state(new_state(StateId.PREMORTEM))
 
         elif critique.overall_confidence >= _revise:
             # Medium confidence — proceed but inject warnings
             logger.info("Plan approved with warnings (%d flaws)", len(critique.flaws))
             # Store critique on the flow for executor prompt injection
             context._plan_critique = critique
-            from weebot.application.flows.states.premortem import PremortmState
 
-            context.set_state(PremortmState())
+            context.set_state(new_state(StateId.PREMORTEM))
 
         else:
             # Low confidence — send back to planning
@@ -132,7 +130,7 @@ class CritiquingState(FlowState):
             )
             # Store critique on the flow for planner context
             context._plan_critique = critique
-            context.set_state(PlanningState())
+            context.set_state(new_state(StateId.PLANNING))
 
         # Yield critique as a thought event for observability
         from weebot.domain.models.event import ThoughtEvent

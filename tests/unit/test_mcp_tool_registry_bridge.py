@@ -13,7 +13,7 @@ from weebot.application.services.mcp_tool_registry_bridge import (
 )
 from weebot.application.services.mcp_tool_retrieval_service import McpToolRetrievalService
 from weebot.domain.models.mcp import MCPServerConfig, MCPToolInfo, MCPToolFilterConfig
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 class _FakeRetrievalPort:

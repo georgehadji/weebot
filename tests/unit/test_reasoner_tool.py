@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 from weebot.tools.reasoner import ReasonerTool
 from weebot.tools.base import ToolResult
 

@@ -4,7 +4,8 @@ name: DI Container
 code: Container
 cluster: application
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: d4ffb555
 ---
@@ -30,7 +31,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 ## Connected to
 - **Creates:** the Mediator (`_create_mediator` calls `build_mediator`, `weebot/application/di/_factories.py:119-120`), every flow, the step executor, and the ports' adapters.
 - **Shared root:** `weebot/interfaces/factories.py:71-88` (`shared_container()`, one configured container per process), used by the web lifespan (`weebot/interfaces/web/main.py:186-188`) and the CLI (`cli/main.py:76-88`).
-- **Hand-built elsewhere:** 8 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:265-277`): `weebot/core/agent.py:45`, `weebot/interfaces/factories.py:84`, `cli/commands/flow.py:332`, `cli/commands/harness.py:55, 95, 254, 350`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
+- **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:265-277`): `weebot/interfaces/factories.py:84`, `cli/commands/flow.py:332`, `cli/commands/harness.py:55, 95, 254, 350`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
 - **Checked by:** `scripts/lint_di_wiring.py` (`make lint-di-wiring`) and `tests/unit/test_architecture_fitness.py`.
 - **Looks like but is not:** a framework container; there is no scope, no auto-wiring, no constructor injection. It is looked up by hand.
 

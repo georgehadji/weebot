@@ -13,7 +13,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import DoneEvent
 from weebot.domain.models.llm_response import LLMResponse
 from weebot.domain.models.session import Session
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 class _DummyLLMPort(LLMPort):

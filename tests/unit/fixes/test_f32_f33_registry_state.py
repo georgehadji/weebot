@@ -9,7 +9,7 @@ F33: the default role table was copied shallowly, so changing one registry
 changed every registry built afterwards. F34: see the last test.
 """
 
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 def test_the_role_table_is_the_default_table():

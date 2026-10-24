@@ -217,10 +217,10 @@ class FlowRouter:
         if journal is None:
             return
         try:
-            import asyncio
+            from weebot.core.background_tasks import get_background_tasks
             from weebot.domain.models.misalignment_entry import MisalignmentEntry
 
-            asyncio.ensure_future(
+            get_background_tasks().spawn(
                 journal.record(
                     MisalignmentEntry(
                         session_id=session.id,
@@ -228,7 +228,8 @@ class FlowRouter:
                         symptom="user_correction",
                         correction_text=prompt[:500],
                     )
-                )
+                ),
+                name="misalignment-journal",
             )
         except ImportError:
             pass

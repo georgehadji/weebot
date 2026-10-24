@@ -10,7 +10,7 @@ from __future__ import annotations
 
 def test_documentation_role_gets_the_product_tool():
     from weebot.application.di import Container
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     c = Container()
     c.configure_defaults()

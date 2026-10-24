@@ -8,7 +8,15 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    next_state_after_plan,
+    register_state,
+    task_text,
+)
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -63,13 +71,13 @@ def _infer_domain(prompt: str) -> str:
     return "general"
 
 
+@register_state(StateId.PLANNING)
 class PlanningState(FlowState):
     """Handles the creation of the initial execution plan."""
 
     status = AgentStatus.PLANNING
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.summarizing import SummarizingState
         from weebot.application.agents.planner import PlannerAgent
         from weebot.domain.models.event import ErrorEvent as EE
 
@@ -84,7 +92,7 @@ class PlanningState(FlowState):
                 error=(
                     "PlanningState requires a Mediator to be configured on PlanActFlow. "
                     "Construct PlanActFlow with mediator=container.get(Mediator) or "
-                    "use container.build_agent_runner()."
+                    "build it through container.get(\"create_flow\")."
                 )
             )
             return
@@ -240,9 +248,8 @@ class PlanningState(FlowState):
 
         if context._plan is None or len(context._plan.steps) == 0:
             logger.info("No steps in plan, transitioning to SUMMARIZING")
-            from weebot.application.flows.states.summarizing import SummarizingState
 
-            context.set_state(SummarizingState())
+            context.set_state(new_state(StateId.SUMMARIZING))
         else:
             context._snapshot_plan()
             # --- DPPM: parallel planning for complex tasks ---
@@ -310,10 +317,8 @@ class PlanningState(FlowState):
             )
             # Transition to CritiquingState if a critic is available
             if context._plan_critic is not None:
-                from weebot.application.flows.states.critiquing import CritiquingState
 
-                context.set_state(CritiquingState(critic=context._plan_critic))
+                context.set_state(new_state(StateId.CRITIQUING, critic=context._plan_critic))
             else:
-                from weebot.application.flows.states.plan_review import next_state_after_plan
 
                 context.set_state(next_state_after_plan())

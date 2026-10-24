@@ -4,7 +4,8 @@ name: Orchestration tools
 code: DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter
 cluster: tools
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: d4ffb555
 ---
@@ -33,7 +34,7 @@ A sub-agent tool cannot build a flow itself without importing the composition ro
 | `schedule` | `ScheduleTool` `weebot/tools/schedule_tool.py:23` | no | no | module singleton `SchedulingManager` (`:11-20`) | automation, admin, webhook |
 | `persistent_memory` | `PersistentMemoryTool` `weebot/tools/persistent_memory.py:39` | no | no | `memory` required, `state_repo` optional for salience (`:86-114`) | admin, webhook |
 | `audit_session` | `AuditTool` `weebot/tools/audit_tool.py:16` | no | no | `service: AuditPort` required (`:40-47`) | admin, webhook |
-| (not a tool) | `HeuristicRouter` `weebot/tools/heuristic_router.py:17` | - | - | static keyword scoring | not a `BaseTool`; used by `weebot/core/agent.py:35-37, 84` |
+| (not a tool) | `HeuristicRouter` `weebot/tools/heuristic_router.py:17` | - | - | static keyword scoring | not a `BaseTool`; its only caller, the legacy `RecursiveWeebotAgent`, was retired in plan 3.5 |
 
 Role lists: `weebot/tools/tool_registry.py:27-177`.
 
@@ -55,10 +56,10 @@ Consequences (read from source, not run):
 ## Connected to
 - **Built by** `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`) through the callers above, and `build_tools` in `weebot/interfaces/factories.py:348`.
 - **Spawn** `PlanActFlow` sub-sessions (`dispatch_agents.py:175-185`, `workflow_orchestrator.py:215-225`); `swarm` uses `application/agents/goal_agent.py` and `synthesizer_agent.py`; `workflow_orchestrator` wraps the `WorkflowOrchestrator` engine (`workflow_orchestrator.py:165-172`).
-- **Looks like but is not:** `SubAgentFactory` / `HyperAgentFlow` (`application/di/__init__.py:619-668`), the other multi-agent path; `PersonaRouter` (card `tools/Personas.md`); `HeuristicRouter`, which routes inside the legacy `weebot/core/agent.py`, not the tool layer.
+- **Looks like but is not:** `SubAgentFactory` / `HyperAgentFlow` (`application/di/__init__.py:619-668`), the other multi-agent path; `PersonaRouter` (card `tools/Personas.md`); `HeuristicRouter`, whose only caller, the legacy `RecursiveWeebotAgent`, was retired in plan 3.5.
 
 ## If you change this
-**Hits:** every caller that builds sub-agent tools (above), webhook and gateway tool sets, tests `tests/unit/tools/test_dispatch_agents.py`, `tests/unit/test_workflow_orchestrator.py`, `tests/unit/application/test_flow_construction_wiring.py`, `tests/unit/test_reasoner_tool.py`, `tests/unit/test_berb_tool.py`, `tests/unit/fixes/test_f15_tool_dirs_unset.py`, `tests/unit/tools/test_control.py`, `tests/unit/test_scheduler.py`, `tests/unit/test_persistent_memory.py`, `tests/unit/test_memory_metadata_repo.py`, `tests/unit/fixes/test_w55_tool_wiring.py`, `tests/unit/fixes/test_w53_tool_registry_collaborators.py`, `tests/unit/test_di_registries_are_wired.py`, `tests/unit/tools/test_heuristic_router.py`, `tests/unit/test_recursive_agent_browser_async.py`. No test imports `DebateTool`, `SwarmTool` or `MixtureOfAgentsTool`.
+**Hits:** every caller that builds sub-agent tools (above), webhook and gateway tool sets, tests `tests/unit/tools/test_dispatch_agents.py`, `tests/unit/test_workflow_orchestrator.py`, `tests/unit/application/test_flow_construction_wiring.py`, `tests/unit/test_reasoner_tool.py`, `tests/unit/test_berb_tool.py`, `tests/unit/fixes/test_f15_tool_dirs_unset.py`, `tests/unit/tools/test_control.py`, `tests/unit/test_scheduler.py`, `tests/unit/test_persistent_memory.py`, `tests/unit/test_memory_metadata_repo.py`, `tests/unit/fixes/test_w55_tool_wiring.py`, `tests/unit/fixes/test_w53_tool_registry_collaborators.py`, `tests/unit/test_di_registries_are_wired.py`, `tests/unit/tools/test_heuristic_router.py`, `tests/unit/tools/test_swarm_injected_agents.py`. No test imports `DebateTool` or `MixtureOfAgentsTool`.
 **Does not hit:** the guard chain (none of these names is in the shell `GUARDED_TOOLS`); the planner/executor LLM roles.
 
 ## Surfaces

@@ -4,7 +4,8 @@ name: ExecTools
 code: BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline
 cluster: tools
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: d4ffb555
 ---
@@ -44,7 +45,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `RoleBasedToolRegistry` (sandbox and `set_config` wiring, `weebot/tools/tool_registry.py:446-510`), the MCP server, which wraps `bash` and `python_execute` with the egress guard included (`weebot/mcp/server.py:384-392`).
-- **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:222, 264-320`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:34`); `load_fs_permission_checker` (`weebot/config/fs_permissions.py:137`).
+- **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:222, 264-320`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:34`); `load_fs_permission_checker` (`weebot/application/services/fs_permission_policy.py:33`).
 - **Runs on** the Sandbox card's `SandboxPort`.
 - **Looks like but is not:** `weebot/tools/validation.py` validators (dead) and the guard chain (live).
 

@@ -11,7 +11,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.services.mcp_tool_retrieval_service import McpToolRetrievalService
 from weebot.config.constants import MCP_DEFAULT_SCOPE_K
 from weebot.domain.models.session import Session
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 class _DummyLLMPort(LLMPort):

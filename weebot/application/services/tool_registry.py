@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from weebot.tools.base import ToolCollection
+    from weebot.application.models.tool_collection import ToolCollection
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +334,7 @@ class RoleBasedToolRegistry:
 
         import importlib
         import pkgutil
-        from weebot.tools.base import BaseTool
+        from weebot.domain.models.base_tool import BaseTool
 
         cls._TOOL_CLASS_MAP = {}
 
@@ -441,7 +441,7 @@ class RoleBasedToolRegistry:
             ToolCollection with matching ``BaseTool`` instances.
             Unknown names are logged and silently skipped.
         """
-        from weebot.tools.base import ToolCollection
+        from weebot.application.models.tool_collection import ToolCollection
 
         wired = self._wiring() if self._wiring is not None else {}
         sandbox_port = sandbox_port if sandbox_port is not None else wired.get("sandbox_port")
@@ -449,6 +449,7 @@ class RoleBasedToolRegistry:
         state_repo = state_repo if state_repo is not None else wired.get("state_repo")
         rerank = rerank if rerank is not None else wired.get("rerank")
         collaborators: dict[str, dict] = wired.get("collaborators") or {}
+        browser_factory = wired.get("browser_factory")
 
         class_map = self.build_tool_class_map()
         tools: list = []
@@ -479,17 +480,29 @@ class RoleBasedToolRegistry:
                     tool = tool_cls(llm_port=llm_port)
                 elif name in _sandbox_port_tools and sandbox_port is not None:
                     tool = tool_cls(sandbox=sandbox_port)
+                elif name == "swarm":
+                    # The swarm tool receives its agents instead of importing them (plan 3.3).
+                    from weebot.application.agents.goal_agent import GoalAgent
+                    from weebot.application.agents.synthesizer_agent import SynthesizerAgent
+
+                    tool = tool_cls(
+                        llm=llm_port,
+                        flow_factory=flow_factory,
+                        decompose=GoalAgent(llm_port).decompose,
+                        synthesize=SynthesizerAgent(llm_port).synthesize,
+                    )
                 elif name in _flow_factory_llm_tools:
                     tool = tool_cls(llm=llm_port, flow_factory=flow_factory)
                 elif name in _flow_factory_state_tools:
                     tool = tool_cls(flow_factory=flow_factory, state_repo=state_repo)
                 elif name in _browser_adapter_tools:
+                    # The browser comes from the composition root (wiring["browser_factory"]),
+                    # one instance shared by the browser tools; this module imports no adapter.
+                    if _shared_browser_adapter is None and browser_factory is not None:
+                        _shared_browser_adapter = browser_factory()
                     if _shared_browser_adapter is None:
-                        from weebot.infrastructure.browser.playwright_adapter import (
-                            PlaywrightAdapter,
-                        )
-
-                        _shared_browser_adapter = PlaywrightAdapter()
+                        logger.debug("Skipping tool %s: no browser_factory wired", name)
+                        continue
                     tool = tool_cls(browser=_shared_browser_adapter)
                 else:
                     try:

@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from weebot.application.services import fs_permission_policy
 from weebot.config import fs_permissions
 from weebot.config.settings import WORKSPACE_ROOT
 
@@ -61,8 +62,8 @@ def _checker_for(body: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     if body is not None:
         path.write_text(body, encoding="utf-8")
     monkeypatch.setattr(fs_permissions, "_RULES_PATH", path)
-    fs_permissions.load_fs_permission_checker.cache_clear()
-    return fs_permissions.load_fs_permission_checker()
+    fs_permission_policy.load_fs_permission_checker.cache_clear()
+    return fs_permission_policy.load_fs_permission_checker()
 
 
 def test_absent_policy_still_allows_everything(tmp_path, monkeypatch) -> None:

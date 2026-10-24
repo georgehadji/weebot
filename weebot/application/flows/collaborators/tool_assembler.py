@@ -9,7 +9,7 @@ from typing import Any
 
 from weebot.application.flows.mcp_scope import apply_mcp_tool_scope
 from weebot.application.flows.mcp_scope_config import McpScopeConfig
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 class ToolAssembler:

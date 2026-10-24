@@ -8,7 +8,7 @@ tell the agent to use them; `detect_elements`, `screenshot_ocr`,
 
 from __future__ import annotations
 
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 def test_every_tool_has_a_role_and_every_role_entry_exists():

@@ -4,7 +4,8 @@ name: Built-in skills
 code: weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)
 cluster: tools
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: d4ffb555
 ---

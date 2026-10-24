@@ -17,12 +17,18 @@ import logging
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
-from weebot.config.settings import get_settings
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import (  # noqa: F401
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    next_state_after_plan,  # re-exported: the helper moved to base, older imports keep working
+    register_state,
+)
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanReviewEvent, WaitForUserEvent
 
 _log = logging.getLogger(__name__)
@@ -46,20 +52,7 @@ _APPROVE_TOKENS = frozenset(
 )
 
 
-def next_state_after_plan(min_steps: int = 1):
-    """Return PlanReviewState or ExecutingState based on the feature flag.
-
-    Call this from any state that previously transitioned to ExecutingState
-    after plan creation/critique to insert the plan review gate.
-    """
-    from weebot.application.flows.states.executing import ExecutingState
-
-    settings = get_settings()
-    if not settings.plan_review_enabled:
-        return ExecutingState()
-    return PlanReviewState(min_steps=min_steps)
-
-
+@register_state(StateId.PLAN_REVIEW)
 class PlanReviewState(FlowState):
     """Pauses execution for the user to review the proposed plan."""
 
@@ -69,11 +62,10 @@ class PlanReviewState(FlowState):
         self._min_steps = min_steps
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.executing import ExecutingState
 
         if context._plan is None:
             yield ErrorEvent(error="PlanReviewState entered with no plan")
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
             return
 
         plan = context._plan
@@ -85,7 +77,7 @@ class PlanReviewState(FlowState):
                 len(plan.steps),
                 self._min_steps,
             )
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
             return
 
         _log.info("Plan review: presenting %d-step plan '%s' to user", len(plan.steps), plan.title)

@@ -33,7 +33,7 @@ except ImportError:
     HAS_AGENT_MANAGER = False
 
 try:
-    from weebot.tools.tool_registry import ToolRegistry
+    from weebot.application.services.tool_registry import ToolRegistry
 
     HAS_TOOL_REGISTRY = True
 except ImportError:

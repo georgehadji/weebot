@@ -4,7 +4,8 @@ name: Session
 code: Session, SessionStatus, SessionContext, Fact, FactSource
 cluster: domain
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: 1a0e0052
 ---

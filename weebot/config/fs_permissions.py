@@ -18,19 +18,17 @@ Format::
 ``paths`` are globs, either rooted ("/etc/**", "C:/keys/**") or relative to
 the workspace root. ``mode`` is allow | deny | interrupt. First match wins.
 
-Loaded once per process and cached: this is read on every gated file
-operation, and re-parsing YAML per call would put disk I/O in the tool path.
-Call ``load_fs_permission_checker.cache_clear()`` in tests.
+This module is data loading only (``weebot.config`` is a leaf). The cached
+process-wide checker is built in
+``weebot.application.services.fs_permission_policy``.
 """
 
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from weebot.application.services.fs_permission_checker import FSPermissionChecker
 from weebot.domain.models.fs_permission import FilesystemPermission
 
 logger = logging.getLogger(__name__)
@@ -48,16 +46,6 @@ class FSPolicyUnreadable(RuntimeError):
     represented by an empty rule list. Collapsing the two is what let a single
     bad indent disable every rule silently.
     """
-
-
-#: Installed when a policy exists but cannot be read. `FSPermissionChecker`
-#: resolves a workspace-relative pattern against the workspace root, so "**"
-#: covers everything inside it; "/**" covers anything rooted outside.
-_DENY_EVERYTHING = [
-    FilesystemPermission(
-        operations=["read", "write", "execute"], paths=["**", "/**"], mode="deny"
-    )
-]
 
 
 def parse_rules(raw: Any) -> list[FilesystemPermission]:
@@ -131,31 +119,3 @@ def load_rules(path: Path | None = None) -> list[FilesystemPermission]:
         return parse_rules(data["rules"])
     except Exception as exc:
         raise FSPolicyUnreadable(f"{rules_path}: {exc}") from exc
-
-
-@lru_cache(maxsize=1)
-def load_fs_permission_checker() -> FSPermissionChecker:
-    """Process-wide checker built from the rules file."""
-    from weebot.config.settings import WORKSPACE_ROOT
-
-    try:
-        rules = load_rules()
-    except FSPolicyUnreadable as exc:
-        # Fail closed. `PermissionMode` states the rule for the other half of
-        # this gate -- a caller with no approval path "MUST fail closed" -- and
-        # a policy that cannot be loaded is exactly an unanswered gate. The
-        # cost is real and deliberate: a typo in the policy blocks file
-        # operations until it is fixed. The alternative is an operator who
-        # believes they are protected and is not.
-        logger.error(
-            "Filesystem policy could not be loaded (%s). Denying all gated file "
-            "operations until it parses. Fix the file, or remove it to restore "
-            "the unrestricted default.",
-            exc,
-        )
-        return FSPermissionChecker(
-            rules=list(_DENY_EVERYTHING), workspace_root=str(WORKSPACE_ROOT)
-        )
-    if rules:
-        logger.info("Loaded %d filesystem permission rule(s)", len(rules))
-    return FSPermissionChecker(rules=rules, workspace_root=str(WORKSPACE_ROOT))

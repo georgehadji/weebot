@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 @dataclass

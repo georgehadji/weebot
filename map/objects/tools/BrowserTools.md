@@ -4,7 +4,8 @@ name: Browser and desktop tools
 code: AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool
 cluster: tools
 universe: live
-status: verified
+status: stale
+stale_reason: 2026-10-24 remediation moved code these citations point at (tool registry, trust boundary, flow builder, DI); re-verify against source
 verified: 2026-10-24
 commit: d4ffb555
 ---
@@ -39,7 +40,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/tools/tool_registry.py:26-185`)
 **Wiring.**
 - `advanced_browser` and `browser_inspector` get `browser=<one PlaywrightAdapter>` (`weebot/tools/tool_registry.py:487-493`). Each `close()` closes that adapter, idempotently (`weebot/tools/advanced_browser.py:124-127`, `weebot/tools/browser_inspector.py:193-197`); `ToolCollection.teardown` calls it (see the BaseTool card).
 - `browser_navigator` is in the LLM-port set (`weebot/tools/tool_registry.py:456`) but in no role.
-- `BrowserTool` (`weebot/tools/browser_tool.py:37`) does not subclass `BaseTool`, and discovery keeps only `BaseTool` subclasses (`weebot/tools/tool_registry.py:352-356`). So `browser_navigator` never enters the class map; a name list that asks for it logs "not found in class map" and skips it (`weebot/tools/tool_registry.py:513-514`). It is live only through `weebot/core/agent.py:53-56`.
+- `BrowserTool` (`weebot/tools/browser_tool.py:37`) does not subclass `BaseTool`, and discovery keeps only `BaseTool` subclasses (`weebot/tools/tool_registry.py:352-356`). So `browser_navigator` never enters the class map; a name list that asks for it logs "not found in class map" and skips it (`weebot/tools/tool_registry.py:513-514`). It was live only through the legacy `RecursiveWeebotAgent`, retired in plan 3.5, so no flow builds it today.
 - `computer_use` with `require_window` refuses to type when it cannot confirm the active window (`weebot/tools/computer_use.py:208-234`).
 
 **Timeouts.**
@@ -85,7 +86,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/tools/tool_registry.py:26-185`)
 
 ## Surfaces
 - Agents in the roles above.
-- The legacy agent in `weebot/core/agent.py:53-108`, the only place `browser_navigator` is built.
+- The legacy agent (`RecursiveWeebotAgent`, retired in plan 3.5) was the only place `browser_navigator` was built; nothing builds it now.
 - A visible desktop window for `browser_navigator` (`HEADLESS = False`, `browser_tool.py:34`) and for `computer_use`.
 
 ## See

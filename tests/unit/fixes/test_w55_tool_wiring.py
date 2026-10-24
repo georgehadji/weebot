@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 @pytest.fixture

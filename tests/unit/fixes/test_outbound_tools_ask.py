@@ -81,7 +81,7 @@ def test_reading_tools_are_not(name):
 
 def test_only_the_paid_built_in_tools_are_outbound():
     # F54: paid generation and Actor runs ask first; nothing else built in does.
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     hits = {n for n in RoleBasedToolRegistry.build_tool_class_map() if is_outbound_tool(n)}
     assert hits == {"image_gen", "video_gen", "mixture_of_agents"}

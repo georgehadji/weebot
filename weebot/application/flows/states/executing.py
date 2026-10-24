@@ -8,7 +8,14 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    register_state,
+    task_text,
+)
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -125,6 +132,7 @@ def _step_fetched_inbound_mail(events: list[Any]) -> bool:
     return False
 
 
+@register_state(StateId.EXECUTING)
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
 
@@ -271,8 +279,6 @@ class ExecutingState(FlowState):
             logger.warning("Misalignment journal write failed: %s", exc)
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.verifying import VerifyingState
-        from weebot.application.flows.states.updating import UpdatingState
 
         if context._plan is None:
             yield ErrorEvent(error="No plan available during execution")
@@ -281,13 +287,13 @@ class ExecutingState(FlowState):
         step = context._plan.get_next_step()
         if step is None:
             logger.info("All steps complete, transitioning to VERIFYING")
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.VERIFYING))
             return
 
         # Check if step was already completed (prevent re-execution)
         if step.status == StepStatus.COMPLETED:
             logger.warning("Step %s already completed, skipping", step.id)
-            context.set_state(UpdatingState())
+            context.set_state(new_state(StateId.UPDATING))
             return
 
         # ── Inbound-mail approval gate (ADR 006 / R1) ────────────────────────
@@ -407,7 +413,7 @@ class ExecutingState(FlowState):
                 error=f"Step '{step.description}' repeated {step_exec_count} times. "
                 f"Agent may be stuck in a loop. Completing task."
             )
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.VERIFYING))
             return
 
         # Mark step as RUNNING before execution so the executor and
@@ -440,10 +446,10 @@ class ExecutingState(FlowState):
                 error=(
                     "ExecutingState requires a Mediator to be configured on PlanActFlow. "
                     "Construct PlanActFlow with mediator=container.get(Mediator) or "
-                    "use container.build_agent_runner()."
+                    "build it through container.get(\"create_flow\")."
                 )
             )
-            context.set_state(UpdatingState())
+            context.set_state(new_state(StateId.UPDATING))
             return
 
         import time as _time
@@ -467,7 +473,7 @@ class ExecutingState(FlowState):
         _step_elapsed = _time.monotonic() - _step_t0
         if not cmd_result.success:
             yield ErrorEvent(error=f"Step execution rejected: {cmd_result.error}")
-            context.set_state(UpdatingState())
+            context.set_state(new_state(StateId.UPDATING))
             return
 
         _data = cmd_result.data
@@ -568,7 +574,7 @@ class ExecutingState(FlowState):
                     StepStatus.UNVERIFIED,
                     result="all models circuit-broken — step did not execute",
                 )
-                context.set_state(VerifyingState())
+                context.set_state(new_state(StateId.VERIFYING))
                 return
 
             # Collect the actual error message from any ErrorEvent in the batch
@@ -591,14 +597,13 @@ class ExecutingState(FlowState):
                     update={"status": StepStatus.PENDING, "retry_count": step.retry_count + 1}
                 )
                 context._plan = context._plan.replace_step(step.id, step)
-                context.set_state(ExecutingState())
+                context.set_state(new_state(StateId.EXECUTING))
             elif _severity == "full_replan":
                 logger.warning(
                     "Step %s CRITICAL failure (%s) — restarting planning", step.id, _severity
                 )
-                from weebot.application.flows.states.planning import PlanningState
 
-                context.set_state(PlanningState())
+                context.set_state(new_state(StateId.PLANNING))
             else:
                 logger.warning(
                     "Step %s failed during execution in %.1fs (%s); transitioning to UPDATING",
@@ -606,7 +611,7 @@ class ExecutingState(FlowState):
                     _step_elapsed,
                     _severity,
                 )
-                context.set_state(UpdatingState())
+                context.set_state(new_state(StateId.UPDATING))
             return
 
         # ── Phase 3: Step-result quality check ──────────────────────
@@ -640,7 +645,7 @@ class ExecutingState(FlowState):
                 )
                 context._plan = context._plan.replace_step(step.id, updated_step)
                 # Stay in ExecutingState to retry the same step
-                context.set_state(ExecutingState())
+                context.set_state(new_state(StateId.EXECUTING))
                 return
 
         # ── Improvement 6: Step progress evaluation ────────────────
@@ -677,7 +682,7 @@ class ExecutingState(FlowState):
                     _eval.regression_detected,
                     _eval.reasoning,
                 )
-                context.set_state(UpdatingState())
+                context.set_state(new_state(StateId.UPDATING))
                 return
 
         # ── LongHorizon-Harness E1: per-step evidence gate ──────────
@@ -743,14 +748,14 @@ class ExecutingState(FlowState):
                 # ExecutingState which calls get_next_step()
             else:
                 logger.info("All steps complete after terminate — verifying")
-                context.set_state(VerifyingState())
+                context.set_state(new_state(StateId.VERIFYING))
             return
 
         # Check if all steps are now complete
         if context._auto_terminate_on_plan_complete and context._plan.is_complete():
             self._audit_browser_invocation(context)
             logger.info("All plan steps completed. Auto-terminating.")
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.VERIFYING))
             return
 
         # Compact memory after each step
@@ -760,7 +765,7 @@ class ExecutingState(FlowState):
         # Replanning is handled on failures/uncertainty elsewhere.
         next_step = context._plan.get_next_step()
         if next_step is None:
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.VERIFYING))
             return
 
         # ── Phase 8: Per-step code review gate ──────────────────────
@@ -771,14 +776,14 @@ class ExecutingState(FlowState):
             and _is_code_step(step, events=_current_step_events)
             and step.retry_count < _MAX_REVIEW_RETRIES_GATE
         ):
-            from weebot.application.flows.states.reviewing import ReviewingState
 
             context.set_state(
-                ReviewingState(
+                new_state(
+                StateId.REVIEWING,
                     step=step,
                     reviewer=context._code_reviewer,
                     step_events=list(_current_step_events),
                 )
             )
         else:
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))

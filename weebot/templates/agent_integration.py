@@ -21,8 +21,7 @@ from weebot.core import AgentContext
 from weebot.domain.legacy_models import AgentConfig
 
 # NOTE: WeebotAgent is a placeholder name used in this template for illustration.
-# In the real codebase, use ToolCallWeebotAgent (weebot.core.tool_agent) or
-# RecursiveWeebotAgent (weebot.core.agent) depending on your use case.
+# In the real codebase, use ToolCallWeebotAgent (weebot.core.tool_agent).
 # Replace `from weebot.agent_core_v2 import WeebotAgent` with the concrete class.
 
 # ARCH-AUDIT-V2 A5: agent_core_v2 fully sunset.
@@ -313,7 +312,7 @@ def create_agent_enabled_engine(
     Returns:
         Tuple of (TemplateEngine, TemplateAgentManager)
     """
-    from weebot.templates import TemplateEngine
+    from weebot.templates.engine import TemplateEngine
 
     engine = TemplateEngine()
 
