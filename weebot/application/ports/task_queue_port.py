@@ -1,5 +1,10 @@
 """TaskQueuePort — abstract interface for a durable session queue.
 
+RESERVED (decision D4, 2026-10-24): kept on purpose for the Sep plan's Phase 5.2
+(scheduler extraction, multi-process work dispatch). Nothing outside ``TaskRunner``
+uses it today; both adapters stay under ``tests/unit/test_task_queue_contract.py`` so
+they do not rot. Do not delete as dead code.
+
 Allows ``TaskRunner`` to work with either the default in-memory queue
 or a Redis-backed queue (behind the ``WEEBOT_QUEUE_BACKEND=redis``
 feature flag).

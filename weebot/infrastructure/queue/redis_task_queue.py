@@ -128,6 +128,8 @@ class RedisTaskQueue(TaskQueuePort):
         logger.debug("Enqueued session %s (priority=%d)", session.id, priority)
 
     async def dequeue(self) -> QueuedSession | None:
+        if self._closed:  # as the in-memory queue: a closed, drained queue yields None
+            return None
         r = await self._get_redis()
 
         while not self._closed:

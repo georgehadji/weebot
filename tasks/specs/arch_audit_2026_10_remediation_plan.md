@@ -1,7 +1,7 @@
 ---
-status: open
+status: in-progress
 date: 2026-10-24
-note: from the 2026-10-24 EGFV audit (4/10); nothing executed; decisions D1-D6 resolved 2026-10-24; Phase 8 defers to the 2026-09 plan's Phase 5
+note: from the 2026-10-24 EGFV audit (4/10); executed 2026-10-24 on feat/icm-a4-walk, uncommitted, see Appendix C for what landed and where it deviated; decisions D1-D6 resolved 2026-10-24; Phase 8 defers to the 2026-09 plan's Phase 5
 ---
 
 # Architecture Remediation — 2026-10 audit
@@ -20,7 +20,7 @@ scored the code **4/10** on its five-dimension rubric:
 `ARCHITECTURE.md` still reports 9.0. The audit's ledger is reproduced in Appendix B, so this
 file stands on its own.
 
-**This is a plan, not an implementation.** Nothing here has been executed.
+**This began as a plan. Appendix C records what was executed and where the implementation deviated from the text above; where they differ, Appendix C is the truth.**
 
 **Relation to open plans.**
 
@@ -1051,3 +1051,91 @@ tests named in this plan run.
 | CI-1 | `Makefile:130` vs `architecture.yml`; `:35`, `:171` | VERIFIED | LOW | REACHABLE |
 | OPS-1 | `docker-compose.yml:23,30,78` | VERIFIED | LOW | GUARDED |
 | UNK-1 | `docs/SECURITY_MODEL.md` header | UNKNOWN | — | UNKNOWN |
+
+## Appendix C — Execution record (2026-10-24)
+
+Executed on `feat/icm-a4-walk`, **uncommitted**. Where this appendix and the sections above
+differ, this appendix is what the code does.
+
+### Landed
+
+| Item | Result |
+|---|---|
+| 0.1 module cycles | `scripts/lint_module_cycles.py`, `module_cycles` 3 -> **0** (3.6, 3.7, 3.8) |
+| 0.2 dynamic imports | counted and classified by `lint_import_exemptions.py`; `dynamic_weebot_imports` 19 -> **15** (AST count; the audit's grep said 18) |
+| 0.3 CI parity | `lint-no-print`, `lint-map`, `lint-module-cycles`, `lint-ruff`, `lint-long-functions` in CI; coverage floor moved to `[floors] unit_coverage_floor = 64` (measured 65.12% after this work, 62.26% before), read by CI; `ruff_violations = 741` |
+| 0.4 long functions | `functions_over_150_lines = 28` |
+| 1.1 SEC-1 | `OutputTrust` on every tool; `trust_of / must_fence / must_taint / escalate` in `core/trust_boundary.py`; the two name lists, the `apify_`/`mcp__` branches and `KNOWN_UNMATCHED_NAMES` are gone; errors are fenced and never taint (D1). The `LOCAL` tools preserve today's behaviour and are pinned in `test_trust_boundary_registry.py` (`screen_capture` was found by a runtime subclass test) |
+| 1.1b scan | wired as a signal. **Measured before enabling**: 1,422 stored tool results, 10 hits, all one pattern (`XSS Attempt`, critical) on pages and HTML files; `weather` 0 of 16. The broad patterns did not fire. `InjectionSuspected` event, pattern named in the fence header |
+| 1.2 SEC-2 | `core/api_key_crypto.py`; one `_principal_from_key`; the port is on `app.state.api_key_store`, built by the container; golden vectors; `import_exemptions` -1 |
+| 1.3 CON-1 | `BackgroundTasks` moved to `core/background_tasks.py` (infrastructure and core may not import `application.services`); the old path re-exports; all 8 sites converted; discarded-task check added to `lint_unawaited_coroutines.py` at 0; the lifespan drains before pools close |
+| 1.4 OPS-1 | pin test, `.env.example` note (generated from `scripts/generate_config_reference.py`) |
+| 2.1 ORCH-1 | `BoundedLLMAdapter`, re-entrant `LLMPool` (ContextVar admission depth), every container-built LLM wrapped, AST test over `application/di`; the web lifespan unwraps for the breaker |
+| 2.2 ORCH-2 | effect ledger, see deviation 1 |
+| 2.3 ORCH-3 | measured: one dead model = 7 attempts / 60 s alone, **4 attempts** inside the cascade's 15 s `wait_for`. The layers do not multiply; deadline propagation **not built** (it would stop nothing the cancel does not). Numbers pinned in `tests/stress/test_retry_budget.py` |
+| 2.4 ORCH-4 | `SessionCostMeter`; the soft limit degrades the cascade; the hard limit asks through ADR-013, then stops as `BUDGET_EXCEEDED`; settings `WEEBOT_SESSION_COST_SOFT_USD` / `_HARD_USD`; sub-agent spend rolls up (sub-agents run in the parent's context) |
+| 3.1 | infrastructure imports the domain `BaseTool`; `import_exemptions` -4 |
+| 3.2 | `RoleBasedToolRegistry` in `application/services/tool_registry.py`; the browser factory is injected through `tool_wiring`; `tool_discovery` takes the registry by constructor (a `Protocol`); the old path is a re-export shim |
+| 3.3 | swarm receives `decompose` / `synthesize`; the tool imports no agent |
+| 3.4 | the executor receives a `memory_snapshot` callable and imports no tool |
+| 3.5 | `core/agent.py` deleted (D3). `run.py --interactive` already ran on `AgentRunner`, so nothing needed switching to `ChatFlow` |
+| 3.6 | `StateId` registry in `states/base.py`, see deviation 3 |
+| 3.7 | `application/flows/flow_builder.py`; `Container.build_agent_runner` deleted (its only caller was a test); the `application.di -> interfaces.**` exemption is gone |
+| 3.8, 3.9 | templates cycle; `TaskCategory` to the domain; `config-is-leaf` contract with no exemptions |
+| 4 CON-2 | `blocking_io_in_async` 29 -> **0**, a ban; awaited calls are no longer flagged |
+| 5 | typed `Key[T]` (`application/di/keys.py`) with the `string_di_keys` ratchet at 43; `_step_result_handler.py` extracted; budget and termination logic moved out of `plan_act_flow.py` into `collaborators/session_budget.py` |
+| 6 OBS-1 | `core/log_context.py` binds session, step and correlation id and stamps every `logging` record; `BoundedLLMAdapter` logs one `llm_call` record per call with `prompt_sha` |
+| 7 | `ARCHITECTURE.md` (DOC-1..4), `SECURITY_MODEL.md` (each bullet has its test or `unverified`), `TaskQueuePort` kept and reserved (D4) with a contract test over both adapters (which found and fixed a real divergence: `RedisTaskQueue.dequeue` connected before checking `_closed`) |
+| 8 | the 30-session proof, see deviation 8 |
+
+### Deviations from the text above, and why
+
+1. **2.2: the ledger is in the event store, not session facts.** `TaskRunner` rewrites the
+   whole session on every event (`save_session(session)`), so a fact written beside it can be
+   lost; an appended `effect_recorded` row cannot. It uses the existing `EventStorePort`
+   (`log_event` / `get_session_events`): still no new port. The key also includes a digest of
+   the step description, because the planner numbers steps `step-1`, `step-2` afresh on every
+   plan, so a step id alone cannot tell a re-plan from a retry. The plan's "verify re-planned
+   steps get new ids" assumption was **false**.
+2. **2.4: no new `EventStorePort.get_session_cost`.** `get_cost_summary(session_id)` already
+   returns the total.
+3. **3.6: states do not return a `Transition`.** They still call `context.set_state(...)` (that
+   call carries side effects mid-generator); what changed is how they name the successor:
+   `new_state(StateId.X)` through a registry, so no state imports a sibling. The cycle is gone;
+   the `Transition` value object was not needed to get there.
+4. **1.1: `LOCAL` is behaviour-preserving, not a fresh review.** Every tool that was unlisted
+   stays unfenced. `computer_use`, `screen_capture`, `voice_input`, `bash`, `python_execute`
+   and `powershell` are the candidates to revisit; making them `EXTERNAL` would taint nearly
+   every session and train users to disable the egress guard. The pinned list makes any change
+   a visible edit.
+5. **3.2: the registry still discovers tool classes in `weebot.tools`** (a `pkgutil` walk), so
+   application keeps one edge into `weebot.tools`. Injecting the class map is a separate change.
+6. **3.5** needed no REPL switch (see table). **3.3** is complete: the registry passes the
+   agents in.
+7. **4:** `qmd_integration/mcp_client.py` uses `asyncio.to_thread(subprocess.Popen, ...)`, not
+   `create_subprocess_exec`: the rest of the module and `core/process_lifecycle` expect a sync
+   `Popen`. The four application services in step 3 use `to_thread`, not `FileStoragePort`:
+   they are built without a port, and the port rejects absolute paths outside its root.
+8. **Phase 8** is the Sep plan's Phase 5; only its inputs were in scope here. Done: the
+   30-session proof (`tests/stress/test_ten_x_sessions.py`: pool bound holds, no
+   `database is locked`, p95 persist latency under budget). **Still open for Sep 5.3:** moving
+   `TaskRunner._retry_counts / _flow_factories / _failed_sessions` and the executor's
+   `_LOCAL_TAB / _WRITTEN_FILES / _TAINTED_SESSIONS` into durable state, and owners for the
+   four module registries. The proof drives the real bulkhead and the real event store, not
+   the whole FastAPI app.
+9. **Map:** 14 verified `map/` cards cite code that moved; they are marked `status: stale`
+   rather than re-verified (the map's own rule). Re-verify them.
+10. **Tooling note:** some mechanical changes were scripted (a codemod added `output_trust` to
+    the tool classes; the state registry rewrite was a regex pass); tests and ruff reviewed
+    them.
+
+### Left for you
+
+- Nothing is committed. `git add -N` was used on new files so the map's tracked-file checks see
+  them; no content is staged.
+- Last full run (unit, integration, stress, e2e; `-m "not external"`): 6264 passed, 7 failed.
+  The 7 are `tests/unit/config/test_fs_policy_fail_closed.py` and fail only after
+  `tests/unit/tools` has run in the same process; they fail identically on a pristine `HEAD`
+  worktree, so they are an existing order-dependent test pollution, not from this work.
+- AGENTS.md / GEMINI.md / QWEN.md report drift from CLAUDE.md in `gen_entry_twins.py --check`;
+  CLAUDE.md was not edited by this work.
