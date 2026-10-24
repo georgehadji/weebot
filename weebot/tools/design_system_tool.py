@@ -14,7 +14,9 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class DesignSystemTool(BaseTool):
 
-    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
+    # Reviewed 2026-10-24: it scrapes remote sites and repositories, so its result can
+    # carry third-party text.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
     name: str = "design_system"
     description: str = (
         "Extract a complete design system from any website, GitHub repo, or "

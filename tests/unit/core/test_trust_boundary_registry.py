@@ -27,12 +27,22 @@ _ROOT = pathlib.Path(__file__).resolve().parents[3]
 _TOOLS_DIR = _ROOT / "weebot" / "tools"
 _MCP_DIR = _ROOT / "weebot" / "infrastructure" / "mcp"
 
-# Reviewed 2026-10-24 (plan 1.1): behaviour-preserving. Every name here was
-# unfenced and untainting before the list was removed. Candidates to revisit:
-# computer_use and voice_input (screen and microphone content a third party can
-# influence), bash/python_execute/powershell (stdout can carry fetched text).
-# They stay LOCAL because making them EXTERNAL taints nearly every session and
-# trains users to disable the egress guard (trust_boundary.must_taint).
+# Reviewed 2026-10-24 (plan 1.1). A tool is LOCAL only if no third party can choose the
+# text it returns. The review moved six tools to EXTERNAL because they relay third-party
+# text: swarm, dispatch_parallel_tasks, workflow_orchestrator and debate run sub-agents
+# that have tools (and may have browsed), design_system scrapes remote sites, and
+# desktop_a11y returns other applications' UI text. What stays LOCAL, and why:
+#   bash, python_execute, powershell -- stdout can carry fetched text, but the network
+#       is gated separately (sandbox network off by default, EgressGuard on every send);
+#       EXTERNAL would taint nearly every session and train users to disable the guard.
+#   computer_use, screen_capture -- action confirmations and images of the user's own
+#       screen, no text a tool fetched; screenshot_ocr and ocr are EXTERNAL.
+#   voice_input -- the user's own microphone.
+#   mixture_of_agents, reasoner -- model text, no tools.
+#   persistent_memory, knowledge, todo_write, schedule, product, berb, audit_session --
+#       the agent's own records.
+#   image_gen, video_gen, voice_output, remotion_video, ask_human, terminate,
+#       detect_elements -- generated or local artifacts and control signals.
 REVIEWED_LOCAL = frozenset(
     {
         "audit_session",
@@ -40,11 +50,7 @@ REVIEWED_LOCAL = frozenset(
         "bash",
         "berb",
         "computer_use",
-        "debate",
-        "design_system",
-        "desktop_a11y",
         "detect_elements",
-        "dispatch_parallel_tasks",
         "image_gen",
         "knowledge",
         "mixture_of_agents",
@@ -56,13 +62,11 @@ REVIEWED_LOCAL = frozenset(
         "remotion_video",
         "schedule",
         "screen_capture",
-        "swarm",
         "terminate",
         "todo_write",
         "video_gen",
         "voice_input",
         "voice_output",
-        "workflow_orchestrator",
     }
 )
 
@@ -181,6 +185,25 @@ class TestRuntimeAgreesWithTheSource:
                 ):
                     undeclared.append(f"{cls.__module__}.{cls.__name__}")
         assert not undeclared, f"BaseTool subclasses without their own output_trust: {undeclared}"
+
+
+class TestRelayToolsAreExternal:
+    """The 2026-10-24 review: tools that relay third-party text must not be LOCAL."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "swarm",
+            "dispatch_parallel_tasks",
+            "workflow_orchestrator",
+            "debate",
+            "design_system",
+            "desktop_a11y",
+        ],
+    )
+    def test_relay_tools_fence_and_taint(self, name):
+        declared = {n: t for _, _, n, t in _tool_classes()}
+        assert declared[name] == "EXTERNAL", f"{name!r} relays text a third party can write"
 
 
 class TestKnownTools:

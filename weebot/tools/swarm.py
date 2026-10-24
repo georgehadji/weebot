@@ -31,7 +31,9 @@ class SwarmTool(BaseTool):
     """Decompose a complex task into sub-goals, spawn parallel agents,
     and synthesize results — all driven by a single prompt."""
 
-    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
+    # Reviewed 2026-10-24: sub-agents with tools run inside it and may have browsed,
+    # so its result can carry third-party text.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "swarm"
     description: str = (

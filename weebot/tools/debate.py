@@ -71,7 +71,9 @@ Return ONLY a JSON object:
 class DebateTool(BaseTool):
     """Analyze a question from multiple opposing perspectives and reconcile."""
 
-    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
+    # Reviewed 2026-10-24: sub-agents with tools run inside it and may have browsed,
+    # so its result can carry third-party text.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "debate"
     description: str = (

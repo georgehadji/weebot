@@ -54,7 +54,9 @@ class DesktopA11yTool(BaseTool):
         desktop_a11y(window_title="Settings")  →  target specific window
     """
 
-    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
+    # Reviewed 2026-10-24: the accessibility tree carries other applications' text,
+    # browser pages included, so its result can carry third-party text.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "desktop_a11y"
     description: str = (
