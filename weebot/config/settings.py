@@ -373,6 +373,24 @@ class WeebotSettings(BaseSettings):
             "against the model's own timeout."
         ),
     )
+    session_cost_soft_usd: float = Field(
+        default=0.50,
+        ge=0,
+        alias="WEEBOT_SESSION_COST_SOFT_USD",
+        description=(
+            "Per-session spend (USD) above which the cascade skips PREMIUM models for the "
+            "rest of the session. 0 disables. Default is about the measured p99."
+        ),
+    )
+    session_cost_hard_usd: float = Field(
+        default=2.50,
+        ge=0,
+        alias="WEEBOT_SESSION_COST_HARD_USD",
+        description=(
+            "Per-session spend (USD) at which the flow asks to continue (ADR-013), then ends "
+            "as BUDGET_EXCEEDED if refused. 0 disables."
+        ),
+    )
     max_concurrent_flows: int = Field(
         default=8,
         ge=1,

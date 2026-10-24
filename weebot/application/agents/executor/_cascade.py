@@ -84,7 +84,10 @@ class CascadeExecutor:
         # Awaited with an LLMCallCompleted after each successful call (W4.1, F23).
         on_call_completed=None,
         pinned_model: str | None = None,  # `flow run --model`: tried before the role cascade
+        # SessionCostMeter: past the soft limit PREMIUM models are skipped (plan 2.4, D6).
+        cost_meter=None,
     ) -> None:
+        self._cost_meter = cost_meter
         self._llm = llm
         self._tools = tools
         self._agent_role = agent_role
@@ -440,6 +443,20 @@ class CascadeExecutor:
             return CascadeTier.FREE
         return CascadeTier.PREMIUM if model_id in PREMIUM_MODELS else CascadeTier.BUDGET
 
+    def _within_budget(self, models: list[str]) -> list[str]:
+        """Past the soft cost limit drop PREMIUM models, but never empty the list (D6)."""
+        if self._cost_meter is None:
+            return models
+        from weebot.core.log_context import session_id_var
+
+        if not self._cost_meter.soft_exceeded(session_id_var.get()):
+            return models
+        cheaper = [m for m in models if not m or self._tier_of(m) is not CascadeTier.PREMIUM]
+        if len(cheaper) < len(models) and any(cheaper):
+            logger.info("soft cost limit: skipping %d PREMIUM model(s)", len(models) - len(cheaper))
+            return cheaper
+        return models
+
     # ── Full cascade orchestration ──────────────────────────────────
 
     async def call_with_cascade(
@@ -500,7 +517,7 @@ class CascadeExecutor:
                 if m
             )
         )
-        filtered_models = await self.get_credits_and_filter_direct(all_models)
+        filtered_models = self._within_budget(await self.get_credits_and_filter_direct(all_models))
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
         parallel = list(
@@ -578,7 +595,7 @@ class CascadeExecutor:
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [
             m
-            for m in (role_fallback2, self._TIER4_MODEL)
+            for m in self._within_budget([role_fallback2, self._TIER4_MODEL])
             if m
             and not self.cascade_is_tripped(m)
             and m not in parallel

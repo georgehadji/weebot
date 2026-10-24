@@ -48,6 +48,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from weebot.application.di import Container
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.application.strategies.llm_pool import unwrap_llm
 from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.web.routers import (
@@ -201,6 +202,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_process_approval(FlowPauseApproval())
     set_approval_journal(container.get(EventStorePort))
 
+    # The one API-key store for this process; web/auth.py reads it from app.state.
+    from weebot.application.ports.api_key_port import ApiKeyPort
+
+    app.state.api_key_store = container.get(ApiKeyPort)
+
     # ── Live event fan-out (WebSocket) ─────────────────────────
     # Wired once, here, at the composition root — nothing in application/
     # or the flows knows a WebSocket exists. Without this subscription
@@ -253,7 +259,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
         ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
-        llm = container.get(LLMPort)
+        llm = unwrap_llm(container.get(LLMPort))
         if isinstance(llm, ResilientLLMAdapter):
             cb_path = str(Path.home() / ".weebot" / "breaker_state.json")
             restored = llm._circuit.restore_state(cb_path) if llm._circuit else False
@@ -357,7 +363,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
         ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
-        llm = container.get(LLMPort)
+        llm = unwrap_llm(container.get(LLMPort))
         if isinstance(llm, ResilientLLMAdapter):
             cb_path = str(Path.home() / ".weebot" / "breaker_state.json")
             if llm._circuit:
@@ -365,10 +371,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
+    # Fire-and-forget work (webhook replies, journal writes) gets a bounded chance
+    # to finish while the pools it writes through are still open.
+    from weebot.core.background_tasks import get_background_tasks
+
+    await get_background_tasks().drain()
+
     # The configured MCP servers' connections, from the task that opened them.
     from weebot.interfaces.factories import close_mcp_toolkit
 
     await close_mcp_toolkit()
+    api_key_store = getattr(app.state, "api_key_store", None)
+    if api_key_store is not None and hasattr(api_key_store, "close"):
+        await api_key_store.close()
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools

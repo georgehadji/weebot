@@ -22,6 +22,8 @@ class TerminationContext:
     total_tokens: int = 0
     elapsed_seconds: float = 0.0
     last_messages: list[dict[str, Any]] | None = None
+    session_cost_usd: float = 0.0
+    session_cost_allowance_usd: float = 0.0  # the hard limit now in force; 0 = none
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,7 @@ class TerminationResult:
 
     should_terminate: bool
     reason: str = ""
+    code: str = ""  # machine-readable cause, e.g. BUDGET_EXCEEDED
 
     def __bool__(self) -> bool:
         return self.should_terminate

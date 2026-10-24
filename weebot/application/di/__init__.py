@@ -11,7 +11,7 @@ Capability bindings extracted to ``di/_capabilities.py``,
 Usage:
     container = Container()
     container.configure_defaults()
-    runner = container.build_agent_runner(role="admin")
+    flow = container.get("create_flow")(flow_type="plan_act", session=..., llm=..., tools=...)
 """
 
 from __future__ import annotations
@@ -29,6 +29,8 @@ from weebot.application.cqrs.handlers import register_default_handlers  # noqa: 
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E402
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
+from weebot.application.di.keys import LLM_POOL, SESSION_COST_METER  # noqa: E402
+from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.gateway_session_store_port import (  # noqa: E402
@@ -168,6 +170,9 @@ class Container(
         # The Telegram gateway's session store. Resolved here -- not built by
         # web/main.py -- so session deletion purges the same store it writes.
         self.register(IGatewaySessionStorePort, self._create_gateway_session_store)
+        # Web auth resolves API keys through this port (SEC-2): the web lifespan
+        # puts it on app.state, so a request no longer builds a store per call.
+        self.register(ApiKeyPort, self._create_api_key_store)
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
         self.register(SwarmEventBusPort, self._create_swarm_bus)
         self.register(SubAgentFactoryPort, self._create_sub_agent_factory)
@@ -252,14 +257,21 @@ class Container(
         # arguments still win; a None mediator is never kept, because no flow
         # can run on one.
         def _create_flow_callable():
-            from weebot.interfaces.factories import create_flow
+            from weebot.application.flows.flow_builder import build_flow
+
+            def _resolve(key):
+                # Optional services: absent or failing means "not wired", never an error.
+                try:
+                    return self.get(key)
+                except Exception:
+                    return None
 
             def _build_flow(**kwargs):
                 if kwargs.get("mediator") is None:
                     kwargs["mediator"] = self.get(Mediator)
                 if kwargs.get("state_repo") is None:
                     kwargs["state_repo"] = self.get(StateRepositoryPort)
-                return create_flow(**kwargs)
+                return build_flow(_resolve, **kwargs)
 
             return _build_flow
 
@@ -327,7 +339,26 @@ class Container(
                 acquire_timeout=_settings.llm_pool_acquire_timeout_s,
             )
 
-        self.register("llm_pool", _create_llm_pool)
+        self.register(LLM_POOL, _create_llm_pool)
+
+        # Per-session spend: a running total fed by LLMCallCompleted, a soft limit that
+        # degrades and a hard limit that asks (plan 2.4, D6). Subscribed to the bus once.
+        def _create_session_cost_meter():
+            from weebot.application.services.session_cost import SessionCostMeter
+
+            _settings = self.get(WeebotSettings)
+            bus = self._maybe_get(EventBusPort)
+            meter = SessionCostMeter(
+                soft_usd=_settings.session_cost_soft_usd,
+                hard_usd=_settings.session_cost_hard_usd,
+                event_store=self._maybe_get(EventStorePort),
+                event_bus=bus,
+            )
+            if bus is not None:
+                bus.subscribe_domain(meter.on_domain_event)
+            return meter
+
+        self.register(SESSION_COST_METER, _create_session_cost_meter)
 
         # Credit balance + live model list for the cascade (phase 3.1). These
         # were raw httpx calls to openrouter.ai inside CascadeExecutor.
@@ -406,22 +437,6 @@ class Container(
 
         return self.get("scheduler")
 
-    def build_agent_runner(self, role="admin", mcp_config=None, use_rich=True):
-        """Construct a ready-to-use AgentRunner."""
-        from weebot.interfaces.cli.agent_runner import AgentRunner
-
-        return AgentRunner(
-            llm=self.get(LLMPort),
-            state_repo=self.get(StateRepositoryPort),
-            event_bus=self.get(EventBusPort),
-            model=self._maybe_get_model(),
-            role=role,
-            mcp_config=mcp_config,
-            use_rich=use_rich,
-            mediator=self._maybe_get(Mediator),
-            retention_agent=self._maybe_get_str("retention_agent"),
-        )
-
     def step_executor(
         self,
         *,
@@ -442,6 +457,8 @@ class Container(
         from weebot.application.agents.executor import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+        from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
+        from weebot.tools.persistent_memory import PersistentMemoryTool
 
         kwargs = dict(
             llm=llm if llm is not None else self._maybe_get(LLMPort),
@@ -456,8 +473,15 @@ class Container(
             tracing_port=self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None,
             # THE place the pool has to go: this executor runs every step
             # (ExecutingState sends each one through the mediator).
-            llm_pool=self._maybe_get_str("llm_pool"),
+            llm_pool=self._maybe_get(LLM_POOL),
             provider_account=self._maybe_get(ProviderAccountPort),
+            # Plan 1.1b: every fenced tool result is scanned (a signal, not the control).
+            injection_scan=scan_for_injection,
+            # Plan 2.2: an outbound action a retried flow already took is not repeated.
+            effect_ledger=self._effect_ledger(),
+            # Plan 2.4: past the soft cost limit the cascade skips PREMIUM models.
+            cost_meter=self._maybe_get(SESSION_COST_METER),
+            memory_snapshot=PersistentMemoryTool.load_snapshot,
         )
         if context is not None:
             kwargs.update(context.executor_kwargs())
@@ -481,7 +505,7 @@ class Container(
         event_bus = self._maybe_get(EventBusPort)
         tools = None
         if llm is not None:
-            from weebot.tools.tool_registry import RoleBasedToolRegistry
+            from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
             try:
                 sandbox = self._maybe_get(SandboxPort)
@@ -618,7 +642,7 @@ class Container(
         """Create a SubAgentFactory."""
         from weebot.infrastructure.adapters.sub_agent_factory import SubAgentFactory
         from weebot.application.flows.plan_act_flow import PlanActFlow
-        from weebot.tools.tool_registry import RoleBasedToolRegistry
+        from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
         sandbox = self._maybe_get(SandboxPort)
         # Unwired, every tool with collaborators was skipped from sub-agents.

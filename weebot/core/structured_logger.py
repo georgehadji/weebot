@@ -53,8 +53,12 @@ from datetime import datetime, UTC
 from typing import Any
 from collections.abc import Callable, Generator
 
-# Context variables for correlation tracking
-_correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
+# Context variables for correlation tracking. The correlation id is owned by
+# core.log_context (with session_id and step_id), so one id serves this logger,
+# stdlib logging and the LLM call records (OBS-1).
+from weebot.core.log_context import correlation_id_var as _correlation_id  # noqa: E402
+from weebot.core.log_context import session_id_var as _session_id  # noqa: E402
+from weebot.core.log_context import step_id_var as _step_id  # noqa: E402
 _agent_id: ContextVar[str | None] = ContextVar("agent_id", default=None)
 _workflow_id: ContextVar[str | None] = ContextVar("workflow_id", default=None)
 
@@ -85,6 +89,8 @@ class StructuredLogRecord:
         correlation_id: str | None = None,
         agent_id: str | None = None,
         workflow_id: str | None = None,
+        session_id: str | None = None,
+        step_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         exc_info: str | None = None,
         error_type: str | None = None,
@@ -98,6 +104,8 @@ class StructuredLogRecord:
         self.correlation_id = correlation_id
         self.agent_id = agent_id
         self.workflow_id = workflow_id
+        self.session_id = session_id
+        self.step_id = step_id
         self.metadata = metadata or {}
         self.exc_info = exc_info
         self.error_type = error_type
@@ -120,6 +128,10 @@ class StructuredLogRecord:
             result["agent_id"] = self.agent_id
         if self.workflow_id:
             result["workflow_id"] = self.workflow_id
+        if self.session_id:
+            result["session_id"] = self.session_id
+        if self.step_id:
+            result["step_id"] = self.step_id
 
         # Add metadata
         if self.metadata:
@@ -196,6 +208,8 @@ class StructuredLogger:
             "correlation_id": _correlation_id.get(),
             "agent_id": _agent_id.get(),
             "workflow_id": _workflow_id.get(),
+            "session_id": _session_id.get(),
+            "step_id": _step_id.get(),
         }
 
     def _log(
@@ -229,6 +243,8 @@ class StructuredLogger:
             correlation_id=context["correlation_id"],
             agent_id=context["agent_id"],
             workflow_id=context["workflow_id"],
+            session_id=context["session_id"],
+            step_id=context["step_id"],
             metadata=kwargs if kwargs else None,
             exc_info=exc_info_str,
             error_type=error_type,

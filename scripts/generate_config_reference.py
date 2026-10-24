@@ -92,7 +92,13 @@ CONFIG_SCHEMA: list[dict] = [
 
     # ── Valkey (Event Bus) ────────────────────────────────────────
     {"var": "VALKEY_PASSWORD", "type": "str", "default": "weebot_default",
-     "desc": "Valkey password (set a strong value in production)"},
+     "desc": "Valkey password. The default is for local docker compose only: the Valkey service publishes no port (pinned by tests/unit/test_compose_valkey_unpublished.py). Set your own value before publishing it"},
+
+    # ── Session cost budget (plan 2.4, D6) ────────────────────────
+    {"var": "WEEBOT_SESSION_COST_SOFT_USD", "type": "float", "default": "0.50",
+     "desc": "Per-session spend (USD) above which the cascade skips PREMIUM models for the rest of the session; 0 disables"},
+    {"var": "WEEBOT_SESSION_COST_HARD_USD", "type": "float", "default": "2.50",
+     "desc": "Per-session spend (USD) at which the flow asks to continue, then ends as BUDGET_EXCEEDED if refused; 0 disables"},
 
     # ── Sandbox / Execution ───────────────────────────────────────
     {"var": "BASH_TIMEOUT", "type": "int",

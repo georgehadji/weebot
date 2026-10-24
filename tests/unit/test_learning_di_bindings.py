@@ -71,10 +71,10 @@ def test_flow_factory_passes_all_three(container):
     """
     import inspect
 
-    from weebot.interfaces import factories
+    from weebot.application.flows import flow_builder
 
-    source = inspect.getsource(factories.create_flow)
+    source = inspect.getsource(flow_builder.build_flow)
     for key, _ in _KEYS:
         assert (
-            f'_cached("{key}")' in source
-        ), f"create_flow never resolves {key} -- the DI binding is unused"
+            f'resolve("{key}")' in source
+        ), f"build_flow never resolves {key} -- the DI binding is unused"

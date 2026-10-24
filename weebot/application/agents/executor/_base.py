@@ -7,7 +7,7 @@ import logging
 from collections import deque
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
@@ -29,7 +29,8 @@ from weebot.application.services.ponytail_post_processor import PonytailPostProc
 from weebot.application.services.step_budget import StepBudget
 from weebot.config.constants import MAX_EXECUTOR_STEPS
 from weebot.config.model_refs import MODEL_CASCADE_TIER1
-from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
+from weebot.core.trust_boundary import escalate, must_fence, trust_of, wrap_untrusted
+from weebot.application.agents.executor._step_result_handler import feed_vision, pause_events
 from weebot.application.agents.executor._error_handler import (
     build_stuck_error,
     classify_tool_error,
@@ -46,7 +47,6 @@ from weebot.domain.models.event import (
     StepEvent,
     StepStatus,
     ThoughtEvent,
-    ToolApprovalEvent,
     ToolEvent,
     ToolStatus,
     WaitForUserEvent,
@@ -243,7 +243,18 @@ class ExecutorAgent:
         llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
         provider_account: ProviderAccountPort | None = None,  # Credit check + live rescue
         pinned_model: str | None = None,  # `flow run --model`: the cascade tries it first
+        # Injection scan for fenced tool output (plan 1.1b): a signal that names the
+        # pattern and escalates trust, never the control. None = not configured.
+        injection_scan: Callable[[str], dict[str, Any] | None] | None = None,
+        # Outbound actions already taken, so a retried flow does not repeat them (ORCH-2).
+        effect_ledger: Any | None = None,
+        cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
+        # Awaitable returning the persistent-memory snapshot for the system prompt; the
+        # composition root supplies it, so the executor imports no tool (plan 3.4).
+        memory_snapshot: Callable[[], Awaitable[str]] | None = None,
     ):
+        self._memory_snapshot = memory_snapshot
+        self._injection_scan = injection_scan
         self._llm = llm
         self._tools = tools
         self._event_bus = event_bus
@@ -314,6 +325,7 @@ class ExecutorAgent:
             llm_pool=llm_pool,
             provider_account=provider_account,
             pinned_model=pinned_model,
+            cost_meter=cost_meter,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
             on_call_completed=self._publish_llm_call,
@@ -329,6 +341,7 @@ class ExecutorAgent:
             system_prompt=self._system_prompt,
             llm=llm,
             model=model,
+            effect_ledger=effect_ledger,
         )
 
     def set_harness_block(self, block: str | None) -> None:
@@ -379,6 +392,68 @@ class ExecutorAgent:
             except Exception:
                 pass
         return _load_executor_system_prompt()
+
+    async def _present_tool_output(self, tool_name: str, result: Any) -> str:
+        """The text of a tool result as the model sees it: fenced unless the tool is LOCAL.
+
+        Errors are fenced too (HTTP error pages and MCP messages carry remote
+        text); the taint still skips them, see ``must_taint``. The scan is a
+        signal: a hit names its pattern in the fence header, escalates a
+        fixed-schema source to tainting, and records ``InjectionSuspected``. The
+        content inside the fence is never altered.
+        """
+        content = str(result)
+        trust = trust_of(self._tools.get_tool(tool_name) if self._tools is not None else None)
+        if not must_fence(trust):
+            return content
+
+        detection = self._scan_tool_output(content)
+        suspected = None
+        if detection:
+            suspected = str(detection.get("pattern") or detection.get("type") or "suspected")
+            if escalate(trust, detection) != trust:
+                self._tool_executor.taint_session(tool_name, getattr(result, "is_error", False))
+            await self._emit_injection_suspected(tool_name, detection)
+        return wrap_untrusted(source=tool_name, content=content, suspected=suspected)
+
+    def _scan_tool_output(self, content: str) -> dict[str, Any] | None:
+        if self._injection_scan is None or not content:
+            return None
+        try:
+            return self._injection_scan(content)
+        except Exception:
+            # Fail closed: a scan that cannot run is a detection, not a clean bill.
+            logger.warning("injection scan raised; treating the output as suspect", exc_info=True)
+            return {
+                "type": "scanner_unavailable",
+                "pattern": "the injection scanner could not run",
+                "severity": "critical",
+                "unavailable": True,
+            }
+
+    async def _emit_injection_suspected(self, tool_name: str, detection: dict[str, Any]) -> None:
+        from weebot.domain.models.event import InjectionSuspected
+
+        session_id = getattr(self, "_current_session_id", "") or ""
+        logger.warning(
+            "injection suspected in %s output (session %s): %s [%s]",
+            tool_name,
+            session_id,
+            detection.get("pattern"),
+            detection.get("severity"),
+        )
+        if self._event_bus is None:
+            return
+        await self._event_bus.publish_domain_event(
+            InjectionSuspected(
+                session_id=session_id,
+                step_id=str(getattr(self._tool_executor, "_get_step_id", lambda: "")() or ""),
+                tool_name=tool_name,
+                pattern=str(detection.get("pattern", "")),
+                severity=str(detection.get("severity", "")),
+                scanner_unavailable=bool(detection.get("unavailable", False)),
+            )
+        )
 
     async def _publish_llm_call(self, event: Any) -> None:
         """Stamp the step's session on an LLMCallCompleted and publish it (W4.1)."""
@@ -545,7 +620,7 @@ class ExecutorAgent:
         self._current_session_id = session_id or getattr(self, "_current_session_id", "unknown")
         # The approval scope and audit records read the session from here; it
         # was never set, so Flow pause denied every web approval (B2c).
-        self._tool_executor.set_step_context(step.id, session_id)
+        self._tool_executor.set_step_context(step.id, session_id, step.description or "")
         self._tool_note = self._scope_tools_for(step)
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
@@ -611,9 +686,7 @@ class ExecutorAgent:
         )
         # Inject persistent memory snapshot
         try:
-            from weebot.tools.persistent_memory import PersistentMemoryTool
-
-            snapshot = await PersistentMemoryTool.load_snapshot()
+            snapshot = await self._memory_snapshot() if self._memory_snapshot else ""
             if snapshot:
                 self._system_prompt = self._system_prompt + "\n\n" + snapshot
         except Exception as exc:
@@ -1006,27 +1079,10 @@ class ExecutorAgent:
 
                 if result.data:
                     self._facts[tool_name] = result.data
-
-                    if result.data.get("awaiting_human"):
-                        question = result.data.get("question", "")
-                        yield WaitForUserEvent(question=question)
-                        return
-
-                    # ADR-013 flow pause: a guard asked, and a human must answer.
-                    pending = result.data.get("approval_required")
-                    if pending:
-                        yield ToolApprovalEvent(
-                            tool_name=pending.get("tool_name", tool_name),
-                            arguments=pending.get("arguments", {}),
-                            risk_level=pending.get("guard", ""),
-                            reason=pending.get("reason", ""),
-                            prompt=pending.get("prompt", "Allow this command? (yes/no)"),
-                            fingerprint=pending.get("fingerprint", ""),
-                            allow_always=pending.get("allow_always"),
-                        )
-                        # The UI, CLI and SSE render wait_for_user, not
-                        # tool_approval: this is the question a person sees.
-                        yield WaitForUserEvent(question=pending.get("prompt", ""))
+                    paused = pause_events(result, tool_name)
+                    if paused:
+                        for event in paused:
+                            yield event
                         return
 
                 if tool_name == "terminate":
@@ -1038,25 +1094,12 @@ class ExecutorAgent:
                     abort_step = True
                     break
 
-                _tool_content = str(result)
-                if not result.is_error and is_untrusted_tool(tool_name):
-                    _tool_content = wrap_untrusted(source=tool_name, content=_tool_content)
+                _tool_content = await self._present_tool_output(tool_name, result)
                 self._conversation_buffer.append(
                     {"role": "tool", "content": _tool_content, "tool_call_id": tc["id"]}
                 )
 
-                # Vision-in-the-loop: let a vision-capable model SEE the screen
-                # state a tool produced, instead of driving blind off DOM/OCR text.
-                if getattr(result, "base64_image", None) and self._vision_enabled():
-                    self._needs_vision = True  # Next LLM call must use a VLM
-                    await self._context_compressor.inject_screenshot(tool_name, result.base64_image)
-                    # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
-                    # Grounded in the step description so the model can judge progress.
-                    reflection = await self._context_compressor.reflect_on_screenshot(
-                        tool_name, result.base64_image, task_context=step.description
-                    )
-                    if reflection is not None:
-                        self._context_compressor.inject_reflection(reflection)
+                await feed_vision(self, tool_name, result, step.description)
 
             if abort_step:
                 break
@@ -1172,9 +1215,11 @@ def _maybe_record_skill_gap(
             best_score=best_score,
         )
         if executor._event_bus is not None:
-            import asyncio
+            from weebot.core.background_tasks import get_background_tasks
 
-            asyncio.ensure_future(executor._event_bus.publish_domain_event(event))
+            get_background_tasks().spawn(
+                executor._event_bus.publish_domain_event(event), name="skill-gap-detected"
+            )
     except Exception:
         logger.debug("SkillGapDetected event emission failed (non-blocking)")
         pass  # event emission must never block the execution loop

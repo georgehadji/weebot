@@ -608,7 +608,9 @@ def test_persistence_at_emit():
     """
     # Collaborators that only read state_repo (e.g. via load_session) and
     # never mutate it, so save_session is legitimately absent.
-    read_only_files = {"fact_resolver.py"}
+    # flow_builder.py only forwards state_repo to the flow it constructs (plan 3.7);
+    # the flow persists.
+    read_only_files = {"fact_resolver.py", "flow_builder.py"}
 
     violations: list[str] = []
     checked_dirs = [ROOT / "application" / "flows"]

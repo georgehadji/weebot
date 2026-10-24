@@ -18,13 +18,16 @@ from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.base import AgentStatus
 from weebot.application.flows.flow_router import FlowRouter
 from weebot.application.flows.collaborators.fact_resolver import FactResolver
+from weebot.application.flows.collaborators.session_budget import (
+    enforce_budget,
+    enforce_termination,
+)
 from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core import cancel_requests
 from weebot.core.structured_logger import StructuredLogger
-from weebot.application.termination.base import TerminationContext
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
@@ -113,6 +116,7 @@ class PlanActFlow(BaseFlow):
         session_constraint_extractor: Any | None = None,
         correction_tracker: Any | None = None,
         persistence_adapter: Any | None = None,  # retrying session saver
+        cost_meter: Any | None = None,  # SessionCostMeter (plan 2.4)
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -157,6 +161,7 @@ class PlanActFlow(BaseFlow):
                 # ReviewingState's correction loop was unreachable.
                 correction_tracker=correction_tracker,
                 persistence_adapter=persistence_adapter,
+                cost_meter=cost_meter,
             )
 
         self._llm = cfg.llm
@@ -212,6 +217,10 @@ class PlanActFlow(BaseFlow):
         self._context_aware_model_selection = cfg.context_aware_model_selection
         self._max_iterations = cfg.max_iterations
         self._termination_conditions = cfg.termination_conditions or []
+        self._cost_meter = cfg.cost_meter
+        self._cost_hard_override = cfg.session_cost_hard_usd
+        self._budget_grants = 0  # human approvals to go past the hard limit, one increment each
+        self._pending_budget_request = None  # the ToolCallApproval a paused flow is waiting on
         self._step_execution_counts: dict[str, int] = {}
         self._emit_lock = asyncio.Lock()
         self._event_publisher = None  # Lazy-init via _get_event_publisher()
@@ -554,6 +563,17 @@ class PlanActFlow(BaseFlow):
             span.end()
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
+        """Run the flow with this session's ids bound to every log record (OBS-1)."""
+        from weebot.core.log_context import log_context
+
+        with log_context(session_id=self._session.id):
+            if self._cost_meter is not None:
+                # A resumed session starts from what it already spent.
+                await self._cost_meter.seed(self._session.id)
+            async for event in self._run_states(prompt):
+                yield event
+
+    async def _run_states(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         import time as _time
 
         self._flow_started_at = _time.monotonic()
@@ -720,24 +740,15 @@ class PlanActFlow(BaseFlow):
 
             # ── Composable termination check ──────────────────────────
             if self._termination_conditions:
-                import time as _term_time
+                enforce_termination(self, iteration_count)
 
-                _term_ctx = TerminationContext(
-                    iteration=iteration_count,
-                    total_tokens=self.token_usage.get("total_tokens", 0),
-                    elapsed_seconds=_term_time.monotonic() - self._flow_started_at,
-                )
-                for _tc in self._termination_conditions:
-                    _result = _tc.check(_term_ctx)
-                    if _result.should_terminate:
-                        self._log.info("Termination condition met: %s", _result.reason)
-                        from weebot.application.flows.states.completed import CompletedState
-
-                        self._end_run_span()
-                        # Run CompletedState this pass; it sets the terminal
-                        # status, so the loop ends after it.
-                        self.set_state(CompletedState(termination_reason=_result.reason))
-                        break
+            # ── Session cost budget (plan 2.4, D6): ask at the hard limit ──
+            if self._cost_meter is not None:
+                paused = await enforce_budget(self)
+                if paused:
+                    for event in paused:
+                        yield event
+                    break  # paused and resumable; a grant lets the next run continue
 
             # ── Self-Harness: resolve harness instructions per-step ──
             # Before executing a state, check if we have a resolver and

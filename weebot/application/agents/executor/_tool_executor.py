@@ -19,7 +19,10 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import is_enforcing
-from weebot.core.trust_boundary import taints_egress_context
+from weebot.core.effect_key import effect_key, step_scope
+from weebot.core.log_context import bind_step
+from weebot.core.trust_boundary import must_taint, trust_of
+from weebot.domain.models.output_trust import OutputTrust
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
 
@@ -151,7 +154,10 @@ class ToolExecutor:
         llm=None,  # LLMPort
         model: str | None = None,
         egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
+        effect_ledger=None,  # EffectLedger | None — outbound actions already taken (ORCH-2)
     ) -> None:
+        self._effect_ledger = effect_ledger
+        self._current_step_scope: str = ""
         self._tools = tools
         self._hooks = hooks
         self._conversation_buffer = conversation_buffer or deque(maxlen=15)
@@ -180,10 +186,26 @@ class ToolExecutor:
 
     # ── Dynamic context ────────────────────────────────────────────
 
-    def set_step_context(self, step_id: str, session_id: str) -> None:
+    def set_step_context(self, step_id: str, session_id: str, step_description: str = "") -> None:
         """Update the current step/session context (called at step start)."""
         self._current_step_id = step_id
         self._current_session_id = session_id
+        self._current_step_scope = step_scope(step_description)
+        # Every log record from this step's tools, cascade and adapters carries the ids.
+        bind_step(step_id, session_id)
+
+    def _effect_id(self, name: str, args: dict[str, Any]) -> str:
+        """The ledger key of this call: session, step, tool and canonical arguments."""
+        canonical = self._tools.canonical_args(name, args) if hasattr(
+            self._tools, "canonical_args"
+        ) else dict(args)
+        return effect_key(
+            self._current_session_id,
+            self._current_step_id,
+            self._current_step_scope,
+            name,
+            canonical,
+        )
 
     def _get_step_id(self) -> str:
         return self._current_step_id or "unknown"
@@ -345,11 +367,29 @@ class ToolExecutor:
                 )
                 return ToolResult.error_result(error=_msg, output=_msg, tool_name=name)
         approved_call = ""
+        effect_to_record = ""  # set when this call is an egress the ledger should remember
         network_ok = False  # W3.9: does this call get sandbox network?
         if guard is not None:
             decision = guard.classify(
                 name, args, untrusted_context_active=self._untrusted_context_active
             )
+            # ORCH-2: an outbound action this session already completed is not
+            # repeated, and a replay never reaches the approval gate below (the
+            # action is not happening again, so there is nothing to approve).
+            if self._effect_ledger is not None and decision.is_egress and self._current_session_id:
+                effect_id = self._effect_id(name, args)
+                prior = await self._effect_ledger.lookup(self._current_session_id, effect_id)
+                if prior is not None:
+                    await self._effect_ledger.note_replay(self._current_session_id, effect_id, name)
+                    summary = prior.get("summary", "")
+                    note = (
+                        f"'{name}' already ran earlier in this session with these arguments"
+                        f"{': ' + summary if summary else ''}. Not repeated."
+                    )
+                    return ToolResult.success_result(
+                        output=note, replayed=True, effect_key=effect_id, tool_name=name
+                    )
+                effect_to_record = effect_id
             if decision.requires_approval:
                 if is_enforcing():
                     refused = await _ask_about_egress(
@@ -401,6 +441,18 @@ class ToolExecutor:
             )
         _elapsed = (_timer.monotonic() - _t0) * 1000
 
+        # Remember a completed outbound action. A failed or paused call is not
+        # recorded: a retry of a send that never happened must go ahead.
+        if (
+            effect_to_record
+            and self._effect_ledger is not None
+            and not getattr(result, "is_error", False)
+            and not (getattr(result, "data", None) or {}).get("approval_required")
+        ):
+            await self._effect_ledger.record(
+                self._current_session_id, effect_to_record, name, str(result)[:500], ok=True
+            )
+
         # Post-tool hook
         if self._hooks is not None:
             await self._hooks.execute_hooks(
@@ -418,10 +470,11 @@ class ToolExecutor:
 
         # External content has now entered the session; taint it so later egress
         # needs approval even to an already-known recipient. Errors carry no
-        # external content, so they do not taint.
+        # external content, so they do not taint (D1; pinned in must_taint).
         #
-        # Narrower than the fence in _base.py by FENCE_ONLY_TOOLS: fencing is
-        # free, this taint is sticky for the rest of the session.
+        # Narrower than the fence in _base.py: fencing is free, this taint is
+        # sticky for the rest of the session. The tool's declared OutputTrust
+        # decides, and an unregistered name is EXTERNAL.
         # A file:// or loopback tab holds no external content, so reading it
         # does not taint. shortcut: tracked per session from the last navigate,
         # not the shared browser's real tab; read the tab URL if that drifts.
@@ -437,13 +490,21 @@ class ToolExecutor:
             own_file = args.get("command") != "view" or path in written
             if args.get("command") != "view" and not getattr(result, "is_error", False):
                 written.add(path)
-        if (
-            taints_egress_context(name)
-            and not getattr(result, "is_error", False)
-            and not (local_page or own_file)
+        if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
+            local_page or own_file
         ):
             self._untrusted_context_active = True
         return result
+
+    def taint_session(self, tool_name: str, is_error: bool) -> None:
+        """Taint the session because the injection scan escalated *tool_name* to EXTERNAL.
+
+        Called by the executor when a fixed-schema source returned text the scanner
+        flagged; ``must_taint`` still decides, so an error result does not taint.
+        """
+        if must_taint(OutputTrust.EXTERNAL, is_error):
+            logger.warning("session tainted: %s output carried suspected injection", tool_name)
+            self._untrusted_context_active = True
 
     async def _execute_single_tool_call(self, tc: dict[str, Any]) -> ToolResult:
         """Thin wrapper: parse tool call dict and delegate to execute_tool."""

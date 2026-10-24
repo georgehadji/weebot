@@ -91,7 +91,8 @@ class TaskRunner:
     async def _worker(self) -> None:
         """Background worker that consumes the task queue."""
         if self._task_queue is not None:
-            # External queue (Redis) — use TaskQueuePort interface
+            # External queue (Redis) — use TaskQueuePort interface.
+            # RESERVED for the Sep plan's Phase 5.2 (decision D4); see task_queue_port.py.
             while True:
                 try:
                     item = await self._task_queue.dequeue()
@@ -238,6 +239,15 @@ class TaskRunner:
             await self._run_flow(session_id, flow, prompt)
 
     async def _run_flow(self, session_id: str, flow: BaseFlow, prompt: str | None = None) -> None:
+        """Run the flow with this session's ids bound to every log record (OBS-1)."""
+        from weebot.core.log_context import log_context
+
+        with log_context(session_id=session_id, new_correlation=True):
+            await self._run_flow_logged(session_id, flow, prompt)
+
+    async def _run_flow_logged(
+        self, session_id: str, flow: BaseFlow, prompt: str | None = None
+    ) -> None:
         """Internal runner that persists events and handles completion."""
         session = await self._state_repo.load_session(session_id)
         if session is None:

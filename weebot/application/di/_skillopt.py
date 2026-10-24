@@ -139,7 +139,7 @@ class SkillOptMixin:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
 
         provider = ModelProvider.from_model_name(model_id).value
-        return create_adapter(provider, model=model_id)
+        return self._bounded_llm(create_adapter(provider, model=model_id))
 
     def _create_optimizer_agent(self):
         from weebot.application.agents.optimizer_agent import OptimizerAgent
