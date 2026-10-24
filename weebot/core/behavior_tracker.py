@@ -555,7 +555,9 @@ class BehaviorTracker:
         }
 
 
-# Global tracker registry for session management
+# Process-level registry of live watchers, one per session.
+# Owner: whoever calls create_tracker (the web session lifecycle) must call stop_tracker
+# when the session ends; stop_all_trackers is the shutdown and test reset.
 _tracker_registry: dict[str, BehaviorTracker] = {}
 
 

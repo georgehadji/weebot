@@ -70,6 +70,17 @@ def shared_container():
     return _shared_container
 
 
+def reset_shared_container() -> None:
+    """Forget the shared container so the next ``shared_container()`` builds a new one.
+
+    Owner of the singleton is this module; the reset is for tests and for a process that
+    re-reads its configuration. It does not close what the old container opened.
+    """
+    global _shared_container
+    with _shared_container_lock:
+        _shared_container = None
+
+
 _MCP_TOOLKIT: Any = None  # MCPToolkitAdapter, connected once per process
 _MCP_LOCK: Any = None
 

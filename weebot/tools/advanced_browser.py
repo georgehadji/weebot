@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 import atexit
 
+# Owner: AdvancedBrowserTool._close_browser stops and zeroes these; the atexit handler
+# below is the backstop for a process that exits without closing. Tests reset them by
+# assigning None (tests/unit/test_cove_regressions.py).
 # Module-level Playwright globals — zeroed BEFORE their respective awaits
 # (τ-violation guard) so that a failed close/stop leaves them None and
 # prevents double-close by atexit or concurrent callers.
