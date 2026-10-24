@@ -69,7 +69,9 @@ REGISTRARS = {"register", "register_instance"}
 # The original set was derived from STRING keys only, so it missed
 # `_maybe_get(SomeType)`, the resolver for TYPE keys, used at 44 call sites.
 # That made EventPublisher a false orphan. Re-measured over both key kinds.
-RESOLVERS = {"get", "_maybe_get", "_maybe_get_str", "_cached"}
+# `resolve` is flow_builder.build_flow's injected lookup (plan 3.7): the builder
+# moved there from interfaces/factories.py, whose `_cached(...)` calls it replaced.
+RESOLVERS = {"get", "_maybe_get", "_maybe_get_str", "_cached", "resolve"}
 
 # Where a key is looked UP but must also have been registered. Narrower than
 # RESOLVERS on purpose: `get` is also dict.get and FastAPI's router.get("/x"),
@@ -149,6 +151,37 @@ def census() -> tuple[dict[str, str], set[str]]:
                 resolved.add(key)
 
     return registered, resolved
+
+
+def count_string_keys() -> list[tuple[str, str]]:
+    """Container bindings registered under a string literal, as ``(key, where)``.
+
+    A string key is untyped at every use. ``application/di/keys.py`` defines
+    ``Key[T]``; a migrated key is registered under a ``Key`` constant and no longer
+    counts here (CPL-2, Sep plan pattern P2).
+    """
+    found: list[tuple[str, str]] = []
+    for path in _python_files():
+        rel = path.relative_to(_ROOT).as_posix()
+        if not rel.startswith(DI_PACKAGE):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and node.args
+                and _called_name(node) in REGISTRARS
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "self"
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                found.append((node.args[0].value, f"{rel}:{node.lineno}"))
+    return sorted(set(found))
 
 
 def find_orphans() -> list[tuple[str, str]]:
@@ -237,7 +270,17 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     code = code or code2
-    return code
+
+    string_keys = count_string_keys()
+    code3, message3 = _ceiling_check("string_di_keys", len(string_keys))
+    print(f"\n{message3}")
+    if code3:
+        print(
+            "Register the binding under a Key[T] from weebot/application/di/keys.py, or\n"
+            "if one was migrated, lower `string_di_keys` in tasks/quality/ceilings.toml.",
+            file=sys.stderr,
+        )
+    return code or code3
 
 
 if __name__ == "__main__":
