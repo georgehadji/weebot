@@ -33,6 +33,9 @@ Configuration is read from environment variables in the factory (`LLM_TIMEOUT`, 
 ## Bulkhead (outside this layer)
 `FactoriesMixin._bounded_llm` wraps every LLM the container builds in `BoundedLLMAdapter`, so each `chat()` takes a slot in the shared `LLMPool` and logs one `llm_call` record (`weebot/application/di/_factories.py:110-133`; `weebot/application/strategies/llm_pool.py:61-236`). A call already inside the cascade's slot passes through (`:116-146`). Code that needs the concrete adapter calls `unwrap_llm` (`:324-328`; `weebot/interfaces/web/main.py:366`). Pinned by `tests/stress/test_llm_bulkhead.py:171`.
 
+## Local models (off unless `OLLAMA_ENABLED`)
+`create_adapter` wraps the finished adapter in `LocalModelRouter` only when Ollama is on (`weebot/infrastructure/adapters/llm/adapter_factory.py:219`, switch at `:414`). The router sends `ollama/<tag>` ids to a second adapter built on first use and strips the prefix (`weebot/infrastructure/adapters/llm/local_router_adapter.py:19, 47-49`); the `ollama` provider branch is an `OpenAIAdapter` on `OLLAMA_BASE_URL` with a dummy key (`adapter_factory.py:328`). `unwrap_llm` sees through the router via `_llm_wrapper`. `OLLAMA_ROLES` maps roles to tags, so a local and a `-cloud` tag can serve different roles (`weebot/config/local_models.py:30`; first in the role cascade, `weebot/config/model_refs.py:158`); a `-cloud` tag runs on Ollama's servers. Setup and role choice: `docs/OLLAMA.md`.
+
 ## Connected to
 - **Port:** `LLMPort` (`application/ports/llm_port.py`).
 - **Created by** `FactoriesMixin._create_llm` (`application/di/_factories.py:127-133`, provider from `ModelProvider.from_model_name`), `di/_skillopt.py:137-142` (both bounded), `application/services/model_registry/_service.py:37-53` (not bounded). Role adapters (critic, verifier) are built with `_create_llm_for_role` (`_factories.py:230-239`).

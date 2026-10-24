@@ -1,0 +1,12 @@
+# Weebot's local model with a context large enough for its prompts.
+#
+# Ollama's OpenAI-compatible endpoint (/v1) ignores a per-request num_ctx, so the model
+# keeps its 4096-token default and silently truncates Weebot's system prompt and tool
+# schemas. A derived model fixes that once:
+#
+#   ollama create qwen3-weebot -f deploy/ollama/Modelfile
+#
+# then set OLLAMA_MODEL=qwen3-weebot and OLLAMA_CONTEXT_WINDOW=16384 in .env.
+# 16384 fits an 8 GB GPU with qwen3:8b (Q4); raise it only if `ollama ps` still shows 100% GPU.
+FROM qwen3:8b
+PARAMETER num_ctx 16384

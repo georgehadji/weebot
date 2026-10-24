@@ -88,6 +88,7 @@ nul;
 !/docs/archive/
 !/docs/CONFIGURATION.md
 !/docs/BRANCHES.md
+!/docs/OLLAMA.md
 /stripe-landing
 /Notion
 /logs
