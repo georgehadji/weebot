@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
+from weebot.domain.services.session_lessons import session_lessons
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -198,6 +199,10 @@ class PlanningState(FlowState):
                         )
             except Exception:
                 pass  # journal read failures must never block planning
+        # ── Lessons MetaAnalysisState stored on this session ────────────────
+        # They were written (Session.add_meta_note) but never read back. They go first:
+        # the planner keeps only the last 5 notes, and a recorded violation must outlast them.
+        _avoidance_notes = session_lessons(context._session.context.meta_notes) + _avoidance_notes
         # ─────────────────────────────────────────────────────────────────────
 
         import time as _time
