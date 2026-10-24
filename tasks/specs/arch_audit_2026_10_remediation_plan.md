@@ -1,7 +1,7 @@
 ---
 status: open
 date: 2026-10-24
-note: from the 2026-10-24 EGFV audit (4/10); nothing executed; Phase 8 defers to the 2026-09 plan's Phase 5
+note: from the 2026-10-24 EGFV audit (4/10); nothing executed; decisions D1-D6 resolved 2026-10-24; Phase 8 defers to the 2026-09 plan's Phase 5
 ---
 
 # Architecture Remediation — 2026-10 audit
@@ -61,15 +61,15 @@ before any fix lands.
 | CPL-2 | String-keyed service locator (`di/__init__.py:459`) | MED | 5 (Sep P2) |
 | DOC-1 | `ARCHITECTURE.md:61` says "remaining 10 entries". The actual count is 73. | MED | 7 |
 | DOC-3 | ADR-007 says ~803 lines for `_base.py`. The actual count is 1180. | MED | 7 |
-| DOC-2 | ADR-008 says `TaskQueuePort` was deleted. It still exists and is dead. | LOW | 7, D4 |
+| DOC-2 | ADR-008 says `TaskQueuePort` was deleted. It still exists and is dead. | LOW | 7 (D4: keep, reserved) |
 | DOC-4 | Self-score 9.0/10 is stale | LOW | 7 |
-| DOC-5 | `trust_boundary.py:9` says output is "scanned by AgentMemorySanitizer". It is not. | LOW | 1.1 |
+| DOC-5 | `trust_boundary.py:9` says output is "scanned by AgentMemorySanitizer". It is not. | LOW | 1.1b (D2: wire the scan) |
 | LAY-3 | `config` imports `application.services` twice. Highest fan-in package. | LOW | 3.9 |
 | ORCH-3 | Retry layers may multiply under a provider outage (unmeasured) | LOW | 2.3 |
-| ORCH-4 | No per-session USD cap found on the main flow (UNKNOWN) | LOW | 2.4 |
+| ORCH-4 | No per-session USD cap on the main flow. Resolved 2026-10-24: none exists (§2.4). | MED | 2.4 (D6) |
 | OBS-1 | `correlation_id` appears in 4 files. No prompt versioning. | LOW | 6 |
 | CI-1 | `lint-no-print` and `lint-map` run only in `make check`, not CI. Coverage floor 52%. ruff selects only F821 and E9. | LOW | 0.3 |
-| OPS-1 | Valkey password falls back to `weebot_default` | LOW | 1.4 |
+| OPS-1 | Valkey password falls back to `weebot_default` | LOW | 1.4 (D5: accepted, guard pinned) |
 | UNK-1 | `docs/SECURITY_MODEL.md` behavior claims unverified (the doc says so) | — | 7 |
 
 ---
@@ -123,9 +123,10 @@ OOP with constructor injection stays the shell. No paradigm migration.
   with the session. A separate store adds a second consistency problem.
 - **No state-machine library or transition DSL.** A `Mapping[StateId, type]` and a frozen
   `Transition` are enough.
-- **No pattern-matching injection scanner as a control (DOC-5).** Fence, taint and egress
-  approval are the real control. A regex scanner is trivially bypassed and would be read as
-  assurance. See decision D2.
+- **The injection scanner is a signal, never the control (D2).** Fence, taint and egress
+  approval remain the control. The existing scanner (1.1b) only adds evidence: it escalates
+  trust and records detections. It never removes, rewrites or blocks content, because a
+  regex scanner is trivially bypassed and its noisy patterns would destroy real pages.
 - **No async rewrite.** Blocking calls get `asyncio.to_thread` or the existing async
   `FileStoragePort`. Nothing more.
 - **No tracing-framework swap.** OTel sink, Prometheus and the structured logger exist.
@@ -227,15 +228,15 @@ So a new tool is trusted until someone remembers two lists.
    ```python
    def trust_of(tool: BaseTool | None) -> OutputTrust:   # unknown or unregistered -> EXTERNAL
    def must_fence(trust: OutputTrust) -> bool             # EXTERNAL, FIXED_SCHEMA
-   def must_taint(trust: OutputTrust, is_error: bool) -> bool  # EXTERNAL and not is_error (D1)
+   def must_taint(trust: OutputTrust, is_error: bool) -> bool  # EXTERNAL and not is_error (D1: errors never taint)
    ```
    `wrap_untrusted` stays as it is: delimiter escaping plus the fence.
 4. **Call sites pass the tool object.** The executor already resolves it (`tool_obj`,
    `_tool_executor.py:312`). `_base.py:1042` fences on `must_fence(trust_of(tool))`,
    **including error results**. Fencing is free, and an error body can carry remote text
    (HTTP error pages, MCP server messages). The taint keeps today's decision that errors do
-   not taint (comment at `_tool_executor.py:420`). It moves into `must_taint`, where a test
-   pins it. See D1.
+   not taint (comment at `_tool_executor.py:420`, confirmed by D1). It moves into
+   `must_taint`, where a test pins it.
 5. **Keep the special cases.** The per-session exceptions `_LOCAL_TAB` and `_WRITTEN_FILES`
    (`_tool_executor.py:429-437`) stay, as named arguments to `must_taint`. They are real
    refinements, not list drift.
@@ -245,8 +246,9 @@ So a new tool is trusted until someone remembers two lists.
 7. **Delete** `UNTRUSTED_OUTPUT_TOOLS`, `FENCE_ONLY_TOOLS`, the `apify_` and `mcp__` branches,
    and `KNOWN_UNMATCHED_NAMES`. `egress_guard._BROWSER_EGRESS_TOOLS` is a different concern
    (what *sends*, not what *reads*) and stays.
-8. **DOC-5.** Rewrite the module docstring to describe what the code does: fence, taint and
-   egress approval. Do not claim a scan (D2).
+8. **DOC-5.** The module docstring's claim becomes true in 1.1b. Rewrite the docstring then,
+   to describe fence, taint, scan and egress approval in that order. It must say the scan is
+   a signal, not the control.
 
 **Tests.**
 
@@ -273,6 +275,69 @@ So a new tool is trusted until someone remembers two lists.
 **Risk.** A tool wrongly left EXTERNAL taints sessions and adds approval prompts. Mitigation:
 the reviewed `LOCAL` list. Remember that over-prompting trains users to disable the guard
 (`trust_boundary.py:119-131`).
+
+### 1.1b Injection scan on fenced output (D2: yes; closes DOC-5)
+
+**Current shape.** The scanner already exists and has no callers:
+
+- `scan_for_injection` in `infrastructure/security/trust_boundary_scanner.py:27` runs
+  `AgentMemorySanitizer.detect_contamination` (`agent_sanitizer.py:238`).
+- It fails closed: it returns `SCANNER_UNAVAILABLE` (`trust_boundary_scanner.py:18`) when it
+  cannot run.
+- `detect_contamination` checks two pattern families: injection (`agent_sanitizer.py`
+  `_INJECTION_PATTERNS`) and dangerous behavior (`_DANGEROUS_BEHAVIOR_PATTERNS`). It returns
+  the highest-severity hit.
+
+So this item wires an existing, tested component. It builds no scanner.
+
+**Design.**
+
+1. **Injection, not import.** The executor is in application and the scanner is in
+   infrastructure. `ExecutorAgent` receives `scan: Callable[[str], dict | None]` by
+   constructor, and `application/di` binds it to `scan_for_injection`. That is the same
+   constructor-injection shape as `llm_pool`. There is no new port and no new exemption.
+2. **Where it runs.** In `_base.py`, on the same path as the fence, for every result where
+   `must_fence(trust)` is true, errors included. It runs on the content *after* the tool's
+   truncation strategy, so the scan cost is bounded by the output cap.
+3. **What a detection does.** A pure function in `core/trust_boundary.py` decides:
+   ```python
+   def escalate(trust: OutputTrust, detection: dict | None) -> OutputTrust
+   ```
+   - No detection: trust unchanged.
+   - Any detection on `FIXED_SCHEMA`: escalate to `EXTERNAL`, so the session taints.
+     A fixed-schema source that suddenly carries instruction text is no longer
+     fixed-schema.
+   - `SCANNER_UNAVAILABLE`: treat as a detection. It is fail-closed by design.
+   - It never returns `LOCAL`, and the content is never edited.
+4. **Visible to the model.** The fence header names the hit, for example
+   `⟦UNTRUSTED_DATA source=web_search suspected=Instruction Override⟧`. That gives the
+   model a reason to distrust the block that it can see.
+5. **Recorded.** Emit an `InjectionSuspected` domain event with session, step, tool, pattern
+   name and severity, and log it at WARNING. It is never the matched text in full: the
+   sanitizer already caps `match` at 100 characters, and that cap stays.
+6. **Measure precision before tuning.** Some patterns are broad. `(?:system|admin|root)\s*:\s*`
+   and `\$\{.*\}` match ordinary pages and shell docs. Before enabling the escalation step,
+   replay the scanner over stored tool outputs in the event store (`~/.weebot/events.db`,
+   tool-result events) and record the hit rate per pattern in this file. A pattern whose hit
+   rate on ordinary content makes escalation meaningless (for example, it fires on most
+   pages) is demoted to log-only in the wiring, not deleted from the sanitizer, which other
+   code may use.
+
+**Tests.**
+
+- A fixed-schema tool whose output contains "ignore previous instructions" taints the
+  session.
+- An EXTERNAL tool with a detection: fenced, header names the pattern, event emitted, content
+  byte-identical inside the fence.
+- The scanner raises: treated as a detection (fail closed).
+- Clean content: no event, header unchanged.
+- The executor is built with a fake `scan`, so no infrastructure import is needed in tests.
+
+**Exit:** every fenced output is scanned. The docstring at `trust_boundary.py:9` is true.
+**Effort:** S–M. **Sequence:** right after 1.1, same files.
+
+**Risk.** False positives escalate `FIXED_SCHEMA` tools (today only `weather`) to tainting
+sessions. That is bounded to one tool, and step 6 measures it before enabling.
 
 ### 1.2 Authentication through the port (SEC-2)
 
@@ -348,15 +413,20 @@ drains on shutdown.
 
 **Exit:** the gate is at 0. **Effort:** S.
 
-### 1.4 Fail-closed Valkey credential (OPS-1)
+### 1.4 Valkey default credential: accepted, guard pinned (OPS-1, D5: no)
 
-- `docker-compose.yml:23,30,78`: replace `${VALKEY_PASSWORD:-weebot_default}` with
-  `${VALKEY_PASSWORD:?set VALKEY_PASSWORD (see .env.example)}`.
-- CI `docker-smoke` (`architecture.yml:333-337`) exports a random one:
-  `export VALKEY_PASSWORD=$(openssl rand -hex 16)`.
-- Add `VALKEY_PASSWORD=` to `.env.example` with a comment.
-- **Effort:** S. **Risk:** a local `docker compose up` without `.env` now stops with a clear
-  message. That is the intended fail-closed behavior (D5).
+D5 keeps `${VALKEY_PASSWORD:-weebot_default}` (`docker-compose.yml:23,30,78`), so
+`docker compose up` keeps working without a `.env`. The risk is acceptable only while the
+thing that contains it holds: Valkey publishes no port (`ports: []`, `docker-compose.yml:20`)
+and is reachable only on the compose network. So pin that, instead of changing the default.
+
+- **Pin test.** Add a test in `tests/unit/` that parses `docker-compose.yml` and asserts
+  `services.weebot-valkey.ports` is empty or absent. Its failure message must name OPS-1 and
+  this section, so whoever publishes the port also sees they are publishing a default
+  password.
+- **Document it.** Add `VALKEY_PASSWORD=` to `.env.example` with one line: the default is for
+  local compose only; set a value before exposing Valkey anywhere.
+- **Effort:** S. **Risk:** none at runtime.
 
 ---
 
@@ -470,19 +540,97 @@ assumption in `domain/models/plan.py` before building.
 - **Exit:** the measured numbers are recorded in the test as assertions. **Effort:** S
   (measure), plus S (deadline, if needed).
 
-### 2.4 Session cost cap (ORCH-4, resolve the UNKNOWN first)
+### 2.4 Session cost budget (ORCH-4, D6)
 
-- **Resolve.** Read `config/constants.py` (`DEFAULT_MAX_FLOW_ITERATIONS` and its peers),
-  `infrastructure/adapters/sub_agent_cost_tracker.py`, and the source behind
-  `python -m cli.main costs`. Record in this file whether a per-session USD bound exists on
-  `PlanActFlow`.
-- **If absent.** Add `max_session_cost_usd` to `PlanActFlowConfig`, default from settings
-  (D6). Enforce it as a termination condition in `application/termination/conditions.py`,
-  the existing Strategy seam, fed by the same cost source `costs` reads. Not as an `if` in
-  `plan_act_flow.py:702`.
-- **Tests.** A fake cost source crossing the cap ends the flow with a typed termination
-  reason and a persisted session.
-- **Effort:** S–M.
+**Resolved 2026-10-24: no per-session USD bound exists on `PlanActFlow`.**
+
+- `config/constants.py` holds token-budget history limits only (`:56,67`).
+- The only USD budget is the sub-agent one (`di/__init__.py:65`,
+  `SubAgentCostTracker(budget_usd=0.50)`).
+- Cost data does exist. Wave C of `tasks/remaining_fix_plan.md` (W4.1, W4.2) added the
+  `LLMCallCompleted` event with an `estimate_cost` USD figure. `DurableEventBus` stores it in
+  the `events` table (`cost`, `model`, `tokens_used`). `EventStore.get_cost_window`
+  (`infrastructure/event_store.py:253`) sums it by time window.
+- Gap: only the executor cascade emits that event. Wave C itself records that planner,
+  verifier and intent-review calls emit nothing.
+
+**Measured baseline** (read-only query of the local `~/.weebot/events.db`, 2026-10-24).
+409 sessions with `llm_call_completed` rows, all from 2026-10-23, cascade calls only:
+
+| Statistic | USD per session | LLM calls per session |
+|---|---|---|
+| p50 | 0.017 | 6 |
+| p90 | 0.093 | — |
+| p95 | 0.159 | 49 |
+| p99 | 0.477 | — |
+| max | 2.399 | 102 |
+
+One day of data, cascade-only, priced by `estimate_cost`, not by the provider's bill. So the
+true per-session cost is higher than this table, by an unknown factor.
+
+**Decision D6: a two-threshold budget that asks before it kills.**
+
+A single hard number either never fires or kills real work, because the distribution is
+long-tailed (p99 is 28× the median). So use two thresholds, both enforced through
+mechanisms the repo already has.
+
+1. **Soft limit — degrade, keep going.** Default **$0.50** (about the measured p99). When a
+   session crosses it:
+   - the cascade stops trying PREMIUM-tier models for the rest of the session and runs
+     FREE and BUDGET only (`CascadeTier`, `_cascade.py:437-441`);
+   - emit a `SessionBudgetSoftLimit` event and log at WARNING.
+
+   This costs no user interaction, and only about 1 session in 100 sees it.
+2. **Hard limit — ask, then stop.** Default **$2.50** (above the measured maximum, about
+   5× p99). When a session crosses it, the flow raises an "ask" through the existing ADR-013
+   approval channel:
+   - a console prompt in CLI `flow` on a TTY;
+   - a flow pause in the web UI and gateways;
+   - refusal in cron, webhooks and MCP, where nobody can answer.
+
+   An approval grants one more hard-limit increment for that session (a single-use grant,
+   like every ADR-013 grant). A refusal or expiry ends the flow with a typed termination
+   reason, `BUDGET_EXCEEDED`, and a persisted, resumable session.
+3. **Where it lives.**
+   - **The check** is a termination condition in `application/termination/conditions.py`,
+     the existing Strategy seam. It is not an `if` in `plan_act_flow.py:702`.
+   - **The running total** is per session, held by the flow and updated from each
+     `LLMCallCompleted` event. No DB query per iteration.
+   - **On resume,** seed the total from the event store. Add one method,
+     `get_session_cost(session_id)`, to the existing `EventStorePort`; that is a method on
+     an existing port, not a new port.
+   - **Sub-agents** roll up: each sub-agent's spend is added to its parent session's total.
+     The sub-agent's own $0.50 cap stays as its local limit.
+4. **Configuration.** Add `WEEBOT_SESSION_COST_SOFT_USD=0.50` and
+   `WEEBOT_SESSION_COST_HARD_USD=2.50` to `WeebotSettings` and `.env.example`. A per-flow
+   override goes in `PlanActFlowConfig`, so the harness and benchmark flows can set their
+   own. Setting either value to `0` disables that threshold.
+5. **Prerequisite: complete metering first.** Enforcing a cap on cascade-only metering would
+   under-count every session. So 2.4 lands **after** 2.1 and Phase 6, where the
+   `BoundedLLMAdapter` becomes the one choke point and emits `LLMCallCompleted` for every
+   call, planner and verifier included.
+6. **Re-derive the defaults from data, then pin the rule.** Two weeks after complete metering
+   lands, re-run the per-session query. Set:
+   - soft = measured p99;
+   - hard = max(5 × p99, measured max).
+
+   Record the new numbers in this section. The rule is the decision; $0.50 and $2.50 are its
+   current output.
+
+**Tests.**
+
+- A fake cost source crosses the soft limit: the next cascade call skips PREMIUM models, and
+  the event is emitted.
+- Crossing the hard limit in a non-interactive context ends the flow with
+  `BUDGET_EXCEEDED`, and the session is persisted and resumable.
+- Crossing it with an approval continues for exactly one increment.
+- Resume seeds the total from the event store.
+- Sub-agent spend counts toward the parent total.
+
+**Effort:** M. **Sequence:** after 2.1 and Phase 6.
+
+**Risk.** Defaults set from one day of cascade-only data. Step 6 corrects them, and the hard
+limit asks rather than kills, so a wrong default costs one prompt, not lost work.
 
 ---
 
@@ -537,13 +685,13 @@ Each item lowers `import_exemptions` by exactly the lines it removes, in the sam
 - **Effort:** S–M. Check the call shape first; if the port lacks the method, this item
   becomes a port *method* addition, not a new port.
 
-### 3.5 Retire `core/agent.py` (LAY-1e, closes ARCHITECTURE debt D2)
+### 3.5 Retire `core/agent.py` (LAY-1e, closes `ARCHITECTURE.md` debt item D2)
 
 - `RecursiveWeebotAgent` (162 lines) is the only `core→tools` and `core→application.di`
   source (`core/agent.py:35,42,52,53`), and the only LangChain import in `core`.
 - Its callers: `run.py` (legacy `--interactive` REPL) and
   `tests/unit/test_recursive_agent_browser_async.py`.
-- **Recommended (D3):** switch `run.py --interactive` to `ChatFlow` through
+- **Decided (D3: yes):** switch `run.py --interactive` to `ChatFlow` through
   `interfaces/factories.py`. Delete `core/agent.py` and its test. Remove the four
   `core-no-app` exemptions for `weebot.core.agent`.
 - `core.safety -> application.ports.llm_port` stays. It is the ADR-009 documented exception
@@ -706,10 +854,16 @@ sections at the end, so they describe the finished state.
 - **DOC-1.** `ARCHITECTURE.md:61`: replace "Remaining 10 entries … target ≤25" with a pointer
   to `import_exemptions` in `tasks/quality/ceilings.toml` and `scripts/lint_import_exemptions.py`.
   No number in the doc (Q10).
-- **DOC-2.** ADR-008: add an amendment saying `TaskQueuePort` was not deleted, and that
-  `task_runner.py:60-70` documents it as unreachable. Then apply decision D4: delete
-  `ports/task_queue_port.py`, `infrastructure/queue/*`, the `TaskRunner` queue path and the
-  DI wiring, or keep them explicitly reserved for Sep Phase 5.2.
+- **DOC-2 (D4: keep).** ADR-008: add an amendment saying `TaskQueuePort` was not deleted and
+  is kept on purpose, reserved for the Sep plan's Phase 5.2 (scheduler extraction and
+  multi-process work dispatch). Then make "reserved" visible in the code, so the next audit
+  does not log it as dead:
+  - a one-line comment at `ports/task_queue_port.py` and at `task_runner.py`'s queue path,
+    naming Sep 5.2;
+  - keep both adapters (`infrastructure/queue/in_memory_task_queue.py`,
+    `redis_task_queue.py`) under test, so they do not rot while unused. If no test exercises
+    them today, add one contract test that runs the same enqueue, dequeue and ack sequence
+    against both.
 - **DOC-3.** ADR-007: add an amendment with the current sizes, and say that the target is now
   the `functions_over_150_lines` ratchet, not prose.
 - **DOC-4.** Replace the header's self-score with a link to the latest audit record and its
@@ -772,17 +926,18 @@ This is the trace the audit said it could not produce statically.
 ## 12. Sequencing and interactions
 
 ```
-Phase 0 (0.1-0.4) ─┬─> 1.1 SEC-1 ──> 2.2 ORCH-2 ──> Phase 5 executor extraction
-                   │      (both edit _tool_executor.py and _base.py; do not run in parallel)
+Phase 0 (0.1-0.4) ─┬─> 1.1 SEC-1 ──> 1.1b scan ──> 2.2 ORCH-2 ──> Phase 5 executor extraction
+                   │      (all edit _tool_executor.py and _base.py; do not run in parallel)
                    ├─> 1.2 SEC-2   (independent)
                    ├─> 1.3 CON-1   (independent)
-                   ├─> 1.4 OPS-1   (independent)
+                   ├─> 1.4 OPS-1 pin test (independent)
                    ├─> 2.1 ORCH-1 ─┬─> 3.7 di↔interfaces (both edit di/__init__.py)
                    │               └─> Phase 6 (needs the decorator as choke point)
-                   ├─> 2.3, 2.4    (independent)
+                   │                      └─> 2.4 cost budget (needs complete metering)
+                   ├─> 2.3         (independent)
                    ├─> 3.1, 3.3, 3.8, 3.9 (independent, S each)
                    ├─> 3.2 ──> 3.4 (3.4 touches _base.py: after 2.2)
-                   ├─> 3.5         (needs decision D3)
+                   ├─> 3.5         (independent; D3 decided yes)
                    ├─> 3.6 ──> Sep §5.4
                    ├─> Phase 4     (independent, batch by directory)
                    └─> Phase 7 strike-through now; rewrite last
@@ -814,22 +969,23 @@ Target after Phases 0–7: **8–9/10** on the code. Replica scaling stays with 
 
 ---
 
-## 14. Decisions needed
+## 14. Decisions (resolved 2026-10-24)
 
-| # | Decision | Recommendation | Why |
+| # | Question | Decision | Where it lands |
 |---|---|---|---|
-| D1 | Do error results from EXTERNAL tools taint the session? | Fence: yes. Taint: no, as today. | Fencing is free. Tainting on errors raises approval prompts with little gain. Revisit if an error body is ever shown to carry attacker-chosen text that reaches egress. |
-| D2 | Run `AgentMemorySanitizer` on fenced content? | No. Fix the docstring instead. | Pattern scanning is bypassable and reads as assurance. Fence, taint and egress approval is the control. |
-| D3 | Delete `core/agent.py` and switch the legacy REPL to `ChatFlow`? | Yes | It removes 4 exemptions and LangChain from `core`, and closes D2 four months early. |
-| D4 | Delete `TaskQueuePort` and the Redis/in-memory queues, or reserve them for Sep 5.2? | Delete, unless Sep 5.2 is scheduled this quarter | Two adapters with zero live callers. Git keeps them. |
-| D5 | Fail-closed `VALKEY_PASSWORD` breaks `docker compose up` without `.env` | Accept | Matches `docs/SECURITY_MODEL.md` fail-closed defaults. |
-| D6 | Default `max_session_cost_usd` (only if 2.4 finds no cap) | Set from a measured p95 session cost × 3 | A guessed number either never fires or kills real work. |
+| D1 | Do error results from EXTERNAL tools taint the session? | **No.** Errors are fenced but never taint. | 1.1 step 4, `must_taint` |
+| D2 | Run the injection scanner on fenced content? | **Yes**, as a signal that escalates trust and records detections; never as the control, and never editing content. | 1.1b |
+| D3 | Delete `core/agent.py` and switch the legacy REPL to `ChatFlow`? | **Yes** | 3.5 |
+| D4 | Delete `TaskQueuePort` and the queues, or reserve them for Sep 5.2? | **Keep**, reserved for Sep 5.2, marked in code and kept under a contract test | Phase 7, DOC-2 |
+| D5 | Make `VALKEY_PASSWORD` fail closed? | **No.** Keep the default; pin the unpublished port with a test. | 1.4 |
+| D6 | Session cost cap default | **Two thresholds:** soft $0.50 degrades to FREE/BUDGET models, hard $2.50 asks through the ADR-013 channel then stops. Defaults are re-derived from data by a fixed rule (soft = p99, hard = max(5 × p99, max)). | 2.4 |
 
 ---
 
 ## 15. Definition of done
 
-- Every row in §1 is closed, or listed in §14/§11 as owned elsewhere, with a link.
+- Every row in §1 is closed, accepted with its guard pinned (OPS-1, D5), or listed in §11 as
+  owned elsewhere, with a link.
 - Ceilings after this plan:
 
   | Ceiling | Now | Target |
@@ -890,7 +1046,7 @@ tests named in this plan run.
 | DOC-5 | `trust_boundary.py:9` vs `wrap_untrusted` | FALSE | LOW | REACHABLE |
 | LAY-3 | `config/capability_profiles.py:20`; `config/fs_permissions.py:33` | VERIFIED | LOW | REACHABLE |
 | ORCH-3 | `resilient_adapter.py:144`; `_cascade.py:336-349` | HYPOTHESIS | LOW | REACHABLE |
-| ORCH-4 | `di/__init__.py:65` (sub-agents only) | UNKNOWN | LOW | UNKNOWN |
+| ORCH-4 | `di/__init__.py:65` (sub-agents only); `config/constants.py:56,67` (tokens only) | VERIFIED absence (resolved 2026-10-24) | MED | REACHABLE |
 | OBS-1 | `correlation_id` in 4 files; 0 prompt-version hits | VERIFIED | LOW | REACHABLE |
 | CI-1 | `Makefile:130` vs `architecture.yml`; `:35`, `:171` | VERIFIED | LOW | REACHABLE |
 | OPS-1 | `docker-compose.yml:23,30,78` | VERIFIED | LOW | GUARDED |
