@@ -41,6 +41,13 @@ def ollama_on(monkeypatch):
 
 
 class TestOffByDefault:
+    @pytest.fixture(autouse=True)
+    def _settings_without_the_developers_env(self):
+        # The cached settings may have been built while an earlier import put .env in os.environ.
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
     def test_nothing_changes_without_the_switch(self):
         assert local_models() == {}
         assert get_model_config(LOCAL_ID) is None

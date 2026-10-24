@@ -35,6 +35,13 @@ _AMBIENT_SETTINGS_VARS = (
     "SANDBOX_MAX_OUTPUT_BYTES",
     "SANDBOX_MODE",
     "SANDBOX_ALLOW_NETWORK",
+    # weebot.interfaces.web.main runs load_dotenv(override=True) when imported, which puts the
+    # developer's .env into os.environ for the rest of the run; local-model routing reads these.
+    "OLLAMA_ENABLED",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "OLLAMA_CONTEXT_WINDOW",
+    "OLLAMA_ROLES",
 )
 
 
