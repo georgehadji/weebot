@@ -11,8 +11,8 @@ measurement before any new mechanism. Result, recorded here as assertions:
   0, 1, 3 and 7 s) and spends 15 s, never 60 s. The SDK's own retries are 0
   (``adapter_factory.py:174``). The two layers do not multiply.
 
-Deadline propagation (a ContextVar the retry would read) would stop no attempt the
-cancellation does not already stop, so it is NOT built. This file is the guard: if
+Deadline propagation (a ContextVar the retry reads) now stops a retry that could not
+finish inside the cascade budget, so the real error surfaces instead of a cancellation. This file is the guard: if
 the delays or the budget change so that amplification appears, it fails.
 """
 
@@ -86,3 +86,40 @@ def test_the_sdk_layer_adds_no_retries():
 
     source = inspect.getsource(adapter_factory)
     assert "max_retries" in source and "max_retries=0" in source.replace(" ", "")
+
+
+@pytest.mark.asyncio
+async def test_a_deadline_stops_the_retry_that_could_not_finish_inside_it():
+    """Deadline propagation (ORCH-3): no sleep into the cancellation, the real error surfaces."""
+    from weebot.utils import backoff
+
+    clock = 0.0
+    starts: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay, *args, **kwargs):
+        nonlocal clock
+        clock += delay
+        await real_sleep(0)
+
+    async def always_503():
+        starts.append(clock)
+        raise RuntimeError("503 Service Unavailable")
+
+    with (
+        patch("weebot.utils.backoff.asyncio.sleep", fake_sleep),
+        patch("weebot.utils.backoff.time.monotonic", lambda: clock),
+        backoff.deadline_scope(CASCADE_BUDGET_S),
+        pytest.raises(RuntimeError, match="503"),
+    ):
+        await _retry().call(always_503)
+
+    # Attempts at 0, 1, 3, 7; the retry after 7 would end at 15 >= the deadline, so it
+    # is not scheduled and the time spent is 7 s, not 15.
+    assert starts == [0, 1, 3, 7]
+    assert clock == 7
+
+
+@pytest.mark.asyncio
+async def test_without_a_deadline_nothing_changes():
+    assert len(await _attempt_start_times()) == 7

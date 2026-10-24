@@ -12,6 +12,7 @@ import contextlib
 import logging
 
 from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
+from weebot.utils.backoff import deadline_scope
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -341,16 +342,20 @@ class CascadeExecutor:
         start = _cascade_time.monotonic()
 
         try:
-            resp = await asyncio.wait_for(
-                self._llm.chat(
-                    messages=messages,
-                    tools=self._tools.to_params(),
-                    tool_choice="auto",
-                    model=model_id,
-                    temperature=TEMPERATURE_BALANCED,
-                ),
-                timeout=effective,
-            )
+            # The retry layer below reads this deadline and stops scheduling retries
+            # that could not finish inside it (ORCH-3), instead of sleeping into the
+            # cancellation.
+            with deadline_scope(effective):
+                resp = await asyncio.wait_for(
+                    self._llm.chat(
+                        messages=messages,
+                        tools=self._tools.to_params(),
+                        tool_choice="auto",
+                        model=model_id,
+                        temperature=TEMPERATURE_BALANCED,
+                    ),
+                    timeout=effective,
+                )
             if resp and (resp.content or resp.tool_calls):
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
