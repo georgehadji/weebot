@@ -45,14 +45,14 @@ export function BehaviorPanel({
 
         <div className="flex items-center gap-2">
           {isConnected ? (
-            <span className="flex items-center gap-1 text-[11px] text-status-live">
+            <span className="flex items-center gap-1 text-xs text-status-live-fg">
               <span className="h-1.5 w-1.5 rounded-full bg-status-live" />
               Live
             </span>
           ) : isLoading ? (
-            <span className="text-[11px] text-muted-foreground">Loading...</span>
+            <span className="text-xs text-muted-foreground">Loading...</span>
           ) : (
-            <span className="flex items-center gap-1 text-[11px] text-status-waiting">
+            <span className="flex items-center gap-1 text-xs text-status-waiting-fg">
               <span className="h-1.5 w-1.5 rounded-full bg-status-waiting" />
               Polling
             </span>
@@ -70,7 +70,7 @@ export function BehaviorPanel({
         {showRecentActions && <RecentActions actions={recentActions} onRefresh={rest.refreshAll} />}
       </div>
 
-      <div className="mt-3 border-t pt-3 text-[11px] text-muted-foreground">
+      <div className="mt-3 border-t pt-3 text-xs text-muted-foreground">
         {sessionId ? <span>Session: {sessionId.slice(0, 8)}...</span> : <span>Global behavior tracking</span>}
       </div>
     </div>

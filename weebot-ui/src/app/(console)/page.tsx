@@ -10,19 +10,18 @@
  */
 
 import { useRouter } from "next/navigation";
-import { ConsoleShell } from "@/components/shell/ConsoleShell";
 import { ConversationPane } from "@/components/conversation/ConversationPane";
+import { useShellSlots } from "@/hooks/useShellSlots";
 
 export default function Home() {
   const router = useRouter();
+  useShellSlots({ title: "New conversation" });
 
   return (
-    <ConsoleShell title="New conversation">
-      <ConversationPane
-        sessionId={null}
-        status="none"
-        onSessionCreated={(id) => router.push(`/sessions/${id}`)}
-      />
-    </ConsoleShell>
+    <ConversationPane
+      sessionId={null}
+      status="none"
+      onSessionCreated={(id) => router.push(`/sessions/${id}`)}
+    />
   );
 }

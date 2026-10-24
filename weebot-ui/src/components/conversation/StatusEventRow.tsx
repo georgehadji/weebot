@@ -14,7 +14,7 @@ export function ErrorRow({ event }: { event: ErrorEvent }) {
 export function WaitForUserRow({ event }: { event: WaitForUserEvent }) {
   return (
     <div className="surface-waiting flex items-start gap-2 rounded-lg border p-3">
-      <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-status-waiting" aria-hidden="true" />
+      <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-status-waiting-fg" aria-hidden="true" />
       <p className="text-sm whitespace-pre-wrap">{event.question}</p>
     </div>
   );

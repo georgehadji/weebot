@@ -13,12 +13,15 @@
  *   - Collapse a tool call's `calling` → `called` pair into one display
  *     row instead of two, keyed by tool_call_id, shown at the position
  *     the call first appeared (not wherever the `called` update arrives).
+ *   - Reconcile optimistic user messages: the UI adds one with `delivery: "sending"`; the
+ *     server's echo carries the same id and settles it as "sent"; `markDelivery` records a
+ *     failed send so the row can offer a retry.
  *   - Surface gap markers from the "N event(s) dropped" notification
  *     events T0.5's bounded queue emits, so a lost event reads as a
  *     visible seam instead of silently vanishing.
  */
 
-import { AgentEvent, ToolEvent } from "@/types/events";
+import { AgentEvent, DeliveryState, MessageEvent, ToolEvent } from "@/types/events";
 
 /** A display-order key: either an event's own id, or `tool:{tool_call_id}` for ToolEvents. */
 type DisplayKey = string;
@@ -52,7 +55,13 @@ const DROPPED_PATTERN = /^(\d+) event\(s\) dropped/;
 export function sessionReducer(state: SessionViewState, event: AgentEvent): SessionViewState {
   // Idempotent — replaying an already-seen event (e.g. after a reconnect
   // re-syncs history) must not duplicate a row.
-  if (state.eventsById.has(event.id)) {
+  const known = state.eventsById.get(event.id);
+  if (known) {
+    // The echo of a message the UI showed optimistically settles it; any other repeat is a no-op.
+    if (isUnsettledMessage(known) && event.type === "message" && !(event as MessageEvent).delivery) {
+      const eventsById = new Map(state.eventsById).set(event.id, { ...event, delivery: "sent" } as MessageEvent);
+      return { ...state, eventsById };
+    }
     return state;
   }
 
@@ -85,6 +94,25 @@ export function sessionReducer(state: SessionViewState, event: AgentEvent): Sess
   }
 
   return { ...state, eventsById, displayOrder: [...state.displayOrder, event.id] };
+}
+
+function isUnsettledMessage(event: AgentEvent): boolean {
+  return event.type === "message" && (event.delivery === "sending" || event.delivery === "failed");
+}
+
+/**
+ * Record the outcome of the HTTP send for an optimistic message. A message the server already
+ * echoed stays "sent": delivery is proven, whatever the HTTP response did.
+ */
+export function markDelivery(
+  state: SessionViewState,
+  id: string,
+  delivery: DeliveryState
+): SessionViewState {
+  const known = state.eventsById.get(id);
+  if (!known || known.type !== "message" || known.delivery === "sent") return state;
+  const eventsById = new Map(state.eventsById).set(id, { ...known, delivery });
+  return { ...state, eventsById };
 }
 
 export function reduceSessionEvents(events: readonly AgentEvent[]): SessionViewState {

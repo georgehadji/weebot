@@ -25,9 +25,9 @@ const ACTION_ICON: Record<string, typeof Circle> = {
 };
 
 const ACTION_COLOR: Record<string, string> = {
-  created: "text-status-live",
-  modified: "text-status-waiting",
-  deleted: "text-status-error",
+  created: "text-status-live-fg",
+  modified: "text-status-waiting-fg",
+  deleted: "text-status-error-fg",
   moved: "text-cyan-500",
 };
 
@@ -82,7 +82,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
         </div>
         <button
           onClick={onRefresh}
-          className="rounded bg-surface-3 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          className="rounded bg-surface-3 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           Refresh
         </button>
@@ -100,18 +100,18 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
                 key={`${action.timestamp}-${index}`}
                 onClick={() => setSelectedAction(action)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left font-mono text-[11px] transition-colors",
+                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left font-mono text-xs transition-colors",
                   isSelected ? "bg-white/10" : "hover:bg-white/5"
                 )}
               >
                 <Icon
                   className={cn(
                     "h-3.5 w-3.5 shrink-0",
-                    action.is_override ? "text-status-waiting" : ACTION_COLOR[action.action] ?? "text-muted-foreground"
+                    action.is_override ? "text-status-waiting-fg" : ACTION_COLOR[action.action] ?? "text-muted-foreground"
                   )}
                 />
                 <span className="min-w-[40px] text-muted-foreground">{formatTime(action.timestamp)}</span>
-                <span className={cn("flex-1 truncate", action.is_override ? "text-status-waiting" : "text-foreground/80")}>
+                <span className={cn("flex-1 truncate", action.is_override ? "text-status-waiting-fg" : "text-foreground/80")}>
                   {formatPath(action.path)}
                 </span>
               </button>

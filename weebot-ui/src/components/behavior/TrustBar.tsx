@@ -12,9 +12,9 @@ interface TrustBarProps {
 }
 
 function trustClass(percentage: number): { border: string; text: string; bar: string } {
-  if (percentage >= 90) return { border: "border-status-live", text: "text-status-live", bar: "bg-status-live" };
-  if (percentage >= 70) return { border: "border-status-waiting", text: "text-status-waiting", bar: "bg-status-waiting" };
-  return { border: "border-status-error", text: "text-status-error", bar: "bg-status-error" };
+  if (percentage >= 90) return { border: "border-status-live", text: "text-status-live-fg", bar: "bg-status-live" };
+  if (percentage >= 70) return { border: "border-status-waiting", text: "text-status-waiting-fg", bar: "bg-status-waiting" };
+  return { border: "border-status-error", text: "text-status-error-fg", bar: "bg-status-error" };
 }
 
 const STATUS_TEXT: Record<string, string> = {

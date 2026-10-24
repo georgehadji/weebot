@@ -4,6 +4,7 @@ import {
   reduceSessionEvents,
   getDisplayItems,
   initialSessionViewState,
+  markDelivery,
 } from "./session-reducer";
 import { MessageEvent, ToolEvent, NotificationEvent } from "@/types/events";
 
@@ -122,5 +123,50 @@ describe("sessionReducer", () => {
 
   it("reduceSessionEvents over an empty list returns the initial state", () => {
     expect(reduceSessionEvents([])).toEqual(initialSessionViewState);
+  });
+});
+
+describe("optimistic user messages", () => {
+  const optimistic = (id: string): MessageEvent => ({ ...message(id, "hello"), role: "user", delivery: "sending" });
+  const delivery = (state: ReturnType<typeof reduceSessionEvents>, id: string) =>
+    (state.eventsById.get(id) as MessageEvent).delivery;
+
+  it("the server echo (same id) settles a sending message as sent, without a second row", () => {
+    let state = sessionReducer(initialSessionViewState, optimistic("m1"));
+    state = sessionReducer(state, { ...message("m1", "hello"), role: "user" });
+    expect(delivery(state, "m1")).toBe("sent");
+    expect(state.displayOrder).toEqual(["m1"]);
+  });
+
+  it("a duplicate echo changes nothing", () => {
+    let state = sessionReducer(initialSessionViewState, optimistic("m1"));
+    state = sessionReducer(state, { ...message("m1", "hello"), role: "user" });
+    const again = sessionReducer(state, { ...message("m1", "hello"), role: "user" });
+    expect(again).toBe(state);
+  });
+
+  it("a failed send is recorded and can still be settled by a late echo", () => {
+    let state = sessionReducer(initialSessionViewState, optimistic("m1"));
+    state = markDelivery(state, "m1", "failed");
+    expect(delivery(state, "m1")).toBe("failed");
+    state = sessionReducer(state, { ...message("m1", "hello"), role: "user" });
+    expect(delivery(state, "m1")).toBe("sent");
+  });
+
+  it("a message the server already echoed stays sent when the HTTP call then reports failure", () => {
+    let state = sessionReducer(initialSessionViewState, optimistic("m1"));
+    state = sessionReducer(state, { ...message("m1", "hello"), role: "user" });
+    expect(markDelivery(state, "m1", "failed")).toBe(state);
+  });
+
+  it("marking an unknown id or a non-message is a no-op", () => {
+    const state = sessionReducer(initialSessionViewState, toolEvent("t1", "c1", "calling"));
+    expect(markDelivery(state, "nope", "failed")).toBe(state);
+    expect(markDelivery(state, "t1", "failed")).toBe(state);
+  });
+
+  it("events from the server without a delivery state are untouched", () => {
+    const state = sessionReducer(initialSessionViewState, message("a1", "hi"));
+    expect((state.eventsById.get("a1") as MessageEvent).delivery).toBeUndefined();
   });
 });

@@ -33,6 +33,7 @@ export function MetricsPanel({ metrics }: MetricsPanelProps) {
           </p>
           <Progress
             value={(metrics.activeSessions / Math.max(metrics.totalSessions, 1)) * 100}
+            aria-label="Active sessions as a share of all sessions"
             className="mt-2"
           />
         </CardContent>
@@ -58,7 +59,7 @@ export function MetricsPanel({ metrics }: MetricsPanelProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{metrics.cpuUsage}%</div>
-          <Progress value={metrics.cpuUsage} className="mt-2" />
+          <Progress value={metrics.cpuUsage} aria-label="CPU usage" className="mt-2" />
         </CardContent>
       </Card>
 
@@ -69,7 +70,7 @@ export function MetricsPanel({ metrics }: MetricsPanelProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{metrics.memoryUsage}%</div>
-          <Progress value={metrics.memoryUsage} className="mt-2" />
+          <Progress value={metrics.memoryUsage} aria-label="Memory usage" className="mt-2" />
         </CardContent>
       </Card>
 

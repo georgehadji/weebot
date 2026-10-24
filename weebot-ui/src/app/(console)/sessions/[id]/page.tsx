@@ -3,11 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { ConsoleShell } from "@/components/shell/ConsoleShell";
 import { ConversationPane } from "@/components/conversation/ConversationPane";
-import { MissionDock } from "@/components/dock/Dock";
 import { SessionLifecycleStatus } from "@/components/conversation/Composer";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
+import { useShellSlots } from "@/hooks/useShellSlots";
 import { useSessionPresence } from "@/hooks/useSessionPresence";
 import { applyPresence } from "@/hooks/useSessionList";
 import { api } from "@/lib/api";
@@ -53,38 +52,35 @@ export default function SessionPage() {
     };
   }, [sessionId]);
 
+  useShellSlots({
+    title: loading ? "Loading session" : session ? session.title || "New session" : "Session not found",
+    isConnected,
+    dockSessionId: session ? sessionId : null,
+  });
+
   if (loading) {
     return (
-      <ConsoleShell isConnected={isConnected}>
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      </ConsoleShell>
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading session" />
+      </div>
     );
   }
 
   if (!session) {
     return (
-      <ConsoleShell isConnected={isConnected}>
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Session not found.
-        </div>
-      </ConsoleShell>
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Session not found.
+      </div>
     );
   }
 
   return (
-    <ConsoleShell
-      title={session.title || "Untitled session"}
-      isConnected={isConnected}
-      dock={<MissionDock sessionId={sessionId} />}
-    >
-      <ConversationPane
-        sessionId={sessionId}
-        status={toLifecycleStatus(session.status)}
-        initialEvents={initialEvents}
-        onSessionCreated={(id) => router.push(`/sessions/${id}`)}
-      />
-    </ConsoleShell>
+    <ConversationPane
+      key={sessionId}
+      sessionId={sessionId}
+      status={toLifecycleStatus(session.status)}
+      initialEvents={initialEvents}
+      onSessionCreated={(id) => router.push(`/sessions/${id}`)}
+    />
   );
 }

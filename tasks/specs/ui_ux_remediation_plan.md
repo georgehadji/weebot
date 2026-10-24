@@ -1,7 +1,7 @@
 ---
-status: draft
+status: implemented
 date: 2026-10-24
-note: from the 2026-10-24 UX/UI audit of weebot-ui (read, run on desktop and mobile, contrast measured); nothing is implemented yet; decisions D1-D6 carry recommended defaults
+note: from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 ---
 
 # UI/UX Remediation — weebot-ui
@@ -433,3 +433,71 @@ Each has a recommended default; the default is applied unless reversed.
 - **Virtualizing the timeline first.** Highest complexity, unmeasured benefit.
 - **Fixing `event_count` in the UI by counting loaded events.** Wrong for sessions not open, and the
   number belongs to the backend.
+
+## Appendix C — Implementation record (2026-10-24)
+
+Everything below was verified by tests that ran: `npm test` (vitest), `npx playwright test` (76 browser tests against a
+production build with the API and socket stubbed), ESLint, `tsc`, pytest for the backend, and `make lint-ui`'s two scripts.
+What was **not** verified is listed at the end.
+
+### What landed, by phase
+
+| Phase | Landed | Where |
+|---|---|---|
+| 0 Net | Playwright suite with a stubbed backend (`e2e/fixtures.ts`), served from its own build directory (`e2e/serve.mjs`); axe over 7 routes x 2 themes x 2 widths (`e2e/a11y.spec.ts`, new dev dependency `@axe-core/playwright`); primitives contract test; `lint-ui` ratchet with 6 counters; ESLint layer rules; CI job runs build and browser tests | `weebot-ui/e2e/`, `scripts/lint_ui_debt.py`, `tasks/quality/ceilings.toml`, `eslint.config.mjs`, `.github/workflows/architecture.yml` |
+| 1 Primitives | `data-[orientation=...]` in tabs, scroll-area, separator. The contract test failed 4 ways on the old code and passes now. Ops tab list: 640 px -> 32 px (measured in the running app) | `components/ui/` |
+| 2 Identity | `derive_session_title` (domain, pure); `_displayed_title` in the router decides; create stores it; the planner's `TitleEvent` is persisted and announced to the rail; `EventStorePort.count_events` (one grouped query per 500 ids) replaces `len(session.events)`; `Session.set_title` now keeps the memory index | `weebot/domain/services/session_title.py`, `routers/sessions.py`, `event_store.py`, `task_runner.py` |
+| 3 Shell | `AppShell` (skip link, one `<main>`, `h-dvh`), one 48 px `AppBar` with a menu dialog below `lg`, `(console)` route group mounting `ConsoleShell` once, rail/dock as `Dialog` side sheets, palette rebuilt on `Dialog` with the combobox pattern, dock wired by a context slot (D5) | `components/shell/`, `providers/ShellProvider.tsx`, `app/(console)/` |
+| 4 Conversation | `useStickToBottom` (IntersectionObserver + "Jump to latest"), `AnnouncerProvider`, composer reducer + `useComposer` (never disabled, IME-safe, per-session draft), optimistic messages with `delivery` and Retry, tool rows with arguments / failed state / copy / full result, `ToolEvent.is_error` (D6) | `hooks/`, `lib/`, `components/conversation/`, `weebot/domain/models/event.py`, `executor/_base.py` |
+| 5 States | `Remote<T>`, `useRemote`, `StateView`, `StatusBadge`, `ConfirmDialog`, `filterSessions` (Greek-safe), working rail search, example prompts on the home page, `app/error.tsx` | `types/remote.ts`, `components/common/`, `lib/sessions.ts` |
+| 6 Visual | `--status-*-fg` text tokens, light `muted-foreground` and `destructive` darkened, `check_ui_contrast.py` (58 pairs, both themes), no text under 12 px, 44 px targets on coarse pointers, toast policy (errors persist, others pause on hover/focus, 8 s) | `globals.css`, `components/ui/button.tsx`, `providers/ToastProvider.tsx` |
+| 7 Performance | Measured, then fixed (below) | `e2e/perf.spec.ts`, `components/plan/LazyPlanVisualizer.tsx` |
+| 8 Docs | `weebot-ui/README.md`, `map/objects/interfaces/WebUI.md` | |
+
+### Measurements (production build, uncompressed JavaScript before the `load` event)
+
+| Route | Before | After | Change |
+|---|---|---|---|
+| `/` | 884 KB | 748 KB | -136 |
+| `/sessions/[id]` | 885 KB | 749 KB | -136 |
+| `/ops` | 1245 KB | 715 KB | -530 |
+| `/models`, `/behavior` | 662, 695 KB | unchanged | |
+
+A live event on a 2,041-row timeline cost 2.8 ms of scripting before `React.memo` rows and 1.4 to 2.0 ms after (a 16 ms
+frame is the bar), so **virtualization (7.3) was not needed and was not built**. Budgets in `e2e/perf.spec.ts` are the
+after figures plus about 7 %.
+
+Ceilings moved: `ui_viewport_height` 3 -> 0, `ui_main_landmarks` 2 -> 1, `ui_click_on_static` 2 -> 0,
+`ui_tiny_text` 10 -> 0 (all at their targets; none was raised).
+
+### Deviations from the plan
+
+- **Corrections to the audit's own numbers.** Text under 12 px was 10 occurrences, not the 82 the audit counted (that
+  figure included `text-xs`, which is 12 px). The plan's claim that `lib/` already imported no React was wrong: the
+  command-registry hook lived in `lib/commands/`; it moved to `hooks/useRegisterCommands.ts`.
+- **6.2:** no `text-2xs` token was added. `text-xs` is already 12 px, so the old forms were replaced by `text-xs`.
+- **5.2:** the rail filters the loaded page (100 sessions) only. The `/sessions/search` fallback was not wired: its
+  results are bookend records, not `Session` rows, so using them needs a mapping that this change did not justify.
+  Revisit if anyone has more than 100 sessions.
+- **5.1:** a root `app/error.tsx` was added; per-route `loading.tsx` files were not, because the pages are client
+  components that render their own `StateView` loading state.
+- **3.1/3.3:** the rail is a `<nav aria-label="Sessions">` and the dock a labelled region inside the one `<main>`, because
+  axe flags an `<aside>` nested in `<main>`. The breakpoint for inline navigation is `lg` (1024 px), not `md`: at 768 px
+  the bar overflowed (found by the browser test, fixed).
+- **7.1:** first-load JavaScript is measured by response bodies before the `load` event. Measuring at `networkidle`
+  was wrong: Link prefetches of other routes inflate it.
+- **Dev compile flake:** running the axe suite against `next dev` produced `#__next_error__` pages on first compile of a
+  route, so the suite builds and serves a production bundle by default (`E2E_DEV=1` opts back in).
+- `CodeBlock` (and its Monaco/syntax-highlighter imports) has no importer. It is dead code; it was left alone.
+
+### Not verified
+
+- **Visual appearance.** The preview pane could not render frames in this environment, so no screenshot was taken or
+  compared. Layout was checked by measured geometry (heights, overflow, focus, roles), not by eye. Review the light
+  theme and the mobile layouts by hand.
+- Real-device touch behaviour (the 44 px rule was tested with Chromium's coarse-pointer emulation).
+- A screen reader. Roles, names and live regions were checked with axe and DOM assertions only.
+- The stick-to-bottom fix against a real streaming run; it was tested with a 2,000-event fixture and injected socket events.
+- `make lint-map`: the map card cites new files that are not committed yet, and 50 older citations already drifted at
+  `HEAD` before this work (`_factories.py`, `settings.py` and `adapter_factory.py` moved in the Ollama commits). Both
+  need a commit and `check_map_citations.py --fix` / a re-stamp of the card's `commit:` field.

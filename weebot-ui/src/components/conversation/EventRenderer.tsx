@@ -4,7 +4,8 @@
  * old session page's EventCard had. Adding a new event type means adding
  * one registry entry, not editing a shared switch (open/closed principle).
  */
-import { AgentEvent } from "@/types/events";
+import { memo } from "react";
+import { AgentEvent, MessageEvent } from "@/types/events";
 import { MessageRow } from "./MessageRow";
 import { ToolCallRow } from "./ToolCallRow";
 import { StepRow } from "./StepRow";
@@ -17,7 +18,10 @@ import { ErrorRow, WaitForUserRow, DoneRow, NotificationRow } from "./StatusEven
 // contravariant). The registry is keyed by `event.type`, so each lookup is
 // guaranteed to hand the component the exact subtype it declared; `unknown`
 // documents that this file — not each row component — owns that guarantee.
-type RowComponent = (props: { event: never }) => React.ReactElement | null;
+type RowComponent = (props: {
+  event: never;
+  onRetry?: (event: MessageEvent) => void;
+}) => React.ReactElement | null;
 
 const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
   message: MessageRow,
@@ -30,8 +34,21 @@ const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
   notification: NotificationRow,
 } as unknown as Partial<Record<AgentEvent["type"], RowComponent>>;
 
-export function EventRenderer({ event }: { event: AgentEvent }) {
+function EventRendererImpl({
+  event,
+  onRetry,
+}: {
+  event: AgentEvent;
+  /** Re-send a user message whose delivery failed (used by message rows only). */
+  onRetry?: (event: MessageEvent) => void;
+}) {
   const Row = EVENT_REGISTRY[event.type];
   if (!Row) return null;
-  return <Row event={event as never} />;
+  return <Row event={event as never} onRetry={onRetry} />;
 }
+
+/**
+ * Memoised: the session reducer keeps event objects stable, so appending one event re-renders
+ * one row instead of the whole timeline.
+ */
+export const EventRenderer = memo(EventRendererImpl);

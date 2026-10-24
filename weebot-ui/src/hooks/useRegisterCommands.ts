@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Command, commandRegistry } from "./registry";
+import { Command, commandRegistry } from "@/lib/commands/registry";
 
 /** Registers *commands* for the lifetime of the calling component. */
 export function useRegisterCommands(commands: Command[]) {
