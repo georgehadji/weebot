@@ -49,6 +49,16 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "OpenAI API key"},
     {"var": "XAI_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "xAI (Grok) API key for direct access"},
+    {"var": "OLLAMA_ENABLED", "type": "bool", "default": "false",
+     "desc": "Use a local Ollama model for the roles in OLLAMA_ROLES (see docs/OLLAMA.md)"},
+    {"var": "OLLAMA_BASE_URL", "type": "str", "default": "http://localhost:11434/v1",
+     "desc": "Ollama's OpenAI-compatible endpoint"},
+    {"var": "OLLAMA_MODEL", "type": "str", "default": "qwen3:8b",
+     "desc": "Model tag from `ollama list`"},
+    {"var": "OLLAMA_CONTEXT_WINDOW", "type": "int", "default": "4096",
+     "desc": "Context the model really has (num_ctx); Ollama's /v1 ignores a per-request value"},
+    {"var": "OLLAMA_ROLES", "type": "str", "default": "summarizer,documentation",
+     "desc": "Roles that try an Ollama model first: `role` or `role=tag` (e.g. verifier=gemma4:31b-cloud)"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,

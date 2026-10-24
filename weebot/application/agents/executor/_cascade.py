@@ -159,7 +159,8 @@ class CascadeExecutor:
         NOT exclusively use OpenRouter, so they should NOT be filtered. minimax
         is not one: its adapter only reaches OpenRouter (adapter_factory).
         """
-        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft"}
+        # "ollama" is local: it needs no OpenRouter credit, so a low balance must not drop it.
+        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft", "ollama"}
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 

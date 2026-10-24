@@ -21,15 +21,26 @@ class ModelSelectionService:
 
     MODELS: dict[str, ModelConfig] = MODELS  # Reference the catalog
 
+    def _usable(self) -> list[tuple[str, ModelConfig]]:
+        """Catalog models that can be called now: a key is set, or none is needed (local)."""
+        from weebot.config.local_models import local_models
+
+        catalog = {**self.MODELS, **local_models()}
+        return [
+            (model_id, cfg)
+            for model_id, cfg in catalog.items()
+            if not cfg.api_key_env or os.getenv(cfg.api_key_env)
+        ]
+
     def available_models(self) -> list[str]:
         """Return model IDs for which the API key is configured."""
-        return [model_id for model_id, cfg in self.MODELS.items() if os.getenv(cfg.api_key_env)]
+        return [model_id for model_id, _ in self._usable()]
 
     def select_model(
         self, strategy: ModelSelectionStrategy, task_type: TaskType, budget: float | None = None
     ) -> str:
         """Select a model using the provided strategy."""
-        candidates = [(mid, cfg) for mid, cfg in self.MODELS.items() if os.getenv(cfg.api_key_env)]
+        candidates = self._usable()
         if not candidates:
             raise ValueError("No API keys configured for any supported provider")
         return strategy.select(candidates, task_type, budget)

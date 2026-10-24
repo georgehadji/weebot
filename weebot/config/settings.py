@@ -79,6 +79,20 @@ class WeebotSettings(BaseSettings):
     openai_api_key: str | None = None
     openrouter_api_key: str | None = None  # env: OPENROUTER_API_KEY
 
+    # Local models served by Ollama (see docs/OLLAMA.md). Off by default: nothing about
+    # routing, the catalog or any role cascade changes until OLLAMA_ENABLED is set.
+    ollama_enabled: bool = False  # env: OLLAMA_ENABLED
+    ollama_base_url: str = "http://localhost:11434/v1"  # env: OLLAMA_BASE_URL
+    ollama_model: str = "qwen3:8b"  # env: OLLAMA_MODEL, an `ollama list` tag
+    # Must equal the model's real num_ctx. Ollama's /v1 endpoint ignores a per-request
+    # num_ctx, so raise it with a Modelfile (deploy/ollama/Modelfile) and set this to match.
+    ollama_context_window: int = 4096  # env: OLLAMA_CONTEXT_WINDOW
+    # Roles that try an Ollama model first, comma separated; the others never use one.
+    # `role` uses OLLAMA_MODEL; `role=tag` picks another, e.g. a cloud tag ending in
+    # `-cloud` (runs on Ollama's servers, after `ollama signin`):
+    # "summarizer,documentation,verifier=gemma4:31b-cloud".
+    ollama_roles: str = "summarizer,documentation"  # env: OLLAMA_ROLES
+
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
     reasoner_api_key: str | None = None  # env: REASONER_API_KEY

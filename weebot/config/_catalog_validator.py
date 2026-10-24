@@ -106,10 +106,10 @@ class CatalogValidator:
         startup and the ``doctor --validate-catalog`` CLI flag.
         """
         import weebot.config.model_refs as _mr
-        from weebot.config.model_catalog import MODELS as _CATALOG
+        from weebot.config.local_models import all_models
 
         _validator = CatalogValidator()
-        return _validator.validate(role_cascades=_mr.ROLE_MODEL_CONFIG, catalog=_CATALOG)
+        return _validator.validate(role_cascades=_mr.ROLE_MODEL_CONFIG, catalog=all_models())
 
     def validate(
         self, role_cascades: dict[str, list[str]], catalog: dict[str, ModelConfig]

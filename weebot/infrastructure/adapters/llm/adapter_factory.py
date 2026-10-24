@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -20,7 +21,10 @@ from weebot.infrastructure.adapters.llm.deepseek_adapter import DeepSeekAdapter
 from weebot.infrastructure.adapters.llm.moonshot_adapter import MoonshotAdapter
 from weebot.infrastructure.adapters.llm.openrouter_adapter import OpenRouterAdapter
 from weebot.infrastructure.adapters.llm.direct_or_fallback_adapter import DirectOrFallbackAdapter
+from weebot.infrastructure.adapters.llm.local_router_adapter import LocalModelRouter
 from weebot.config.api_endpoints import XAI_API_BASE
+
+logger = logging.getLogger(__name__)
 
 
 class AdapterFactory:
@@ -70,6 +74,8 @@ class AdapterFactory:
             "timeout": 180.0,  # Complex planning via OpenRouter can exceed 90s
             "default_model": MODEL_FACTORY_OPENROUTER,
         },
+        # Local: a cold model load plus CPU offload on a laptop is minutes, not seconds.
+        "ollama": {"timeout": 300.0, "default_model": "qwen3:8b"},
     }
 
     def __init__(
@@ -207,6 +213,11 @@ class AdapterFactory:
             enable_caching=enable_caching if enable_caching is not None else self._enable_caching,
         )
 
+        # `ollama/<tag>` model ids (the cascade's per-attempt `model=`) go to the local server,
+        # not to this adapter's fixed endpoint. Only when Ollama is switched on.
+        if provider != "ollama" and _ollama_enabled():
+            resilient = LocalModelRouter(resilient, lambda: self.create_adapter("ollama"))
+
         # Cache adapter
         self._adapters[cache_key] = resilient
 
@@ -314,6 +325,18 @@ class AdapterFactory:
         elif provider == "openrouter":
             return OpenRouterAdapter(api_key=api_key, default_model=model)
 
+        elif provider == "ollama":
+            from weebot.config.settings import get_settings
+
+            settings = get_settings()
+            # Ollama ignores the key but the SDK wants one; a fixed dummy also stops
+            # OpenAIAdapter's key chain from sending an OpenRouter key to localhost.
+            return OpenAIAdapter(
+                api_key="ollama",
+                base_url=base_url or settings.ollama_base_url,
+                default_model=model.removeprefix("ollama/") or settings.ollama_model,
+            )
+
         elif model and "/" in model:
             # A vendor/model id with no direct adapter here (google/, poolside/,
             # microsoft/, ...) is an OpenRouter id. These raised "Unknown
@@ -386,6 +409,16 @@ def _resolve_direct_key(env_var: str) -> str | None:
         except Exception:
             pass
     return os.getenv(env_var) or None
+
+
+def _ollama_enabled() -> bool:
+    try:
+        from weebot.config.settings import get_settings
+
+        return bool(get_settings().ollama_enabled)
+    except Exception:
+        logger.debug("could not read the Ollama switch; treating Ollama as off", exc_info=True)
+        return False
 
 
 def _has_direct_key(env_var: str) -> bool:

@@ -323,6 +323,7 @@ def prompt_sha(messages: list[dict[str, Any]]) -> str:
 
 def unwrap_llm(llm: Any) -> Any:
     """The adapter under any bulkhead wrappers, for ``isinstance`` checks on a concrete type."""
-    while isinstance(llm, BoundedLLMAdapter):
+    # `_llm_wrapper`: other pass-through layers (the local-model router) expose `.inner` too.
+    while isinstance(llm, BoundedLLMAdapter) or getattr(llm, "_llm_wrapper", False) is True:
         llm = llm.inner
     return llm
