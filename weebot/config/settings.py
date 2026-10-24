@@ -13,7 +13,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # validate the whole .env at import. Entry points must load_dotenv() before
 # importing weebot (run.py, cli/main.py, run_mcp.py). ICM fix plan W2.4b, option
 # (a); passing the workspace to tools through ToolConfig is planned for Wave 5.
-WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE", os.getcwd()))
+# `or`, not a getenv default: a blank `WEEBOT_WORKSPACE=` line in .env must mean "unset".
+# resolve(): `WEEBOT_WORKSPACE=.` is a relative root, and no absolute path is inside one,
+# so every containment and permission check against it silently stopped matching.
+WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE") or os.getcwd()).resolve()
 LOGS_DIR = Path(os.getenv("WEEBOT_LOGS_DIR", "logs"))
 LOG_FILE = LOGS_DIR / "agent.log"
 SESSIONS_DB = os.getenv("WEEBOT_SESSIONS_DB", "./weebot_sessions.db")
