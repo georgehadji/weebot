@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (15)
+## open (16)
 
 - 2026-10-23 — [Plan: fix the findings recorded in the map cards](icm_fix_plan.md) — F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
@@ -14,6 +14,7 @@ Format: date — record — note
 - 2026-07-21 — [Plan: Greek Scientific Book Generation via LaTeX](scientific-book-latex-plan.md) — LLM drafting, TeX Live image, CLI/Web wiring missing
 - 2026-08-13 — [Memory subsystem repair plan (AgeMem-derived)](specs/agentic_memory_fix_plan.md) — phases 5-8 not built (retrieval, preservation check, filter_context, memory-quality job)
 - 2026-09-09 — [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — phase 5 not built: Postgres backend, scheduler extraction, replica proof
+- 2026-10-24 — [Architecture Remediation — 2026-10 audit](specs/arch_audit_2026_10_remediation_plan.md) — from the 2026-10-24 EGFV audit (4/10); nothing executed; Phase 8 defers to the 2026-09 plan's Phase 5
 - 2026-08-03 — [Bilevel Autoresearch → weebot: Implementation Plan](specs/bilevel_autoresearch_implementation_plan.md) — phase 3 mechanism selection and phase 4 L1.5 instrumentation not built
 - 2026-06-30 — [Implementation Plan — "Code as Agent Harness" Enhancements & Fixes](specs/code_as_harness_implementation_plan.md) — phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
 - 2026-06-15 — [Memento-Skills → weebot: Deployment-Time Learning Implementation Plan](specs/memento_skills_implementation_plan.md) — phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
