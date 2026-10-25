@@ -41,7 +41,7 @@ Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out
 
 ## Connected to
 - **Called by** `PlanActFlow.run()` (`plan_act_flow.py:651-655`) and, for `record_misalignment`, `plan_act_flow.py:672`.
-- **Reads flags written by** `states/executing.py:109` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:280-292` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:94` (`plan_pending_approval`), `states/product_gate.py:153` (`_product_gate_pending`).
+- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:280-292` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:94` (`plan_pending_approval`), `states/product_gate.py:153` (`_product_gate_pending`).
 - **Approve words:** `_APPROVE_TOKENS`, `states/plan_review.py:36` (imported lazily at `flow_router.py:84, 127`).
 - **Not** the state machine itself: transitions *between* states are `context.set_state(...)` calls inside each state (see FlowState).
 

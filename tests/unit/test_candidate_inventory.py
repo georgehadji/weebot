@@ -66,7 +66,21 @@ _NOT_HUNT_AUDITS = (
     "cross_phase",
     "weebot_refactoring",
     "residual_b1_inventory",
+    # The UI hunt is a separate program with its own numbering: its `D1` is
+    # `EventStreamProvider.tsx:109` and its `H3`/`H4` are W0 slice labels. None of them
+    # is a record here, and the collision is not a defect in either inventory -- but a
+    # scan that cannot tell the two apart reports this file's gaps as missing records
+    # (and did: `D1 is listed as a numbering gap but is mentioned in
+    # ui_defect_hunt_w1_transport.md`). Its own docs are the source of record for it.
+    "ui_defect_hunt",
 )
+
+# Ids that appear in an audit only as documentation of the ID FORMAT, not as a claim.
+# `H3.5` is the example the round-2 census uses to describe `H<wave>.<n>`
+# (defect_hunt_v71_w0_complete.md:151, 159). Recorded here rather than in the yml
+# because it has no claim to attribute -- the same reasoning as `numbering_gaps`, but
+# for a string that IS mentioned, which the gap guard correctly refuses.
+_FORMAT_EXAMPLES = frozenset({"H3.5"})
 
 _VALID_STATUSES = frozenset({"open", "investigating", "confirmed", "fixed", "cleared", "deferred"})
 _NEEDS_NOTE = frozenset({"cleared", "deferred"})
@@ -93,7 +107,10 @@ def _ids_mentioned_in_audits() -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for path in _hunt_audit_files():
         for letter, number in _ID.findall(path.read_text(encoding="utf-8")):
-            found.setdefault(f"{letter}{number}", []).append(path.name)
+            candidate = f"{letter}{number}"
+            if candidate in _FORMAT_EXAMPLES:
+                continue
+            found.setdefault(candidate, []).append(path.name)
     return found
 
 

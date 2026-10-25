@@ -48,12 +48,12 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `save/revoke/list_active_session_constraint(s)` | `flows/collaborators/session_constraint_accumulator.py` |
 | `save_opportunity` | `services/opportunity_engine.py` |
 | `upsert_memory_metadata`, `delete_memory_entries` | `services/{user_model_consolidator,memory_lifecycle_service}.py`, `tools/persistent_memory.py` |
-| `get_memory_entry` | `agents/executor/_base.py` (user-profile lookup), `agents/executor/_prompt_builder.py` |
+| `get_memory_entry` | `agents/executor/_step_setup.py` (user-profile lookup), `agents/executor/_prompt_builder.py` |
 | `save_plan_template` / `increment_template_use` | `flows/states/completed.py` / `cqrs/handlers/create_plan_handler.py` |
 | `find_plan_templates_by_hash`, `list_all_plan_templates` | `domain/services/plan_template_cache.py` (domain layer) |
 | `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:334`) |
 
-Consequence: `InMemoryStateRepo` and the PostgreSQL repo implement the port but none of the roles (only `sqlite_state_repo.py` defines `save_behavioral_rule`, `get_memory_entry`, `save_commitment`, `save_plan_template`; grep 2026-10-24). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-100`), get `None` on those repositories, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `application/agents/executor/_base.py:643-646`.
+Consequence: `InMemoryStateRepo` and the PostgreSQL repo implement the port but none of the roles (only `sqlite_state_repo.py` defines `save_behavioral_rule`, `get_memory_entry`, `save_commitment`, `save_plan_template`; grep 2026-10-24). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-100`), get `None` on those repositories, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:127-130`.
 
 ## Connected to
 - **Implements** `StateRepositoryPort` (`application/ports/state_repo_port.py`); 68 files under `weebot/` mention the port (grep 2026-10-24). Other implementers: `persistence/in_memory_state_repo.py`, `persistence/postgresql/state_repo.py`.

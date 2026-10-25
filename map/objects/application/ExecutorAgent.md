@@ -5,8 +5,8 @@ code: ExecutorAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # ExecutorAgent
@@ -14,7 +14,7 @@ commit: 12624041
 Runs one plan step: builds a system prompt, loops "ask the model, run the tool calls it returns" until the step produces an answer, calls `terminate`, hits a guard, pauses for a human, or runs out of budget. `execute_step` is an async generator of `AgentEvent`s and ends with a `StepEvent` of COMPLETED or FAILED, or returns early after a `WaitForUserEvent`.
 
 ## Why this shape
-Split from a 1,400-line class into collaborators (ADR-007 in `ARCHITECTURE.md`); the model-call logic is `CascadeExecutor`, tool dispatch is `ToolExecutor`, compaction and token counts are `ContextCompressor`, loop limits are `IterationGuard` (`weebot/application/agents/executor/_base.py:296-345, 550-555`); what the loop does with one tool result is in `_step_result_handler.py` (CPL-1). `_base.py` is still 1,225 lines. Each `execute_step` call starts clean: facts, terminate flag and conversation buffer are cleared first (`:601-603`). The container injects `injection_scan`, `effect_ledger`, `cost_meter` and `memory_snapshot` (`:246-254`), so the executor imports no tool.
+Split from a 1,400-line class into collaborators (ADR-007 in `ARCHITECTURE.md`); the model-call logic is `CascadeExecutor`, tool dispatch is `ToolExecutor`, compaction and token counts are `ContextCompressor`, loop limits are `IterationGuard` (`weebot/application/agents/executor/_base.py:227-276, 550-555`); what the loop does with one tool result is in `_step_result_handler.py` (CPL-1). `_base.py` is still 1,225 lines. Each `execute_step` call starts clean: facts, terminate flag and conversation buffer are cleared first (`:601-603`). The container injects `injection_scan`, `effect_ledger`, `cost_meter` and `memory_snapshot` (`:246-254`), so the executor imports no tool.
 
 ## Shape
 `execute_step(plan, step, user_input, session_id)` at `_base.py:529`:

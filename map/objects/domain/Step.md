@@ -5,8 +5,8 @@ code: Step, StepStatus, ContextScope
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # Step
@@ -17,14 +17,14 @@ One unit of work inside a `Plan`: an id, a description, a status and a result. `
 A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:16, 99-106`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`:38-50`).
 
 ## Shape
-- `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:625`, default at `domain/models/event.py:65`); plans use `RUNNING`.
+- `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:546`, default at `domain/models/event.py:65`); plans use `RUNNING`.
 - `ContextScope` (`:38-50`): `full` (default), `minimal`, `skill`, `creative`.
 - `Step` fields (`:56-75`): `id`, `description`, `status`, `result`, `retry_count` (cap 1), `acceptance_criteria`, `evidence_refs`, `context_scope`.
 - `is_done()` (`:77-78`): COMPLETED **or FAILED**. UNVERIFIED is not done, so `Plan.get_next_step` returns it again.
 - `mark_running`, `mark_completed`, `mark_failed`, `mark_unverified` (`:80-110`), `is_blocked` (`:112-121`).
 
 Consequences (read from source, not run):
-- The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`weebot/application/flows/states/executing.py:240`, `weebot/application/flows/states/_step_outcome.py:148, 248`, `weebot/application/flows/states/evidence_gate.py:42-56`).
+- The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`weebot/application/flows/states/executing.py:234`, `weebot/application/flows/states/_step_outcome.py:148, 248`, `weebot/application/flows/states/evidence_gate.py:42-56`).
 - `evidence_refs` is written only by the dead `mark_completed`/`mark_unverified` and read by nothing.
 - `acceptance_criteria` is asked for in the planner prompt (`weebot/config/prompts/planner_system.txt:15, 56`) and parsed (`application/agents/planner.py:336-381`); no Python code reads it afterwards. It reaches a model only if a prompt serialises the whole step.
 - `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`weebot/application/flows/states/_step_outcome.py:102-115`), step validation (`weebot/application/flows/states/_step_outcome.py:173-200`), the evidence audit (`evidence_gate.py:42-49`); review has its own cap on the same field (`application/flows/states/reviewing.py:70, 137`). A step retried by one gate has no retry left for the next.

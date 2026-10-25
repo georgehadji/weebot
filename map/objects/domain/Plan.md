@@ -5,8 +5,8 @@ code: Plan, PlanStatus, PlanCritique
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # Plan
@@ -14,7 +14,7 @@ commit: 12624041
 The ordered list of `Step`s a flow runs against, plus a title, a summary and a `PlanStatus`. `PlanCritique` (same file) is the critic's verdict on a plan before execution; it lives here because it has no behaviour of its own.
 
 ## Why this shape
-Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:180-220`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:240`; `weebot/application/flows/states/_step_outcome.py:109, 148, 199, 248`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`:222-231`), `is_successful()` needs every step COMPLETED (`:233-243`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`:236-241`).
+Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:180-220`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:234`; `weebot/application/flows/states/_step_outcome.py:109, 148, 199, 248`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`:222-231`), `is_successful()` needs every step COMPLETED (`:233-243`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`:236-241`).
 
 ## Shape
 - `PlanStatus` (`:19-35`): `created`, `updated`, `running`, `completed`, `failed`. The comment at `:29-34` says `FAILED` is backend only and the UI type omits `running`; that is out of date: `weebot-ui/src/types/events.ts:6` lists all five values.

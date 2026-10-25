@@ -5,8 +5,8 @@ code: weebot/application/ports/*_port.py
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # Ports
@@ -39,7 +39,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | EventStorePort | event_store_port.py:15 | AsyncEventStore `infrastructure/event_store.py:94` | port `di/__init__.py:169` |
 | FileStoragePort | file_storage_port.py:14 | LocalFileStorageAdapter `infrastructure/adapters/file_storage_adapter.py:18` | port `di/__init__.py:189` |
 | IGatewaySessionStorePort (Protocol) / AbstractGatewaySessionStore | gateway_session_store_port.py:15, 67 | SQLiteGatewaySessionStore `infrastructure/persistence/gateway_session_store.py:40` | port `di/__init__.py:172` |
-| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:232`, `models/plan_act_flow_config.py:185`) |
+| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:163`, `models/plan_act_flow_config.py:185`) |
 | IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:185`, `di/_factories.py:266-274` |
 | JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:43, 100` | none |
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
@@ -91,7 +91,7 @@ Dependency inversion: application code types against the port, and an adapter is
 Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
 
 Consequences (read from source, not run):
-- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:293` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
+- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:296` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:223`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).

@@ -5,8 +5,8 @@ code: WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool,
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # WebTools
@@ -14,7 +14,7 @@ commit: 12624041
 The read tools: web search, page fetch, scraping, image search, weather, OCR, and the two local lookups (`knowledge` notes, `search_history`). Browser tools have their own card (Browser).
 
 ## Why this shape
-Each tool owns its backend and its fallback, and returns an error `ToolResult` rather than raising, so a missing key or binary costs one failed call, not a crashed step. Third-party text is not trusted: each tool declares an `OutputTrust` (`weebot/domain/models/output_trust.py:18-33`), and output of anything but a `LOCAL` tool is fenced before the model sees it (`weebot/core/trust_boundary.py:58-90`, `weebot/application/agents/executor/_base.py:396-417`). Binary-backed tools (`moli_fetch`, `agent_reach`) run a fixed argument list, never a shell (`weebot/tools/moli_fetch.py:7-15`, `weebot/tools/agent_reach.py:12-16`).
+Each tool owns its backend and its fallback, and returns an error `ToolResult` rather than raising, so a missing key or binary costs one failed call, not a crashed step. Third-party text is not trusted: each tool declares an `OutputTrust` (`weebot/domain/models/output_trust.py:18-33`), and output of anything but a `LOCAL` tool is fenced before the model sees it (`weebot/core/trust_boundary.py:58-90`, `weebot/application/agents/executor/_base.py:327-348`). Binary-backed tools (`moli_fetch`, `agent_reach`) run a fixed argument list, never a shell (`weebot/tools/moli_fetch.py:7-15`, `weebot/tools/agent_reach.py:12-16`).
 
 ## Shape
 | Tool (`name`) | Class | Backend | Needs | Fallback / when missing | Fenced |
@@ -48,7 +48,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `RoleBasedToolRegistry`: `set_config` for `spacescraper`, `moli_fetch`, `agent_reach`; `set_rerank` for `web_search`; collaborators for `knowledge` and `ocr` (`weebot/application/services/tool_registry.py:446-525`, `weebot/application/di/_factories.py:479-521`).
-- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `:74`, `must_taint` `:79`, `wrap_untrusted` `:107`) through the executor (`weebot/application/agents/executor/_base.py:396-417`, `weebot/application/agents/executor/_tool_executor.py:543-546`). A tool that declares nothing is `EXTERNAL`.
+- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `:74`, `must_taint` `:79`, `wrap_untrusted` `:107`) through the executor (`weebot/application/agents/executor/_base.py:327-348`, `weebot/application/agents/executor/_tool_executor.py:543-546`). A tool that declares nothing is `EXTERNAL`.
 - **Related:** the BaseTool card (call path), the EgressGuard card, the Browser card (`advanced_browser`, `camofox_browser`).
 - **Looks like but is not:** `web_scraper`, `screenshot_ocr`, `youtube_download`: other tools, each declaring its own `output_trust` in its module, not covered here.
 

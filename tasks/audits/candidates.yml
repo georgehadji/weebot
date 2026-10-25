@@ -2031,3 +2031,51 @@ candidates:
       byte-identical to a clean run; the stamp can now say verification did not
       run, but the individual gates still cannot say which of them did not.
 
+
+  # ── Round 2 (H-series). The round-1 inventory stopped at D59; round 2 numbered
+  #    its candidates H<wave>.<n>, and its three results lived only in the hunt's
+  #    summary until this record was added. WB-10 of the 2026-10 wave 2 plan is why
+  #    that mattered: a doc that is not indexed is a doc that is not read.
+
+  - id: H1.1
+    round: 2
+    wave: W1
+    location: weebot/core/bash_guard.py:517-518
+    claim: >-
+      An empty or whitespace-only command returns SAFE. Is that right, or should an
+      empty command be an error -- it usually means a construction bug upstream, and
+      returning SAFE hides it behind a "safe" verdict.
+    status: open
+    evidence: null
+    verdict_note: null
+
+  - id: H1.2
+    round: 2
+    wave: W1
+    location: weebot/application/services/tool_guards.py:347
+    claim: >-
+      GuardChain.evaluate() defaults to ALLOW when every guard returns None. Correct
+      when "no guard applies" means "nothing to object to"; a fail-open if at least one
+      guard is expected to have an opinion.
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Cleared in the round-2 summary (defect_hunt_v71_final_summary.md:54). Recorded
+      with that as the only evidence: the W1 report itself ends at "MEDIUM risk,
+      investigation needed" (defect_hunt_v71_w1_security.md:250) and does not write the
+      reasoning down, so this record carries the disposition, not a defence.
+
+  - id: H2.1
+    round: 2
+    wave: W2
+    location: weebot/interfaces/web/routers/slack_webhook.py:48-49
+    claim: >-
+      The Slack URL-verification challenge is answered without signature verification,
+      so a POST with {"type": "url_verification", "challenge": ...} is echoed to anyone.
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Slack platform requirement: the challenge is echoed before the app's signing
+      secret can be used, and the response carries no command execution. LOW risk
+      per the W2 report; cleared on that basis (defect_hunt_v71_w2_interfaces.md:157,
+      208).
