@@ -113,8 +113,10 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
         }
       };
 
-      ws.onerror = (e) => {
-        console.error("[Behavior] WebSocket error:", e);
+      ws.onerror = () => {
+        // The browser gives no detail, and onclose reconnects; a socket closed by cleanup
+        // (dev double-mount, route change) also lands here, so this is a warning, not an error.
+        if (!disposed) console.warn("[Behavior] WebSocket error; reconnecting");
       };
 
       ws.onclose = () => {
