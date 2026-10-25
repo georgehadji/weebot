@@ -30,7 +30,13 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install import-linter ruff pip-audit
+          # Only pip-audit is added here. import-linter and ruff come from
+          # requirements.txt, where they are pinned: the ratchets in
+          # tasks/quality/ceilings.toml are exact counts, so installing "latest" over a
+          # pin makes the gate measure a different tool than the ceiling was set with.
+          # That is how ruff_violations read 743 against a ceiling of 741 on a clean
+          # checkout, and why this step now adds nothing but the auditor.
+          pip install pip-audit
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F821,E9
       - name: Python dependency audit
@@ -177,7 +183,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install import-linter ruff pip-audit
+          pip install pip-audit
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F821,E9
       - name: Python dependency audit
