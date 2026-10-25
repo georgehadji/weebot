@@ -347,7 +347,11 @@ ruff_violations = 741
 # weebot/application/di/keys.py with plan 2.1/2.4 (43). Migrate the rest as they
 # are touched; each Key replaces every use of its string in one change.
 # Measured by: scripts/lint_di_wiring.py
-string_di_keys = 43
+# 43 -> 44 with commit 1813405b: "misalignment_journal" binding added in
+# di/_learning.py for the session lessons feature. Baseline corrected during
+# defect hunt V7.1 Wave 0 (the plan draft cited 43, but the baseline commit
+# 86289a08 includes the feature, so actual baseline is 44).
+string_di_keys = 44
 
 # weebot-ui debt, counted by scripts/lint_ui_debt.py (plan: tasks/specs/ui_ux_remediation_plan.md).
 # Targets: orientation 0, tiny text 0, vh 0, main 1 (one landmark per page), static onClick 0,
