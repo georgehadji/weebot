@@ -5,8 +5,8 @@ code: create_app, lifespan
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # Web API (FastAPI)
@@ -23,8 +23,8 @@ Per-route auth lives in `weebot/interfaces/web/auth.py`: `get_current_user_id` (
 
 | Prefix | File | Endpoints | Auth deps |
 |---|---|---|---|
-| `/api/sessions` | `routers/sessions.py:27` | GET list, POST create, GET `/search`, GET `/{id}`, GET `/{id}/events`, DELETE, POST `/cancel`, `/resume`, `/run`, `/steer`, `/input` | mutations `require_mutation_identity`; reads by id `verify_session_ownership` |
-| `/api/models` | `routers/models.py:20` | GET list, GET `/available` | none |
+| `/api/sessions` | `routers/sessions.py:29` | GET list, POST create, GET `/search`, GET `/{id}`, GET `/{id}/events`, DELETE, POST `/cancel`, `/resume`, `/run`, `/steer`, `/input` | mutations `require_mutation_identity`; reads by id `verify_session_ownership` |
+| `/api/models` | `routers/models.py:24` | GET list, GET `/available` | none |
 | `/api/health` | `routers/health.py:35` | GET "", `/ready`, `/live`, `/prometheus`, `/metrics`, `/status` | none |
 | `/api/dashboard` | `routers/dashboard.py:16` | GET `/metrics` | caller's sessions only (`:37-38`) |
 | `/api/behavior` | `routers/behavior_router.py:28` | GET trust, report, recent, session, watch/status, self-knowledge; POST override, watch/start, watch/stop, self-knowledge/regenerate; WS `/ws`, `/ws/session/{id}` | POSTs `require_mutation_identity`; GETs none |
@@ -38,19 +38,19 @@ Per-route auth lives in `weebot/interfaces/web/auth.py`: `get_current_user_id` (
 
 WebSockets: `/ws` (`main.py:620-642`) and `/ws/sessions/{id}` (`:644-681`), both through `_websocket_auth` (`:691-741`: subprotocol `bearer.<key>`, `Authorization`, then deprecated `?token=`; no key means loopback only). The session socket also checks ownership (`:654-667`). `WebSocketEventBroadcaster` sends an event to its session's sockets, and only events without a `session_id` to `/ws` (`weebot/interfaces/web/event_broadcaster.py:37-43`).
 
-Sessions: `/run` builds tools and a `TaskRunner` plan-act factory with the app's bus and steering (`routers/sessions.py:284-313`); `/input` and `/resume` go through `dispatch_session_input` (`:394-434`).
+Sessions: `/run` builds tools and a `TaskRunner` plan-act factory with the app's bus and steering (`routers/sessions.py:325-354`); `/input` and `/resume` go through `dispatch_session_input` (`:394-434`).
 
 Consequences (read from source, not run):
 - One container per web process: the lifespan takes `shared_container()` (`main.py:184-190`), the same one `build_tools`, `create_flow` and the gateways resolve through (`weebot/interfaces/factories.py:54-70`), so the sub-agent flow factory's bus is the one the WebSocket broadcaster listens to (F55).
-- A PlanActFlow built with no mediator stops at planning with an error (`weebot/application/flows/states/planning.py:90-98`); `build_flow` resolves the mediator and bus from the shared container when the caller passes none (`weebot/application/flows/flow_builder.py:82-93`), which covers `/api/webhook/run` (`routers/webhook.py:128-136`) and the chat gateways.
+- A PlanActFlow built with no mediator stops at planning with an error (`weebot/application/flows/states/planning.py:95-103`); `build_flow` resolves the mediator and bus from the shared container when the caller passes none (`weebot/application/flows/flow_builder.py:82-93`), which covers `/api/webhook/run` (`routers/webhook.py:128-136`) and the chat gateways.
 - `/api/webhook/run` continues a stored session only when its `user_id` is `webhook`, else 404 (F57, `routers/webhook.py:113-123`); it runs under `DenyApproval`, since a webhook caller cannot answer a prompt (`:143-147`).
 - Store-mode principal keys cannot pass the HTTP middleware: it compares only against `weebot_api_key` (`main.py:521`), and with no key `FailClosedMiddleware` refuses non-loopback (`:547-559`).
-- `/api/costs/summary` has no tenant filter (`routers/ops_router.py:85-102`). Fixed (F58): `/api/sessions/search` keeps only the caller's sessions (`routers/sessions.py:118-125`), `/api/dashboard/metrics` counts only the caller's (`routers/dashboard.py:37-38`), `/api/events/stream` forwards only events of the caller's sessions (`routers/sse.py:52-72`).
+- `/api/costs/summary` has no tenant filter (`routers/ops_router.py:85-102`). Fixed (F58): `/api/sessions/search` keeps only the caller's sessions (`routers/sessions.py:153-160`), `/api/dashboard/metrics` counts only the caller's (`routers/dashboard.py:37-38`), `/api/events/stream` forwards only events of the caller's sessions (`routers/sse.py:52-72`).
 - `watch/start` starts a file watcher on any existing directory the caller names, once `require_mutation_identity` passes (`routers/behavior_router.py:137-159`).
 - The behavior sockets do their own auth: with no API key both accept any client, loopback or not (`behavior_router.py:251-288, 365-377`), unlike `_websocket_auth` (`main.py:704-706`); `/ws/session/{id}` accepts only `?token=` and checks no ownership.
-- Silent swallow: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:213-216`).
+- Silent swallow: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:254-257`).
 - Slack and WhatsApp callbacks run their work on `BackgroundTasks` (`routers/slack_webhook.py:68`, `routers/whatsapp_webhook.py:78`), which the lifespan drains at shutdown (`main.py:376-378`).
-- `/app` static mount looks for `weebot-ui/dist` (`main.py:683-686`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:9`), so the mount is inert.
+- `/app` static mount looks for `weebot-ui/dist` (`main.py:683-686`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:12`), so the mount is inert.
 - `ponytail` router imports from `cli.commands.ponytail` (`routers/ponytail.py:13`), an interfaces module reaching into the CLI package.
 
 ## Connected to

@@ -4,7 +4,7 @@ name: Browser adapter and session pool
 code: PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-10-24
 commit: eeb0e80e
 ---
@@ -44,18 +44,18 @@ The Playwright side of web browsing: `PlaywrightAdapter` owns one browser, one c
 
 ## Lifecycle (who opens and closes the browser)
 - **Open.** A `PlaywrightAdapter` is constructed with no browser in three places.
-  - Per tool collection: `create_tool_collection_from_names` builds one through the `browser_factory` the container wires (`weebot/application/di/_factories.py:495, 503-509`) and shares it between `advanced_browser` and `browser_inspector` (`weebot/application/services/tool_registry.py:498-506`). The variable is local to the call (`:464`), so every collection gets its own adapter. With no factory wired, both tools are skipped (`:503-505`).
+  - Per tool collection: `create_tool_collection_from_names` builds one through the `browser_factory` the container wires (`weebot/application/di/_factories.py:514, 503-509`) and shares it between `advanced_browser` and `browser_inspector` (`weebot/application/services/tool_registry.py:498-506`). The variable is local to the call (`:464`), so every collection gets its own adapter. With no factory wired, both tools are skipped (`:503-505`).
   - By the tool itself when nothing was injected (`advanced_browser.py:374-377`, `browser_inspector.py:285-288`).
   - In the health check, which only calls `is_available()` (`weebot/infrastructure/observability/health_checks.py:327-330`).
   - The browser process starts on the first `advanced_browser` `launch`/`goto` or `browser_inspector` `navigate` (`advanced_browser.py:176-177, 192-193, 372-383`, `browser_inspector.py:280-291`).
 - **Close.** Two paths:
   - `advanced_browser(action="close")` closes the adapter (`advanced_browser.py:184-185, 407-408`).
-  - `ToolCollection.teardown()` calls `BaseTool.close()` on every tool, and both browser tools override it to close the shared adapter (`weebot/application/models/tool_collection.py:147-154`; `advanced_browser.py:132-135`, `browser_inspector.py:196-199`). Flows call it at `application/flows/plan_act_flow.py:518-520` and `application/flows/agent_session_manager.py:43-45`. Pinned by `tests/unit/fixes/test_teardown_closes_browser.py`.
+  - `ToolCollection.teardown()` calls `BaseTool.close()` on every tool, and both browser tools override it to close the shared adapter (`weebot/application/models/tool_collection.py:147-154`; `advanced_browser.py:132-135`, `browser_inspector.py:196-199`). Flows call it at `application/flows/plan_act_flow.py:521-523` and `application/flows/agent_session_manager.py:43-45`. Pinned by `tests/unit/fixes/test_teardown_closes_browser.py`.
   - The `advanced_browser` atexit hook stops a module global that no code assigns (`advanced_browser.py:16-42`); its owner is documented at `:18-20`.
 - **Pool.** Nothing closes it because nothing opens it.
 
 ## Guards on navigation
-None in this layer. `PlaywrightAdapter.navigate` (`playwright_adapter.py:237`) and `BrowserSessionManager.load_session` (`session_manager.py:116`) call `page.goto` with no host check. The tool-level gate is `EgressGuard`, run by `ToolExecutor` before each call (`application/agents/executor/_tool_executor.py:403-424`). It treats a browser call as egress for form-submit action names or POST-data arguments (`weebot/core/egress_guard.py:161-174, 412-422`), for a URL that holds a secret, and for page writes once the session is tainted (`:176-182, 348-360`); see `tools/BrowserTools.md`.
+None in this layer. `PlaywrightAdapter.navigate` (`playwright_adapter.py:237`) and `BrowserSessionManager.load_session` (`session_manager.py:116`) call `page.goto` with no host check. The tool-level gate is `EgressGuard`, run by `ToolExecutor` before each call (`application/agents/executor/_tool_executor.py:397-418`). It treats a browser call as egress for form-submit action names or POST-data arguments (`weebot/core/egress_guard.py:161-174, 412-422`), for a URL that holds a secret, and for page writes once the session is tainted (`:176-182, 348-360`); see `tools/BrowserTools.md`.
 
 ## Connected to
 - **Implements** `BrowserPort` (`application/ports/browser_port.py:151`); config `BrowserConfig` (`:113-144`).
@@ -69,7 +69,7 @@ None in this layer. `PlaywrightAdapter.navigate` (`playwright_adapter.py:237`) a
 - The session files under `data/browser_sessions/`.
 - `web_scraper` markdown output.
 - `browser_inspector` `som`.
-- Tests: `tests/unit/infrastructure/test_child_process_and_browser_teardown.py` (adapter start/close/HAR, `:222-286`), `tests/unit/fixes/test_teardown_closes_browser.py`, `tests/unit/infrastructure/test_som_renderer.py`, `tests/unit/tools/test_browser_inspector.py`, `tests/unit/test_architecture_fitness.py:1359-1373` (where `_global_pool` may live), `tests/unit/conftest.py:92` (imports `reset_global_pool`, errors swallowed).
+- Tests: `tests/unit/infrastructure/test_child_process_and_browser_teardown.py` (adapter start/close/HAR, `:222-286`), `tests/unit/fixes/test_teardown_closes_browser.py`, `tests/unit/infrastructure/test_som_renderer.py`, `tests/unit/tools/test_browser_inspector.py`, `tests/unit/test_architecture_fitness.py:1383-1397` (where `_global_pool` may live), `tests/unit/conftest.py:106` (imports `reset_global_pool`, errors swallowed).
 
 **Does not hit:**
 - `browser_navigator` (browser-use).

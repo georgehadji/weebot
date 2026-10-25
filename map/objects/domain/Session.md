@@ -5,8 +5,8 @@ code: Session, SessionStatus, SessionContext, Fact, FactSource
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # Session
@@ -26,11 +26,11 @@ Event-sourced: the plan is not a field, it is the last `PlanEvent` in `events` w
 - `SessionContext` fields (`:64-84`): `skill_name`, `skill_content`, `skill_version`, `original_task` (alias `_original_task`), `last_prompt`, `facts`, `archived`, `archived_at`, `archive_ttl_days`, `trace_id`, `detected_language`, `meta_notes` (last 20, `:344-352`), `extra`. `extra` also holds `TaskRunner`'s `retries_remaining` and `failure_reason`, so the retry budget and dead letter survive a restart (`application/services/task_runner.py:36-44`).
 
 Consequences (read from source, not run):
-- Dead: `is_completable`, `completion_summary`, `has_pending_approval`, `get_fact_source` have no caller in `weebot/` or `cli/` (grep 2026-10-24). `has_unresolved_wait_event` (`:313-314`) is called only by `PlanActFlow._has_unresolved_wait_event` (`application/flows/plan_act_flow.py:850-852`), which nothing calls.
+- Dead: `is_completable`, `completion_summary`, `has_pending_approval`, `get_fact_source` have no caller in `weebot/` or `cli/` (grep 2026-10-24). `has_unresolved_wait_event` (`:313-314`) is called only by `PlanActFlow._has_unresolved_wait_event` (`application/flows/plan_act_flow.py:853-855`), which nothing calls.
 - Fact provenance is written but never used: no code passes `FactSource.AUDIT`, `FactSource.USER` or `verified_by`, and `get_fact_source` has no caller.
 - `archived`, `archived_at`, `archive_ttl_days` and `detected_language` are never read or written outside this file; the language detector's docstring claims it stores into `detected_language` (`application/services/language_detector.py:7`).
-- The 100-fact cap drops by insertion order. Per-step keys accumulate (`correction_original:<step>`, `reviewing.py:131, 180`; `constraint_gate_ack:<step>`, `executing.py:334, 351`). A gate flag rewritten late, such as `atomic_mail_inbound_pending` (`executing.py:302, 509`), moves to newest on each write and is not the first evicted (F68, `tests/unit/fixes/test_fact_cap_keeps_fresh_flags.py`); a key written once early and never rewritten can still be evicted in a long session, and `get_fact` then returns `None`.
-- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:1173`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:42-62`, called from `executing.py:693`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
+- The 100-fact cap drops by insertion order. Per-step keys accumulate (`correction_original:<step>`, `reviewing.py:131, 180`; `constraint_gate_ack:<step>`, `executing.py:335, 352`). A gate flag rewritten late, such as `atomic_mail_inbound_pending` (`executing.py:303, 510`), moves to newest on each write and is not the first evicted (F68, `tests/unit/fixes/test_fact_cap_keeps_fresh_flags.py`); a key written once early and never rewritten can still be evicted in a long session, and `get_fact` then returns `None`.
+- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:1174`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:42-62`, called from `executing.py:694`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
 - `SessionMemory` keeps at most 100 indices per event type (`session_memory.py:14-17`); with more than 100 `step` events after the last plan, the oldest are not reconciled. `copy()` always rebuilds with the default 100 (`:74`).
 - The comments at `session.py:249-252` and `session_memory.py:69-70` say `model_copy()` drops private attributes. With pydantic in `.venv` (checked 2026-10-24) `set_status()` returns a session that shares the same `_memory_index` object. Harmless today, because only `add_event` and `replace_events` mutate the index and both copy it first.
 - A session built from a DB row has an empty index (`infrastructure/persistence/sqlite_state_repo.py:510`), so `get_last_plan` falls back to the full scan until a new `PlanEvent` is added.
@@ -39,7 +39,7 @@ Consequences (read from source, not run):
 ## Connected to
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
 - **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:481-519`); see that card.
-- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:603-609, 648`), `FlowRouter` (`flow_router.py:80-88, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:299, 323, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
+- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:606-612, 648`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:306, 330, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
 - **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:107`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this

@@ -5,8 +5,8 @@ code: GatewayAdapter and six subclasses
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # Chat gateways
@@ -30,7 +30,7 @@ One base class holds what every platform needs: a `SafetyChecker` over the inbou
 Every adapter builds the flow the same way: `build_tools(role="admin")` then `create_flow(flow_type="plan_act", session, llm, tools, state_repo, profile_name)` from `weebot/interfaces/factories.py` (`telegram.py:222-230`, `slack.py:128-136`, `discord.py:188-196`, `whatsapp.py:115-123`, `signal.py:103-111`, `email.py:152-160`). The `llm` each adapter gets is the container's bounded `LLMPort` (`infrastructure/LLMAdapters.md`). Email also drops its own address and automated senders (`email.py:122-130`). The allowlist is edited with `python -m cli.main gateway allowlist ...` (`cli/commands/gateway.py:107-172`).
 
 Consequences (read from source, not run):
-- No adapter passes a mediator or event bus to `create_flow`; `build_flow` resolves both from the shared container (`weebot/application/flows/flow_builder.py:80-93`), so a gateway flow can plan (`PlanningState` refuses to run without a mediator, `weebot/application/flows/states/planning.py:90-98`) and its events reach the bus the WebSocket broadcaster listens on (`main.py:215-218`).
+- No adapter passes a mediator or event bus to `create_flow`; `build_flow` resolves both from the shared container (`weebot/application/flows/flow_builder.py:80-93`), so a gateway flow can plan (`PlanningState` refuses to run without a mediator, `weebot/application/flows/states/planning.py:95-103`) and its events reach the bus the WebSocket broadcaster listens on (`main.py:215-218`).
 - The flows resolve tools and collaborators through `shared_container()`, which is also the web lifespan's container (`main.py:184-190`; see `WebAPI.md`).
 - Every allowlisted chat gets the `admin` tool role, which includes `bash`, `powershell` and `python_execute`; the web process approval channel is `FlowPauseApproval` (`main.py:202`), and no gateway has a way to answer a pause.
 - `extract_media` turns an absolute path ending in a listed extension in the agent's reply into an attachment (`base.py:195-234`). Document types (`.pdf`, `.docx`, `.xlsx`, `.csv`, `.json`, `.yaml`, `.yml`, `.md`, `.txt`) only from inside the project root (F76, `:219-231`); images, audio and video from any path. Telegram then uploads the file (`telegram.py:282-288, 301-349`). The regex only matches paths starting with `/` (`base.py:53`), though the docstring names Windows paths (`:177`).

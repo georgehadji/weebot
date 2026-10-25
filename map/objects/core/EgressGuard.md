@@ -5,8 +5,8 @@ code: EgressGuard, RecipientAllowlist, EgressDecision
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # EgressGuard
@@ -14,7 +14,7 @@ commit: eeb0e80e
 Looks at a pending tool call and decides whether it sends data out (curl POST, `git push`, network-importing Python, browser form submit, Telegram message, JMAP email send) and, if so, whether it needs human approval. In enforcing mode a call that needs approval goes to the approval channel; when that channel denies, the call is replaced by an error result and does not run.
 
 ## Why this shape
-Aimed at the "lethal trifecta": an agent that can read private data, ingest untrusted content and send data out can be talked into leaking (`weebot/core/egress_guard.py:1-11`). So the check is on the outbound action, keyed on stable identifiers (host, email address, chat id), never display names (`:13-15, 239-245`). Like the other guards it fails closed: if the guard cannot be built, outbound-capable tools are refused (`weebot/application/agents/executor/_tool_executor.py:262-315, 403-417`).
+Aimed at the "lethal trifecta": an agent that can read private data, ingest untrusted content and send data out can be talked into leaking (`weebot/core/egress_guard.py:1-11`). So the check is on the outbound action, keyed on stable identifiers (host, email address, chat id), never display names (`:13-15, 239-245`). Like the other guards it fails closed: if the guard cannot be built, outbound-capable tools are refused (`weebot/application/agents/executor/_tool_executor.py:256-309, 403-417`).
 
 ## Shape
 - `EgressGuard` (`egress_guard.py:287`); `classify(tool_name, args, untrusted_context_active)` (`:299-346`):
@@ -34,18 +34,18 @@ Aimed at the "lethal trifecta": an agent that can read private data, ingest untr
 - `RecipientAllowlist`: JSON file, default `weebot_egress_allowlist.json` at the repo root or `WEEBOT_EGRESS_ALLOWLIST` (`:50-57`); atomic writes; an unreadable file is preserved and the list starts empty (`:239-279`). `approve_recipient` persists a host (`:387-389`). The file is in `.gitignore:179`.
 - Enforcement switch: `WEEBOT_EGRESS_ENFORCE`, default true; false means detect-only (log, allow) (`:41-47`).
 
-Where it runs: `ToolExecutor._get_egress_guard` constructs `EgressGuard()` lazily and latches only a successful build (`_tool_executor.py:262-294`). `execute_tool` calls `guard.classify` before every tool call (`:421-424`). When approval is required and enforcement is on, `_ask_about_egress` sends a `ToolCallApproval` to the current approval channel: approved runs the call, pending pauses the flow, denied returns "Outbound action blocked — requires human approval" (`:46-76, 442-448`, message `:33-43`). Detect-only logs and allows (`:452-455`). A non-egress call that reaches the network while the sandbox network is off asks through the same channel (`:79-123, 456-464`). `GuardedTool` also runs this guard for the MCP server's shell tools (`EgressAdapter`, `application/services/tool_guards.py:180-205`).
+Where it runs: `ToolExecutor._get_egress_guard` constructs `EgressGuard()` lazily and latches only a successful build (`_tool_executor.py:256-288`). `execute_tool` calls `guard.classify` before every tool call (`:421-424`). When approval is required and enforcement is on, `_ask_about_egress` sends a `ToolCallApproval` to the current approval channel: approved runs the call, pending pauses the flow, denied returns "Outbound action blocked — requires human approval" (`:46-76, 442-448`, message `:33-43`). Detect-only logs and allows (`:452-455`). A non-egress call that reaches the network while the sandbox network is off asks through the same channel (`:79-123, 456-464`). `GuardedTool` also runs this guard for the MCP server's shell tools (`EgressAdapter`, `application/services/tool_guards.py:180-205`).
 
-Effect ledger (ORCH-2): an egress call this session already completed is not run again, and a completed one is recorded (`_tool_executor.py:428-441, 493-503`; `application/services/effect_ledger.py`, key from `core/effect_key.py`).
+Effect ledger (ORCH-2): an egress call this session already completed is not run again, and a completed one is recorded (`_tool_executor.py:422-435, 493-503`; `application/services/effect_ledger.py`, key from `core/effect_key.py`).
 
-Taint: after a non-error result from a tool whose declared `OutputTrust` is EXTERNAL, the session is marked untrusted (`must_taint(trust_of(tool), is_error)`, `_tool_executor.py:547-550`; `weebot/core/trust_boundary.py:58-90`); an injection-scan hit can escalate a fixed-schema tool (`taint_session`, `:554-561`). The mark is kept per session id in a process-wide set (`:133-143, 182-193`) and appended to the event store as `session_flag` rows, replayed once per session per process, so a resume in a new process keeps it (`_persist_flag`, `_hydrate_session_state`, `:205-242`). A local (`file://`, loopback) browser tab and a file the session wrote itself do not taint (`:527-546`).
+Taint: after a non-error result from a tool whose declared `OutputTrust` is EXTERNAL, the session is marked untrusted (`must_taint(trust_of(tool), is_error)`, `_tool_executor.py:543-546`; `weebot/core/trust_boundary.py:58-90`); an injection-scan hit can escalate a fixed-schema tool (`taint_session`, `:554-561`). The mark is kept per session id in a process-wide set (`:133-143, 182-193`) and appended to the event store as `session_flag` rows, replayed once per session per process, so a resume in a new process keeps it (`_persist_flag`, `_hydrate_session_state`, `:205-242`). A local (`file://`, loopback) browser tab and a file the session wrote itself do not taint (`:527-546`).
 
 Consequences (read from source, not run):
-- "Always" on an approval for a first-time host (offered only when `FIRST_TIME_RECIPIENT` is the sole reason, `_tool_executor.py:59, 67`) calls `tool_approval.allow_host`, which calls `approve_recipient` (`weebot/application/services/tool_approval.py:154-155, 162-167, 323-324`).
+- "Always" on an approval for a first-time host (offered only when `FIRST_TIME_RECIPIENT` is the sole reason, `_tool_executor.py:60, 68`) calls `tool_approval.allow_host`, which calls `approve_recipient` (`weebot/application/services/tool_approval.py:154-155, 162-167, 323-324`).
 - The default approval channel is `DenyApproval` (`tool_approval.py:172`), so with no Console or Flow channel set, every first egress to a new host is still blocked.
 
 ## Connected to
-- **Built by** `ToolExecutor._get_egress_guard`, one per executor (`_tool_executor.py:262-294`); there is no DI binding (`egress_guard.py:489-492`). `tool_approval.allow_host` builds a throwaway instance only to write the allowlist (`tool_approval.py:162-167`).
+- **Built by** `ToolExecutor._get_egress_guard`, one per executor (`_tool_executor.py:256-288`); there is no DI binding (`egress_guard.py:489-492`). `tool_approval.allow_host` builds a throwaway instance only to write the allowlist (`tool_approval.py:162-167`).
 - **Related:** `weebot/core/trust_boundary.py` (`trust_of` `:58`, `must_fence` `:74`, `must_taint` `:79`, `escalate` `:93`; the verdict comes from each tool's `OutputTrust`), `application/services/tool_approval.py` (the approval channel), the inbound-mail gate in `ExecutingState`.
 - **Looks like but is not:** `BashGuard` (rates what a command *does locally*); `ExecApprovalPolicy` (asks before destructive commands); this guard concerns data leaving the machine.
 

@@ -5,8 +5,8 @@ code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # SQLiteStateRepository
@@ -35,7 +35,7 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `load_session` | CQRS handlers (create_plan, execute_step, update_plan, summarize, process_message, plan_queries, trajectory) and `save_policy.py`; `flows/collaborators/fact_resolver.py`; services (`session_search_service`, `task_runner`, `trajectory_exporter`); `infrastructure/persistence/legacy_project_adapter.py`; web: `interfaces/web/main.py`, `routers/{chat_router,ops_router,sessions,sse,webhook}.py`; gateway: `interfaces/gateways/telegram.py`; CLI: `cli/main.py`, `cli/commands/flow.py`, `interfaces/cli/agent_runner.py`; `scheduling/default_jobs.py` |
 | `list_sessions` | web: `routers/{chat_router,dashboard,health,sessions}.py`; MCP: `mcp/resources.py`; CLI: `cli/main.py`, `cli/commands/hyper.py`, `interfaces/cli/agent_runner.py`; `cqrs/handlers/active_queries.py`; `services/{task_runner,trajectory_exporter}.py`; `infrastructure/persistence/legacy_project_adapter.py`; monitors/health: `infrastructure/monitors/session_staleness_monitor.py`, `infrastructure/observability/health_checks.py`; `scheduling/default_jobs.py` |
 | `count_sessions` | `interfaces/web/routers/sessions.py` |
-| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:253` |
+| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:265` |
 | `delete_session` | `services/session_deletion_orchestrator.py` only |
 | `search_sessions` | `services/session_search_service.py` only |
 | `get_low_salience_entries` | `services/memory_lifecycle_service.py`, `services/user_model_consolidator.py` |

@@ -521,7 +521,7 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
 | `test_architecture_fitness.py` | 64 passed, **0 skipped** (was 62 / 1). |
 | Ratchets | `module_cycles 0`, `unresolved_di_keys 0`, `unregistered_di_keys 0`, `string_di_keys 44`, `import_exemptions 62`, `dynamic_weebot_imports 15`, `silent_except_handlers 112`, `blocking_io_in_async 0`, `unawaited 0`, `functions_over_150_lines 28`, `settings_construction 0`, `container_construction 7` -- all unchanged. `bare_env_reads 68` (lowered, ceiling moved). |
 | `ruff_violations` | **741, at its ceiling** (was 743). The audit read this as a tool-version artifact; that was wrong. Running at `e72f5126` — the commit that *introduced* the 741 ceiling — measures **743**, so the ceiling was recorded before its two fixes were counted and the gate had been red since the day it was added. The two were paid in `cli/commands/flow.py`'s `decisions` panel (two E501 lines, now wrapped), `web/auth.py` itself being clean. `ruff` is pinned to `==0.17.2` in `requirements.txt` in the same change, because an exact-count ceiling cannot depend on a floating tool version. No ceiling moved. |
-| Map / index | `gen_map_index --check`, `gen_tasks_index --check`, `check_map_citations` all exit 0; two map cards updated (`infrastructure/LLMAdapters.md`, `interfaces/CLI.md`) because they asserted the old, unbounded behaviour. |
+| Map / index | Initially reported green because I ran `check_map_citations.py` without `--drift`, the flag `make lint-map` actually uses. With it: **155 citations were already drifted on `b9c4c378`** and 202 on this branch, so the gate had been red on `main` too. `--fix` relocated the shifts and demoted the 8 cards whose cited text was already gone (`DIContainer`, `PlanActFlow`, `Browser`, `LLMAdapters`, `CLI`, `WebUI`, `BrowserTools`, `IntegrationTools`) to `status: stale` -- honest, where they had been silently wrong. The 2 cards my own change made stale (`SkillRegistry`, `BuiltinSkills`, both citing `di/_skills.py` where the store is now constructed) were re-read against source and re-verified by hand. `map/objects/_index.md` regenerated. Final: 0 broken, 0 drifted. |
 
 ### Not done, and why
 
@@ -534,11 +534,14 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
 - **WB-09**: accepted, no cap built -- as recommended and left to decision Q2.
 - **The 5 pre-existing unit failures** above: they predate this work and are not in this
   plan's ledger. They belong in a defect-hunt candidate, not here.
-- **The `ruff_violations` ceiling was wrong, and that is now fixed rather than explained.**
-  The first version of this record called it a tool-version artifact. Measuring at
-  `e72f5126` -- the commit that added the ceiling -- shows 743 there too, so the gate had
-  been red from birth: a permanently-red gate is worse than no gate, because it teaches
-  everyone to ignore the column. Two E501s paid and a pinned ruff make it live again at
-  741 with no ceiling movement (see the gate table above).
+- **Two more gates were red on `main` and are now green**, both found by CI rather than by me:
+  the `ruff_violations` ceiling (above), and `make lint-map` (155 drifted citations). The
+  lesson recorded here because it will recur: I ran `check_map_citations.py` and read its
+  "0 broken" as the gate passing, when the gate is `--drift`; and I reported `ruff_violations`
+  as a tool-version artifact without measuring at the commit that set the ceiling. Both were
+  caused by trusting a proxy for the real command.
+- **8 map cards are now `stale`** rather than silently `verified`: their cited text was already
+  gone at `b9c4c378`. Re-verifying them needs a human re-read against source (map/_meta/schema.md),
+  which is not this plan's work and was not faked.
 
 

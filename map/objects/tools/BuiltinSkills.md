@@ -5,8 +5,8 @@ code: weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 40ccfbdb
 ---
 
 # Built-in skills
@@ -14,16 +14,16 @@ commit: eeb0e80e
 Markdown instruction packages, not code: each skill directory holds a `SKILL.md` (YAML frontmatter + body) or a `manifest.json` + `prompt.md`. They are found by path and injected into prompts; nothing imports them.
 
 ## Why this shape
-A skill is prose the model reads, so a file per skill keeps it editable without code changes. One loader scans fixed directories in order (`weebot/application/skills/skill_registry.py:47-100`) and a retriever picks which skills a task gets (`weebot/application/di/_skills.py:18-63`).
+A skill is prose the model reads, so a file per skill keeps it editable without code changes. One loader scans fixed directories in order (`weebot/application/skills/skill_registry.py:47-100`) and a retriever picks which skills a task gets (`weebot/application/di/_skills.py:18-70`).
 
 ## Shape
 - Search paths, in order: `<cwd>/.weebot/skills`, `~/.weebot/skills`, `weebot/skills/builtin` (`weebot/application/skills/skill_registry.py:48-62`); each only if it exists at construction. `add_search_path` adds more (`weebot/application/skills/skill_registry.py:34-45`; `SkillMaterializer` uses it, `weebot/application/services/skill_materializer.py:83`).
 - `load_all` rescans on every call and reads `<dir>/SKILL.md`, else `<dir>/manifest.json` (`weebot/application/skills/skill_registry.py:64-100`); one bad file is logged and skipped (`weebot/application/skills/skill_registry.py:86-94`). On a `name` clash the first path wins, so a project skill shadows a built-in one (`weebot/application/skills/skill_registry.py:95-99`); skills added only in memory are kept (`weebot/application/skills/skill_registry.py:100`).
 - `_parse_skill` (`weebot/application/skills/skill_registry.py:114-186`): frontmatter `name` (default: dir name), `description`; `metadata` (or `metadata.openclaw` / `metadata.hermes`) gives `emoji`, `env`, `platforms`, `requires_toolsets`, `trust`, `provenance` (`weebot/application/skills/skill_registry.py:138-172`); `references/*.md` are listed for later loading (`weebot/application/skills/skill_registry.py:184, 255-265`).
 - `_parse_manifest` (`weebot/application/skills/skill_registry.py:188-211`): `name`, `description`, `emoji`, `env`, `homepage`, `trust` from `manifest.json`; the body is `prompt_file` (default `prompt.md`).
-- `trust` defaults to `"trusted"` when absent; a value outside `quarantined/candidate/trusted` becomes `"quarantined"` with a warning (`weebot/application/skills/skill_registry.py:244-252`). The retrievers inject only trusted skills (`weebot/application/services/bm25_skill_retriever.py:75`, `weebot/application/services/semantic_skill_retriever.py:133`).
+- `trust` defaults to `"trusted"` when absent; a value outside `quarantined/candidate/trusted` becomes `"quarantined"` with a warning (`weebot/application/skills/skill_registry.py:244-252`). The retrievers inject only trusted skills (`weebot/application/services/bm25_skill_retriever.py:75`, `weebot/application/services/semantic_skill_retriever.py:135`).
 - `is_ready` is true when `metadata.env` is empty or all set (`weebot/domain/models/skill.py:266-275`).
-- Consumers: the DI skill retriever, BM25 or semantic, optionally reranked (`weebot/application/di/_skills.py:27-63`); also `SkillRegistry()` built directly at `weebot/application/di/_factories.py:558`, `weebot/application/di/_learning.py:159`, `weebot/application/services/ponytail_skill_prompt.py:76`, `weebot/scheduling/default_jobs.py:106`, `cli/commands/ponytail.py:77`, `cli/commands/skills.py:31, 119, 186, 279, 350`.
+- Consumers: the DI skill retriever, BM25 or semantic, optionally reranked (`weebot/application/di/_skills.py:27-70`); also `SkillRegistry()` built directly at `weebot/application/di/_factories.py:577`, `weebot/application/di/_learning.py:173`, `weebot/application/services/ponytail_skill_prompt.py:76`, `weebot/scheduling/default_jobs.py:106`, `cli/commands/ponytail.py:77`, `cli/commands/skills.py:31, 119, 186, 279, 350`.
 
 | Skill (frontmatter / manifest name) | Dir | Format | Tools it names |
 |---|---|---|---|
@@ -61,7 +61,7 @@ Consequences (read from source, not run):
 - The seven `manifest.json` skills (berb-research, competitive_analysis, design-taste, multi_llm_orchestrator, reasoner, skill-author, web_research) load through `_parse_manifest` (`weebot/application/skills/skill_registry.py:79-80, 188-211`), so the agent can be given `multi_llm_orchestrator`, which the root `CLAUDE.md` requires delegating to.
 - `youtube-download` and `remotion-video` point at `youtube_download`, which only `researcher` and `admin` have; `desktop-automation` at `desktop_a11y`, which only `admin` has (`weebot/application/services/tool_registry.py:27-185`). A skill naming a tool does not grant it.
 - `apify-scraper` declares its key as top-level `requires_env` (`.weebot/skills/apify-scraper/SKILL.md`, lines 5-6); the parser reads `metadata.env` (`weebot/application/skills/skill_registry.py:158`), so the skill is ready, and can be injected, when the Apify tools are absent.
-- A skill with no `trust` is trusted (`weebot/application/skills/skill_registry.py:244-247`). The ClawHub importer writes into a caller-given `install_dir` (its docstring example is `~/.weebot/skills`, `weebot/application/skills/clawhub_importer.py:83`; only tests call it) and forces `metadata.trust: quarantined` on both its writers (`weebot/application/skills/clawhub_importer.py:54-72, 227`), so imported skills fail the retrievers' trust gate until promoted.
+- A skill with no `trust` is trusted (`weebot/application/skills/skill_registry.py:244-247`). The ClawHub importer writes into a caller-given `install_dir` (its docstring example is `~/.weebot/skills`, `weebot/application/skills/clawhub_importer.py:81`; only tests call it) and forces `metadata.trust: quarantined` on both its writers (`weebot/application/skills/clawhub_importer.py:52-70, 227`), so imported skills fail the retrievers' trust gate until promoted.
 
 ## Connected to
 - **Loaded by** `SkillRegistry` (stub `objects/_index.md`). **Retrieved by** `BM25SkillRetriever` / `SemanticSkillRetriever` / `RerankingSkillRetriever`. **Written by** `SkillMaterializer` and `MaterializingSkillStore` (`weebot/application/services/materializing_skill_store.py:39`, trusted only).
