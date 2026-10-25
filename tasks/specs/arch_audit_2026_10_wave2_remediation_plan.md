@@ -520,7 +520,7 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
 | `lint-imports` | 11 contracts, **11 kept, 0 broken** (was 10). |
 | `test_architecture_fitness.py` | 64 passed, **0 skipped** (was 62 / 1). |
 | Ratchets | `module_cycles 0`, `unresolved_di_keys 0`, `unregistered_di_keys 0`, `string_di_keys 44`, `import_exemptions 62`, `dynamic_weebot_imports 15`, `silent_except_handlers 112`, `blocking_io_in_async 0`, `unawaited 0`, `functions_over_150_lines 28`, `settings_construction 0`, `container_construction 7` -- all unchanged. `bare_env_reads 68` (lowered, ceiling moved). |
-| `ruff_violations` | **743 vs ceiling 741**, and HEAD measures **743** in this environment too: the ceiling was set under ruff 0.17.2 and the venv here has 0.17.1. Zero new violations from this work (per-file delta measured against HEAD). Not raised, not lowered -- the tool version is the cause, and the script's own comment warns about exactly this. |
+| `ruff_violations` | **741, at its ceiling** (was 743). The audit read this as a tool-version artifact; that was wrong. Running at `e72f5126` — the commit that *introduced* the 741 ceiling — measures **743**, so the ceiling was recorded before its two fixes were counted and the gate had been red since the day it was added. The two were paid in `cli/commands/flow.py`'s `decisions` panel (two E501 lines, now wrapped), `web/auth.py` itself being clean. `ruff` is pinned to `==0.17.2` in `requirements.txt` in the same change, because an exact-count ceiling cannot depend on a floating tool version. No ceiling moved. |
 | Map / index | `gen_map_index --check`, `gen_tasks_index --check`, `check_map_citations` all exit 0; two map cards updated (`infrastructure/LLMAdapters.md`, `interfaces/CLI.md`) because they asserted the old, unbounded behaviour. |
 
 ### Not done, and why
@@ -532,7 +532,13 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
   prerequisite for 5.4 (the taint cache is no longer process-global-by-accident but
   process-global-by-owner, with a lifecycle).
 - **WB-09**: accepted, no cap built -- as recommended and left to decision Q2.
-- **The 5 pre-existing unit failures** above, and the ruff-version gap: both predate this work
-  and neither is in this plan's ledger. They belong in a defect-hunt candidate, not here.
+- **The 5 pre-existing unit failures** above: they predate this work and are not in this
+  plan's ledger. They belong in a defect-hunt candidate, not here.
+- **The `ruff_violations` ceiling was wrong, and that is now fixed rather than explained.**
+  The first version of this record called it a tool-version artifact. Measuring at
+  `e72f5126` -- the commit that added the ceiling -- shows 743 there too, so the gate had
+  been red from birth: a permanently-red gate is worse than no gate, because it teaches
+  everyone to ignore the column. Two E501s paid and a pinned ruff make it live again at
+  741 with no ceiling movement (see the gate table above).
 
 

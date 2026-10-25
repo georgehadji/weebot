@@ -473,14 +473,16 @@ def cmd_flow_decisions(session_id: str) -> None:
             return
 
         for d in decisions:
+            stamp = d.timestamp.isoformat()[:10] if hasattr(d, "timestamp") else "N/A"
+            door = "🔴 One-way door" if d.reversibility == "one-way" else "🟢 Two-way door"
             console.print(
                 Panel.fit(
                     f"[bold]Decision:[/bold] {d.title}\n"
-                    f"[bold]Date:[/bold] {d.timestamp.isoformat()[:10] if hasattr(d, 'timestamp') else 'N/A'}\n"
+                    f"[bold]Date:[/bold] {stamp}\n"
                     f"[bold]Problem:[/bold] {d.problem[:200]}\n"
                     f"[bold]Why now:[/bold] {d.why_now[:200]}\n"
                     f"[bold]Choice:[/bold] {d.choice[:200]}\n"
-                    f"[bold]Reversibility:[/bold] {'🔴 One-way door' if d.reversibility == 'one-way' else '🟢 Two-way door'}\n"
+                    f"[bold]Reversibility:[/bold] {door}\n"
                     f"[bold]Success metric:[/bold] {d.success_metric[:200]}\n"
                     + (
                         f"[bold]Revisit trigger:[/bold] {d.revisit_trigger[:200]}\n"

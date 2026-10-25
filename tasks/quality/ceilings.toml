@@ -344,6 +344,15 @@ functions_over_150_lines = 28
 # Fragile to ruff upgrades (0.17.2 when added); the script prints the version.
 # Measured by: scripts/lint_ruff_violations.py
 # 743 -> 741 with plan 1.2: the two SIM105 try/except/pass blocks in web/auth.py.
+# NOTE 2026-10-25 (wave 2): this gate had been RED since the day it was added. At
+# e72f5126, the commit that introduced the ceiling of 741, the tree measured 743 --
+# so the "743 -> 741" edit above was recorded before the two fixes were actually
+# counted, and nothing noticed because a permanently-red gate reads as background
+# noise. web/auth.py itself is clean today (ruff reports nothing there), so the two
+# were paid elsewhere: cli/commands/flow.py's `decisions` panel had two E501 lines
+# (127 and 112 chars) that are now wrapped. ruff is also pinned in requirements.txt
+# as of the same change, so this number is reproducible instead of depending on what
+# pip resolved.
 ruff_violations = 741
 
 # Container bindings registered under a string literal (untyped at every use).
