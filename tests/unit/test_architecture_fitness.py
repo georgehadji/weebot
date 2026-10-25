@@ -958,7 +958,10 @@ def test_god_modules_under_800_lines():
         # which this walk does not cover. Its gate was never the line count --
         # test_the_shipped_catalog_is_byte_for_byte_what_the_generator_would_render
         # pins it to exactly what --write produces.
-        "_base.py": 1450,  # was 1400 (WP-8 pool wiring)                 # target: <800 (extract strategies)
+        # `_base.py` left this list with WB-06 (2026-10 wave 2): 1226 -> 766 lines by
+        # extracting _step_setup/_turn/_tool_batch/_tool_pairing, so the default 800
+        # applies to it again. It held the entry at 1450 only because `execute_step`
+        # was one 527-line method.
         "plan_act_flow.py": 1000,  # 961 lines; target: <800 (decompose further)
         "information_synthesis.py": 900,  # WP-2: 850 lines, target: <800 (extract summarizer)
     }
@@ -1622,9 +1625,15 @@ def test_no_direct_agent_calls_in_mutating_states():
 
     Non-mutating states (base, idle, meta_analysis, reviewing, etc.) are
     helpers that don't call agents — they don't need the mediator.
+
+    `executing.py` sends through `_step_run.py` since WB-06 (the command construction
+    is the mediated call and moved with it), so for that state the check follows the
+    call site and additionally asserts the state itself keeps no direct route.
     """
     # Only the 4 core mutating states need this enforcement
     mutating_states = {"planning.py", "executing.py", "summarizing.py", "updating.py"}
+    # Where each state's mediator call actually lives, when it is not the state module.
+    mediator_home = {"executing.py": "_step_run.py"}
     import os
 
     states_dir = os.path.join("weebot", "application", "flows", "states")
@@ -1638,7 +1647,13 @@ def test_no_direct_agent_calls_in_mutating_states():
                 "DeprecationWarning" in content or "context._summary_executor.summarize" not in content
             ), f"{sf}: direct executor call must have DeprecationWarning"
         else:
-            assert "context._mediator.send" in content, f"{sf}: must route through CQRS mediator"
+            home = mediator_home.get(sf, sf)
+            with open(os.path.join(states_dir, home), encoding="utf-8") as fh:
+                routed = fh.read()
+            assert "context._mediator.send" in routed, f"{home}: must route through CQRS mediator"
+            assert "context._mediator.send" in content or sf in mediator_home, (
+                f"{sf}: must route through CQRS mediator"
+            )
             assert (
                 "context._planner.create_plan" not in content
             ), f"{sf}: direct planner call bypassing mediator"

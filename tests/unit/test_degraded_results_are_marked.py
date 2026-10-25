@@ -112,20 +112,25 @@ async def test_an_empty_completion_is_marked_too():
 def test_the_flow_warns_when_no_evaluation_happened():
     """The live consumer only logged on `not passed`, so an outage was silent.
 
-    Asserted against the source of `executing.py` rather than by driving a whole
-    flow: the branch is one `elif` inside a 700-line state handler whose setup
-    would dwarf what is being checked, and the property -- that the call site
-    reacts to `evaluator_failed` at all -- is visible statically.
+    Asserted against the source rather than by driving a whole flow: the branch is
+    one `elif` whose setup would dwarf what is being checked, and the property -- that
+    the call site reacts to `evaluator_failed` at all -- is visible statically.
+
+    The consumer is `_step_outcome.progress_gate` since WB-06; the state handler it
+    used to live in is now the orchestrator and no longer names the field, so the check
+    follows the branch instead of the file.
     """
     import inspect
 
-    from weebot.application.flows.states import executing
+    from weebot.application.flows.states import _step_outcome, executing
 
-    src = inspect.getsource(executing)
+    src = inspect.getsource(_step_outcome)
     assert "evaluator_failed" in src, (
         "the live consumer of StepEvaluation never looks at evaluator_failed, so "
         "an evaluator outage is still silent at the call site"
     )
+    # ...and the state must not have grown a second copy of the branch.
+    assert "evaluator_failed" not in inspect.getsource(executing)
 
 
 # --------------------------------------------------------------------------

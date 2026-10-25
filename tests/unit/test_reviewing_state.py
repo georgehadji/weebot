@@ -139,7 +139,7 @@ async def test_no_plan_falls_through(mock_context, mock_reviewer):
 
 def test_is_code_step_helper():
     """_is_code_step detects code-producing steps."""
-    from weebot.application.flows.states.executing import _is_code_step
+    from weebot.application.flows.states._step_outcome import is_code_step as _is_code_step
 
     assert _is_code_step(Step(id="s1", description="Implement sorting"))
     assert _is_code_step(Step(id="s2", description="Write a Python script"))

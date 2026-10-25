@@ -336,8 +336,12 @@ dynamic_weebot_imports = 15
 # Functions longer than 150 lines in weebot/ (AST, def line to last line).
 # 28 when added; ExecutorAgent.execute_step (558), ExecutingState.execute (512)
 # and PlanActFlow.run (282) are the god methods the Sep plan's section 4.3 owns.
+# 28 -> 26 with WB-06 of the 2026-10 wave 2 plan: ExecutingState.execute (509) became
+# the orchestrator in executing.py plus _execution_gates/_step_run/_step_outcome, and
+# ExecutorAgent.execute_step (527) became the loop in _base.py plus
+# _step_setup/_turn/_tool_batch/_tool_pairing.
 # Measured by: scripts/lint_long_functions.py
-functions_over_150_lines = 28
+functions_over_150_lines = 26
 
 # Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
 # CI's blocking selector is F821,E9 only; this catches growth in the rest.
@@ -353,7 +357,7 @@ functions_over_150_lines = 28
 # (127 and 112 chars) that are now wrapped. ruff is also pinned in requirements.txt
 # as of the same change, so this number is reproducible instead of depending on what
 # pip resolved.
-ruff_violations = 741
+ruff_violations = 740
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

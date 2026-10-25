@@ -17,7 +17,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from weebot.application.flows.states.executing import ExecutingState, _step_fetched_inbound_mail
+from weebot.application.flows.states._step_run import (
+    step_fetched_inbound_mail as _step_fetched_inbound_mail,
+)
+from weebot.application.flows.states.executing import ExecutingState
 from weebot.domain.models.event import MessageEvent, ToolEvent, ToolStatus, WaitForUserEvent
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session, SessionStatus

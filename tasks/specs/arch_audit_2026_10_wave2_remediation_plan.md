@@ -465,8 +465,8 @@ python scripts/quality_ceilings.py --verify-not-raised --baseline origin/main
 ## 17. Execution record (2026-10-25)
 
 Executed on `main` at `b9c4c378`, uncommitted at the time of writing. Where this section and
-the sections above differ, **this section is what the code does**. Phases 0, 1, 2, 3 and 6
-landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not started**.
+the sections above differ, **this section is what the code does**. All phases landed except
+5 (replica proof), which stays in the 2026-09 plan's lane as decided.
 
 ### Landed
 
@@ -480,6 +480,10 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
 | 6.1 (WB-05) | `ARCHITECTURE.md` no longer carries a self-score at `:16` or a stale pointer at `:4`; both name the audit records. `rg "7\.5-8\.0"` outside the new explanatory sentence returns nothing. |
 | 6.2 (WB-08) | `_usable()` reads keys through `SecretAccessor`. `bare_env_reads` **70 -> 68** (measured), and the ceiling moved with it in `tasks/quality/ceilings.toml`. |
 | 6.3 (WB-09) | Decided, not built: accept and document. No code change. |
+| 4.0 (WB-06) | `tests/unit/application/flows/test_executing_state_scripted.py`: drives the real `ExecutingState` against a scripted mediator for success, tool error, cascade exhaustion, repetition trip, steering and a rejected command — no model, no network, no database, 7 tests in 0.4s. **It found a live bug on its first run** (below). |
+| 4.1 (WB-06) | `ExecutingState.execute` **509 -> 96 lines**; `executing.py` **768 -> 284**. Three collaborators: `_execution_gates.py` (the five pre-step gates, in order), `_step_run.py` (the mediated call, event reconstruction, the inbound-mail flag), `_step_outcome.py` (failure routing, quality gates, completion, transition). `mark_user_gate` and `step_fetched_inbound_mail` moved with their only callers. |
+| 4.2 (WB-06) | `ExecutorAgent.execute_step` **527 -> ~120 lines**; `_base.py` **1226 -> 766**, so its allowlist entry in `test_god_modules_under_800_lines` (1450) is gone and the default 800 applies again. Collaborators: `_step_setup.py` (prime + prompts, split because `yield StepEvent` lands between them), `_turn.py` (message assembly, cascade, the two typed declines), `_tool_batch.py` (`ToolBatchRunner`: the per-step counters that survive across turns, plus pre-flight, execution and the three per-result policies), `_tool_pairing.py` (`sanitize_tool_call_pairing`, moved verbatim by script rather than retyped). |
+| 7 (E2) | `prompt_sha` now has a sibling: `tools_sha` (`llm_pool.py`), so a tool-schema change no longer looks like an unchanged prompt version in the `llm_call` record. |
 
 ### Deviations from the plan, and why
 
@@ -511,6 +515,24 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
    first attempt. `CompletedState` is where the terminal status is set, so the lifecycle reads
    better there anyway; that required one entry in the flow-states allowlist
    (`weebot.application.agents.executor._session_scope`, a state-holder, not an agent call).
+5. **E1 was not implemented, on purpose.** The plan said to pass an explicit `max_tokens` at the
+   cascade's two `self._llm.chat` sites instead of relying on the adapters' defaults. Those
+   defaults differ by provider -- 16384 in `openai_adapter.py:161`, 4096 in
+   `anthropic_adapter.py:64` -- and the repo's named constants are smaller still
+   (`MAX_TOKENS_EXTENDED = 2048`). Picking one number therefore either cuts the OpenAI path by
+   8x or raises the Anthropic path by 4x: a spend/truncation decision, not a refactor. E2 is
+   implemented instead, and E1 belongs in a decision with a measured per-tier budget.
+
+### The bug 4.0 found on its first run
+
+`ExecutingState.execute`'s "all models are circuit-broken" branch read the *raw dicts* from the
+command result with `getattr(e, "error", "")`, which returns `""` for a dict -- so `_all_tripped`
+was always `False` and the branch was dead. Every cascade exhaustion therefore fell through to
+the 3-tier routing and replanned against a cascade with nothing left in it. Twelve lines below,
+a comment records the identical defect for `_error_msg` ("an isinstance check never matches a
+dict, so every failure read as 'step execution failed'"); that one was fixed, this one was not.
+It now reads the reconstructed events, and the scripted test asserts the UNVERIFIED outcome and
+that no second attempt is made.
 
 ### Gates run after the change
 
@@ -525,13 +547,17 @@ landed. Phases 4 (agent-loop extraction) and 5 (replica proof) were **not starte
 
 ### Not done, and why
 
-- **Phase 4 (WB-06)**: `ExecutorAgent.execute_step` (527 lines) and `ExecutingState.execute`
-  (509) are untouched. 4.0 -- the scripted step-level test -- has to exist first, and it is
-  larger than everything above combined.
-- **Phase 5 (WB-07)**: still owned by the 2026-09 plan's Phase 5. 2.1 is now done, which was its
-  prerequisite for 5.4 (the taint cache is no longer process-global-by-accident but
+- **Phase 5 (WB-07)**: still owned by the 2026-09 plan's Phase 5, as decided. 2.1 removed its
+  prerequisite blocker for 5.4 (the taint cache is no longer process-global-by-accident but
   process-global-by-owner, with a lifecycle).
-- **WB-09**: accepted, no cap built -- as recommended and left to decision Q2.
+- **E1 (`max_tokens` at the cascade)** and **E3 (a cost-dashboard record for saturation)** and
+  **E4 (provider idempotency keys)**: see deviation 5 for E1. E3 would publish a zero-token
+  record for a call that never happened; E4 needs a provider that supports the key. Both are
+  optimisations with no defect behind them, and this plan's ledger is closed.
+- **`PlanActFlow.__init__` (234 lines) was not turned into `from_config()`.** It is 4.2 step 1 in
+  the plan above; the two named targets of 4.2 (execute_step, `_base.py`) are met, and the flow
+  constructor is the one place every test constructs, so it deserves its own change rather than
+  the tail of this one.
 - **The 5 pre-existing unit failures** above: they predate this work and are not in this
   plan's ledger. They belong in a defect-hunt candidate, not here.
 - **Two more gates were red on `main` and are now green**, both found by CI rather than by me:
