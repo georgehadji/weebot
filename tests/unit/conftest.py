@@ -70,6 +70,13 @@ def _isolate_weebot_settings(monkeypatch, tmp_path):
     except Exception:
         pass
 
+    # The model picked per role in the UI lives in <workspace>/.weebot/role_models.json; a
+    # developer's own picks must not change what the cascade tests expect.
+    from weebot.config import role_overrides
+
+    monkeypatch.setattr(role_overrides, "overrides_path", lambda: tmp_path / "role_models.json")
+    monkeypatch.setattr(role_overrides, "_cache", None)
+
     yield
 
     # Reset mutable module-level state to prevent cross-test leakage

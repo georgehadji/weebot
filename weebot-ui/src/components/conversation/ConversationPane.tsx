@@ -12,7 +12,7 @@
  * failed send keeps its row with a Retry.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Composer, SessionLifecycleStatus } from "./Composer";
@@ -22,6 +22,7 @@ import { RunControls } from "./RunControls";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { announcementFor } from "@/lib/announce";
+import { api } from "@/lib/api";
 import {
   getDisplayItems,
   initialSessionViewState,
@@ -67,6 +68,27 @@ export function ConversationPane({
     const text = announcementFor(event);
     if (text) announce(text);
   });
+
+  // The socket replays nothing, so an event published between the page's REST load and the
+  // socket subscribing never arrived (a plan rejected at once left "Waiting for events…" until
+  // a reload). When the session settles, fetch the history and add whatever was missed.
+  useEffect(() => {
+    if (!sessionId || status === "none" || status === "pending" || status === "running") return;
+    let cancelled = false;
+    api.sessions
+      .events(sessionId)
+      .then((events) => {
+        if (cancelled) return;
+        const missed = events.filter((e) => !seen.has(e.id));
+        if (missed.length === 0) return;
+        missed.forEach((e) => seen.add(e.id));
+        setState((prev) => missed.reduce(sessionReducer, prev));
+      })
+      .catch((e) => console.warn("[Conversation] could not refresh events", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, status, seen]);
 
   const addOptimisticMessage = useCallback(
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),

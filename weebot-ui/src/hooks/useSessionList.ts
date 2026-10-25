@@ -9,7 +9,7 @@
  * patched into the same array in place.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { api } from "@/lib/api";
 import { useRemote } from "./useRemote";
 import { useSessionPresence } from "./useSessionPresence";
@@ -37,6 +37,21 @@ export function useSessionList() {
       sessions && presence.size > 0 ? sessions.map((s) => applyPresence(s, presence.get(s.id))) : sessions,
     [sessions, presence]
   );
+
+  // Presence only patches sessions already in the list, so a session created after the seed
+  // never showed in the rail until a reload. An id the list lacks triggers one reload.
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sessions) return;
+    const known = new Set(sessions.map((s) => s.id));
+    for (const id of presence.keys()) {
+      if (!known.has(id) && !asked.current.has(id)) {
+        asked.current.add(id);
+        reload();
+        return;
+      }
+    }
+  }, [sessions, presence, reload]);
 
   const live = useMemo<Remote<Session[]>>(() => {
     if (state.status === "ready") return { status: "ready", data: liveSessions ?? state.data };

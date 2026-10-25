@@ -55,7 +55,15 @@ export function useComposer({
   onDelivery,
 }: UseComposerOptions) {
   const key = draftKey(sessionId);
-  const [state, dispatch] = useReducer(composerReducer, key, (k) => initialComposerState(readDraft(k)));
+  const [state, dispatch] = useReducer(composerReducer, "", initialComposerState);
+
+  // Read after hydration: the server render cannot see sessionStorage, and reading it in the
+  // initializer made the first client render differ from the HTML (a hydration mismatch on the
+  // Send button whenever a draft was saved). Declared before the write below so it reads first.
+  useEffect(() => {
+    const saved = readDraft(key);
+    if (saved) dispatch({ type: "edit", draft: saved });
+  }, [key]);
 
   useEffect(() => {
     writeDraft(key, state.draft);
@@ -66,7 +74,13 @@ export function useComposer({
       try {
         if (!sessionId) {
           const session = await api.sessions.create({ prompt: text, model });
-          await api.sessions.run(session.id);
+          try {
+            await api.sessions.run(session.id);
+          } catch (e) {
+            // The session exists, so a retry would create a second one. Open it instead: the
+            // page shows its real status and the run controls.
+            console.warn("[Composer] starting the run failed; opening the session anyway", e);
+          }
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
           onSessionCreated(session.id);

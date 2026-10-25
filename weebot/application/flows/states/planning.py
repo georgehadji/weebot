@@ -228,6 +228,11 @@ class PlanningState(FlowState):
         _plan_elapsed = _time.monotonic() - _plan_t0
         if not cmd_result.success:
             yield EE(error=f"Plan creation rejected: {cmd_result.error}")
+            # Left RUNNING, the flow loop re-entered this state at once, up to max_iterations
+            # times: 47+ identical 402 "insufficient credits" errors and a session stuck forever.
+            from weebot.domain.models.session import SessionStatus
+
+            context._session = context._session.set_status(SessionStatus.FAILED)
             return
 
         # Consume events from the mediator result using shared reconstructor.

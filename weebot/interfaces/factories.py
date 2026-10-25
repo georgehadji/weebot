@@ -135,6 +135,30 @@ async def _configured_mcp_tools() -> list:
         return toolkit.get_tools()
 
 
+_MCP_WAIT_S = 8.0
+_MCP_PENDING: Any = None
+
+
+async def _mcp_tools_within(seconds: float = _MCP_WAIT_S) -> list:
+    """The configured MCP tools, waiting at most *seconds* for the first connection.
+
+    The first connect can take over 30 s (a server may install packages), and /run waited
+    for it: the dev proxy dropped the request ("socket hang up") while the run went on. On a
+    timeout this run starts without those tools; the connection finishes in the background
+    and later runs get them.
+    """
+    global _MCP_PENDING
+    import asyncio
+
+    if _MCP_PENDING is None or _MCP_PENDING.done():
+        _MCP_PENDING = asyncio.ensure_future(_configured_mcp_tools())
+    try:
+        return await asyncio.wait_for(asyncio.shield(_MCP_PENDING), seconds)
+    except TimeoutError:
+        _log.warning("MCP servers still connecting after %.0fs; starting without them", seconds)
+        return []
+
+
 async def close_mcp_toolkit() -> None:
     """Close the configured MCP connections, in the task that is ending.
 
@@ -300,7 +324,7 @@ async def build_tools(
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())
     else:
-        combined.extend(await _configured_mcp_tools())
+        combined.extend(await _mcp_tools_within())
 
     if extra_tools:
         combined.extend(extra_tools)
