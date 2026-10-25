@@ -38,7 +38,7 @@ Configuration is read from environment variables in the factory (`LLM_TIMEOUT`, 
 
 ## Connected to
 - **Port:** `LLMPort` (`application/ports/llm_port.py`).
-- **Created by** `FactoriesMixin._create_llm` (`application/di/_factories.py:127-133`, provider from `ModelProvider.from_model_name`), `di/_skillopt.py:137-142` (both bounded), `application/services/model_registry/_service.py:37-53` (not bounded). Role adapters (critic, verifier) are built with `_create_llm_for_role` (`_factories.py:230-239`).
+- **Created by** `FactoriesMixin._create_llm` (`application/di/_factories.py:144-150`, provider from `ModelProvider.from_model_name`), `di/_skillopt.py:137-142` and `FactoriesMixin.create_llm_for_model` (`_factories.py:127-142`, the public per-model route) — all bounded by `_bounded_llm` (`_factories.py:110-125`). Role adapters (critic, verifier) are built with `_create_llm_for_role` (`_factories.py:247-256`). Nothing outside `application/di/` constructs one: `test_the_adapter_factory_is_only_called_by_the_composition_root` fails if anything does (WB-02).
 - **Consumed by** `CascadeExecutor` (which has its **own** per-model breaker, tripped at 5, see its card), `PlannerAgent`, the verifier and critic services.
 - **Looks like but is not:** `CascadeExecutor` (chooses *which* model; this layer makes one model reliable); `ProviderAccountPort` / `OpenRouterAccountAdapter` (credits and model list, not chat).
 

@@ -62,10 +62,10 @@ def records() -> list[tuple[str, str, str, str, str]]:
     return rows
 
 
-def render() -> str:
-    rows = records()
+def render(rows: list[tuple[str, str, str, str, str]] | None = None) -> str:
+    rows = records() if rows is None else rows
     parts = [HEADER]
-    for status in (*STATUSES, "unknown"):
+    for status in STATUSES:
         group = sorted((r for r in rows if r[0] == status), key=lambda r: r[2].lower())
         if not group:
             continue
@@ -76,8 +76,38 @@ def render() -> str:
     return "".join(parts)
 
 
+def unindexable(rows: list[tuple[str, str, str, str, str]]) -> list[tuple[str, str, str]]:
+    """(status, path, problem) for every record this generator cannot index.
+
+    A record whose ``status`` is not one of STATUSES used to be dropped from the
+    index entirely: it rendered under no heading, nothing failed, and the file
+    was invisible to every reader who starts at ``tasks/_index.md``. Nine records
+    were in that state on 2026-10-25, including the remediation plan that was
+    being executed at the time. A missing ``date`` is reported the same way for
+    less severe reasons -- the record still indexes, but with a placeholder.
+    """
+    found: list[tuple[str, str, str]] = []
+    for status, date, rel, _title, _note in rows:
+        if status not in STATUSES:
+            found.append((status, rel, f"status {status!r} is not one of {', '.join(STATUSES)}"))
+        elif not date:
+            found.append((status, rel, "no frontmatter date"))
+    return found
+
+
 def main() -> int:
-    new = render()
+    rows = records()
+    stray = unindexable(rows)
+    if stray:
+        print("Records this index cannot place (fix the frontmatter, then rerun):")
+        for status, rel, problem in stray:
+            print(f"  {rel}: {problem} (status={status!r})")
+        print(
+            "Every record needs `status:` (open | superseded | done | reference) and "
+            "`date:` in its frontmatter."
+        )
+        return 1
+    new = render(rows)
     if "--check" in sys.argv:
         current = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
         if current.replace("\r\n", "\n") != new:

@@ -1,4 +1,6 @@
 ---
+status: reference
+date: 2026-10-25
 round: 1
 cleared_count: 13
 purpose: >-

@@ -1,4 +1,6 @@
 ---
+status: reference
+date: 2026-10-25
 wave: W0
 purpose: Frozen file lists for waves 1-12
 baseline_commit: 86289a08a946ced8f8cc4fcf86da1d7f3f651f05

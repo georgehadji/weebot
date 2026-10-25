@@ -244,28 +244,46 @@ def test_every_command_has_handler():
 
 
 def test_every_query_has_handler():
-    """Every ``Query`` subclass defined in ``queries.py`` must be
-    registered in ``handlers.py``."""
+    """Every ``Query`` subclass in ``cqrs/queries.py`` must be registered with the
+    mediator somewhere in the ``cqrs/handlers/`` package.
+
+    History (WB-04). This test used to read ``cqrs/handlers.py`` and return early
+    via ``pytest.skip`` when that file was absent. The handlers were split into the
+    ``handlers/`` package, so from that day the test skipped on every run -- the
+    property it guards was true by inspection and unchecked by anything. It now
+    walks the package and fails loudly if the layout moves again, because a skip is
+    indistinguishable from a pass in a green CI log.
+    """
     queries_py = ROOT / "application" / "cqrs" / "queries.py"
-    handlers_py = ROOT / "application" / "cqrs" / "handlers.py"
+    handlers_pkg = ROOT / "application" / "cqrs" / "handlers"
+    assert queries_py.exists(), f"{queries_py} is missing"
+    assert handlers_pkg.is_dir(), (
+        f"{handlers_pkg} is not a directory -- if the handlers moved, point this test at "
+        "the new location. Do not skip: the skip is what made this gate dead from 2026-08."
+    )
 
-    if not queries_py.exists() or not handlers_py.exists():
-        pytest.skip("queries.py or handlers.py not found")
+    defined: set[str] = set()
+    for node in ast.iter_child_nodes(_parse(queries_py)):
+        if isinstance(node, ast.ClassDef) and any("Query" in ast.unparse(b) for b in node.bases):
+            defined.add(node.name)
+    assert defined, f"no Query subclasses found in {queries_py} -- the scan is broken"
 
-    queries_tree = _parse(queries_py)
-    handlers_content = handlers_py.read_text(encoding="utf-8")
+    registered: set[str] = set()
+    for path in _walk_py(handlers_pkg):
+        for node in _nodes(_parse(path)):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "register_query_handler"):
+                continue
+            if node.args:
+                registered.add(ast.unparse(node.args[0]).split(".")[-1])
 
-    missing: list[str] = []
-    for node in ast.iter_child_nodes(queries_tree):
-        if isinstance(node, ast.ClassDef):
-            bases = [ast.unparse(b) for b in node.bases]
-            if any("Query" in b for b in bases):
-                if node.name not in handlers_content:
-                    missing.append(node.name)
-
+    missing = sorted(defined - registered)
     assert not missing, (
-        "Every Query subclass must have a registered handler.\n"
-        f"Missing handlers for: {', '.join(missing)}"
+        "Every Query subclass must be registered with mediator.register_query_handler.\n"
+        f"Unregistered: {', '.join(missing)}\n"
+        f"Registered: {', '.join(sorted(registered))}"
     )
 
 
@@ -299,6 +317,10 @@ def test_no_direct_agent_calls_in_flow_states():
         "weebot.application.agents.chat_agent",
         "weebot.application.agents.executor._error_handler",
         "weebot.application.agents.parallel_planner",
+        # WB-03: CompletedState closes the executor's per-session caches when the
+        # session reaches a terminal state. This is a state-holder, not an agent call,
+        # and the lifecycle belongs where the session's status is decided.
+        "weebot.application.agents.executor._session_scope",
     }
     violations: list[str] = []
 
@@ -818,34 +840,36 @@ def test_application_services_no_infra_imports():
 
     This is stricter than ``test_application_no_module_level_infra_imports``,
     which only checks module-level imports.
+
+    Exemptions are per EDGE, not per filename (WB-01). The previous form exempted
+    seven files wholesale, so a new infrastructure import inside one of them was
+    invisible to the check that named it. There are now none: the two runtime leaks
+    became ports and the three type-only annotations were pointed at ports too.
     """
-    violations: list[str] = []
-    # Files that are tracked for migration (will be removed as WP-4 progresses)
-    tracked_exceptions = {
-        "_service.py",  # imports adapter_factory — lazy method import
-        "task_runner.py",  # imports metrics — lazy function import
-        "autonomous_learning.py",  # TYPE_CHECKING only — SkillStore annotation
-        "multi_source_research.py",  # TYPE_CHECKING only — ServiceRegistry annotation
-        "strategy_transfer.py",  # TYPE_CHECKING only — StrategyStore annotation (lazy fallback removed)
-        "metrics_bridge.py",  # designated bridge to infrastructure Prometheus adapter
-        "semantic_skill_retriever.py",  # lazy default for NumpyVectorStore (tracked: WP-4 DI migration)
-    }
+    tracked_edges: set[tuple[str, str]] = set()
 
     services_dir = ROOT / "application" / "services"
+    violations: list[str] = []
     for path in _walk_py(services_dir):
-        if path.name in tracked_exceptions:
-            continue
         tree = _parse(path)
+        guarded = _type_checking_node_ids(tree)
         for node in _nodes(tree):
+            module = None
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("weebot.infrastructure"):
-                        rel = path.relative_to(ROOT.parent)
-                        violations.append(f"{rel}: import {alias.name!r}")
-            elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("weebot.infrastructure"):
-                    rel = path.relative_to(ROOT.parent)
-                    violations.append(f"{rel}: from-import {node.module!r}")
+                        module = alias.name
+                        if (path.name, module) not in tracked_edges:
+                            rel = path.relative_to(ROOT.parent)
+                            violations.append(f"{rel}:{node.lineno}: import {module!r}")
+                continue
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if not node.module.startswith("weebot.infrastructure"):
+                    continue
+                if (path.name, node.module) in tracked_edges and id(node) in guarded:
+                    continue
+                rel = path.relative_to(ROOT.parent)
+                violations.append(f"{rel}:{node.lineno}: from-import {node.module!r}")
 
     assert not violations, (
         "application/services/ must not import infrastructure at any scope.\n"
@@ -1838,6 +1862,69 @@ def test_the_known_bypasses_have_not_multiplied():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# WB-02: the adapter *factory function* is called only from the composition root
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Files allowed to call `create_adapter(...)`: the composition root, and the
+# adapter package that defines it.
+_ADAPTER_FACTORY_ALLOWED = ("application/di/", "infrastructure/adapters/llm/")
+
+
+def test_the_adapter_factory_is_only_called_by_the_composition_root():
+    """WB-02. ``create_adapter`` may only be called from ``application/di/``.
+
+    ``test_llm_clients_are_built_by_the_factory`` above catches concrete adapter
+    *classes* built outside the adapter package, so it could not see the CLI's path:
+    five commands called ``ModelSelectionService.create_llm_adapter``, which reached
+    the factory *function* from an application service and handed back an unwrapped
+    port. Two executor call sites bypass the cascade's own slot
+    (``_tool_executor.py:587``, ``_context_compressor.py:246``), so with that port in
+    hand their calls were neither bounded nor metered by ``LLMPool``.
+
+    The count is asserted in both directions: a new call site fails, and deleting the
+    composition root's calls (which would make this pass vacuously) fails too.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent.parent
+    search: list[Path] = []
+    for name in ("weebot", "cli", "scripts"):
+        base = root / name
+        if base.is_dir():
+            search.extend(base.rglob("*.py"))
+    for name in ("run.py", "run_mcp.py"):
+        if (root / name).exists():
+            search.append(root / name)
+
+    sites: list[str] = []
+    for path in search:
+        if "__pycache__" in path.parts:
+            continue
+        rel = path.relative_to(root).as_posix()
+        try:
+            tree = _parse(path)
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in _nodes(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            if node.func.id != "create_adapter":
+                continue
+            sites.append(f"{rel}:{node.lineno}")
+
+    offenders = sorted(s for s in sites if not any(a in s for a in _ADAPTER_FACTORY_ALLOWED))
+    assert offenders == [], (
+        "LLM adapter built outside the composition root — the port it returns is not "
+        "wrapped in LLMPool, so its calls are neither bounded nor metered. Resolve the "
+        "port with Container.create_llm_for_model(model_id):\n  " + "\n  ".join(offenders)
+    )
+    assert sites, (
+        "no create_adapter call found at all — the composition root must build adapters; "
+        "this assertion exists so a rename cannot make this test pass vacuously"
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # PlanActFlowConfig carries real types
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -1933,4 +2020,45 @@ def test_every_top_level_package_is_under_a_contract():
         "no import-linter contract governs these top-level packages. Add each "
         "to a layer's contract or to `unassigned-no-infra` in .importlinter:\n  "
         + "\n  ".join(ungoverned)
+    )
+
+
+def test_every_application_subpackage_is_under_the_inward_contract():
+    """WB-01, the default-deny half of `app-no-infrastructure`.
+
+    That contract scopes itself to the application subpackages rather than to
+    `weebot.application` as a whole, because `application/di` is the composition root
+    and listing its 42 infrastructure edges as exemptions would be 42 lines saying what
+    the directory name says. The cost of that choice is a gap: a new subpackage under
+    application/ would be governed by nothing, which is exactly the failure mode
+    `unassigned-no-infra` exists to prevent at the top level.
+
+    This test closes it the same way: a new subpackage fails until it is listed as a
+    source of that contract (or of another one, if it is allowed to reach outward).
+    """
+    import configparser
+
+    cfg = configparser.ConfigParser()
+    cfg.read(ROOT.parent / ".importlinter", encoding="utf-8")
+    governed = {
+        line.strip()
+        for section in cfg.sections()
+        if section.startswith("importlinter:contract:")
+        for line in cfg[section].get("source_modules", "").splitlines()
+        if line.strip()
+    }
+    application = ROOT / "application"
+    packages = {
+        f"weebot.application.{d.name}"
+        for d in application.iterdir()
+        if d.is_dir() and "__pycache__" not in d.parts and (d / "__init__.py").exists()
+    }
+    # The composition root is exempt by design, and `app-no-interfaces` already
+    # governs it in the direction that matters most.
+    packages.discard("weebot.application.di")
+    ungoverned = sorted(packages - governed)
+    assert ungoverned == [], (
+        "no import-linter contract lists these application subpackages as a source, so "
+        "nothing forbids them importing infrastructure. Add each to "
+        "`app-no-infrastructure` in .importlinter:\n  " + "\n  ".join(ungoverned)
     )

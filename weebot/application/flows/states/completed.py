@@ -11,6 +11,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
+from weebot.application.agents.executor._session_scope import get_session_scope
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus, StepStatus
@@ -293,6 +294,11 @@ class CompletedState(FlowState):
         if context._state_repo:
             await context._state_repo.save_session(context._session)
         context._step_execution_counts.clear()  # Reset for next run
+        # This session is finished, so its in-memory security caches can go (WB-03).
+        # They used to be module-level and only ever grew. Safe because the flags are
+        # rows in the event store and _hydrate_session_state replays them if the
+        # session runs again; a TTL would not be safe, which is why there is none.
+        get_session_scope().close(context._session.id)
         yield DoneEvent()
 
         # --- CQRS: score the trajectory if mediator is available ---

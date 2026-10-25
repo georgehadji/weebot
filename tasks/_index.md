@@ -6,16 +6,22 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (16)
+## open (22)
 
+- 2026-10-25 — [Defect Hunt V7.1 — Final Summary Report](audits/defect_hunt_v71_final_summary.md)
+- 2026-10-25 — [Wave 1 — Security and Trust Boundary](audits/defect_hunt_v71_w1_security.md)
+- 2026-10-25 — [Wave 2 — Interfaces and Non-Human Entry Points](audits/defect_hunt_v71_w2_interfaces.md)
+- 2026-10-25 — [Wave 3 — Flow Engine and State Machine](audits/defect_hunt_v71_w3_flows.md)
 - 2026-10-23 — [Plan: fix the findings recorded in the map cards](icm_fix_plan.md) — F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
 - 2026-10-23 — [Plan: fix everything still open](remaining_fix_plan.md) — F28 type-safe mediator dispatch; container_construction ceiling still 8
 - 2026-07-21 — [Plan: Greek Scientific Book Generation via LaTeX](scientific-book-latex-plan.md) — LLM drafting, TeX Live image, CLI/Web wiring missing
 - 2026-08-13 — [Memory subsystem repair plan (AgeMem-derived)](specs/agentic_memory_fix_plan.md) — phases 5-8 not built (retrieval, preservation check, filter_context, memory-quality job)
 - 2026-09-09 — [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — phase 5 not built: Postgres backend, scheduler extraction, replica proof
+- 2026-10-24 — [Architecture Remediation — 2026-10 audit](specs/arch_audit_2026_10_remediation_plan.md) — from the 2026-10-24 EGFV audit (4/10); executed 2026-10-24 on feat/icm-a4-walk, see Appendix C for what landed and where it deviated; decisions D1-D6 resolved 2026-10-24; Phase 8 defers to the 2026-09 plan's Phase 5
 - 2026-08-03 — [Bilevel Autoresearch → weebot: Implementation Plan](specs/bilevel_autoresearch_implementation_plan.md) — phase 3 mechanism selection and phase 4 L1.5 instrumentation not built
 - 2026-06-30 — [Implementation Plan — "Code as Agent Harness" Enhancements & Fixes](specs/code_as_harness_implementation_plan.md) — phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
+- 2026-10-25 — [Autonomous Defect-Hunt (V7.1) — Whole-Backend Execution Plan, Round 2](specs/defect_hunt_v7_1_execution_plan.md)
 - 2026-06-15 — [Memento-Skills → weebot: Deployment-Time Learning Implementation Plan](specs/memento_skills_implementation_plan.md) — phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
 - 2026-06-10 — [Reasoner-Inspired Enhancements — Implementation Plan](specs/reasoner_enhancements_plan.md) — phase 6 parallel pre-router (AgentPreRouter) never built
 - 2026-09-05 — [Review Gate & Residual Work — Execution Plan](specs/review_gate_and_residual_work_plan.md) — A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
@@ -34,8 +40,9 @@ Format: date — record — note
 - 2026-08-10 — [LongHorizon-Harness → weebot: analysis and enhancement plan](specs/longhorizon_harness_weebot_analysis.md) — specs/longhorizon_harness_implementation_plan.md
 - 2026-06-30 — [Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers](specs/ssot_constants_remediation_plan.md) — specs/arch_audit_2026_09_remediation_plan.md (phase 3.2)
 
-## done (33)
+## done (36)
 
+- 2026-10-25 — [Wave 0 — Instruments, Baseline, and Census (COMPLETE)](audits/defect_hunt_v71_w0_complete.md)
 - 2026-07-21 — [CI Stabilization & Architecture-Debt Remediation Plan](ci-stabilization-plan.md)
 - 2026-10-22 — [Entry-file diff: AGENTS.md / GEMINI.md / QWEN.md vs CLAUDE.md](icm_entry_diff.md)
 - 2026-06-28 — [Bug Fix Plan — B4 & B5](plans/bug_fix_b4_b5_plan.md)
@@ -44,6 +51,7 @@ Format: date — record — note
 - 2026-06-28 — [Fix Plan — VideoGenTool Audit Defects (D1–D3) + Improvements (I1–I4)](plans/video_gen_tool_fixes.md)
 - 2026-06-28 — [YouTube Video Download Support — Implementation Plan](plans/youtube_download_plan.md)
 - 2026-06-30 — [Agent-Native Memory — Implementation Plan](specs/agent_native_memory_implementation_plan.md)
+- 2026-10-25 — [Architecture Remediation - 2026-10 wave 2](specs/arch_audit_2026_10_wave2_remediation_plan.md) — from the 2026-10-25 EGFV audit (7/10, 10 ledger rows WB-01..WB-10); phases 0-3 and 6 executed the same day, see section 17 for what landed and where it deviated; phases 4 (agent-loop extraction) and 5 (replica proof) NOT started
 - 2026-06-22 — [Implementation Plan — Atomic Mail Agentic Integration into weebot](specs/atomic_mail_integration_plan.md)
 - 2026-06-10 — [Auto-think / Auto-build: 5 Enhancements Implementation Plan](specs/auto_think_auto_build_plan.md)
 - 2026-06-13 — [awesome-agent-skills Integration Plan](specs/awesome_agent_skills_integration_plan.md)
@@ -69,12 +77,17 @@ Format: date — record — note
 - 2026-08-19 — [Side-Constraint Integrity — Implementation Plan](specs/side_constraint_integrity_plan.md)
 - 2026-08-20 — [Test-Suite & Evidence-Gate Repair Plan](specs/test_suite_and_evidence_gate_repair_plan.md)
 - 2026-06-10 — [Tool Handling Enhancements — Implementation Plan](specs/tool_enhancements_plan.md)
+- 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 
-## reference (74)
+## reference (78)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
 - 2026-09-05 — [Defect Hunt — Wave 0 Baseline & Instrument Repair](audits/defect_hunt_baseline.md)
+- 2026-10-25 — [Defect Hunt V7.1 — Round 1 Cleared-Candidate Register](audits/defect_hunt_v71_cleared_register.md)
+- 2026-10-25 — [Wave 0 — Baseline Verification and Instruments (HALTED)](audits/defect_hunt_v71_w0_baseline_halt.md)
+- 2026-10-25 — [Defect Hunt V7.1 — Architecture Census and Invariant-Ownership Table](audits/defect_hunt_v71_w0_census.md)
+- 2026-10-25 — [Defect Hunt V7.1 — Frozen File Lists](audits/defect_hunt_v71_w0_file_lists.md)
 - 2026-09-05 — [Wave 1 — Security & Trust Boundary](audits/defect_hunt_w1_security.md)
 - 2026-09-05 — [Wave 2 — Verification & Evidence Gates](audits/defect_hunt_w2_verification.md)
 - 2026-09-05 — [Wave 3 — Flow State Machine & Concurrency](audits/defect_hunt_w3_flow.md)

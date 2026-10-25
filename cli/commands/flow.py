@@ -13,7 +13,6 @@ from weebot.application.di import Container
 from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.services.model_selection import ModelSelectionService
 from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 from weebot.domain.models.event import WaitForUserEvent
 from weebot.interfaces.cli.agent_runner import AgentRunner
@@ -76,13 +75,30 @@ def _run_async(coro_factory) -> None:
     asyncio.run(_wrapper())
 
 
-def _get_state_repo() -> StateRepositoryPort:
+def _get_container() -> Container:
+    """The process's one container, built on first use."""
     global _container
     if _container is None:
         from weebot.interfaces.factories import shared_container
 
         _container = shared_container()
-    return _container.get(StateRepositoryPort)
+    return _container
+
+
+def _cli_llm(model_id: str):
+    """The CLI's ``LLMPort``: built by the container, so bounded by the global pool.
+
+    These commands used to call ``ModelSelectionService.create_llm_adapter``, which
+    constructed an adapter outside the container and returned it unwrapped. Two
+    executor call sites bypass the cascade's own slot (``_tool_executor.py:587``,
+    ``_context_compressor.py:246``), so with that adapter in hand they were neither
+    timed nor counted by ``LLMPool`` (WB-02).
+    """
+    return _get_container().create_llm_for_model(model_id)
+
+
+def _get_state_repo() -> StateRepositoryPort:
+    return _get_container().get(StateRepositoryPort)
 
 
 def _get_mediator():
@@ -108,8 +124,7 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
 
-        model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(model or MODEL_BUDGET)
+        llm = _cli_llm(model or MODEL_BUDGET)
         state_repo = _get_state_repo()
         mediator = _get_mediator()
         run_session_id = session_id or str(uuid.uuid4())
@@ -172,8 +187,7 @@ def flow_resume(session_id: str, answer: str) -> None:
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
 
-        model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(MODEL_BUDGET)
+        llm = _cli_llm(MODEL_BUDGET)
         state_repo = _get_state_repo()
         mediator = _get_mediator()
         runner = AgentRunner(
@@ -203,8 +217,7 @@ def flow_list(user_id: str | None) -> None:
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
 
-        model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(MODEL_BUDGET)
+        llm = _cli_llm(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         sessions = await runner.list_sessions(user_id=user_id)
@@ -228,8 +241,7 @@ def flow_cancel(session_id: str) -> None:
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
 
-        model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(MODEL_BUDGET)
+        llm = _cli_llm(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         if await runner.cancel_session(session_id):
@@ -301,8 +313,7 @@ def flow_undo(session_id: str) -> None:
     """Undo the last plan mutation for a session."""
 
     async def _run() -> None:
-        model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(MODEL_COMMAND_DEFAULT)
+        llm = _cli_llm(MODEL_COMMAND_DEFAULT)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         ok = await runner.flow_undo(session_id)

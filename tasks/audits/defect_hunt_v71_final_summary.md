@@ -1,7 +1,7 @@
 ---
 hunt: Defect Hunt V7.1 Round 2
-status: SUBSTANTIALLY COMPLETE
-date_completed: 2026-10-25
+status: open
+date: 2026-10-25
 branch: claude/defect-hunt-v71-w0-instruments
 baseline_commit: 86289a08a946ced8f8cc4fcf86da1d7f3f651f05
 total_commits: 14

@@ -1,7 +1,7 @@
 # ARCHITECTURE.md — weebot AI Orchestrator
 
 **Last updated:** 2026-07-07 (Architecture 9 Plan — Phase 1–2, 11/15 steps)
-**Architecture score:** see the latest audit record, `tasks/specs/arch_audit_2026_10_remediation_plan.md` (EGFV audit of 2026-10-24: 4/10 before remediation; its section 13 gives the target). The 9.0 once printed here was a hand-typed self-score and had gone stale.
+**Architecture score:** see the audit records, `tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md` (EGFV static audit of 2026-10-25: 7/10) and `tasks/specs/arch_audit_2026_10_remediation_plan.md` (2026-10-24: 4/10 before that wave). The 9.0 once printed here was a hand-typed self-score and had gone stale.
 **Last audit:** 2026-10-24 EGFV static audit, remediation plan above. Earlier: _archive/root-2026-10-23/reports/implementation_audit_report.md (2026-07-07)
 **Maturity:** Early production. "Production" returns when the Sep plan's Phase 5.5 (replica proof) passes; the app is single-replica until then.
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
@@ -13,7 +13,12 @@
 
 ## Architecture Remediation Update (2026-06-18)
 
-**Audit score:** 6/10 → **Estimated: 7.5-8.0/10** (post-remediation)
+**Audit score:** not stated here. This section is a 2026-06-18 record of what changed,
+and it used to carry "6/10 → Estimated: 7.5-8.0/10 (post-remediation)" — an estimate for
+that date that the header's own measurement contradicts (the 2026-10-24 audit scored the
+*later* code 4/10, and the 2026-10-25 audit after the wave-2 plan scored it 7/10). Scores
+live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` and
+`tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md` (WB-05).
 **Remediation plan:** ARCHITECTURE_REMEDIATION_PLAN.md
 **ExecutorAgent:** 1,414 lines → 803 lines (−43%), 4 collaborators extracted
 

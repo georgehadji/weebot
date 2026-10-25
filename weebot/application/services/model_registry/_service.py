@@ -7,10 +7,8 @@ selection strategies from ``_strategies.py``.
 
 from __future__ import annotations
 
-import os
-
-from weebot.application.ports.llm_port import LLMPort
 from weebot.config.model_catalog import MODELS
+from weebot.config.secret_accessor import SecretAccessor
 from weebot.domain.models.model_config import ModelConfig
 from weebot.application.services.model_registry._strategies import ModelSelectionStrategy
 from weebot.domain.models.task_type import TaskType
@@ -29,7 +27,7 @@ class ModelSelectionService:
         return [
             (model_id, cfg)
             for model_id, cfg in catalog.items()
-            if not cfg.api_key_env or os.getenv(cfg.api_key_env)
+            if not cfg.api_key_env or SecretAccessor.get(cfg.api_key_env)
         ]
 
     def available_models(self) -> list[str]:
@@ -45,20 +43,10 @@ class ModelSelectionService:
             raise ValueError("No API keys configured for any supported provider")
         return strategy.select(candidates, task_type, budget)
 
-    def create_llm_adapter(self, model_id: str) -> LLMPort:
-        """Instantiate the correct LLMPort adapter for a model ID.
+    # `create_llm_adapter` used to live here: it constructed an adapter through
+    # infrastructure and returned it unwrapped. Two problems in one method (WB-01,
+    # WB-02): an application service reaching into infrastructure, and a second
+    # construction site outside the container, so the port reached the executor
+    # without the global LLM bulkhead around it. Getting a port for a model is the
+    # composition root's job now -- `Container.create_llm_for_model(model_id)`.
 
-        Uses the model catalog's provider field to route through the native
-        API when a direct key is available (e.g. XAI_API_KEY for xAI models),
-        falling back to OpenRouter otherwise.
-        """
-        import os
-        from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
-
-        config = self.MODELS.get(model_id)
-        if not config:
-            raise ValueError(f"Unknown model: {model_id}")
-
-        provider = getattr(config, "provider", "openrouter") or "openrouter"
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        return create_adapter(provider, model=model_id, api_key=api_key)

@@ -34,7 +34,7 @@ Groups registered at `cli/main.py:710-747`:
 
 | Group | Module | Wires |
 |---|---|---|
-| `flow` (run, resume, list, cancel, retry, undo, skillopt, export, search, decisions) | `cli/commands/flow.py:95-492` | `AgentRunner` with LLM from `ModelSelectionService`, state repo and `Mediator` from the shared container (`:108-125`); that LLM is built outside the container (`weebot/application/services/model_registry/_service.py:37-53`), so it is not wrapped in `BoundedLLMAdapter` (`infrastructure/LLMAdapters.md`); `skillopt` builds its own `Container()` (`:332`) |
+| `flow` (run, resume, list, cancel, retry, undo, skillopt, export, search, decisions) | `cli/commands/flow.py:117-492` | `AgentRunner` with its LLM from `_cli_llm` (`:88-101`), state repo and `Mediator` from the shared container (`:78-93`); `_cli_llm` resolves the port through `Container.create_llm_for_model` (`application/di/_factories.py:127-142`), so it is wrapped in `BoundedLLMAdapter` (`infrastructure/LLMAdapters.md`); `skillopt` builds its own `Container()` (`:332`) |
 | `hyper` | `cli/commands/hyper.py:27` | shared container (`:44-46`), `event_bus=container.get(EventBusPort)` (`:60`) |
 | `skill`, `agents`, `profile`, `cron`, `companion`, `guard`, `analytics`, `soul`, `dream`, `mcp`, `gateway`, `cron-agent`, `auth`, `ponytail*` | `cli/commands/*.py` | see each module; `mcp` manages the MCP client config, not the MCP server |
 | `benchmark`, `harness` | `cli/commands/harness.py:12, 142` | each builds its own `Container()` (`:55, 95, 256, 352`), not the shared one |

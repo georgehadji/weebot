@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: open
 date: 2026-10-24
 note: from the 2026-10-24 EGFV audit (4/10); executed 2026-10-24 on feat/icm-a4-walk, see Appendix C for what landed and where it deviated; decisions D1-D6 resolved 2026-10-24; Phase 8 defers to the 2026-09 plan's Phase 5
 ---

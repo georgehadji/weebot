@@ -129,7 +129,6 @@ def run_interactive(
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
     from weebot.domain.models.event import WaitForUserEvent
     from weebot.domain.models.session import SessionStatus
-    from weebot.application.services.model_selection import ModelSelectionService
 
     # Load skill if specified
     skill_prompt = None
@@ -142,8 +141,6 @@ def run_interactive(
             print(f"  [WARN] Skill file not found: {skill_path}")
 
     async def _main() -> None:
-        # Use ModelSelectionService to pick the right adapter
-        model_service = ModelSelectionService()
         # Use a free model by default. Override with --model or env DEFAULT_MODEL.
         import os as _os
 
@@ -151,10 +148,12 @@ def run_interactive(
         from weebot.config.model_refs import MODEL_BUDGET
 
         _default = _os.environ.get("DEFAULT_MODEL", MODEL_BUDGET)
-        llm = model_service.create_llm_adapter(model or _default)
         from weebot.interfaces.factories import shared_container
 
         _container = shared_container()  # one container per process
+        # WB-02: the port comes from the container's factory, so LLMPool bounds every
+        # call made through it. Building the adapter here left it unwrapped.
+        llm = _container.create_llm_for_model(model or _default)
         state_repo = _container.get(StateRepositoryPort)
 
         # ── Phase 5: Steering — wire up mid-execution input channel ──

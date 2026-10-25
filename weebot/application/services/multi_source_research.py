@@ -18,7 +18,6 @@ import logging
 from abc import ABC, abstractmethod
 
 if TYPE_CHECKING:
-    from weebot.infrastructure.external_service_integration import ServiceRegistry
     from weebot.tools.web_search import WebSearchTool
     from weebot.tools.advanced_browser import AdvancedBrowserTool
 
@@ -301,23 +300,27 @@ class MultiSourceResearchEngine:
     Args:
         web_search_tool: Optional ``WebSearchTool`` for web searches.
         browser_tool: Optional ``AdvancedBrowserTool`` for browser-based research.
-        service_registry: Optional ``ServiceRegistry`` for external services.
         rerank: Optional ``RerankPort`` for cross-encoder result reranking.
                 When provided, results are reranked against the query instead of
                 being sorted by a single metadata field.
+
+    There used to be a ``service_registry`` parameter here, annotated with the concrete
+    ``ServiceRegistry`` and stored on the instance. Nothing ever read it -- the name
+    appeared only in this signature, its docstring line and the assignment -- and its
+    only other effect was a type-only import of infrastructure from an application
+    service (WB-01). Deleted rather than annotated with a port, because a port for a
+    collaborator nothing calls is an abstraction with no caller.
     """
 
     def __init__(
         self,
         web_search_tool: WebSearchTool | None = None,
         browser_tool: AdvancedBrowserTool | None = None,
-        service_registry: ServiceRegistry | None = None,
         rerank: Any = None,  # RerankPort — avoids import at module level
     ):
         self.providers: list[ResearchProvider] = []
         self.web_search_tool = web_search_tool
         self.browser_tool = browser_tool
-        self.service_registry = service_registry
         self._rerank = rerank
         self.logger = logging.getLogger(f"{__name__}.MultiSourceResearchEngine")
 

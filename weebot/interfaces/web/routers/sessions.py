@@ -212,6 +212,12 @@ async def delete_session(
     orch = build_deletion_orchestrator(http_request, state_repo)
     results = await orch.delete_session(session_id)
 
+    # The per-session security caches are not a store, but they are keyed by this
+    # session id and would otherwise outlive it in this process (WB-03).
+    from weebot.application.agents.executor._session_scope import get_session_scope
+
+    get_session_scope().close(session_id)
+
     logger.info("Deleted session %s (results: %s)", session_id, results)
 
     return {"message": f"Session {session_id} deleted", "results": results}

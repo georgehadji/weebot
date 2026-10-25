@@ -81,7 +81,6 @@ async def run_single_task(
     Returns True on success, False on failure.
     """
     from weebot.application.di import Container
-    from weebot.application.services.model_selection import ModelSelectionService
     from weebot.config.model_refs import MODEL_BUDGET
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
@@ -111,8 +110,8 @@ async def run_single_task(
     container = Container()
     container.configure_defaults(db_path=db_path, default_model=model)
 
-    model_service = ModelSelectionService()
-    llm = model_service.create_llm_adapter(model or MODEL_BUDGET)
+    # WB-02: the container's factory applies the global LLM bulkhead.
+    llm = container.create_llm_for_model(model or MODEL_BUDGET)
 
     from weebot.application.ports.state_repo_port import StateRepositoryPort
 

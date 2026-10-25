@@ -1,5 +1,5 @@
 ---
-status: implemented
+status: done
 date: 2026-10-24
 note: from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 ---

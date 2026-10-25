@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from tests.unit.test_tool_executor_egress import FakeToolCollection, make_guard
-from weebot.application.agents.executor import _tool_executor as te
+from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.agents.executor._tool_executor import ToolExecutor
 from weebot.application.services.effect_ledger import EffectLedger
 from weebot.core.background_tasks import get_background_tasks
@@ -45,10 +45,7 @@ def _executor(store) -> ToolExecutor:
 
 def _restart() -> None:
     """A new process: the caches are empty and nothing is hydrated."""
-    te._TAINTED_SESSIONS.discard(SESSION)
-    te._LOCAL_TAB.pop(SESSION, None)
-    te._WRITTEN_FILES.pop(SESSION, None)
-    te._HYDRATED.discard(SESSION)
+    get_session_scope().close(SESSION)
 
 
 @pytest.fixture(autouse=True)
@@ -149,3 +146,56 @@ async def test_an_unreadable_store_does_not_stop_a_call():
 
     result = await _executor(Broken()).execute_tool("bash", {"command": "echo hi"})
     assert not result.is_error
+
+
+# ── WB-03: the scope is owned and bounded ────────────────────────────────────
+
+
+def test_many_sessions_leave_nothing_behind():
+    """Ten thousand sessions must not leave ten thousand entries (WB-03).
+
+    The four caches used to be module-level and only ever grew: production code had no
+    removal path at all, so a long-lived web process kept one entry per session that had
+    ever run a tool, each holding the set of paths it wrote. Only a test fixture cleared
+    them. This is the leak, expressed as an assertion.
+    """
+    scope = SessionScope()
+    for i in range(10_000):
+        sid = f"sess-{i}"
+        scope.mark_tainted(sid)
+        scope.set_local_tab(sid, i % 2 == 0)
+        scope.note_written_file(sid, f"/tmp/f{i}.html")
+        scope.claim_hydration(sid)
+        scope.close(sid)
+    assert len(scope) == 0
+
+
+def test_marking_is_idempotent_so_the_store_is_written_once():
+    scope = SessionScope()
+    assert scope.mark_tainted("s") is True
+    assert scope.mark_tainted("s") is False, "a second taint must not append a second row"
+    assert scope.claim_hydration("s") is True
+    assert scope.claim_hydration("s") is False
+    assert scope.set_local_tab("s", True) is True
+    assert scope.set_local_tab("s", True) is False
+    assert scope.note_written_file("s", "a") is True
+    assert scope.note_written_file("s", "a") is False
+
+
+def test_closing_drops_taint_and_the_store_brings_it_back():
+    """Closing is only safe because the event store is the record -- assert both halves."""
+    scope = SessionScope()
+    scope.mark_tainted("s")
+    assert scope.is_tainted("s") is True
+    scope.close("s")
+    assert scope.is_tainted("s") is False, "the cache does not survive close()"
+    # The replay path that restores it is covered by test_taint_survives_a_restart above.
+
+
+def test_the_executor_uses_the_scope_it_is_given():
+    scope = SessionScope()
+    ex = ToolExecutor(tools=FakeToolCollection(), egress_guard=make_guard(), session_scope=scope)
+    ex.set_step_context("step-1", SESSION, "do it")
+    ex._untrusted_context_active = True
+    assert scope.is_tainted(SESSION) is True
+

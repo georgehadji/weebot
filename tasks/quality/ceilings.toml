@@ -99,8 +99,12 @@ print_in_production = 105
 # on disk too, so a local run and CI measure the same 72.
 # 72 -> 71 with phase 3.1: CascadeExecutor read OPENROUTER_API_KEY itself to
 # make its own HTTP calls; the key now reaches the adapter from WeebotSettings.
+# 70 -> 68 with WB-08 of the 2026-10 wave 2 plan: model_registry/_service.py's
+# `_usable()` now reads keys through SecretAccessor, and the second read went with
+# `create_llm_adapter` (WB-02), which is deleted -- the container builds ports for a
+# model now (Container.create_llm_for_model).
 # Measured by: the `lint-env-access` target in the Makefile.
-bare_env_reads = 70
+bare_env_reads = 68
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose

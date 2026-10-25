@@ -1,7 +1,7 @@
 ---
 wave: W0
 surface: Instruments, baseline, census
-status: COMPLETE
+status: done
 date: 2026-10-25
 branch: claude/defect-hunt-v71-w0-instruments
 baseline_commit: 86289a08a946ced8f8cc4fcf86da1d7f3f651f05
