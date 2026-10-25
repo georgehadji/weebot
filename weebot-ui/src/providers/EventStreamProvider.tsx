@@ -127,13 +127,21 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n\n");
-          buffer = lines.pop() ?? "";
-          for (const chunk of lines) {
-            const dataLine = chunk.split("\n").find((l) => l.startsWith("data:"));
-            if (!dataLine) continue;
+          // Frames end at a blank line, which the producer (sse_starlette) writes as
+          // CRLF; bare LF is legal SSE too. Splitting on "\n\n" alone dropped every
+          // frame the backend actually sends.
+          const frames = buffer.split(/\r?\n\r?\n/);
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            // A frame may carry several `data:` lines; the payload is their join.
+            const data = frame
+              .split(/\r?\n/)
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).replace(/^ /, ""))
+              .join("\n");
+            if (!data) continue;
             try {
-              const event = JSON.parse(dataLine.slice(5).trim()) as AgentEvent;
+              const event = JSON.parse(data) as AgentEvent;
               if (event.session_id === sessionId) {
                 conn.listeners.forEach((l) => l(event));
               }
@@ -143,8 +151,15 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           }
         }
       } catch {
-        // aborted or network error — connection just stays closed;
-        // the consumer's next subscribe() call will retry from WS.
+        // Aborted (teardown) or the stream died — settled in `finally`.
+      } finally {
+        // The stream is over. Leaving mode at "sse" kept the AppBar claiming "Live"
+        // over a feed that delivered nothing, forever.
+        if (!controller.signal.aborted) {
+          conn.sseController = null;
+          conn.mode = "closed";
+          forceRender((n) => n + 1);
+        }
       }
     })();
   }, []);
@@ -286,8 +301,15 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const connections = sessionConnections.current;
+    const presence = presenceListeners.current;
     return () => {
-      connections.forEach((conn, id) => closeSessionConnection(id, conn));
+      connections.forEach((conn, id) => {
+        // Clear first: the close event would otherwise see a non-empty listener set
+        // and schedule a reconnect for a provider that no longer exists.
+        conn.listeners.clear();
+        closeSessionConnection(id, conn);
+      });
+      presence.clear();
       presenceWsRef.current?.close();
     };
   }, [closeSessionConnection]);

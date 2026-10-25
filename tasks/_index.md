@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (15)
+## open (16)
 
 - 2026-10-23 — [Plan: fix the findings recorded in the map cards](icm_fix_plan.md) — F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
@@ -21,6 +21,7 @@ Format: date — record — note
 - 2026-09-05 — [Review Gate & Residual Work — Execution Plan](specs/review_gate_and_residual_work_plan.md) — A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
 - 2026-06-10 — [Auto-Evolve Back-End: 6 Enhancements (SkillClaw-Inspired)](specs/skillclaw_auto_evolve_plan.md) — none of the 6 enhancements built
 - 2026-09-06 — [Applying the Precision Defect Auditor (V3) to the weebot backend](specs/static_defect_audit_v3_execution_plan.md) — only passes P1-P2 run (audits/static_defect_audit_v3.md); P3-P11 not run
+- 2026-10-25 — [Autonomous Defect-Hunt V7.1 — the whole frontend (`weebot-ui`)](specs/ui_defect_hunt_v71_execution_plan.md) — V7.1 defect-hunt program for the whole frontend (weebot-ui). Phase 0 executed and measured on 2026-10-25; W0 (harness + baseline) and W1 (transport) executed the same day — see tasks/audits/ui_defect_hunt_baseline.md and ui_defect_hunt_w1_transport.md. W2–W8 not started.
 - 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 - 2026-06-30 — [WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted](specs/weebot_unified_implementation_plan.md) — P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
 
@@ -69,7 +70,7 @@ Format: date — record — note
 - 2026-08-20 — [Test-Suite & Evidence-Gate Repair Plan](specs/test_suite_and_evidence_gate_repair_plan.md)
 - 2026-06-10 — [Tool Handling Enhancements — Implementation Plan](specs/tool_enhancements_plan.md)
 
-## reference (72)
+## reference (74)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
@@ -98,6 +99,8 @@ Format: date — record — note
 - 2026-09-05 — [D47 and D50 — the two Priority 1 candidates](audits/review_gate_d47_d50.md)
 - 2026-10-23 — [Single-source-of-truth audit, 2026-10-23](audits/ssot_audit_2026_10_23.md)
 - 2026-09-07 — [V3 static defect audit — execution record](audits/static_defect_audit_v3.md)
+- 2026-10-25 — [Frontend Defect Hunt — Wave 0 Baseline & Test Harness](audits/ui_defect_hunt_baseline.md)
+- 2026-10-25 — [Wave 1 — Transport & Live-State Integrity](audits/ui_defect_hunt_w1_transport.md)
 - 2026-06-10 — [Weebot Architecture Audit — EGFV Protocol v2.0](audits/weebot_architecture_audit_2026-06-10.md)
 - 2026-06-30 — [Weebot Architecture Audit — EGFV Protocol v2.0](audits/weebot_architecture_audit_v2.md)
 - 2026-06-30 — [Weebot Architecture Audit v2.0](audits/weebot_architecture_audit_v2_full.md)
