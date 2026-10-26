@@ -50,7 +50,7 @@ The Playwright side of web browsing: `PlaywrightAdapter` owns one browser, one c
   - The browser process starts on the first `advanced_browser` `launch`/`goto` or `browser_inspector` `navigate` (`advanced_browser.py:176-177, 192-193, 372-383`, `browser_inspector.py:280-291`).
 - **Close.** Two paths:
   - `advanced_browser(action="close")` closes the adapter (`advanced_browser.py:184-185, 407-408`).
-  - `ToolCollection.teardown()` calls `BaseTool.close()` on every tool, and both browser tools override it to close the shared adapter (`weebot/application/models/tool_collection.py:147-154`; `advanced_browser.py:132-135`, `browser_inspector.py:196-199`). Flows call it at `application/flows/plan_act_flow.py:521-523` and `application/flows/agent_session_manager.py:43-45`. Pinned by `tests/unit/fixes/test_teardown_closes_browser.py`.
+  - `ToolCollection.teardown()` calls `BaseTool.close()` on every tool, and both browser tools override it to close the shared adapter (`weebot/application/models/tool_collection.py:147-154`; `advanced_browser.py:132-135`, `browser_inspector.py:196-199`). Flows call it at `application/flows/plan_act_flow.py:291` and `application/flows/agent_session_manager.py:43-45`. Pinned by `tests/unit/fixes/test_teardown_closes_browser.py`.
   - The `advanced_browser` atexit hook stops a module global that no code assigns (`advanced_browser.py:16-42`); its owner is documented at `:18-20`.
 - **Pool.** Nothing closes it because nothing opens it.
 

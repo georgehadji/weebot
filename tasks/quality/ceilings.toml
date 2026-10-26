@@ -341,7 +341,7 @@ dynamic_weebot_imports = 15
 # ExecutorAgent.execute_step (527) became the loop in _base.py plus
 # _step_setup/_turn/_tool_batch/_tool_pairing.
 # Measured by: scripts/lint_long_functions.py
-functions_over_150_lines = 26
+functions_over_150_lines = 25
 
 # Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
 # CI's blocking selector is F821,E9 only; this catches growth in the rest.

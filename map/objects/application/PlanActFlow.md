@@ -14,10 +14,10 @@ commit: eeb0e80e
 The runner for one agent turn. It owns the current `FlowState`, the `Session` and the `Plan`, and loops "execute state, check stop conditions" until the session completes, fails, waits for a human, or hits the iteration cap. `run(prompt)` is an async generator that yields `AgentEvent`s.
 
 ## Why this shape
-The state machine was pulled out into state classes (see FlowState) and the start-state choice into FlowRouter, so what remains here is wiring plus the loop. The file is still large (996 lines); `ARCHITECTURE.md:65` lists its size as known debt (D4, target 700). The budget and termination logic left for `collaborators/session_budget.py` (plan 5). Construction takes a `PlanActFlowConfig`, with a long list of legacy keyword arguments kept for old call sites (`weebot/application/flows/plan_act_flow.py:79-120`, normalised at `:121-165`).
+The state machine was pulled out into state classes (see FlowState) and the start-state choice into FlowRouter, so what remains here is wiring plus the loop. The file is 767 lines (was 996); `ARCHITECTURE.md:65` lists its size as known debt (D4, target 700). The budget and termination logic left for `collaborators/session_budget.py` (plan 5). Construction takes a `PlanActFlowConfig`; the constructor is 18 lines (`weebot/application/flows/plan_act_flow.py:79-97`) because the three jobs it used to do inline now live in `weebot/application/flows/_plan_act_wiring.py` -- the legacy keyword names at `:43-81`, `config_from_legacy` at `:83`, the port wiring at `:112` and the agent composition at `:197`. The legacy keywords are still accepted and are provably the config's fields (`tests/unit/application/flows/test_the_flow_is_built_from_its_config.py`).
 
 ## Shape
-`run()` at `plan_act_flow.py:568` binds the session id to every log record, seeds the session cost meter (`:566-574`), then delegates to `_run_states` (`:576`), in order:
+`run()` at `plan_act_flow.py:340` binds the session id to every log record, seeds the session cost meter (`:566-574`), then delegates to `_run_states` (`:576`), in order:
 1. Open the `plan_act_iteration` tracing span when OTEL tracing is enabled (`:588-597`). Remember the first non-empty prompt as `original_task` (`:598-609`).
 2. Extract session-scoped constraints if an extractor is wired (`:611-617`); hydrate behavioral rules (`:619-626`).
 3. `ContinuationDetector.resolve_prompt` turns vague follow-ups ("yes") into a full prompt (`:628-631`).

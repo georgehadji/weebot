@@ -2045,9 +2045,15 @@ candidates:
       An empty or whitespace-only command returns SAFE. Is that right, or should an
       empty command be an error -- it usually means a construction bug upstream, and
       returning SAFE hides it behind a "safe" verdict.
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/core/test_an_empty_command_is_named.py
+    verdict_note: >-
+      Resolved 2026-10-25 as a contract question, not a defect: bash_guard is a content
+      guard, so it has no verdict to give about absent content and keeps returning SAFE.
+      What changed is that the absence is now visible -- the verdict carries a named
+      <empty> check, so (SAFE, []) no longer means both "evaluated, nothing found"
+      and "nothing to evaluate". A caller that expected a command can tell the
+      difference; nothing that passes an empty command starts being blocked.
 
   - id: H1.2
     round: 2

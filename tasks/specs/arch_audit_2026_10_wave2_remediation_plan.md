@@ -483,6 +483,8 @@ the sections above differ, **this section is what the code does**. All phases la
 | 4.0 (WB-06) | `tests/unit/application/flows/test_executing_state_scripted.py`: drives the real `ExecutingState` against a scripted mediator for success, tool error, cascade exhaustion, repetition trip, steering and a rejected command — no model, no network, no database, 7 tests in 0.4s. **It found a live bug on its first run** (below). |
 | 4.1 (WB-06) | `ExecutingState.execute` **509 -> 96 lines**; `executing.py` **768 -> 284**. Three collaborators: `_execution_gates.py` (the five pre-step gates, in order), `_step_run.py` (the mediated call, event reconstruction, the inbound-mail flag), `_step_outcome.py` (failure routing, quality gates, completion, transition). `mark_user_gate` and `step_fetched_inbound_mail` moved with their only callers. |
 | 4.2 (WB-06) | `ExecutorAgent.execute_step` **527 -> ~120 lines**; `_base.py` **1226 -> 766**, so its allowlist entry in `test_god_modules_under_800_lines` (1450) is gone and the default 800 applies again. Collaborators: `_step_setup.py` (prime + prompts, split because `yield StepEvent` lands between them), `_turn.py` (message assembly, cascade, the two typed declines), `_tool_batch.py` (`ToolBatchRunner`: the per-step counters that survive across turns, plus pre-flight, execution and the three per-result policies), `_tool_pairing.py` (`sanitize_tool_call_pairing`, moved verbatim by script rather than retyped). |
+| 4.2 step 1 | `PlanActFlow.__init__` **234 -> 18 lines**, `plan_act_flow.py` **999 -> 763** (cap 1000). The constructor took a `PlanActFlowConfig` already but still did three jobs inline; they are now `_plan_act_wiring.config_from_legacy` / `wire_ports` / `compose_agents`, so `__init__` calls three functions and nothing else. The 89-line legacy-kwarg mapping was provably an identity function -- all 36 names are config fields with matching defaults -- so it delegates to the dataclass, and `tests/unit/application/flows/test_the_flow_is_built_from_its_config.py` holds that claim (including a check that `__init__` stays under 25 non-blank lines). |
+| 7 (E1) | The cascade now passes `max_tokens` at both `chat` sites, resolved from the adapter by `config/token_bounds.py`: 16384 for the OpenAI/OpenRouter adapters, 4096 for Anthropic, `None` for anything else (meaning "pass nothing", i.e. exactly today's behaviour). The numbers are the adapters' own hard-coded defaults, named in one table -- so this changes no spend and no truncation, it moves the bound from two unrelated files into the orchestrator that chooses the model. |
 | 7 (E2) | `prompt_sha` now has a sibling: `tools_sha` (`llm_pool.py`), so a tool-schema change no longer looks like an unchanged prompt version in the `llm_call` record. |
 
 ### Deviations from the plan, and why
@@ -515,13 +517,26 @@ the sections above differ, **this section is what the code does**. All phases la
    first attempt. `CompletedState` is where the terminal status is set, so the lifecycle reads
    better there anyway; that required one entry in the flow-states allowlist
    (`weebot.application.agents.executor._session_scope`, a state-holder, not an agent call).
-5. **E1 was not implemented, on purpose.** The plan said to pass an explicit `max_tokens` at the
-   cascade's two `self._llm.chat` sites instead of relying on the adapters' defaults. Those
-   defaults differ by provider -- 16384 in `openai_adapter.py:161`, 4096 in
-   `anthropic_adapter.py:64` -- and the repo's named constants are smaller still
-   (`MAX_TOKENS_EXTENDED = 2048`). Picking one number therefore either cuts the OpenAI path by
-   8x or raises the Anthropic path by 4x: a spend/truncation decision, not a refactor. E2 is
-   implemented instead, and E1 belongs in a decision with a measured per-tier budget.
+5. **E1 was implemented after a decision, not as a refactor** (2026-10-25). The plan said to pass
+   an explicit `max_tokens` at the cascade's two `self._llm.chat` sites. The adapters' defaults
+   differ by provider -- 16384 in `openai_adapter.py:161`, 4096 in `anthropic_adapter.py:64` --
+   and the repo's named constants are smaller still (`MAX_TOKENS_EXTENDED = 2048`), so choosing
+   one number would either cut the OpenAI path 8x or raise Anthropic's 4x. Decided: declare the
+   per-provider bounds and keep today's numbers, which is what `config/token_bounds.py` does.
+   Unlisted adapters resolve to `None` and inherit their own default, so the mapping is opt-in
+   per adapter rather than a new global that every path silently inherits.
+
+### Two things 4.2 step 1's first attempt got wrong
+
+- **`from weebot.application.flows import _plan_act_wiring` created a module cycle**
+  (`.flows` <-> `.flows.plan_act_flow`, caught by `lint_module_cycles`, 0 -> 1). Importing a
+  subpackage's attribute loads the package `__init__`, which imports the flow. Importing the
+  three functions from the submodule directly keeps the edge off the package.
+- **The delegation was not equivalent after all.** `PlanActFlowConfig` *requires* `llm` and
+  `tools`; the legacy signature defaulted them to `None`, and
+  `tests/e2e/test_gate_pause_survives_the_seam.py:67` constructs a flow with neither because it
+  never calls a model. Found by the new test on its second run, fixed in `config_from_legacy`
+  with both defaults restored -- the config route stays strict, the legacy route stays lenient.
 
 ### The bug 4.0 found on its first run
 
@@ -545,19 +560,25 @@ that no second attempt is made.
 | `ruff_violations` | **741, at its ceiling** (was 743). The audit read this as a tool-version artifact; that was wrong. Running at `e72f5126` — the commit that *introduced* the 741 ceiling — measures **743**, so the ceiling was recorded before its two fixes were counted and the gate had been red since the day it was added. The two were paid in `cli/commands/flow.py`'s `decisions` panel (two E501 lines, now wrapped), `web/auth.py` itself being clean. `ruff` is pinned to `==0.17.2` in `requirements.txt` in the same change, because an exact-count ceiling cannot depend on a floating tool version. No ceiling moved. |
 | Map / index | Initially reported green because I ran `check_map_citations.py` without `--drift`, the flag `make lint-map` actually uses. With it: **155 citations were already drifted on `b9c4c378`** and 202 on this branch, so the gate had been red on `main` too. `--fix` relocated the shifts and demoted the 8 cards whose cited text was already gone (`DIContainer`, `PlanActFlow`, `Browser`, `LLMAdapters`, `CLI`, `WebUI`, `BrowserTools`, `IntegrationTools`) to `status: stale` -- honest, where they had been silently wrong. The 2 cards my own change made stale (`SkillRegistry`, `BuiltinSkills`, both citing `di/_skills.py` where the store is now constructed) were re-read against source and re-verified by hand. `map/objects/_index.md` regenerated. Final: 0 broken, 0 drifted. |
 
+### Out of this ledger, but found on the way
+
+The candidate inventory (`tasks/audits/candidates.yml`) was red on `main`, and its three round-2
+candidates had never been recorded, so the one thing it could not answer was what was still open.
+It now reports **0 not closed**, and the last of them was a real decision: **H1.1** -- `bash_guard`
+returned SAFE for an empty command *with no checks*, byte-identical to "a safe command that
+matched nothing". Decided 2026-10-25 (it is a content guard, so it keeps returning SAFE, but the
+verdict now names `<empty>`), fixed, with `tests/unit/core/test_an_empty_command_is_named.py` as
+evidence. WB-10 is the row that made this visible: an unindexed document is an unread one.
+
 ### Not done, and why
 
 - **Phase 5 (WB-07)**: still owned by the 2026-09 plan's Phase 5, as decided. 2.1 removed its
   prerequisite blocker for 5.4 (the taint cache is no longer process-global-by-accident but
   process-global-by-owner, with a lifecycle).
-- **E1 (`max_tokens` at the cascade)** and **E3 (a cost-dashboard record for saturation)** and
-  **E4 (provider idempotency keys)**: see deviation 5 for E1. E3 would publish a zero-token
-  record for a call that never happened; E4 needs a provider that supports the key. Both are
-  optimisations with no defect behind them, and this plan's ledger is closed.
-- **`PlanActFlow.__init__` (234 lines) was not turned into `from_config()`.** It is 4.2 step 1 in
-  the plan above; the two named targets of 4.2 (execute_step, `_base.py`) are met, and the flow
-  constructor is the one place every test constructs, so it deserves its own change rather than
-  the tail of this one.
+- **E3 (a cost-dashboard record for saturation)** and **E4 (provider idempotency keys)**: E3
+  would publish a zero-token record for a call that never happened; E4 needs a provider that
+  supports the key. Both are optimisations with no defect behind them, and this plan's ledger is
+  closed.
 - **The 5 pre-existing unit failures** above: they predate this work and are not in this
   plan's ledger. They belong in a defect-hunt candidate, not here.
 - **Two more gates were red on `main` and are now green**, both found by CI rather than by me:

@@ -492,6 +492,11 @@ class BashGuard:
     def evaluate(self, command: str) -> tuple[RiskLevel, list[SafetyCheck]]:
         """Evaluate a command for safety.
 
+        This is a content guard: it judges what a command would do. A command with no
+        content therefore has no verdict to give, which is why the empty case comes back
+        as SAFE *with a `<empty>` check* rather than as SAFE with nothing -- a caller
+        that expects a command can tell "approved" from "there was nothing to approve".
+
         Args:
             command: The shell command to evaluate
 
@@ -515,7 +520,23 @@ class BashGuard:
             ]
 
         if not command or not command.strip():
-            return RiskLevel.SAFE, []
+            # SAFE, because a command with no content cannot be destructive -- but named,
+            # because SAFE-with-no-checks is byte-identical to "a real command that
+            # matched nothing", and the two are not the same event. An empty command
+            # usually means a construction bug upstream. H1.1, decided 2026-10-25: this
+            # guard judges content, so it has no verdict to offer about no content, and
+            # says so rather than laundering the absence into a clean bill of health.
+            return RiskLevel.SAFE, [
+                SafetyCheck(
+                    pattern="<empty>",
+                    risk_level=RiskLevel.SAFE,
+                    description=(
+                        "empty command: nothing to evaluate, so this is not a safety "
+                        "verdict -- check the caller if a command was expected"
+                    ),
+                    suggestion="Pass a command, or decide upstream what an empty one means.",
+                )
+            ]
 
         command = command.strip()
         checks: list[SafetyCheck] = []
