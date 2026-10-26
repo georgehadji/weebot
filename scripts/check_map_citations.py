@@ -1,6 +1,6 @@
 """Fail when a verified map card cites a file or line that is not there (ICM A3).
 
-Cards under map/objects/ cite source as `path` or `path:line[-line]`. A
+Cards under map/objects/ and map/processes/ cite source as `path` or `path:line[-line]`. A
 verified card that is silently wrong costs more than a missing one, so this
 checks every citation in every `status: verified` card:
 
@@ -42,12 +42,17 @@ def _resolve(path: str, tracked: list[str], tracked_set: set[str]) -> str | None
     return hits[0] if len(hits) == 1 else None
 
 
+def _cards() -> list[Path]:
+    """Object and process cards: the files with a `status` and a `commit` to check."""
+    return sorted(p for sub in ("objects", "processes") for p in (ROOT / "map" / sub).rglob("*.md"))
+
+
 def broken_citations() -> list[str]:
     tracked = _tracked()
     tracked_set = set(tracked)
     lengths: dict[str, int] = {}
     problems: list[str] = []
-    for card in sorted((ROOT / "map" / "objects").rglob("*.md")):
+    for card in _cards():
         if card.name in ("_index.md", "CONTEXT.md"):
             continue
         text = card.read_text(encoding="utf-8")
@@ -84,6 +89,12 @@ def _lines_at(rev: str, path: str, cache: dict) -> list[str] | None:
     return cache[(rev, path)]
 
 
+def _commit_exists(rev: str) -> bool:
+    done = subprocess.run(["git", "cat-file", "-e", f"{rev}^{{commit}}"], cwd=ROOT,
+                          capture_output=True)
+    return done.returncode == 0
+
+
 def _relocate(block: list[str], new: list[str], old_start: int) -> int | None:
     """1-based start of *block* in *new*, nearest to *old_start*; None if absent."""
     n = len(block)
@@ -118,12 +129,17 @@ def drifted_citations(fix: bool = False) -> list[str]:
                           capture_output=True, text=True, check=True).stdout.strip()
     cache: dict = {}
     problems: list[str] = []
-    for card in sorted((ROOT / "map" / "objects").rglob("*.md")):
+    for card in _cards():
         text = card.read_text(encoding="utf-8")
         commit = re.search(r"^commit:\s*([0-9a-f]{7,40})\b", text, re.M)
         if "status: verified" not in text or not commit:
             continue
         rel = card.relative_to(ROOT).as_posix()
+        if not _commit_exists(commit.group(1)):
+            # Without it every citation of the card would be skipped and the gate would pass.
+            problems.append(f"{rel}: commit {commit.group(1)} is not in this clone "
+                            "(shallow checkout?); its citations were not checked")
+            continue
         edits: list[tuple[int, int, str]] = []
         gone: list[str] = []
         for m in _CITE.finditer(text):

@@ -113,10 +113,10 @@ Roughly 1,000 sentences across 28 cards were rewritten by agents, and the card c
 |---|---|---|---|
 | High, **done** | `Makefile`, `architecture.yml` | Drift check in CI blocks unrelated PRs (5 red runs on main). Now `lint-map-drift`: in `make check`, advisory in CI (`353d3acd`). | Choose one: keep `--drift` in CI but make a re-stamp part of any PR that moves cited code (document in `map/CLAUDE.md`), or run `--drift` only in `make lint-map` locally and a scheduled job. Stop describing it as "not in CI". |
 | High, **done** | process | Walk test not repeated after fixes. | Re-run: 6 of 6 PASS, recorded in `tasks/icm_plan.md` slice 6. |
-| Medium | `scripts/check_map_citations.py` | Drift and broken-citation checks skip `map/processes/`, `map/effects/` and `map/CONTEXT.md` (Q8). | Re-read `flow-run-turn.md` (and the other process cards), then extend the scan to `map/processes/`. `effects/` and `CONTEXT.md` have no `commit:` to compare, so they need a different check or a header. |
-| Medium | `scripts/gen_tasks_index.py:68-71` | Unknown status is dropped. | List any other status under "unknown", or fail `--check` on it; add a test. |
-| Medium | `scripts/check_map_citations.py:122` | Missing commit makes a citation unchecked. | Count skipped citations; fail or warn on any. Add `fetch-depth: 0` to the lint job if cards cite older commits. |
-| Medium | `tests/unit/test_map_is_consistent.py` | No test for `drifted_citations` / `--fix`. | Add a test in a temp git repo: shift keeps verified; changed text marks stale. |
+| Medium, **partly done** | `scripts/check_map_citations.py` | Drift and broken-citation checks skipped `map/processes/`, `map/effects/` and `map/CONTEXT.md` (Q8). | Done: the scan covers `map/processes/`; its 107 drifted citations marked all five process cards `stale`. Open: re-read the five process cards against source. `effects/` and `CONTEXT.md` have no `commit:` to compare, so they still need a different check or a header. |
+| Medium, **done on main** | `scripts/gen_tasks_index.py` | Unknown status is dropped. | Fixed by commit `40ccfbdb` (`unindexable()` makes the generator fail and name the file); a regression test was added in this PR. |
+| Medium, **done** | `scripts/check_map_citations.py` | Missing commit makes a citation unchecked. | A card whose `commit` is not in the clone is now reported; the lint job checks out with `fetch-depth: 0`. |
+| Medium, **done** | `tests/unit/test_map_is_consistent.py` | No test for `drifted_citations` / `--fix`. | Two temp-git-repo tests: a shift keeps the card verified at the new line; changed text marks it stale. |
 | Low | `tasks/evals/CONTEXT.md` | "What passes" not defined. | State the pass rule (score threshold or the scorer's meaning). |
 | Low | `map/objects/core/ApprovalManager.md:3` | Stale `name:`. | Rename and regenerate the object index. |
 | Low | `tasks/new-skills/` | Plan lists it as records. | Decide with the owner: index it or amend A4. |

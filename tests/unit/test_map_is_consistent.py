@@ -68,3 +68,80 @@ def test_drift_is_enforced_by_make_check_and_advisory_in_ci():
     by_run = {s.get("run"): s for s in steps if s.get("run")}
     assert not by_run["make lint-map"].get("continue-on-error")
     assert by_run["make lint-map-drift"].get("continue-on-error") is True
+
+
+def test_a_record_with_an_unknown_status_fails_the_generator(monkeypatch, capsys):
+    """A typo'd status (`wip`) used to vanish from the index without a word."""
+    import sys
+
+    gen = _load("gen_tasks_index")
+    monkeypatch.setattr(gen, "records", lambda: [("wip", "2026-10-26", "x.md", "X", "")])
+    monkeypatch.setattr(sys, "argv", ["gen_tasks_index.py"])
+    assert gen.main() == 1, "the generator must refuse a status outside the known set"
+    assert "x.md" in capsys.readouterr().out
+
+
+def _git(repo, *args):
+    import subprocess
+
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"],
+           "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")}
+    out = subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True,
+                         check=True)
+    return out.stdout.strip()
+
+
+def _card_repo(tmp_path, monkeypatch):
+    """A tiny repo: weebot/mod.py, and a verified card citing `weebot/mod.py:3` at its commit."""
+    cm = _load("check_map_citations")
+    monkeypatch.setattr(cm, "ROOT", tmp_path)
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "weebot").mkdir()
+    (tmp_path / "weebot" / "mod.py").write_text("import os\n\ndef f():\n    return 1\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "one")
+    sha = _git(tmp_path, "rev-parse", "--short", "HEAD")
+    card = tmp_path / "map" / "objects" / "x" / "Card.md"
+    card.parent.mkdir(parents=True)
+    card.write_text(f"---\nstatus: verified\nverified: 2026-01-01\ncommit: {sha}\n---\n"
+                    "`f` is at `weebot/mod.py:3`.\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "card")
+    return cm, card
+
+
+def test_fix_moves_a_shifted_citation_and_keeps_the_card_verified(tmp_path, monkeypatch):
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    (tmp_path / "weebot" / "mod.py").write_text("import os\nimport sys\n\ndef f():\n    return 1\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift")
+    assert cm.drifted_citations() != []
+    cm.drifted_citations(fix=True)
+    text = card.read_text()
+    assert "weebot/mod.py:4" in text and "status: verified" in text
+    assert cm.drifted_citations() == []
+
+
+def test_fix_marks_the_card_stale_when_the_cited_text_is_gone(tmp_path, monkeypatch):
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    (tmp_path / "weebot" / "mod.py").write_text("import os\n\ndef g():\n    return 2\n")
+    _git(tmp_path, "commit", "-q", "-am", "rewrite")
+    problems = cm.drifted_citations(fix=True)
+    assert any("no longer says" in p for p in problems)
+    assert "status: stale" in card.read_text()
+
+
+def test_a_card_whose_commit_is_not_in_the_clone_is_reported_not_skipped(tmp_path, monkeypatch):
+    """A shallow CI checkout lacks the card's commit; every citation was then skipped silently."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    card.write_text(card.read_text().replace(
+        card.read_text().split("commit: ")[1].split("\n")[0], "deadbeef1"))
+    problems = cm.drifted_citations()
+    assert any("deadbeef1" in p and "not in this clone" in p for p in problems)
+
+
+def test_the_citation_check_covers_process_cards():
+    """Wrong `PlanActFlow.run` lines sat in a process card the check never opened."""
+    cards = _load("check_map_citations")._cards()
+    assert any(p.parent.name == "processes" for p in cards)
+    assert any("objects" in p.parts for p in cards)
