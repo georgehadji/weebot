@@ -6,18 +6,18 @@ Format: name — source — status — card
 
 ## domain
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-25 — [card](domain/Event.md)
-- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-25 — [card](domain/Plan.md)
-- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-25 — [card](domain/Ports.md)
+- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-26 — [card](domain/Plan.md)
+- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-26 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-25 — [card](domain/Session.md)
-- Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-25 — [card](domain/Step.md)
+- Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-26 — [card](domain/Step.md)
 
 ## application
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-25 — [card](application/CascadeExecutor.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-10-24 — [card](application/DIContainer.md)
-- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-25 — [card](application/ExecutorAgent.md)
+- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-26 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-25 — [card](application/FlowRouter.md)
-- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-25 — [card](application/FlowState.md)
-- Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — verified 2026-10-25 — [card](application/Mediator.md)
+- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-26 — [card](application/FlowState.md)
+- Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — verified 2026-10-26 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-24 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-10-25 — [card](application/PlannerAgent.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — verified 2026-10-25 — [card](application/SkillRegistry.md)
@@ -56,4 +56,4 @@ Format: name — source — status — card
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — verified 2026-10-25 — [card](tools/OrchestrationTools.md)
 - Personas (AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter) — `weebot/agents/parser.py` — verified 2026-10-24 — [card](tools/Personas.md)
 - RoleBasedToolRegistry — `weebot/application/services/tool_registry.py` — verified 2026-10-25 — [card](tools/RoleBasedToolRegistry.md)
-- WebTools (WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool, ImageSearchTool, KnowledgeTool, SearchHistoryTool, WeatherTool, OCRTool, StructuredOCRTool) — `weebot/tools/web_search.py` — verified 2026-10-25 — [card](tools/WebTools.md)
+- WebTools (WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool, ImageSearchTool, KnowledgeTool, SearchHistoryTool, WeatherTool, OCRTool, StructuredOCRTool) — `weebot/tools/web_search.py` — verified 2026-10-26 — [card](tools/WebTools.md)
