@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-28
+---
+
 # C3: Near-Duplicate Service Analysis — Jaccard Import Similarity
 
 **Method:** AST-parsed imports per service, Jaccard similarity of top-level import names.

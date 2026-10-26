@@ -5,13 +5,13 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-23
-commit: c2f39937
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # BashGuard
 
-A regex scanner that rates a command string SAFE, SUSPICIOUS, DANGEROUS or BLOCKED. It decides nothing by itself: each tool that runs shell or code reads the rating and chooses what to do with it. In practice only BLOCKED stops a command.
+A regex scanner that rates a command string SAFE, SUSPICIOUS, DANGEROUS or BLOCKED. It decides nothing by itself: each tool that runs shell or code, and the `GuardedTool` chain around it, reads the rating and chooses what to do with it. Inside the tools only BLOCKED stops a command; in the chain (default mode `enforce`) BLOCKED is refused and DANGEROUS asks a human.
 
 ## Why this shape
 Pure core-layer code with no infrastructure imports; metrics and hooks are injected (`weebot/core/bash_guard.py:412-424`, `on_security_event`). It is fail-closed on its own breakage: a BLOCKED or DANGEROUS pattern that fails to compile makes every `evaluate` return BLOCKED instead of "clean" (`:439-469, 503-515`). The source says built-in patterns are pinned to compile by a test, so the risk is for `custom_patterns` (`:455-459`).
@@ -26,26 +26,27 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 ## How the tools use it (the part that matters)
 | Tool | Gates, in order | Source |
 |---|---|---|
-| `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses; the HMAC override token was retired by ADR-013; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation errors unless `GuardedTool` runs the call as human-approved, fixed 2026-10-23) → sandbox | `tools/bash_tool.py:353-417, 243-300` |
-| `python_execute` | BashGuard on the code string (only BLOCKED refuses) → `ExecApprovalPolicy` → sandbox | `tools/python_tool.py:148-165` |
-| `powershell` | `_validate_no_encoded_commands`, `_validate_path_safety`, `ExecApprovalPolicy` → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:179-203` |
+| `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses; the HMAC override token was retired by ADR-013; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation errors unless `GuardedTool` runs the call as human-approved, fixed 2026-10-23) → sandbox | `tools/bash_tool.py:354-425, 249-306` |
+| `python_execute` | BashGuard on the code string (only BLOCKED refuses) → `ExecApprovalPolicy` → sandbox | `tools/python_tool.py:154-170` |
+| `powershell` | in the tool's own code: `_validate_no_encoded_commands`, `_validate_path_safety`, `ExecApprovalPolicy` → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:185-205` |
+| `GuardedTool` around the three tools above | `BashGuardAdapter` (BLOCKED to DENY, DANGEROUS to ASK, SUSPICIOUS note only), `AnalyzerAdapter`, `ApprovalPolicyAdapter`, financial and outbound policy, `EgressAdapter` (not in flows); most restrictive verdict wins; DENY refused, ASK goes to the approval channel, then the tool runs as human-approved | `application/services/tool_guards.py:89-115, 352-365, 413-478` |
 | other callers | `latex_compiler.py` (refuses BLOCKED), CLI `guard` command | `infrastructure/document/latex_compiler.py:26,143`, `cli/commands/guard.py` |
 
 Consequences (read from source, not run):
-- DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`. `get_risk_description` says DANGEROUS needs "explicit approval", but no code path asks (`bash_tool.py:411-422`). Only the separate `ExecApprovalPolicy` can still refuse.
-- Since 2026-10-22 (plan W3.1-W3.2) `bash`, `powershell` and `python_execute` from the registry and the MCP server are wrapped in `GuardedTool` (`application/services/tool_guards.py`), which runs BashGuard, the analyzer, ExecApprovalPolicy and EgressGuard as one chain. Default mode `observe` only logs the verdict; the tools' own gates below still decide.
-- The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:404-405`; fixed 2026-10-22, W1.7). It is a report only; nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:24-26`).
-- The Windows-preferred `powershell` tool skips BashGuard entirely, although the root `CLAUDE.md` rule says every shell command goes through `bash_guard.py`. Its `Invoke-Expression`, `iex`, `-EncodedCommand` and `Remove-Item -Recurse -Force` rules are therefore not applied there; only `ExecApprovalPolicy` and the two validators are.
-- `CommandSecurityAnalyzer.analyze` returns early only on DANGEROUS from layers 1-3 and otherwise returns the layer 4 verdict alone (`tools/bash_security.py:160-189`). Layers 1-3 can only return SAFE or DANGEROUS, so nothing is dropped today; a future SUSPICIOUS rule in those layers would be. See its own card.
+- Inside the tools, DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`; `get_risk_description` says DANGEROUS needs "explicit approval", and only the `GuardedTool` chain asks (`tool_guards.py:89-115`). A bare `BashTool()` has no such gate.
+- `bash`, `powershell` and `python_execute` from the registry (`application/services/tool_registry.py:532-534`, flows pass `include_egress=False` because `ToolExecutor` gates egress) are wrapped in `GuardedTool`; the MCP server wraps `bash` and `python_execute` (`weebot/mcp/server.py:392`). Default mode is `enforce` since W3.7 (`weebot/config/settings.py:208-213`); `observe` only logs the verdict and the tools' own gates decide (`tool_guards.py:11-17`).
+- The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:374-375`). It is a report only, spawned through `core/background_tasks.py` (`:363-379`); nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:24-26`).
+- The `powershell` tool itself skips BashGuard, although the root `CLAUDE.md` rule says every shell command goes through `bash_guard.py`: its `Invoke-Expression`, `iex`, `-EncodedCommand` and `Remove-Item -Recurse -Force` rules reach it only through `GuardedTool` (`tests/unit/fixes/test_f01_powershell_skips_bash_guard.py`); built bare, only `ExecApprovalPolicy` and the two validators apply.
+- `CommandSecurityAnalyzer.analyze` returns early only on DANGEROUS from layers 1-3 and otherwise returns the layer 4 verdict alone (`tools/bash_security.py:315-325`). Layers 1-3 can only return SAFE or DANGEROUS, so nothing is dropped today; a future SUSPICIOUS rule in those layers would be. See its own card.
 
 ## Connected to
-- **Wired in** `BashTool.__init__` (`bash_tool.py:139-140`) and `PythonTool.__init__` (`python_tool.py:110`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:59`).
-- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and the unused `ApprovalManager` (own cards, all in this folder). A comment in `infrastructure/security/state_verifier.py:312-313` records a past shell-execution site that never consulted BashGuard.
+- **Wired in** `BashTool.__init__` (`bash_tool.py:144-145`) and `PythonExecuteTool.__init__` (`python_tool.py:116`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:59`).
+- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:93`) (own cards, all in this folder). A comment in `infrastructure/security/state_verifier.py:312-313` records a past shell-execution site that never consulted BashGuard.
 - **Looks like but is not:** `ExecApprovalPolicy` (a different rule table, PowerShell-oriented, modes not levels); `CommandRiskLevel` (3 levels, analyzer).
 
 ## If you change this
-**Hits:** `bash` and `python_execute` tools, `latex_compiler`, the `guard` CLI, the `bash_guard_events_total` metric, `post_bash_guard` hooks; tests `tests/unit/test_bash_guard_security.py`, `tests/unit/test_bash_guard_windows.py`, `tests/unit/test_bash_guard_cli.py`, `tests/unit/test_architecture_fitness.py` (core must not import outward).
-**Does not hit:** `powershell` tool; egress decisions; the sandbox.
+**Hits:** `bash`, `python_execute` and (through `BashGuardAdapter`) `powershell` tools, `latex_compiler`, the `guard` CLI, the `bash_guard_events_total` metric, `post_bash_guard` hooks; tests `tests/unit/test_bash_guard_security.py`, `tests/unit/test_bash_guard_windows.py`, `tests/unit/test_bash_guard_cli.py`, `tests/unit/application/services/test_tool_guards.py`, `tests/unit/test_architecture_fitness.py` (core must not import outward).
+**Does not hit:** the `powershell` tool's own code; egress decisions; the sandbox.
 
 ## Surfaces
 Agent shell/code tools; `python -m cli.main guard ...` for checking a command by hand.

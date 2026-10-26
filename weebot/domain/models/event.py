@@ -73,6 +73,7 @@ class ToolEvent(BaseEvent):
     function_args: dict[str, Any] = Field(default_factory=dict)
     status: ToolStatus = Field(default=ToolStatus.CALLING)
     result: str | None = Field(default=None)
+    is_error: bool = Field(default=False)
     artifact: Any | None = Field(default=None)
 
 
@@ -477,6 +478,32 @@ class LLMCallCompleted(DomainEvent):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0  # estimate_cost(); USD
+
+
+class InjectionSuspected(DomainEvent):
+    """The injection scanner flagged a fenced tool result (plan 1.1b, D2).
+
+    A signal, never the control: the content was fenced and passed through
+    unchanged. ``pattern`` is the scanner's description of the rule that fired,
+    never the matched text.
+    """
+
+    type: str = "injection_suspected"
+    session_id: str = ""
+    step_id: str = ""
+    tool_name: str = ""
+    pattern: str = ""
+    severity: str = ""
+    scanner_unavailable: bool = False  # the scan could not run; treated as a detection
+
+
+class SessionBudgetSoftLimit(DomainEvent):
+    """A session's spend crossed the soft limit (D6): PREMIUM models are skipped from here."""
+
+    type: str = "session_budget_soft_limit"
+    session_id: str = ""
+    total_usd: float = 0.0
+    soft_limit_usd: float = 0.0
 
 
 class SkillDistilled(DomainEvent):

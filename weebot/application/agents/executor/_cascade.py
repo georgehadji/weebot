@@ -12,6 +12,7 @@ import contextlib
 import logging
 
 from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
+from weebot.utils.backoff import deadline_scope
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -22,7 +23,9 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4
+from weebot.config.token_bounds import completion_bound
 from weebot.core.error_classifier import ErrorClassifier
+from weebot.application.strategies.llm_pool import unwrap_llm
 
 # Import for ACR telemetry enrichment (Phase P0)
 from weebot.core.model_cascade_tracker import (
@@ -84,7 +87,10 @@ class CascadeExecutor:
         # Awaited with an LLMCallCompleted after each successful call (W4.1, F23).
         on_call_completed=None,
         pinned_model: str | None = None,  # `flow run --model`: tried before the role cascade
+        # SessionCostMeter: past the soft limit PREMIUM models are skipped (plan 2.4, D6).
+        cost_meter=None,
     ) -> None:
+        self._cost_meter = cost_meter
         self._llm = llm
         self._tools = tools
         self._agent_role = agent_role
@@ -100,6 +106,9 @@ class CascadeExecutor:
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
         self._server_error_models: set[str] = set()
+        # E1: resolved once, from the adapter, so both call sites pass the same number
+        # the adapter would otherwise have chosen for itself (see config/token_bounds).
+        self._completion_bound = completion_bound(unwrap_llm(llm))
 
     @staticmethod
     def _classify_description(description: str) -> str:
@@ -155,7 +164,8 @@ class CascadeExecutor:
         NOT exclusively use OpenRouter, so they should NOT be filtered. minimax
         is not one: its adapter only reaches OpenRouter (adapter_factory).
         """
-        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft"}
+        # "ollama" is local: it needs no OpenRouter credit, so a low balance must not drop it.
+        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft", "ollama"}
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
@@ -338,16 +348,24 @@ class CascadeExecutor:
         start = _cascade_time.monotonic()
 
         try:
-            resp = await asyncio.wait_for(
-                self._llm.chat(
-                    messages=messages,
-                    tools=self._tools.to_params(),
-                    tool_choice="auto",
-                    model=model_id,
-                    temperature=TEMPERATURE_BALANCED,
-                ),
-                timeout=effective,
-            )
+            # The retry layer below reads this deadline and stops scheduling retries
+            # that could not finish inside it (ORCH-3), instead of sleeping into the
+            # cancellation.
+            with deadline_scope(effective):
+                resp = await asyncio.wait_for(
+                    self._llm.chat(
+                        messages=messages,
+                        tools=self._tools.to_params(),
+                        tool_choice="auto",
+                        model=model_id,
+                        temperature=TEMPERATURE_BALANCED,
+                        # The orchestrator owns the length bound now: resolved from the
+                        # adapter (E1), so the number this call would have inherited is
+                        # passed explicitly and lives in one named table.
+                        max_tokens=self._completion_bound,
+                    ),
+                    timeout=effective,
+                )
             if resp and (resp.content or resp.tool_calls):
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
@@ -440,6 +458,20 @@ class CascadeExecutor:
             return CascadeTier.FREE
         return CascadeTier.PREMIUM if model_id in PREMIUM_MODELS else CascadeTier.BUDGET
 
+    def _within_budget(self, models: list[str]) -> list[str]:
+        """Past the soft cost limit drop PREMIUM models, but never empty the list (D6)."""
+        if self._cost_meter is None:
+            return models
+        from weebot.core.log_context import session_id_var
+
+        if not self._cost_meter.soft_exceeded(session_id_var.get()):
+            return models
+        cheaper = [m for m in models if not m or self._tier_of(m) is not CascadeTier.PREMIUM]
+        if len(cheaper) < len(models) and any(cheaper):
+            logger.info("soft cost limit: skipping %d PREMIUM model(s)", len(models) - len(cheaper))
+            return cheaper
+        return models
+
     # ── Full cascade orchestration ──────────────────────────────────
 
     async def call_with_cascade(
@@ -500,7 +532,7 @@ class CascadeExecutor:
                 if m
             )
         )
-        filtered_models = await self.get_credits_and_filter_direct(all_models)
+        filtered_models = self._within_budget(await self.get_credits_and_filter_direct(all_models))
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
         parallel = list(
@@ -578,7 +610,7 @@ class CascadeExecutor:
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [
             m
-            for m in (role_fallback2, self._TIER4_MODEL)
+            for m in self._within_budget([role_fallback2, self._TIER4_MODEL])
             if m
             and not self.cascade_is_tripped(m)
             and m not in parallel
@@ -677,7 +709,10 @@ class CascadeExecutor:
             try:
                 resp = await asyncio.wait_for(
                     self._llm.chat(
-                        messages=messages, model=rescue_id, temperature=TEMPERATURE_BALANCED
+                        messages=messages,
+                        model=rescue_id,
+                        temperature=TEMPERATURE_BALANCED,
+                        max_tokens=self._completion_bound,
                     ),
                     timeout=30.0,
                 )

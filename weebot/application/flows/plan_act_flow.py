@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
-from weebot.application.agents.executor import ExecutorAgent
-from weebot.application.agents.planner import PlannerAgent
+from weebot.domain.services.session_lessons import project_key
+from weebot.application.flows._plan_act_wiring import (
+    compose_agents,
+    config_from_legacy,
+    wire_ports,
+)
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows._iteration_context import IterationContext
 from weebot.application.flows.states.base import FlowState
@@ -17,19 +20,13 @@ from weebot.application.flows.states.planning import PlanningState
 from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.base import AgentStatus
 from weebot.application.flows.flow_router import FlowRouter
-from weebot.application.flows.collaborators.fact_resolver import FactResolver
+from weebot.application.flows.collaborators.session_budget import (
+    enforce_budget,
+    enforce_termination,
+)
 from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
-from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.application.ports.llm_port import LLMPort
 from weebot.core import cancel_requests
-from weebot.core.structured_logger import StructuredLogger
-from weebot.application.termination.base import TerminationContext
-from weebot.application.services.memory_compactor import MemoryCompactor
-from weebot.application.services.context_switcher import ContextSwitcher
-from weebot.application.services.plan_history import PlanHistory
-from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
-from weebot.application.services.model_aware_harness_resolver import ModelAwareHarnessResolver
 
 
 class PlanStuckError(RuntimeError):
@@ -43,23 +40,13 @@ class PlanStuckError(RuntimeError):
 
 
 from weebot.domain.services.continuation_detector import ContinuationDetector  # noqa: E402
-from weebot.application.services.plan_critic import PlanCriticService  # noqa: E402
-from weebot.application.services.truth_binder import TruthBinder  # noqa: E402
 from weebot.domain.models.event import AgentEvent, ErrorEvent  # noqa: E402
 from weebot.domain.models.plan import Plan  # noqa: E402
-from weebot.domain.models.session import Session, SessionStatus  # noqa: E402
-from weebot.domain.models.task_preset import TaskPreset  # noqa: E402
+from weebot.domain.models.session import SessionStatus  # noqa: E402
 from weebot.application.models.plan_act_flow_config import PlanActFlowConfig  # noqa: E402
-from weebot.application.models.tool_collection import ToolCollection  # noqa: E402
-from weebot.config.constants import (  # noqa: E402
-    DEFAULT_MAX_STEP_REPETITIONS,
-    DEFAULT_MAX_FLOW_ITERATIONS,
-)
 
 if TYPE_CHECKING:
-    from weebot.application.cqrs.mediator import Mediator
-    from weebot.application.ports.checkpoint_port import CheckpointPort
-    from weebot.application.ports.state_repo_port import StateRepositoryPort
+    pass
 
 # NOTE: Use self._logger (StructuredLogger) in instance methods.
 # The module-level logger is a fallback for static/class methods only.
@@ -73,232 +60,25 @@ from weebot.application.services.metrics_bridge import (  # noqa: E402
 class PlanActFlow(BaseFlow):
     """Plan-Act agent flow with explicit state machine."""
 
-    def __init__(
-        self,
-        config: PlanActFlowConfig = None,
-        *,
-        # ── Legacy kwargs — supported for backward compatibility ─────
-        # All call sites should migrate to PlanActFlowConfig.
-        llm: LLMPort = None,
-        tools: ToolCollection = None,
-        session: Session = None,
-        event_bus: EventBusPort | None = None,
-        model: str | None = None,
-        skill_prompt: str | None = None,
-        mediator: Mediator | None = None,
-        state_repo: StateRepositoryPort | None = None,
-        steering=None,
-        max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
-        max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
-        auto_terminate_on_plan_complete: bool = True,
-        context_aware_model_selection: bool = True,
-        max_steps: int | None = None,
-        truth_binder: TruthBinder | None = None,
-        plan_critic: PlanCriticService | None = None,
-        code_reviewer: Any | None = None,  # CodeReviewerPort
-        step_audit_service: Any | None = None,  # StepAuditPort
-        task_preset: TaskPreset | None = None,
-        verifier_llm: LLMPort | None = None,
-        workspace_snapshots: Any | None = None,  # WorkspaceSnapshotPort
-        knowledge_graph: Any | None = None,
-        idea_gate: Any | None = None,  # IdeaGate, for the post-completion jobs
-        dreamer_agent: Any | None = None,  # DreamerPort
-        event_store: Any | None = None,  # EventStorePort
-        behavioral_learner: Any | None = None,
-        logger: StructuredLogger | None = None,
-        checkpoint_port: CheckpointPort | None = None,
-        profile_name: str | None = None,
-        personality=None,
-        agent_role: str | None = None,
-        session_constraint_extractor: Any | None = None,
-        correction_tracker: Any | None = None,
-        persistence_adapter: Any | None = None,  # retrying session saver
-    ):
-        # Normalize: if config is given use it; otherwise build from legacy kwargs.
-        if config is not None:
-            cfg = config
-        else:
-            cfg = PlanActFlowConfig(
-                llm=llm,
-                tools=tools,
-                session=session,
-                event_bus=event_bus,
-                model=model,
-                skill_prompt=skill_prompt,
-                mediator=mediator,
-                state_repo=state_repo,
-                steering=steering,
-                max_step_repetitions=max_step_repetitions,
-                max_iterations=max_iterations,
-                auto_terminate_on_plan_complete=auto_terminate_on_plan_complete,
-                context_aware_model_selection=context_aware_model_selection,
-                max_steps=max_steps,
-                truth_binder=truth_binder,
-                plan_critic=plan_critic,
-                code_reviewer=code_reviewer,
-                step_audit_service=step_audit_service,
-                task_preset=task_preset,
-                verifier_llm=verifier_llm,
-                workspace_snapshots=workspace_snapshots,
-                knowledge_graph=knowledge_graph,
-                idea_gate=idea_gate,
-                dreamer_agent=dreamer_agent,
-                event_store=event_store,
-                behavioral_learner=behavioral_learner,
-                logger=logger,
-                checkpoint_port=checkpoint_port,
-                profile_name=profile_name,
-                personality=personality,
-                agent_role=agent_role,
-                session_constraint_extractor=session_constraint_extractor,
-                # Absent from the legacy kwarg list until Phase 7, so the
-                # four legacy call sites -- including the user-facing
-                # create_flow -- could not supply a tracker at all and
-                # ReviewingState's correction loop was unreachable.
-                correction_tracker=correction_tracker,
-                persistence_adapter=persistence_adapter,
-            )
+    def __init__(self, config: PlanActFlowConfig | None = None, **legacy: Any):
+        """Build the flow from a parameter object, or from the legacy loose keywords.
 
-        self._llm = cfg.llm
-        self._tools = cfg.tools
-        self._session = cfg.session
-        self._event_bus = cfg.event_bus
-        self._model = cfg.model
-        self._mediator = cfg.mediator
-        self._state_repo = cfg.state_repo
-        self._fact_resolver = FactResolver(state_repo=self._state_repo)
-        self._steering = cfg.steering
-        self._truth_binder = cfg.truth_binder
-        self._plan_critic = cfg.plan_critic
-        self._plan_critique = None  # Set by CritiquingState
-        self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
-        self._step_audit_service = cfg.step_audit_service  # StepAuditPort — per-step evidence gate
-        self._verifier_llm = cfg.verifier_llm  # Optional cheap-tier LLM for VerifyingState (E6)
-        self._workspace_snapshots = (
-            cfg.workspace_snapshots
-        )  # WorkspaceSnapshotPort — integrity axis (E7b)
-        self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
-        self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
-        # Post-completion jobs (CompletedState): skill-gap review, dream scan.
-        self._idea_gate = cfg.idea_gate
-        self._dreamer_agent = cfg.dreamer_agent
-        self._event_store = cfg.event_store
-        self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
-        self._knowledge_graph = cfg.knowledge_graph
-        self._behavioral_learner = cfg.behavioral_learner
-        self._checkpoint_port = cfg.checkpoint_port
-        self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
-        self._misalignment_journal = cfg.misalignment_journal  # Optional[MisalignmentJournalPort]
-        self._correction_tracker = cfg.correction_tracker  # Optional[CorrectionTracker]
-        self._sc_extractor = (
-            cfg.session_constraint_extractor
-        )  # Optional[SessionConstraintExtractor]
-        self._session_constraints = None  # SessionConstraintRegistry — hydrated lazily in run()
-        self._profile_name = cfg.profile_name
-        self._agent_role = cfg.agent_role
-        self._personality = cfg.personality
-        self._logger = cfg.logger
-        self._stdlib_logger = logging.getLogger(__name__)
-        self.status = AgentStatus.IDLE
-        self._state: FlowState = None  # Will be set in run()
-        self._plan: Plan | None = None
-        self._compactor = MemoryCompactor()
-        self._plan_history = PlanHistory()
-        self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
-        self._awm = None  # AgentWorkflowMemory — lazy-init via _get_awm()
-        self._max_step_repetitions = cfg.max_step_repetitions
-        self._planning_mode = getattr(cfg, "planning_mode", "auto")
-        self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
-        self._context_aware_model_selection = cfg.context_aware_model_selection
-        self._max_iterations = cfg.max_iterations
-        self._termination_conditions = cfg.termination_conditions or []
-        self._step_execution_counts: dict[str, int] = {}
-        self._emit_lock = asyncio.Lock()
-        self._event_publisher = None  # Lazy-init via _get_event_publisher()
-
-        self._skill_prompt = cfg.skill_prompt
-        self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
-        self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
-        self._tracing_port = cfg.tracing_port
-        self._persistence_adapter = cfg.persistence_adapter
-
-        # ── Enhancement H1: scoped MCP tool aggregation ─────────────
-        self._tool_registry = cfg.tool_registry
-        self._mcp_bridge = cfg.mcp_bridge
-        self._native_tool_selector = cfg.native_tool_selector
-
-        # ── Self-Harness: behavioural instruction block + resolver ──
-        self._harness_instruction_block: str = ""
-        self._harness_config: Any = cfg.harness_config  # HarnessConfig
-        self._harness_resolver: ModelAwareHarnessResolver | None = None
-
-        if cfg.harness_config is not None:
-            try:
-                hc = cfg.harness_config
-                self._harness_resolver = ModelAwareHarnessResolver(base_config=hc)
-                self._harness_instruction_block = HarnessPromptAssembler.assemble(
-                    instructions=hc.instructions,
-                    runtime_control=hc.runtime_control,
-                    subagents=hc.subagents,
-                    skill_selection=hc.skill_selection,
-                )
-            except (AttributeError, TypeError, ValueError) as exc:
-                self._stdlib_logger.error(
-                    "Failed to assemble harness instructions: %s — running without harness block",
-                    exc,
-                    exc_info=True,
-                )
-        # ──────────────────────────────────────────────────────────
-        # ── Timing bookkeeping ────────────────────────────────────
-        self._state_entered_at: float | None = None
-        self._flow_started_at: float = 0.0
-        self._planner = PlannerAgent(
-            llm=self._llm,
-            event_bus=self._event_bus,
-            model=self._model,
-            skill_prompt=cfg.skill_prompt,
-            facts=cfg.session.get_facts(),
-            skill_catalog=self._build_skill_catalog(cfg.skill_retriever),
+        The three jobs this used to do inline -- translating the loose keywords,
+        assigning ~50 ports, composing the agents -- live in
+        `_plan_act_wiring`; there is nothing left to do but call them in order.
+        `**legacy` is the pre-parameter-object keyword surface, validated by name in
+        `wire_ports`' module (see `LEGACY_KWARG_NAMES`); every name is a
+        `PlanActFlowConfig` field with the same default, so both routes build the
+        same flow.
+        """
+        cfg = (
+            config
+            if config is not None
+            else config_from_legacy(**legacy)
         )
-        executor_kwargs = dict(
-            llm=self._llm,
-            tools=self._tools,
-            event_bus=self._event_bus,
-            model=self._model,
-            skill_prompt=cfg.skill_prompt,
-            skill_retriever=cfg.skill_retriever,
-            profile_name=cfg.profile_name,
-            personality=cfg.personality,
-            agent_role=cfg.agent_role,
-            # Without this the executor's behavioral_learner param was never
-            # fed by the flow, so _prompt_builder's "# Behavioral Rules"
-            # block stayed empty even when a learner was configured.
-            behavioral_learner=cfg.behavioral_learner,
-            harness_instruction_block=(
-                self._harness_instruction_block if self._harness_instruction_block else None
-            ),
-            middleware_chain=cfg.middleware_chain,
-            state_repo=cfg.state_repo,
-            tracing_port=self._tracing_port,
-            trajectory_config=(
-                self._harness_config.trajectory if self._harness_config is not None else None
-            ),
-        )
-        if cfg.max_steps is not None:
-            executor_kwargs["max_steps"] = cfg.max_steps
-        # Steps run on ExecuteStepHandler's executor, which gets these settings
-        # through step_execution_context(); this one serves summarize (ADR-015).
-        self._summary_executor = ExecutorAgent(**executor_kwargs)
-        _keys = ("skill_prompt", "skill_retriever", "profile_name", "personality", "agent_role",
-                 "behavioral_learner", "middleware_chain", "trajectory_config", "max_steps")
-        self._step_settings = {k: executor_kwargs.get(k) for k in _keys}
-        self._step_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        self.step_skill_gaps: list = []
+        wire_ports(self, cfg)
+        compose_agents(self, cfg)
 
-        # Enhancement 5: subscribe to SkillGapDetected domain events
-        if self._event_bus is not None and self._misalignment_journal is not None:
-            with contextlib.suppress(Exception):
-                self._event_bus.subscribe_domain(self._on_skill_gap_detected)
 
     # ── Skill catalog for planner ───────────────────────────────────
 
@@ -391,7 +171,7 @@ class PlanActFlow(BaseFlow):
 
         entry = MisalignmentEntry(
             session_id=self._session.id,
-            project_path=(str(self._session.context.working_dir) if self._session.context else ""),
+            project_path=project_key(self._session.context.get("working_dir")),
             symptom="decomposition_quality",
             step_description=f"total_steps={total_steps}",
             constraint_text="; ".join(signals),
@@ -554,6 +334,17 @@ class PlanActFlow(BaseFlow):
             span.end()
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
+        """Run the flow with this session's ids bound to every log record (OBS-1)."""
+        from weebot.core.log_context import log_context
+
+        with log_context(session_id=self._session.id):
+            if self._cost_meter is not None:
+                # A resumed session starts from what it already spent.
+                await self._cost_meter.seed(self._session.id)
+            async for event in self._run_states(prompt):
+                yield event
+
+    async def _run_states(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         import time as _time
 
         self._flow_started_at = _time.monotonic()
@@ -720,24 +511,15 @@ class PlanActFlow(BaseFlow):
 
             # ── Composable termination check ──────────────────────────
             if self._termination_conditions:
-                import time as _term_time
+                enforce_termination(self, iteration_count)
 
-                _term_ctx = TerminationContext(
-                    iteration=iteration_count,
-                    total_tokens=self.token_usage.get("total_tokens", 0),
-                    elapsed_seconds=_term_time.monotonic() - self._flow_started_at,
-                )
-                for _tc in self._termination_conditions:
-                    _result = _tc.check(_term_ctx)
-                    if _result.should_terminate:
-                        self._log.info("Termination condition met: %s", _result.reason)
-                        from weebot.application.flows.states.completed import CompletedState
-
-                        self._end_run_span()
-                        # Run CompletedState this pass; it sets the terminal
-                        # status, so the loop ends after it.
-                        self.set_state(CompletedState(termination_reason=_result.reason))
-                        break
+            # ── Session cost budget (plan 2.4, D6): ask at the hard limit ──
+            if self._cost_meter is not None:
+                paused = await enforce_budget(self)
+                if paused:
+                    for event in paused:
+                        yield event
+                    break  # paused and resumable; a grant lets the next run continue
 
             # ── Self-Harness: resolve harness instructions per-step ──
             # Before executing a state, check if we have a resolver and

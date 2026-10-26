@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 import httpx
 import sys
 import asyncio
@@ -23,6 +24,8 @@ class BerbTool(BaseTool):
     Uses Berb at http://localhost:8004 to run a 23-stage academic research pipeline
     from a single paper topic, or falls back to headless CLI execution.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     _tool_config: ToolConfig | None = PrivateAttr(default=None)
 

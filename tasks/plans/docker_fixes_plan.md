@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-28
+---
+
 # Fix Plan — Docker & CI Gaps (Audit Findings)
 
 **Source:** `implementation_audit_report.md` (sections 4 and 7)

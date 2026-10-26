@@ -392,7 +392,7 @@ class TestWorkflowOrchestratorTool:
     @pytest.mark.asyncio
     async def test_workflow_orchestrator_tool_instantiation_via_registry(self):
         """Verify the workflow_orchestrator tool is created by the registry with dependencies."""
-        from weebot.tools.tool_registry import RoleBasedToolRegistry
+        from weebot.application.services.tool_registry import RoleBasedToolRegistry
         from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
 
         registry = RoleBasedToolRegistry()

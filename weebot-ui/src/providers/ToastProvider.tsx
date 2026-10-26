@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,10 @@ interface ToastContextValue {
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
-const DEFAULT_DURATION_MS = 5000;
+// Errors stay until dismissed (0 = no timer); the rest wait longer than before and hold still
+// while hovered or focused, so they can be read.
+const DEFAULT_DURATION_MS = 8000;
+const DEFAULT_ERROR_DURATION_MS = 0;
 
 const VARIANT_ICON: Record<ToastVariant, typeof Info> = {
   info: Info,
@@ -47,15 +50,9 @@ const VARIANT_CLASS: Record<ToastVariant, string> = {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-    const timer = timers.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timers.current.delete(id);
-    }
   }, []);
 
   const toast = useCallback(
@@ -66,17 +63,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         title: input.title,
         description: input.description,
         variant: input.variant ?? "info",
-        durationMs: input.durationMs ?? DEFAULT_DURATION_MS,
+        durationMs:
+          input.durationMs ??
+          (input.variant === "error" ? DEFAULT_ERROR_DURATION_MS : DEFAULT_DURATION_MS),
         action: input.action,
       };
       setToasts((prev) => [...prev, entry]);
-      if (entry.durationMs > 0) {
-        const timer = setTimeout(() => dismiss(id), entry.durationMs);
-        timers.current.set(id, timer);
-      }
       return id;
     },
-    [dismiss]
+    []
   );
 
   const value = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
@@ -89,48 +84,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         role="region"
         aria-label="Notifications"
       >
-        {toasts.map((t) => {
-          const Icon = VARIANT_ICON[t.variant];
-          return (
-            <div
-              key={t.id}
-              role={t.variant === "error" ? "alert" : "status"}
-              aria-live={t.variant === "error" ? "assertive" : "polite"}
-              className={cn(
-                "pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lg transition-all duration-base ease-console animate-in slide-in-from-bottom-2 fade-in",
-                VARIANT_CLASS[t.variant]
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium leading-tight">{t.title}</p>
-                {t.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5 break-words">
-                    {t.description}
-                  </p>
-                )}
-                {t.action && (
-                  <button
-                    onClick={() => {
-                      t.action?.onClick();
-                      dismiss(t.id);
-                    }}
-                    className="mt-1.5 text-xs font-medium underline underline-offset-2 hover:no-underline"
-                  >
-                    {t.action.label}
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={() => dismiss(t.id)}
-                aria-label="Dismiss notification"
-                className="shrink-0 rounded-sm opacity-60 hover:opacity-100 transition-opacity"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          );
-        })}
+        {toasts.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+        ))}
       </div>
     </ToastContext.Provider>
   );
@@ -140,4 +96,58 @@ export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
+}
+
+function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
+  const [held, setHeld] = useState(false);
+  const { id, durationMs } = toast;
+  const Icon = VARIANT_ICON[toast.variant];
+
+  // The clock runs only while the toast is not hovered or focused.
+  useEffect(() => {
+    if (durationMs <= 0 || held) return;
+    const timer = setTimeout(() => onDismiss(id), durationMs);
+    return () => clearTimeout(timer);
+  }, [id, durationMs, held, onDismiss]);
+
+  return (
+    <div
+      role={toast.variant === "error" ? "alert" : "status"}
+      aria-live={toast.variant === "error" ? "assertive" : "polite"}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+      className={cn(
+        "pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lg transition-all duration-base ease-console animate-in slide-in-from-bottom-2 fade-in",
+        VARIANT_CLASS[toast.variant]
+      )}
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-tight">{toast.title}</p>
+        {toast.description && (
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">{toast.description}</p>
+        )}
+        {toast.action && (
+          <button
+            onClick={() => {
+              toast.action?.onClick();
+              onDismiss(id);
+            }}
+            className="mt-1.5 text-xs font-medium underline underline-offset-2 hover:no-underline"
+          >
+            {toast.action.label}
+          </button>
+        )}
+      </div>
+      <button
+        onClick={() => onDismiss(id)}
+        aria-label="Dismiss notification"
+        className="shrink-0 rounded-sm opacity-60 transition-opacity hover:opacity-100"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }

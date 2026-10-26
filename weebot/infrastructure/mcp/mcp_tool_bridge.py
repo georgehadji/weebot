@@ -14,12 +14,14 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.application.ports.mcp_tool_port import MCPToolPort
 from weebot.core.mcp_naming import parse_namespaced_name
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
-from weebot.tools.base import BaseTool, ToolResult
+from weebot.domain.models.base_tool import BaseTool
+from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ class _MCPToolWrapper(BaseTool):
     Created dynamically by MCPToolBridge._wrap_tool().
     Not meant to be instantiated directly.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = ""
     description: str = ""

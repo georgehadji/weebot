@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 from urllib.parse import urljoin
 
 from weebot.tools.base import BaseTool, ToolResult
@@ -184,6 +185,8 @@ class BrowserInspectorTool(BaseTool):
     advanced_browser(action='goto') first.
     All results are returned in ToolResult.data for downstream consumption.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "browser_inspector"
 

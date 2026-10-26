@@ -16,7 +16,7 @@ import logging
 import pytest
 
 from weebot.application.services.tool_guards import GuardedTool
-from weebot.core.trust_boundary import is_untrusted_tool
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 from weebot.interfaces import factories
 
 
@@ -51,6 +51,7 @@ def manager(monkeypatch):
     fake = _FakeManager()
     monkeypatch.setattr(factories, "_resolve_mcp_client", lambda: fake)
     monkeypatch.setattr(factories, "_MCP_TOOLKIT", None)
+    monkeypatch.setattr(factories, "_MCP_PENDING", None)
     return fake
 
 
@@ -60,7 +61,7 @@ async def test_configured_mcp_tools_join_the_collection_guarded(manager):
     listing = tools.get_tool("mcp__postiz__postsListTool")
     assert isinstance(post, GuardedTool)
     assert listing is not None and not isinstance(listing, GuardedTool)
-    assert is_untrusted_tool("mcp__postiz__postsListTool")
+    assert must_fence(trust_of(listing)) and must_taint(trust_of(listing), False)
     assert (await listing.execute()).output == "called mcp__postiz__postsListTool"
 
 
@@ -68,6 +69,26 @@ async def test_servers_connect_once_per_process(manager):
     await factories.build_tools(role="researcher")
     await factories.build_tools(role="admin")
     assert manager.initialized == 1
+
+
+async def test_a_slow_first_connection_does_not_hold_the_caller(monkeypatch):
+    """/run waited 30 s+ for MCP servers to install and connect; the proxy dropped it."""
+    import asyncio
+
+    class _Slow(_FakeManager):
+        async def initialize(self):
+            await asyncio.sleep(0.3)
+            await super().initialize()
+
+    slow = _Slow()
+    monkeypatch.setattr(factories, "_resolve_mcp_client", lambda: slow)
+    monkeypatch.setattr(factories, "_MCP_TOOLKIT", None)
+    monkeypatch.setattr(factories, "_MCP_PENDING", None)
+
+    assert await factories._mcp_tools_within(0.05) == []  # starts without them
+    await asyncio.sleep(0.4)  # the connection finishes in the background
+    assert len(await factories._mcp_tools_within(0.05)) == 2
+    assert slow.initialized == 1
 
 
 async def test_no_configured_servers_adds_nothing(monkeypatch):

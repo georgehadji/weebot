@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-30
+note: VerbalizedSampler shipped but has no caller; phases 1-7 not wired
+---
+
 # Verbalized Sampling — Implementation Plan
 
 **Source analysis:** [verbalized_sampling_analysis.md](verbalized_sampling_analysis.md)

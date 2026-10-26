@@ -9,10 +9,8 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
-const refresh = vi.fn();
-vi.mock("@/hooks/useSessionList", () => ({
-  useSessionList: () => ({
-    sessions: [
+vi.mock("@/hooks/useSessionList", () => {
+  const sessions = [
       {
         id: "active-1",
         user_id: "user",
@@ -35,12 +33,11 @@ vi.mock("@/hooks/useSessionList", () => ({
         updated_at: "2026-10-24T00:00:00Z",
         event_count: 4,
       },
-    ],
-    loading: false,
-    error: null,
-    refresh,
-  }),
-}));
+  ];
+  return {
+    useSessionList: () => ({ state: { status: "ready", data: sessions }, sessions, reload: vi.fn() }),
+  };
+});
 
 describe("SessionRail", () => {
   it("filters sessions and lets the operator clear the search", () => {
@@ -52,7 +49,7 @@ describe("SessionRail", () => {
     expect(screen.queryByText("Migrate authentication")).toBeNull();
     expect(screen.getByText("Prepare release notes")).toBeDefined();
 
-    fireEvent.click(screen.getByLabelText("Clear session search"));
+    fireEvent.click(screen.getByLabelText("Clear search"));
     expect(search.value).toBe("");
     expect(screen.getByText("Migrate authentication")).toBeDefined();
   });

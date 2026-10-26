@@ -21,6 +21,7 @@ import os
 from fastapi import HTTPException, Request
 
 from weebot.application.ports.api_key_port import ApiKeyPort
+from weebot.core.api_key_crypto import lookup_hash, verify_key
 from weebot.interfaces.web.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,34 @@ def _get_legacy_api_key() -> str | None:
 def _derived_principal(api_key: str) -> str:
     """The stable pseudo-anonymous principal for a *verified* key."""
     return f"key-{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+
+
+def _key_store(request: Request) -> ApiKeyPort | None:
+    """The key store the app's lifespan put on ``app.state`` (None when not wired).
+
+    One store per process, built by the composition root. Before, each
+    authenticated request built its own store and opened its own connection.
+    """
+    return getattr(request.app.state, "api_key_store", None)
+
+
+async def _principal_from_key(api_key: str, keys: ApiKeyPort) -> str | None:
+    """The principal a presented key belongs to, or None.
+
+    Lookup by SHA-256, verification by scrypt and salt (``core.api_key_crypto``);
+    an expired or revoked record never verifies.
+    """
+    record = await keys.load_by_lookup_hash(lookup_hash(api_key))
+    if record is None or not record.is_valid:
+        return None
+    if not verify_key(api_key, record.key_hash, record.salt):
+        return None
+    try:
+        await keys.touch_last_used(record.id)
+    except Exception:
+        # Bookkeeping only: a failed timestamp must not turn a valid key away.
+        logger.warning("could not record last use of API key %s", record.id, exc_info=True)
+    return record.principal_id
 
 
 def get_current_user_id(request: Request) -> str:
@@ -117,29 +146,13 @@ async def get_current_user_id_async(
     if not api_key:
         return "anonymous"
 
-    if _is_legacy_mode() or api_key_port is None:
+    keys = api_key_port if api_key_port is not None else _key_store(request)
+    if _is_legacy_mode() or keys is None:
         return get_current_user_id(request)
 
-    # Store mode: lookup by SHA-256, verify with scrypt+salt
-    from weebot.infrastructure.security.sqlite_api_key_store import (
-        SQLiteApiKeyStore,
-        _lookup_hash,
-        _verify_key,
-    )
-
-    lookup = _lookup_hash(api_key)
-    store = SQLiteApiKeyStore()
-    try:
-        record = await store.load_by_lookup_hash(lookup)
-        if record is not None and record.is_valid:
-            if _verify_key(api_key, record.key_hash, record.salt):
-                try:
-                    await store.touch_last_used(record.id)
-                except Exception:
-                    pass
-                return record.principal_id
-    finally:
-        await store.close()
+    principal = await _principal_from_key(api_key, keys)
+    if principal is not None:
+        return principal
 
     # Fall back to legacy check for backward compat during migration
     legacy_key = _get_legacy_api_key()
@@ -219,26 +232,11 @@ async def _resolve_user(request: Request) -> str:
     if not api_key:
         return "anonymous"
 
-    # Store mode: lookup by SHA-256, verify with scrypt+salt
-    from weebot.infrastructure.security.sqlite_api_key_store import (
-        SQLiteApiKeyStore,
-        _lookup_hash,
-        _verify_key,
-    )
-
-    lookup = _lookup_hash(api_key)
-    store = SQLiteApiKeyStore()
-    try:
-        record = await store.load_by_lookup_hash(lookup)
-        if record is not None and record.is_valid:
-            if _verify_key(api_key, record.key_hash, record.salt):
-                try:
-                    await store.touch_last_used(record.id)
-                except Exception:
-                    pass
-                return record.principal_id
-    finally:
-        await store.close()
+    keys = _key_store(request)
+    if keys is not None:
+        principal = await _principal_from_key(api_key, keys)
+        if principal is not None:
+            return principal
 
     # Fall back to legacy check for backward compat during migration
     legacy_key = _get_legacy_api_key()

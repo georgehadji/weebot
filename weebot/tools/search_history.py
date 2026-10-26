@@ -6,7 +6,8 @@ decisions, and past findings.  Uses the FTS5-indexed event table.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -17,6 +18,8 @@ from weebot.config.constants import DB_SESSIONS_PATH
 
 class SearchHistoryTool(BaseTool):
     """Search past session events using full-text search."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "search_history"
     description: str = (

@@ -28,6 +28,8 @@
 | `PlanStepCompleted` | `"plan_step_completed"` | `session_id`, `step_id` | ExecutorAgent | EventStore |
 | `SkillGapDetected` | `"skill_gap_detected"` | `session_id`, `step_description`, `best_score` | AutonomousLearning (MetaAnalysisState) | SkillRegistry gap log |
 | `LLMCallCompleted` | `"llm_call_completed"` | `session_id`, `model`, `prompt_tokens`, `completion_tokens`, `cost` | ExecutorAgent (CascadeExecutor success) | EventStore cost columns, via DurableEventBus; read by `GetCostSummaryHandler` |
+| `InjectionSuspected` | `"injection_suspected"` | `session_id`, `step_id`, `tool_name`, `pattern`, `severity`, `scanner_unavailable` | ExecutorAgent (`_present_tool_output`, plan 1.1b) | EventStore; a signal only, the fenced content is unchanged |
+| `SessionBudgetSoftLimit` | `"session_budget_soft_limit"` | `session_id`, `total_usd`, `soft_limit_usd` | SessionCostMeter (plan 2.4) | EventStore; the cascade skips PREMIUM models from here |
 | `SkillDistilled` | `"skill_distilled"` | `session_id`, `skill_name`, `origin`, `content_preview` | AutonomousLearning (CompletedState) | SkillRegistry |
 | `SkillPromoted` | `"skill_promoted"` | `skill_name`, `from_tier`, `to_tier` | SkillRegistry | EventStore |
 | `CorrectionPatternDetected` | `"correction_pattern_detected"` | `session_id`, `category`, `count`, `sample_step_description` | ReviewingState (via CorrectionTracker) | BehavioralLearner |

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # D47 and D50 — the two Priority 1 candidates
 
 Execution record for the first two of the 25 uninvestigated candidates, ranked

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import yaml
 
-from weebot.application.services.task_model_router import TaskCategory
 from weebot.domain.models.capability import CapabilityAxis, ModelQualityProfile, TaskRequirement
+from weebot.domain.models.task_category import TaskCategory
 
 logger = logging.getLogger(__name__)
 

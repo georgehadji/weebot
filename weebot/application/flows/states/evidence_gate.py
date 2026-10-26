@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from weebot.application.flows.states.base import StateId, new_state
 from weebot.domain.models.audit import AuditVerdict
 from weebot.domain.models.event import PlanEvent, ToolEvent
 from weebot.domain.models.plan import Step, StepStatus
@@ -21,8 +22,6 @@ async def evidence_gate(
     The downgrade used to change only ``context._plan``: resume rebuilds
     statuses from events, so the step came back COMPLETED (F69).
     """
-    from weebot.application.flows.states.executing import ExecutingState
-    from weebot.application.flows.states.updating import UpdatingState
     from weebot.domain.models.plan import PlanStatus
 
     _step_audit_service = getattr(context, "_step_audit_service", None)
@@ -49,13 +48,13 @@ async def evidence_gate(
             }
         )
         context._plan = context._plan.replace_step(step.id, updated_step)
-        context.set_state(ExecutingState())
+        context.set_state(new_state(StateId.EXECUTING))
     else:
         context._plan = context._plan.update_step_status(
             step.id, StepStatus.UNVERIFIED, result=_audit_report.summary
         )
         logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, step_elapsed)
-        context.set_state(UpdatingState())
+        context.set_state(new_state(StateId.UPDATING))
     plan_event = PlanEvent(
         status=PlanStatus.UPDATED, plan=context._plan.model_dump(mode="json")
     )

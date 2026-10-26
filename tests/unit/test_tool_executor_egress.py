@@ -10,11 +10,13 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from weebot.application.agents.executor._tool_executor import ToolExecutor
 from weebot.core.egress_guard import EgressGuard, RecipientAllowlist
+from weebot.domain.models.output_trust import OutputTrust
 from weebot.domain.models.tool_result import ToolResult
 
 # ---------------------------------------------------------------------------
@@ -40,8 +42,20 @@ class FakeToolCollection:
         self.calls.append((_name, kwargs))
         return self._result
 
+    # Declared trust by name, as the real tools declare it. A name not listed here
+    # is "not registered": get_tool returns None and the executor fails closed.
+    TRUST = {
+        "bash": OutputTrust.LOCAL,
+        "python_execute": OutputTrust.LOCAL,
+        "web_search": OutputTrust.EXTERNAL,
+        "advanced_browser": OutputTrust.EXTERNAL,
+        "file_editor": OutputTrust.EXTERNAL,
+        "weather": OutputTrust.FIXED_SCHEMA,
+    }
+
     def get_tool(self, name: str):
-        return None
+        trust = self.TRUST.get(name)
+        return None if trust is None else SimpleNamespace(output_trust=trust)
 
 
 def make_executor(
@@ -136,6 +150,44 @@ class TestUntrustedContextTracking:
         assert second.is_error
         assert "untrusted_context" in second.error
         assert len(tools.calls) == 2, "the tainted send must not have executed"
+
+
+class TestTaintFollowsDeclaredTrust:
+    """SEC-1: the tool's declared OutputTrust decides, not a list of names."""
+
+    @pytest.mark.asyncio
+    async def test_a_local_tool_does_not_taint(self):
+        ex, _ = make_executor(make_guard())
+        await ex.execute_tool("python_execute", {"code": "1+1"})
+        assert ex._untrusted_context_active is False
+
+    @pytest.mark.asyncio
+    async def test_a_fixed_schema_tool_does_not_taint(self):
+        ex, _ = make_executor(make_guard())
+        await ex.execute_tool("weather", {"city": "Athens"})
+        assert ex._untrusted_context_active is False
+
+    @pytest.mark.asyncio
+    async def test_an_unregistered_name_fails_closed_and_taints(self):
+        ex, _ = make_executor(make_guard())
+        await ex.execute_tool("tool_nobody_registered", {})
+        assert ex._untrusted_context_active is True
+
+    @pytest.mark.asyncio
+    async def test_an_error_from_an_external_tool_does_not_taint(self):
+        """D1 of the 2026-10 plan: errors are fenced (elsewhere) but never taint."""
+        ex, _ = make_executor(
+            make_guard(), result=ToolResult.error_result(error="502 Bad Gateway", output="")
+        )
+        await ex.execute_tool("web_search", {"query": "x"})
+        assert ex._untrusted_context_active is False
+
+    def test_taint_session_honours_the_error_rule(self):
+        ex, _ = make_executor(make_guard())
+        ex.taint_session("weather", is_error=True)
+        assert ex._untrusted_context_active is False
+        ex.taint_session("weather", is_error=False)
+        assert ex._untrusted_context_active is True
 
 
 class TestTaintOutlivesTheStep:

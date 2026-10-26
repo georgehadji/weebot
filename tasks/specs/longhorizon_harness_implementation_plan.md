@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-10
+---
+
 # LongHorizon-Harness → weebot: implementation plan
 
 **Source analysis:** [`tasks/specs/longhorizon_harness_weebot_analysis.md`](longhorizon_harness_weebot_analysis.md) — read that first for the paper summary and full gap evidence. This file is the actionable subset: what to build, in what order, in which layer, with what to watch for.

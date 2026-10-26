@@ -64,6 +64,9 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
     (``deepseek-chat``, ``kimi-k2-0905``).
     """
     name = model_name.lower()
+    # The explicit local prefix, before the bare llama/qwen/phi guess below.
+    if name.startswith("ollama/"):
+        return ModelProvider.OLLAMA
     # Known direct-provider prefixes (checked BEFORE the generic OpenRouter catch-all).
     # These have direct API adapters with provider-specific API keys.
     if name.startswith("deepseek/"):
@@ -146,6 +149,7 @@ def get_model_config(model_id: str) -> ModelConfig | None:
     a placeholder price or capability is indistinguishable from a real one at
     the call site (see D57 in tests/unit/test_latent_trap_fixes.py's history).
     """
-    from weebot.config.model_catalog import MODELS
+    from weebot.config.local_models import all_models
 
-    return MODELS.get(model_id) or MODELS.get(strip_routing_suffix(model_id))
+    models = all_models()
+    return models.get(model_id) or models.get(strip_routing_suffix(model_id))

@@ -10,12 +10,14 @@ import logging
 import subprocess
 from pathlib import Path
 
+from weebot.application.ports.clawhub_adapter_port import ClawHubAdapterPort
+
 logger = logging.getLogger(__name__)
 
 _REPO_URL = "https://github.com/VoltAgent/awesome-openclaw-skills.git"
 
 
-class ClawHubGitAdapter:
+class ClawHubGitAdapter(ClawHubAdapterPort):
     """Handle git operations for the awesome-openclaw-skills repository.
 
     Encapsulates subprocess calls so that application code does not

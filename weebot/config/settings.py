@@ -13,7 +13,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # validate the whole .env at import. Entry points must load_dotenv() before
 # importing weebot (run.py, cli/main.py, run_mcp.py). ICM fix plan W2.4b, option
 # (a); passing the workspace to tools through ToolConfig is planned for Wave 5.
-WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE", os.getcwd()))
+# `or`, not a getenv default: a blank `WEEBOT_WORKSPACE=` line in .env must mean "unset".
+# resolve(): `WEEBOT_WORKSPACE=.` is a relative root, and no absolute path is inside one,
+# so every containment and permission check against it silently stopped matching.
+WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE") or os.getcwd()).resolve()
 LOGS_DIR = Path(os.getenv("WEEBOT_LOGS_DIR", "logs"))
 LOG_FILE = LOGS_DIR / "agent.log"
 SESSIONS_DB = os.getenv("WEEBOT_SESSIONS_DB", "./weebot_sessions.db")
@@ -75,6 +78,20 @@ class WeebotSettings(BaseSettings):
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     openrouter_api_key: str | None = None  # env: OPENROUTER_API_KEY
+
+    # Local models served by Ollama (see docs/OLLAMA.md). Off by default: nothing about
+    # routing, the catalog or any role cascade changes until OLLAMA_ENABLED is set.
+    ollama_enabled: bool = False  # env: OLLAMA_ENABLED
+    ollama_base_url: str = "http://localhost:11434/v1"  # env: OLLAMA_BASE_URL
+    ollama_model: str = "qwen3:8b"  # env: OLLAMA_MODEL, an `ollama list` tag
+    # Must equal the model's real num_ctx. Ollama's /v1 endpoint ignores a per-request
+    # num_ctx, so raise it with a Modelfile (deploy/ollama/Modelfile) and set this to match.
+    ollama_context_window: int = 4096  # env: OLLAMA_CONTEXT_WINDOW
+    # Roles that try an Ollama model first, comma separated; the others never use one.
+    # `role` uses OLLAMA_MODEL; `role=tag` picks another, e.g. a cloud tag ending in
+    # `-cloud` (runs on Ollama's servers, after `ollama signin`):
+    # "summarizer,documentation,verifier=gemma4:31b-cloud".
+    ollama_roles: str = "summarizer,documentation"  # env: OLLAMA_ROLES
 
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
@@ -371,6 +388,24 @@ class WeebotSettings(BaseSettings):
             "Seconds a model call may queue for an LLM concurrency slot before it is "
             "refused with LLMCapacityExhaustedError. Queue time does not count "
             "against the model's own timeout."
+        ),
+    )
+    session_cost_soft_usd: float = Field(
+        default=0.50,
+        ge=0,
+        alias="WEEBOT_SESSION_COST_SOFT_USD",
+        description=(
+            "Per-session spend (USD) above which the cascade skips PREMIUM models for the "
+            "rest of the session. 0 disables. Default is about the measured p99."
+        ),
+    )
+    session_cost_hard_usd: float = Field(
+        default=2.50,
+        ge=0,
+        alias="WEEBOT_SESSION_COST_HARD_USD",
+        description=(
+            "Per-session spend (USD) at which the flow asks to continue (ADR-013), then ends "
+            "as BUDGET_EXCEEDED if refused. 0 disables."
         ),
     )
     max_concurrent_flows: int = Field(

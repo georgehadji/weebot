@@ -107,14 +107,47 @@ class FactoriesMixin:
 
         return create_default_sandbox()
 
-    @staticmethod
-    def _create_llm(default_model: str | None) -> LLMPort:
+    def _bounded_llm(self, llm: LLMPort) -> LLMPort:
+        """Every LLMPort this container hands out passes through the global pool (ORCH-1).
+
+        The cascade already held the pool; the planner, optimizer, verifiers and
+        critics called the port directly and were invisible to it.
+        """
+        from weebot.application.di.keys import LLM_POOL
+        from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.application.strategies.llm_pool import BoundedLLMAdapter
+
+        bus = self._maybe_get(EventBusPort)
+        return BoundedLLMAdapter(
+            llm,
+            self.get(LLM_POOL),
+            on_completed=bus.publish_domain_event if bus is not None else None,
+        )
+
+    def create_llm_for_model(self, model_id: str) -> LLMPort:
+        """A pool-bounded ``LLMPort`` for *model_id* — the public way to get one (WB-02).
+
+        This exists because the CLI used to build its own adapter through
+        ``ModelSelectionService.create_llm_adapter``, outside this container. That was a
+        second construction site, and ``test_llm_clients_are_built_by_the_factory`` could
+        not see it: that gate looks for concrete adapter *classes*, while the CLI path
+        went through the factory *function*. So the port reached ``ExecutorAgent``
+        unwrapped and its two direct ``chat`` calls (``_tool_executor.py:587``,
+        ``_context_compressor.py:246``) escaped ``LLMPool`` entirely.
+
+        Delegates to the per-model factory the SkillOpt mixin already owns rather than
+        duplicating it; both mixins are part of this container, and that method already
+        applies ``_bounded_llm``.
+        """
+        return self._create_llm_by_id(model_id)
+
+    def _create_llm(self, default_model: str | None) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
         from weebot.config.model_registry import ModelProvider
 
         model = default_model or MODEL_DI_DEFAULT
         provider = ModelProvider.from_model_name(model).value
-        return create_adapter(provider, model=model)
+        return self._bounded_llm(create_adapter(provider, model=model))
 
     def _create_mediator(self):
         return self.build_mediator()
@@ -159,9 +192,10 @@ class FactoriesMixin:
 
     @staticmethod
     def _create_tool_discovery():
+        from weebot.application.services.tool_registry import RoleBasedToolRegistry
         from weebot.infrastructure.adapters.tool_discovery import ToolDiscoveryAdapter
 
-        return ToolDiscoveryAdapter()
+        return ToolDiscoveryAdapter(RoleBasedToolRegistry())
 
     @staticmethod
     def _create_rerank_adapter():
@@ -176,6 +210,20 @@ class FactoriesMixin:
         )
 
         return SQLiteGatewaySessionStore()
+
+    def _effect_ledger(self):
+        """The outbound-action ledger over the event store, or None without one."""
+        from weebot.application.ports.event_store_port import EventStorePort
+        from weebot.application.services.effect_ledger import EffectLedger
+
+        store = self._maybe_get(EventStorePort)
+        return EffectLedger(store) if store is not None else None
+
+    @staticmethod
+    def _create_api_key_store():
+        from weebot.infrastructure.security.sqlite_api_key_store import SQLiteApiKeyStore
+
+        return SQLiteApiKeyStore()
 
     @staticmethod
     def _create_flow_serializer():
@@ -196,17 +244,18 @@ class FactoriesMixin:
 
         return FileSystemSoulProvider()
 
-    @staticmethod
-    def _create_llm_for_role(role: str) -> LLMPort:
+    def _create_llm_for_role(self, role: str) -> LLMPort:
         """Create an LLMPort for a specific role from ROLE_MODEL_CONFIG.
 
         Falls back to the default model if the role is not configured.
         """
-        from weebot.config.model_refs import ROLE_MODEL_CONFIG
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG, get_model_cascade_for_role
 
-        models = ROLE_MODEL_CONFIG.get(role, [])
+        # The role cascade, so OLLAMA_ROLES applies here too; a role with no entry keeps
+        # falling back to the default model, as before.
+        models = get_model_cascade_for_role(role) if role in ROLE_MODEL_CONFIG else []
         model = models[0] if models else None
-        return FactoriesMixin._create_llm(model)
+        return self._create_llm(model)
 
     # _create_intent_review_service() and _create_main_review_service() used to
     # live here, behind the "intent_review" and "main_review" bindings. Neither
@@ -214,31 +263,27 @@ class FactoriesMixin:
     # reviewers on the same role tiers, and PlanningState's in-flow intent
     # check deliberately uses the flow's own model. Removed in phase 2.3.
 
-    @staticmethod
-    def _create_idea_gate() -> IdeaGate:
+    def _create_idea_gate(self) -> IdeaGate:
         from weebot.application.services.idea_gate import IdeaGate
         from weebot.application.services.intent_review_service import IntentReviewService
         from weebot.application.services.main_review_service import MainReviewService
 
-        critic_llm = FactoriesMixin._create_llm_for_role("critic")
-        verifier_llm = FactoriesMixin._create_llm_for_role("verifier")
+        critic_llm = self._create_llm_for_role("critic")
+        verifier_llm = self._create_llm_for_role("verifier")
         intent_reviewer = IntentReviewService(llm=critic_llm)
         main_reviewer = MainReviewService(llm=verifier_llm)
         return IdeaGate(intent_reviewer=intent_reviewer, main_reviewer=main_reviewer)
 
-    @staticmethod
-    def _create_dreamer_agent() -> DreamerAgent:
+    def _create_dreamer_agent(self) -> DreamerAgent:
         from weebot.application.agents.dreamer import DreamerAgent
 
-        llm = FactoriesMixin._create_llm_for_role("dreamer")
+        llm = self._create_llm_for_role("dreamer")
         return DreamerAgent(llm=llm, max_contracts=5)
 
-    @staticmethod
-    def _create_code_reviewer() -> CodeReviewerService:
+    def _create_code_reviewer(self) -> CodeReviewerService:
         from weebot.application.services.code_reviewer_service import CodeReviewerService
-        from weebot.application.di._factories import FactoriesMixin
 
-        llm = FactoriesMixin._create_llm_for_role("reviewer")
+        llm = self._create_llm_for_role("reviewer")
         return CodeReviewerService(llm=llm, timeout_seconds=8.0)
 
     @staticmethod
@@ -267,11 +312,10 @@ class FactoriesMixin:
 
         return LocalWorkspaceSnapshotAdapter()
 
-    @staticmethod
-    def _create_retention_agent() -> RetentionAgent:
+    def _create_retention_agent(self) -> RetentionAgent:
         from weebot.application.agents.retention_agent import RetentionAgent
 
-        llm = FactoriesMixin._create_llm_for_role("subagent")
+        llm = self._create_llm_for_role("subagent")
         return RetentionAgent(llm=llm)
 
     @staticmethod
@@ -428,7 +472,7 @@ class FactoriesMixin:
         container's ``tool_wiring``, so every collection built from it gets
         the same collaborators (W5.5).
         """
-        from weebot.tools.tool_registry import RoleBasedToolRegistry
+        from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
         return RoleBasedToolRegistry(wiring=self.tool_wiring)
 
@@ -467,6 +511,7 @@ class FactoriesMixin:
                     "persistent_memory": "memory"}
         return {
             "state_repo": state_repo,
+            "browser_factory": self._playwright_adapter,
             "rerank": self._maybe_get(RerankPort),
             "tool_config": self._maybe_get(ToolConfig),
             "collaborators": {
@@ -474,6 +519,13 @@ class FactoriesMixin:
                 if kwargs[required[name]] is not None
             },
         }
+
+    @staticmethod
+    def _playwright_adapter():
+        """One Playwright adapter for the registry to share between the browser tools."""
+        from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+
+        return PlaywrightAdapter()
 
     def _vision_llm(self):
         """The vision model, for `ocr` when Tesseract is not installed (or None)."""
@@ -483,7 +535,7 @@ class FactoriesMixin:
 
         try:
             provider = ModelProvider.from_model_name(MODEL_VISION_PRIMARY).value
-            return create_adapter(provider, model=MODEL_VISION_PRIMARY)
+            return self._bounded_llm(create_adapter(provider, model=MODEL_VISION_PRIMARY))
         except Exception as exc:
             logger.debug("No vision LLM for ocr: %s", exc)
             return None

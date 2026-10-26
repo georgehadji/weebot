@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-28
+---
+
 # Self-Review — Paper Enhancement Roadmap
 
 **Reviewed:** `tasks/plans/paper_enhancement_roadmap.md`

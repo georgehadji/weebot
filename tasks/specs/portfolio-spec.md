@@ -1,3 +1,9 @@
+---
+status: reference
+date: 2026-06-10
+note: website spec from an agent build run
+---
+
 # Portfolio Website — Maya Rivera
 
 > **Project:** Single-File HTML5 Portfolio for Maya Rivera, Freelance Web Designer  

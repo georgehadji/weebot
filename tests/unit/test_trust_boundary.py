@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of, wrap_untrusted
 from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
 
 # ---------------------------------------------------------------------------
@@ -48,36 +48,47 @@ class TestWrapUntrusted:
 
 
 # ---------------------------------------------------------------------------
-# is_untrusted_tool
+# declared trust of the real tool classes
 # ---------------------------------------------------------------------------
 
 
-class TestIsUntrustedTool:
+def _tool_class(module: str, cls: str):
+    import importlib
+
+    return getattr(importlib.import_module(module), cls)
+
+
+class TestDeclaredTrust:
     @pytest.mark.parametrize(
-        "tool",
+        ("module", "cls"),
         [
-            "web_search",
-            "advanced_browser",
-            "browser_tool",
-            "browser_inspector",
-            "vane_search",
-            "video_ingest_tool",
-            "ocr",
-            "knowledge_tool",
-            "apify_actor_tool",
+            ("weebot.tools.web_search", "WebSearchTool"),
+            ("weebot.tools.advanced_browser", "AdvancedBrowserTool"),
+            ("weebot.tools.browser_tool", "BrowserTool"),
+            ("weebot.tools.browser_inspector", "BrowserInspectorTool"),
+            ("weebot.tools.vane_search", "VaneSearchTool"),
+            ("weebot.tools.video_ingest_tool", "VideoIngestTool"),
+            ("weebot.tools.ocr", "OCRTool"),
+            ("weebot.tools.apify_actor_tool", "ApifyActorTool"),
+            ("weebot.tools.file_editor", "StrReplaceEditorTool"),
         ],
     )
-    def test_known_tools_flagged(self, tool):
-        assert is_untrusted_tool(tool) is True
+    def test_external_content_tools_fence_and_taint(self, module, cls):
+        trust = trust_of(_tool_class(module, cls))
+        assert must_fence(trust) and must_taint(trust, False)
 
-    @pytest.mark.parametrize("tool", ["bash_execute", "file_editor", "python_execute", "todo_tool"])
-    def test_internal_tools_not_flagged(self, tool):
-        # bash_execute and python_execute are NOT in the untrusted list —
-        # they are local execution, not external-content ingestion.
-        assert is_untrusted_tool(tool) is False or tool == "file_editor"
-
-    def test_file_editor_is_flagged(self):
-        assert is_untrusted_tool("file_editor") is True
+    @pytest.mark.parametrize(
+        ("module", "cls"),
+        [
+            ("weebot.tools.bash_tool", "BashTool"),
+            ("weebot.tools.python_tool", "PythonExecuteTool"),
+            ("weebot.tools.todo_tool", "TodoWriteTool"),
+            ("weebot.tools.knowledge_tool", "KnowledgeTool"),
+        ],
+    )
+    def test_local_tools_neither_fence_nor_taint(self, module, cls):
+        trust = trust_of(_tool_class(module, cls))
+        assert not must_fence(trust) and not must_taint(trust, False)
 
 
 # ---------------------------------------------------------------------------

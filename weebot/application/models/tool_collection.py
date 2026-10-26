@@ -109,6 +109,24 @@ class ToolCollection:
         """Look up a tool by name. Returns None if not found."""
         return self._tools.get(name)
 
+    def canonical_args(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        """The arguments as ``execute`` will actually run them (canonicalizer applied).
+
+        Two spellings of one action (a path with ``./``, a default filled in) must
+        key to the same effect, so the ledger asks here. Without a canonicalizer,
+        or when it blocks, the arguments are returned as given.
+        """
+        if self._canonicalizer is None:
+            return dict(args)
+        try:
+            result = self._canonicalizer.canonicalize(name, dict(args))
+        except Exception:
+            logger.debug("canonicalizer failed for %s; keying on raw args", name, exc_info=True)
+            return dict(args)
+        if result.verdict != "block" and result.changes:
+            return dict(result.corrected_args)
+        return dict(args)
+
     async def teardown(self) -> None:
         """Shut down all tools that expose a shutdown() coroutine.
 

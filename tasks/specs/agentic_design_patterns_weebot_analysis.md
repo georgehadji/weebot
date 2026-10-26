@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-07-30
+---
+
 # Agentic Design Patterns (Gulli) → weebot Value Analysis
 
 **Source:** `Papers/Agentic-Design-Patterns.pdf` / `Agentic-Design-Patterns-main/Agentic_Design_Patterns_Complete.pdf`

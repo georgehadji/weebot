@@ -33,9 +33,16 @@ class SkillsMixin:
 
         # Phase 3: semantic (embedding-based) first stage
         if SEMANTIC_SKILL_RETRIEVAL_ENABLED:
-            from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
+            from weebot.application.services.semantic_skill_retriever import (
+                _DEFAULT_DIM,
+                SemanticSkillRetriever,
+            )
+            from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
 
-            base = SemanticSkillRetriever(registry)
+            # The store is constructed here, not defaulted inside the service: an
+            # application service reaching into infrastructure for a default is the
+            # edge app-no-infrastructure forbids (WB-01).
+            base = SemanticSkillRetriever(registry, store=NumpyVectorStore(dim=_DEFAULT_DIM))
             rerank = self._maybe_get(RerankPort)
             if rerank is not None:
                 from weebot.application.services.reranking_skill_retriever import (

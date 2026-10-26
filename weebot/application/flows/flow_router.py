@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from weebot.domain.services.session_lessons import project_key
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.planning import PlanningState
@@ -217,18 +218,19 @@ class FlowRouter:
         if journal is None:
             return
         try:
-            import asyncio
+            from weebot.core.background_tasks import get_background_tasks
             from weebot.domain.models.misalignment_entry import MisalignmentEntry
 
-            asyncio.ensure_future(
+            get_background_tasks().spawn(
                 journal.record(
                     MisalignmentEntry(
                         session_id=session.id,
-                        project_path=session.context.get("working_dir", ""),
+                        project_path=project_key(session.context.get("working_dir")),
                         symptom="user_correction",
                         correction_text=prompt[:500],
                     )
-                )
+                ),
+                name="misalignment-journal",
             )
         except ImportError:
             pass

@@ -76,8 +76,10 @@ class BaseNotificationAdapter:
             import asyncio as _asyncio
 
             try:
-                loop = _asyncio.get_running_loop()
+                _asyncio.get_running_loop()
             except RuntimeError:
                 _asyncio.run(self._http_client.close())
             else:
-                loop.create_task(self._http_client.close())
+                from weebot.core.background_tasks import get_background_tasks
+
+                get_background_tasks().spawn(self._http_client.close(), name="notifier-http-close")

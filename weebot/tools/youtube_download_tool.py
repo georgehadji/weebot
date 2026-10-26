@@ -14,7 +14,8 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import BaseModel, Field
 
@@ -84,6 +85,8 @@ class YouTubeDownloadTool(BaseTool):
         youtube_download(url="https://twitter.com/user/status/123",
                          format="mp4")
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     default_timeout_seconds: int = _DOWNLOAD_TIMEOUT_SEC
     name: str = "youtube_download"

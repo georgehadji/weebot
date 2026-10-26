@@ -8,8 +8,9 @@ old content from every session, web pages included, and was not fenced.
 
 from __future__ import annotations
 
-from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
+from weebot.tools.search_history import SearchHistoryTool
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 _RUNS_THINGS = {
     "bash", "powershell", "python_execute", "terminate",
@@ -23,4 +24,5 @@ def test_the_webhook_role_holds_no_process_or_desktop_tool():
 
 
 def test_search_history_output_is_untrusted():
-    assert is_untrusted_tool("search_history") and taints_egress_context("search_history")
+    trust = trust_of(SearchHistoryTool)
+    assert must_fence(trust) and must_taint(trust, False)

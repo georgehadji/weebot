@@ -107,6 +107,23 @@ async def test_crashed_flow_publishes_failed_presence():
 
 
 @pytest.mark.asyncio
+async def test_a_flow_that_ended_failed_is_not_reset_to_waiting():
+    """A rejected plan (402) left the session WAITING: the UI offered input to a dead run."""
+    from weebot.domain.models.session import SessionStatus
+
+    session = Session(id="s6", user_id="u", agent_id="a")
+    event_bus = AsyncMock()
+    runner, state_repo = _make_runner(session, event_bus)
+
+    flow = _StubFlow([], done=False)
+    flow._session = session.set_status(SessionStatus.FAILED)
+    await runner.start_session(session, lambda s: flow)
+    await runner._tasks["s6"]
+
+    assert state_repo.save_session.await_args_list[-1].args[0].status == SessionStatus.FAILED
+
+
+@pytest.mark.asyncio
 async def test_no_event_bus_does_not_raise():
     session = Session(id="s4", user_id="u", agent_id="a")
     state_repo = AsyncMock()
@@ -116,3 +133,25 @@ async def test_no_event_bus_does_not_raise():
 
     flow = _StubFlow([DoneEvent()])
     await runner.start_session(session, lambda s: flow)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_the_planners_title_is_persisted_and_announced_to_the_rail():
+    """UI/UX plan 2.1: TitleEvent used to be dropped; now it replaces the derived title."""
+    from weebot.domain.models.event import TitleEvent
+
+    session = Session(id="s5", user_id="u", agent_id="a")
+    event_bus = AsyncMock()
+    runner, state_repo = _make_runner(session, event_bus)
+
+    await runner.start_session(session, lambda s: _StubFlow([TitleEvent(title="Quarterly report")]))
+    await runner._tasks["s5"]
+
+    saved = [c.args[0] for c in state_repo.save_session.await_args_list]
+    assert saved[-1].title == "Quarterly report"
+    titles = [
+        c.args[0].title
+        for c in event_bus.publish.await_args_list
+        if isinstance(c.args[0], SessionPresenceEvent)
+    ]
+    assert "Quarterly report" in titles

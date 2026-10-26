@@ -1,4 +1,4 @@
-import { AgentEvent, ModelInfo, Session } from "@/types/events";
+import { AgentEvent, ModelInfo, RoleModel, Session } from "@/types/events";
 
 /** Same-origin API base by default; respects an explicitly configured backend. */
 export function getApiBase(): string {
@@ -162,6 +162,14 @@ export const api = {
   models: {
     list: () => fetchApi<ModelInfo[]>("/models"),
     available: () => fetchApi<string[]>("/models/available"),
+    roles: () => fetchApi<RoleModel[]>("/models/roles"),
+    setRole: (role: string, model: string) =>
+      fetchApi<RoleModel>(`/models/roles/${encodeURIComponent(role)}`, {
+        method: "PUT",
+        body: JSON.stringify({ model }),
+      }),
+    resetRole: (role: string) =>
+      fetchApi<RoleModel>(`/models/roles/${encodeURIComponent(role)}`, { method: "DELETE" }),
   },
 
   health: {

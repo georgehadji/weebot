@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # D26 and D28 — the two liveness candidates
 
 Execution record for the Priority 2 candidates ranked by

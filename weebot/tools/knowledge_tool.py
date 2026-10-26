@@ -10,7 +10,8 @@ Author: Georgios-Chrysovalantis Chatzivantsidis
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -32,6 +33,8 @@ class KnowledgeTool(BaseTool):
     list_notes  -- Browse notes (filter by project_id and/or tags)
     delete_note -- Remove a stale note by note_id
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     truncation_strategy: str = "boundary"
     name: str = "knowledge"

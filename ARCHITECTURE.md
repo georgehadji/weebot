@@ -1,9 +1,9 @@
 # ARCHITECTURE.md — weebot AI Orchestrator
 
 **Last updated:** 2026-07-07 (Architecture 9 Plan — Phase 1–2, 11/15 steps)
-**Architecture score:** 9.0/10 (post-Architecture 9 Plan — Phase 1 Foundation + Phase 2 Structural Consolidation)
-**Last audit:** _archive/root-2026-10-23/reports/implementation_audit_report.md — APPROVED WITH CONDITIONS (2026-07-07)
-**Maturity:** Production
+**Architecture score:** see the audit records, `tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md` (EGFV static audit of 2026-10-25: 7/10) and `tasks/specs/arch_audit_2026_10_remediation_plan.md` (2026-10-24: 4/10 before that wave). The 9.0 once printed here was a hand-typed self-score and had gone stale.
+**Last audit:** 2026-10-24 EGFV static audit, remediation plan above. Earlier: _archive/root-2026-10-23/reports/implementation_audit_report.md (2026-07-07)
+**Maturity:** Early production. "Production" returns when the Sep plan's Phase 5.5 (replica proof) passes; the app is single-replica until then.
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
 
 ---
@@ -13,7 +13,12 @@
 
 ## Architecture Remediation Update (2026-06-18)
 
-**Audit score:** 6/10 → **Estimated: 7.5-8.0/10** (post-remediation)
+**Audit score:** not stated here. This section is a 2026-06-18 record of what changed,
+and it used to carry "6/10 → Estimated: 7.5-8.0/10 (post-remediation)" — an estimate for
+that date that the header's own measurement contradicts (the 2026-10-24 audit scored the
+*later* code 4/10, and the 2026-10-25 audit after the wave-2 plan scored it 7/10). Scores
+live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` and
+`tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md` (WB-05).
 **Remediation plan:** ARCHITECTURE_REMEDIATION_PLAN.md
 **ExecutorAgent:** 1,414 lines → 803 lines (−43%), 4 collaborators extracted
 
@@ -35,6 +40,9 @@
 **ADR-006:** Port Rationalization (2026-06-18) — Delete ports with <2 implementations and no planned polymorphism. 2 deprecated ports deleted. 27 single-impl ports retained as they have callers.
 
 **ADR-007:** ExecutorAgent Extraction (2026-06-18) — Split 1,414-line god class into 5 focused units: orchestrator (`_base.py`, ~800 lines), cascade executor (295 lines), tool executor (198 lines), context compressor (149 lines), error handler (129 lines).
+> **Amendment 2026-10-24 (DOC-3).** The sizes above were true on 2026-06-18 and are not now: `_base.py` grew past them (`lint_long_functions.py --list` shows `ExecutorAgent.execute_step` among the over-150-line functions). The target is no longer prose. It is the `functions_over_150_lines` ratchet in `tasks/quality/ceilings.toml`, which only moves down when a god method is split.
+
+> **Amendment 2026-10-24 (DOC-2, decision D4).** `TaskQueuePort` was NOT deleted and is kept on purpose, reserved for the Sep plan's Phase 5.2 (scheduler extraction and multi-process work dispatch). Both adapters (`infrastructure/queue/in_memory_task_queue.py`, `redis_task_queue.py`) stay under a shared contract test so they do not rot while unused.
 
 **ADR-008:** Port Rationalization v2 (2026-06-18) — ToolDiscoveryPort and TaskQueuePort deleted (zero non-TYPE_CHECKING runtime callers). Plan's original estimate of "39 deletable ports" corrected to 2 — remaining 30 single-impl ports all have DI registrations or runtime consumers and are retained with planned-polymorphism documentation.
 
@@ -57,8 +65,8 @@
 | # | Item | Severity | Status |
 |---|------|----------|--------|
 | D1 | Root-level stray files (4 remaining) | LOW | `agent_selection`, `failure_recovery`, `tray`, `notifications` deferred to 2027-03-01 |
-| D2 | Core framework coupling — `agent.py` LangChain deps | MEDIUM | Deferred to `agent_core_v2` sunset (2027-03-01) per ADR-009 |
-| D3 | `.importlinter` ignore_imports (count: `import_exemptions` in `tasks/quality/ceilings.toml`; target ≤25) | LOW | Remaining 10 entries need DI refactoring (Steps 2.3-2.4 deferred work) |
+| D2 | Core framework coupling — `agent.py` LangChain deps | — | CLOSED 2026-10-24: `core/agent.py` deleted (plan 3.5, decision D3) |
+| D3 | `.importlinter` ignore_imports | LOW | Count and target live in `import_exemptions` in `tasks/quality/ceilings.toml` (`scripts/lint_import_exemptions.py`); this table states no number |
 | D4 | `plan_act_flow.py` over its 700-line target | MEDIUM | 2.2.3-2.2.4 preamble/tool-result extraction deferred; needs step-by-step tests |
 | D5 | `_base.py` over its 650-line target | MEDIUM | `_handle_step_completion` extracted; preamble (~166 lines) still inline |
 | D6 | `behavior_tracker.py` git ops in core layer | LOW | Extracted to async helper; needs migration to infrastructure/persistence (P4) |
@@ -139,7 +147,8 @@ graph TD
     app -->|"depends on"| domain
     infra -->|"implements ports"| app
     infra -->|"implements ports"| domain
-    tools -->|"depends on"| app
+    tools -->|"depends on ports, wired by DI"| app
+    tools -->|"BaseTool, ToolResult"| domain
     tools -->|"uses"| core
     app -->|"uses"| core
     core -.->|"(no inward deps)"| domain

@@ -6,9 +6,9 @@ refuse ``moli_fetch`` or ``advanced_browser`` as a bot often load in it. It
 does not solve CAPTCHAs and Weebot never logs in through it.
 
 Security:
-- The output is third-party text. ``camofox_browser`` is in
-  ``core.trust_boundary.UNTRUSTED_OUTPUT_TOOLS``: the executor fences it and
-  the session is tainted for the egress check. Typing into a page is egress
+- The output is third-party text. ``camofox_browser`` declares
+  ``OutputTrust.EXTERNAL``: the executor fences it and the session is tainted
+  for the egress check. Typing into a page is egress
   (``core.egress_guard``).
 - The tool starts its own server on 127.0.0.1, on a free port, with a random
   access key held only in memory, telemetry off and ``NODE_ENV=production``
@@ -34,7 +34,8 @@ import secrets
 import shutil
 import socket
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 from urllib.parse import urlsplit
 
 import httpx
@@ -196,6 +197,8 @@ async def _url_error(url: str) -> str | None:
 
 class CamofoxBrowserTool(BaseTool):
     """Drive stealth Firefox tabs: open, read, click, type."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "camofox_browser"
     description: str = (

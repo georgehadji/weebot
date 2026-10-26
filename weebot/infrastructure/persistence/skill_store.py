@@ -7,6 +7,7 @@ dedicated table alongside the existingsession/trajectory tables.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, UTC
 from pathlib import Path
@@ -104,7 +105,7 @@ class SkillStore(SkillStorePort):
             raise FileNotFoundError(f"Skill '{name}' not found")
         content = skill.export_best()
         path = Path(output_path)
-        path.write_text(content, encoding="utf-8")
+        await asyncio.to_thread(path.write_text, content, encoding="utf-8")
         logger.info("Exported best skill '%s' to %s", name, output_path)
 
     async def close(self):

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-28
+---
+
 # Self-Evaluation — Architecture Elevation Plan V2
 
 **Plan reviewed:** `tasks/plans/architecture_elevation_v2.md`

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-08-08
+---
+
 # Prime Agent: how it works, and what weebot should take from it
 
 **Date:** 2026-08-06

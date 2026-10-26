@@ -8,12 +8,13 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, StateId, register_state
 from weebot.domain.models.event import AgentEvent
 
 logger = logging.getLogger(__name__)
 
 
+@register_state(StateId.SUMMARIZING)
 class SummarizingState(FlowState):
     """Handles the generation of the final task summary."""
 

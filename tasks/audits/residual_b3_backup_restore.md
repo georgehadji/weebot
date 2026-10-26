@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # B3 — backup and restore: the named test gap
 
 Execution record for phase B3 of

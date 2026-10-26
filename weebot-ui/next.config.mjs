@@ -5,6 +5,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The browser tests build into their own directory so they never clobber a running `next dev`.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+
   // Standalone output for Docker: produces .next/standalone/ with server + assets
   output: 'standalone',
 

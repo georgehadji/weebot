@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # Wave 7 — Tools & Resource Lifecycle
 
 Execution record for W7. Threats **T7**, **T1**; classes **C5**, **C1**, **C9**.

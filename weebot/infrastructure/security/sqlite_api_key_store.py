@@ -11,11 +11,7 @@ for constant-time comparison.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
-import os
-import secrets
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,45 +24,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# scrypt parameters — balanced for API key verification.
-# API keys have high entropy (48 bytes urlsafe base64), so scrypt's
-# primary value is slowing brute-force on leaked hashes.
-_SCRYPT_N = 2**14  # CPU/memory cost (16384)
-_SCRYPT_R = 8  # block size
-_SCRYPT_P = 1  # parallelization factor
-_SCRYPT_DKLEN = 32  # output length in bytes
-_SALT_BYTES = 32  # salt length for scrypt
-
-
-def _lookup_hash(raw_key: str) -> str:
-    """SHA-256 of the raw key — deterministic, used for record lookup."""
-    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
-
-
-def _hash_key(raw_key: str) -> tuple[str, str]:
-    """Hash an API key with a random salt using scrypt.
-
-    Returns (scrypt_hash_hex, salt_hex).
-    """
-    salt = os.urandom(_SALT_BYTES)
-    key_bytes = raw_key.encode("utf-8")
-    dk = hashlib.scrypt(
-        key_bytes, salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
-    )
-    return dk.hex(), salt.hex()
-
-
-def _verify_key(raw_key: str, stored_hash_hex: str, salt_hex: str) -> bool:
-    """Verify a raw key against a stored scrypt hash + salt.
-
-    Uses hmac.compare_digest for constant-time comparison.
-    """
-    salt = bytes.fromhex(salt_hex)
-    key_bytes = raw_key.encode("utf-8")
-    dk = hashlib.scrypt(
-        key_bytes, salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
-    )
-    return hmac.compare_digest(dk.hex(), stored_hash_hex)
+# The hashing lives in weebot.core.api_key_crypto (pure, public) because the web
+# layer verifies keys with it too. These aliases keep the CLI and older tests,
+# which import the underscored names from here, working.
+from weebot.core.api_key_crypto import (  # noqa: E402, F401
+    generate_raw_key as _generate_raw_key,
+    hash_key as _hash_key,
+    lookup_hash as _lookup_hash,
+    verify_key as _verify_key,
+)
 
 
 class SQLiteApiKeyStore(ApiKeyPort):
@@ -205,4 +171,4 @@ class SQLiteApiKeyStore(ApiKeyPort):
     @staticmethod
     def generate_raw_key() -> str:
         """Generate a cryptographically random API key."""
-        return f"wb_{secrets.token_urlsafe(48)}"
+        return _generate_raw_key()

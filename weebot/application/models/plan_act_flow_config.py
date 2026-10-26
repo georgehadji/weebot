@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from weebot.application.services.truth_binder import TruthBinder
     from weebot.config.harness.schema import HarnessConfig
     from weebot.core.personality_manager import PersonalityManager
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 
 @dataclass
@@ -99,6 +99,8 @@ class PlanActFlowConfig:
     max_steps: int | None = None
     auto_terminate_on_plan_complete: bool = True
     termination_conditions: list | None = None  # list[TerminationCondition]
+    cost_meter: object | None = None  # SessionCostMeter: per-session spend (plan 2.4, D6)
+    session_cost_hard_usd: float | None = None  # per-flow override of the hard limit; 0 disables
     planning_mode: str = "auto"  # "sequential", "dppm", or "auto" (dppm for complex tasks)
 
     # ── Critique & validation ───────────────────────────────────────

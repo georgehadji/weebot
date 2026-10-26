@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-05
+---
+
 # Pre-Existing Architecture Debt — Remediation Plan
 
 **Status:** proposed

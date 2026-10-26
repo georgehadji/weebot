@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
+import { LazyPlanVisualizer } from "@/components/plan/LazyPlanVisualizer";
 import { api } from "@/lib/api";
 import type { StepStatus } from "@/types/events";
 
@@ -62,7 +62,7 @@ export function PlanTab({ sessionId }: PlanTabProps) {
   }
 
   if (error) {
-    return <p className="p-4 text-xs text-status-error">{error}</p>;
+    return <p className="p-4 text-xs text-status-error-fg">{error}</p>;
   }
 
   if (!nodes || nodes.length === 0) {
@@ -75,7 +75,7 @@ export function PlanTab({ sessionId }: PlanTabProps) {
 
   return (
     <div className="p-2">
-      <PlanVisualizer steps={nodes} />
+      <LazyPlanVisualizer steps={nodes} />
     </div>
   );
 }

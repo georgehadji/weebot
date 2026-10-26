@@ -3,128 +3,48 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.domain.services.session_lessons import project_key
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    register_state,
+)
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
-    MessageEvent,
     PlanEvent,
-    ToolApprovalEvent,
-    ToolEvent,
-    WaitForUserEvent,
 )
 from weebot.domain.models.plan import Step, StepStatus
-from weebot.domain.models.session import SessionStatus
 
-from weebot.application.flows.collaborators.user_pause import pause_for_user
-from weebot.application.services.tool_approval import mark_tool_approval_pending
+from weebot.application.flows.states._execution_gates import apply_pre_step_gates
+from weebot.application.flows.states._step_outcome import (
+    absorb_step_result,
+    complete_step,
+    error_hooks,
+    next_transition,
+    pause_for_human,
+    post_task_hooks,
+    pre_task_hooks,
+    progress_gate,
+    quality_gate,
+    route_failure,
+)
+from weebot.application.flows.states._step_run import run_step_command
 
 logger = logging.getLogger(__name__)
 
-# ── Code step detection helpers (Phase 8: per-step code review) ────
-# Tool names whose presence indicates a code-producing step
-_CODE_TOOL_NAMES: frozenset[str] = frozenset(
-    {
-        "file_editor",
-        "edit_file",
-        "write_file",
-        "create_file",
-        "bash",
-        "shell",
-        "execute_command",
-        "run_command",
-        "write",
-        "edit",
-        "patch",
-    }
-)
-
-# Step description keywords that indicate code production
-_CODE_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "implement",
-        "write",
-        "create file",
-        "edit file",
-        "modify",
-        "add function",
-        "add method",
-        "add class",
-        "fix bug",
-        "refactor",
-        "update file",
-        "generate",
-        "scaffold",
-        "build",
-        "code",
-        "script",
-        "patch",
-    }
-)
-
-# Reviewer retries gate — must match _MAX_REVIEW_RETRIES in ReviewingState
-_MAX_REVIEW_RETRIES_GATE: int = 2
+# The code-step detection helpers, `mark_user_gate` and `step_fetched_inbound_mail`
+# moved to `_step_outcome.py` and `_step_run.py` with the code that uses them (WB-06).
 
 
-def _is_code_step(step: Step, events: list[Any] | None = None) -> bool:
-    """Return True if this step likely produced or modified code.
-
-    Uses both keyword matching on the step description and, when available,
-    tool-name inspection from captured execution events.
-    """
-    desc_lower = step.description.lower()
-    if any(kw in desc_lower for kw in _CODE_KEYWORDS):
-        return True
-    if events:
-        for e in events:
-            if isinstance(e, dict):
-                if e.get("tool_name", "") in _CODE_TOOL_NAMES:
-                    return True
-    return False
-
-
-def _mark_user_gate(session: Any, gate: str) -> Any:
-    """Record that the flow is pausing on *gate* and awaiting a human answer.
-
-    The flag lives in ``context.extra`` because that is the store
-    ``SessionContext.get`` reads -- it checks declared fields and then
-    ``extra``, and never ``context.facts``, where ``set_fact`` writes.
-    ``FlowRouter.resolve_initial_state`` keys its routing off this, and a gate
-    that does not set it is resumed by the branch that ignores the user's
-    reply entirely.
-    """
-    new_extra = {**session.context.extra, "_user_gate_pending": gate}
-    new_ctx = session.context.model_copy(update={"extra": new_extra})
-    return session.model_copy(update={"context": new_ctx})
-
-
-def _step_fetched_inbound_mail(events: list[Any]) -> bool:
-    """Return True if any event is a completed atomic_mail jmap_request.
-
-    Used to flag a session so the NEXT step is gated through approval_policy
-    before the agent can act on untrusted inbound email content (ADR 006 / R1).
-
-    A jmap_request is the read path (list/fetch/search mail); register and help
-    do not return inbound content and are not gated.
-    """
-    from weebot.domain.models.event import ToolEvent
-
-    for e in events:
-        if (
-            isinstance(e, ToolEvent)
-            and e.tool_name == "atomic_mail"
-            and e.status.value == "called"
-            and (not e.function_args or e.function_args.get("action") == "jmap_request")
-        ):
-            return True
-    return False
-
-
+@register_state(StateId.EXECUTING)
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
 
@@ -261,7 +181,7 @@ class ExecutingState(FlowState):
             await journal.record(
                 MisalignmentEntry(
                     session_id=context._session.id,
-                    project_path=context._session.context.get("working_dir", ""),
+                    project_path=project_key(context._session.context.get("working_dir")),
                     symptom="constraint_violation",
                     constraint_text=constraint_text,
                     step_description=step.description,
@@ -271,9 +191,15 @@ class ExecutingState(FlowState):
             logger.warning("Misalignment journal write failed: %s", exc)
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.verifying import VerifyingState
-        from weebot.application.flows.states.updating import UpdatingState
+        """Advance one step, then decide where the flow goes next.
 
+        This method is the *order* of the loop and nothing else: the gates before a step
+        live in `_execution_gates`, the mediated call and its event classification in
+        `_step_run`, and every post-step decision in `_step_outcome`. It was 509 lines
+        with all of that inline (WB-06 in
+        tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md), which made an ordering
+        change indistinguishable from a routing change in review.
+        """
         if context._plan is None:
             yield ErrorEvent(error="No plan available during execution")
             return
@@ -281,501 +207,78 @@ class ExecutingState(FlowState):
         step = context._plan.get_next_step()
         if step is None:
             logger.info("All steps complete, transitioning to VERIFYING")
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.VERIFYING))
             return
 
         # Check if step was already completed (prevent re-execution)
         if step.status == StepStatus.COMPLETED:
             logger.warning("Step %s already completed, skipping", step.id)
-            context.set_state(UpdatingState())
+            context.set_state(new_state(StateId.UPDATING))
             return
 
-        # ── Inbound-mail approval gate (ADR 006 / R1) ────────────────────────
-        # If the previous step fetched inbound mail via atomic_mail jmap_request,
-        # require explicit user confirmation before the agent acts on that content.
-        if context._session.get_fact("atomic_mail_inbound_pending"):
-            from weebot.core.approval_policy import ExecApprovalPolicy
-
-            _mail_ap = ExecApprovalPolicy().evaluate("act on inbound email content", "inbound_mail")
-            if _mail_ap.requires_confirmation:
-                # Clear flag before pausing so the resume call proceeds normally.
-                context._session = context._session.set_fact("atomic_mail_inbound_pending", False)
-                # ...and record *why* we are waiting, where FlowRouter can see
-                # it. `set_fact` writes to context.facts, which
-                # SessionContext.get never reads, so without this the resume
-                # landed in the generic branch of resolve_initial_state — the
-                # one that returns ExecutingState without looking at `prompt`.
-                # The question below then had no answer that changed anything,
-                # in either direction.
-                context._session = _mark_user_gate(context._session, "inbound_mail")
-                # `_pause_for_user` sets WAITING and persists — everything above
-                # has to be on the session before it is called, or it will not
-                # be in the database when the resume loads from there.
-                yield await pause_for_user(
-                    context,
-                    "The previous step retrieved content from an @atomicmail.ai inbox.\n"
-                    "Inbound email is untrusted input — acting on it without review "
-                    "is a security risk (ADR 006).\n\n"
-                    "Review the retrieved content above, then type 'proceed' to "
-                    "continue, or describe how you'd like to handle it.",
-                )
-                return
-        # ─────────────────────────────────────────────────────────────────────
-
-        # ── Constraint enforcement gate (Lost-in-Compaction Phase 5.4) ───────
-        # Pause before a step that appears to violate a user-issued constraint.
-        # See tasks/specs/side_constraint_integrity_plan.md Phase 5.4.
-        _ack_key = f"constraint_gate_ack:{step.id}"
-        _violations = (
-            []
-            if context._session.get_fact(_ack_key)
-            else self._constraint_violations(context, step, task_text(context, prompt))
-        )
-        if _violations:
-            _violation_text = "; ".join(c.text for c in _violations[:2])
-            logger.warning(
-                "Step '%s' may violate constraint: %s — pausing for user", step.id, _violation_text
-            )
-            await self._journal_constraint_violation(context, step, _violations[0].text)
-            # Clear the gate for this step BEFORE pausing. On resume FlowRouter
-            # flips WAITING -> RUNNING and re-enters execute() from the top
-            # against the same step; with nothing cleared the gate re-fires and
-            # the user can never get past it. The inbound-mail gate above
-            # clears its pending flag for exactly this reason.
-            context._session = context._session.set_fact(_ack_key, True)
-            context._session = _mark_user_gate(context._session, "constraint")
-            yield await pause_for_user(
-                context,
-                f"Step '{step.description}' may violate a stated constraint:\n"
-                f"  {_violation_text}\n\n"
-                f"Type 'proceed' to allow this step, or describe an alternative approach.",
-            )
+        gate = await apply_pre_step_gates(self, context, step, prompt)
+        if gate.event is not None:
+            yield gate.event
             return
-        # ──────────────────────────────────────────────────────────────────────
+        if gate.stop:
+            return
 
-        # ── Capability 5: Behavioral Learning — extract rules from corrections ──
-        # Dedup: only process one user message per session per 30-second window
-        _dedup_key = f"blearn:{context._session.id}"
-        _dedup_window = 30.0
-        if context._behavioral_learner is not None and prompt:
-            import time as _time
-
-            now = _time.monotonic()
-            last = getattr(context, "_last_blearn_ts", {}).get(context._session.id, 0)
-            if now - last > _dedup_window:
-                try:
-                    await context._behavioral_learner.learn_from_correction(
-                        prompt,
-                        {
-                            "session_id": context._session.id,
-                            "step_description": step.description if step else "",
-                            "tool_name": "",
-                        },
-                    )
-                except Exception as ble:
-                    logger.warning("Behavioral learner error: %s", ble)
-                if not hasattr(context, "_last_blearn_ts"):
-                    context._last_blearn_ts = {}
-                context._last_blearn_ts[context._session.id] = now
-        # ────────────────────────────────────────────────────────────────────────
-
-        # ── Phase 5: Steering — poll for mid-execution user feedback ──
-        effective_prompt = prompt
-        if context._steering is not None:
-            steering_msg = await context._steering.poll(context._session.id)
-            if steering_msg:
-                logger.info(
-                    "Steering received for session %s: %s", context._session.id, steering_msg[:80]
-                )
-                effective_prompt = (
-                    f"{prompt}\n\n[STEERING — the user says: {steering_msg}. "
-                    "Adjust your approach immediately.]"
-                )
-
-        # Check for step repetition limit (prevent infinite loops)
-        step_exec_count = context._step_execution_counts.get(step.id, 0) + 1
-        context._step_execution_counts[step.id] = step_exec_count
-
-        if step_exec_count > context._max_step_repetitions:
-            logger.warning(
-                "Step %s executed %d times (limit: %d). Forcing completion.",
-                step.id,
-                step_exec_count,
-                context._max_step_repetitions,
-            )
+        # A step cannot run without a mediator: the executor is reached through it.
+        if context._mediator is None:
             yield ErrorEvent(
-                error=f"Step '{step.description}' repeated {step_exec_count} times. "
-                f"Agent may be stuck in a loop. Completing task."
+                error=(
+                    "ExecutingState requires a Mediator to be configured on PlanActFlow. "
+                    "Construct PlanActFlow with mediator=container.get(Mediator) or "
+                    'build it through container.get("create_flow").'
+                )
             )
-            context.set_state(VerifyingState())
+            context.set_state(new_state(StateId.UPDATING))
             return
 
         # Mark step as RUNNING before execution so the executor and
         # mediator see the correct state.
         context._plan = context._plan.update_step_status(step.id, StepStatus.RUNNING)
         logger.info("Executing step %s: %s", step.id, step.description)
+        await pre_task_hooks(context, step)
 
-        if getattr(context, "_hooks", None) is not None:
-            _step_idx = next((i for i, s in enumerate(context._plan.steps) if s.id == step.id), 0)
-            await context._hooks.execute_hooks(
-                "pre_task",
-                {
-                    "session_id": context._session.id,
-                    "step_id": step.id,
-                    "step_description": step.description,
-                    "step_index": _step_idx,
-                    "total_steps": len(context._plan.steps),
-                    "plan": context._plan,
-                },
-            )
-
-        # Initialize flags before the event consumption paths
-        hitl_paused = False
-        execution_failed = False
-        inner_should_terminate = False
-
-        # --- CQRS: execute step through mediator (REQUIRED) ---
-        if context._mediator is None:
-            yield ErrorEvent(
-                error=(
-                    "ExecutingState requires a Mediator to be configured on PlanActFlow. "
-                    "Construct PlanActFlow with mediator=container.get(Mediator) or "
-                    "use container.build_agent_runner()."
-                )
-            )
-            context.set_state(UpdatingState())
-            return
-
-        import time as _time
-
-        _step_t0 = _time.monotonic()
-        from weebot.application.cqrs.commands import ExecuteStepCommand
-        from weebot.config.model_refs import MODEL_BUDGET
-
-        cmd_result = await context._mediator.send(
-            ExecuteStepCommand(
-                session_id=context._session.id,
-                step_id=step.id,
-                model=context._model or MODEL_BUDGET,
-                tools=[t.name for t in context._tools],
-                # `effective_prompt`, not `prompt`: this sent the ORIGINAL,
-                # so steering was polled, logged and dropped (P3-2 in the audit).
-                user_input=effective_prompt,
-                step_context=context.step_execution_context(),  # ADR-015
-            )
-        )
-        _step_elapsed = _time.monotonic() - _step_t0
-        if not cmd_result.success:
-            yield ErrorEvent(error=f"Step execution rejected: {cmd_result.error}")
-            context.set_state(UpdatingState())
-            return
-
-        _data = cmd_result.data
-        context.record_step_usage(_data.get("token_usage"), _data.get("skill_gaps"))
-
-        # Consume events from the mediator result via shared reconstructor.
-        from weebot.application.cqrs.event_reconstructor import reconstruct_events
-
-        _current_step_events: list[Any] = []
-        for event in reconstruct_events(cmd_result.data.get("events", [])):
-            _current_step_events.append(event)
-            await context._emit(event)
+        run = await run_step_command(context, step, gate.effective_prompt)
+        for event in run.events:
             yield event
-            if isinstance(event, WaitForUserEvent):
-                hitl_paused = True
-            elif isinstance(event, ToolApprovalEvent):
-                hitl_paused = True
-                # ADR-013: record what a "yes" approves; FlowRouter grants it.
-                context._session = mark_tool_approval_pending(context._session, event)
-            elif isinstance(event, ErrorEvent):
-                execution_failed = True
-            # Reconstruct shutdown signals from the serialised events
-            if (
-                getattr(event, "type", "") == "tool"
-                and getattr(event, "tool_name", "") == "terminate"
-            ):
-                inner_should_terminate = True
 
-        # ── Inbound-mail content flag (ADR 006) ──────────────────────────────
-        # If this step called atomic_mail jmap_request and returned content,
-        # flag the session so the NEXT step is gated through approval_policy.
-        if _step_fetched_inbound_mail(_current_step_events):
-            context._session = context._session.set_fact("atomic_mail_inbound_pending", True)
-        # ─────────────────────────────────────────────────────────────────────
-
-        # ── Extract step result from execution events for quality validation ──
-        _last_result_text = ""
-        for event in _current_step_events:
-            if isinstance(event, MessageEvent) and getattr(event, "role", "") == "assistant":
-                msg = getattr(event, "message", "") or ""
-                if msg and len(msg) > len(_last_result_text):
-                    _last_result_text = msg
-            elif isinstance(event, ToolEvent):
-                tr = getattr(event, "result", "") or ""
-                if tr and len(tr) > len(_last_result_text):
-                    _last_result_text = tr
-        if _last_result_text:
-            step = step.model_copy(update={"result": _last_result_text})
-
-        if hitl_paused:
-            logger.info("Step %s paused for human input after %.1fs", step.id, _step_elapsed)
-            # Fire post_task on pause so observers track step timing
-            if getattr(context, "_hooks", None) is not None:
-                await context._hooks.execute_hooks(
-                    "post_task",
-                    {
-                        "session_id": context._session.id,
-                        "step_id": step.id,
-                        "step_description": step.description,
-                        "elapsed_ms": _step_elapsed * 1000,
-                        "plan": context._plan,
-                    },
-                )
-            context._session = context._session.set_status(SessionStatus.WAITING)
+        if run.rejected is not None:
+            yield ErrorEvent(error=f"Step execution rejected: {run.rejected}")
+            context.set_state(new_state(StateId.UPDATING))
             return
 
-        if execution_failed:
-            if getattr(context, "_hooks", None) is not None:
-                await context._hooks.execute_hooks(
-                    "on_error",
-                    {
-                        "session_id": context._session.id,
-                        "step_id": step.id,
-                        "error": "step execution failed",
-                        "error_type": "step_failure",
-                        "plan": context._plan,
-                    },
-                )
-            eval_events = cmd_result.data.get("events", [])
-            # If ALL models are circuit-broken, replanning will also fail.
-            # Skip the replan cycle and go straight to terminal state.
-            _all_tripped = any(
-                "All models in the cascade have tripped" in getattr(e, "error", "")
-                for e in eval_events
-                if isinstance(e, dict) and e.get("type") == "error"
-            )
-            if _all_tripped:
-                logger.warning(
-                    "Step %s: all models tripped — skipping replan, marking UNVERIFIED (%.1fs)",
-                    step.id,
-                    _step_elapsed,
-                )
-                # Not COMPLETED: no model was able to run, so there is no
-                # evidence a real audit could check. Forcing completion here
-                # would be exactly the silent bypass E1 exists to close.
-                context._plan = context._plan.update_step_status(
-                    step.id,
-                    StepStatus.UNVERIFIED,
-                    result="all models circuit-broken — step did not execute",
-                )
-                context.set_state(VerifyingState())
-                return
+        # The step's own output, carried on the step for the gates and the audit below.
+        step = step.model_copy(update={"result": run.result_text or None})
 
-            # Collect the actual error message from any ErrorEvent in the batch
-            _error_msg = "step execution failed"
-            for _ev in eval_events:
-                if isinstance(_ev, ErrorEvent):
-                    _error_msg = str(_ev.error or _error_msg)
-
-            # Classify failure severity and route accordingly (3-tier)
-            from weebot.application.agents.executor._error_handler import classify_failure_severity
-
-            _severity = classify_failure_severity(_error_msg)
-            if _severity == "minor_fix" and step.retry_count < 1:
-                logger.warning("Step %s MINOR failure (%s) — retrying once", step.id, _severity)
-                # Reset step to PENDING so get_next_step() picks it up again
-                step = step.model_copy(
-                    update={"status": StepStatus.PENDING, "retry_count": step.retry_count + 1}
-                )
-                context._plan = context._plan.update_step(step)
-                context.set_state(ExecutingState())
-            elif _severity == "full_replan":
-                logger.warning(
-                    "Step %s CRITICAL failure (%s) — restarting planning", step.id, _severity
-                )
-                from weebot.application.flows.states.planning import PlanningState
-
-                context.set_state(PlanningState())
-            else:
-                logger.warning(
-                    "Step %s failed during execution in %.1fs (%s); transitioning to UPDATING",
-                    step.id,
-                    _step_elapsed,
-                    _severity,
-                )
-                context.set_state(UpdatingState())
+        if run.hitl_paused:
+            logger.info("Step %s paused for human input after %.1fs", step.id, run.elapsed_s)
+            await post_task_hooks(context, step, run)
+            pause_for_human(context)
             return
 
-        # ── Phase 3: Step-result quality check ──────────────────────
-        # Gated on task_preset.enable_step_validation (default True).
-        _sv_enabled = getattr(
-            getattr(context, "_task_preset", None), "enable_step_validation", True
+        if run.execution_failed:
+            await error_hooks(context, step)
+            await route_failure(context, step, run)
+            return
+
+        if quality_gate(context, step, run):
+            return
+        if await progress_gate(context, step, run):
+            return
+
+        # LongHorizon-Harness E1: environment-grounded evidence gate. Runs BEFORE
+        # completion is committed, scoped to this step's events, not the whole session.
+        audit_event = await self._evidence_gate(context, step, run.events, run.elapsed_s)
+        if audit_event is not None:
+            yield audit_event
+            return
+
+        complete_step(context, step, run)
+        await post_task_hooks(context, step, run)
+        await absorb_step_result(context, step)
+        next_transition(
+            context, step, run, audit_browser_invocation=self._audit_browser_invocation
         )
-        if _sv_enabled and step.retry_count < 1:
-            from weebot.application.services.step_result_validator import StepResultValidator
-
-            _validator = StepResultValidator()
-            validation = _validator.validate(
-                result=str(step.result or ""),
-                step_description=step.description,
-                previous_result=None,
-                step_events=_current_step_events,
-            )
-            if not validation.passed:
-                logger.info(
-                    "Step '%s' failed quality check (%s) — retrying with hint",
-                    step.id,
-                    validation.reason,
-                )
-                # Inject quality hint into step description and retry
-                updated_step = step.model_copy(
-                    update={
-                        "description": f"{step.description}\n[Quality hint: {validation.quality_hint}]",
-                        "retry_count": 1,
-                        "status": StepStatus.PENDING,
-                    }
-                )
-                context._plan = context._plan.replace_step(step.id, updated_step)
-                # Stay in ExecutingState to retry the same step
-                context.set_state(ExecutingState())
-                return
-
-        # ── Improvement 6: Step progress evaluation ────────────────
-        _step_evaluator = getattr(context, "_step_evaluator", None)
-        if _step_evaluator is not None and step.result:
-            _prev_outputs = [
-                s.result
-                for s in context._plan.steps
-                if s.is_done() and s.id != step.id and s.result
-            ]
-            _eval = await _step_evaluator.evaluate(
-                step=step,
-                output=str(step.result),
-                plan=context._plan,
-                previous_outputs=_prev_outputs,
-            )
-            if _eval.evaluator_failed:
-                # Fail-open by policy: the step proceeds. But it proceeds
-                # UNVERIFIED, and that used to be invisible here -- the only
-                # log was on `not passed`, and a failed evaluator returns
-                # passed=True. An outage silently disabled the progress gate
-                # for every step and nothing said so.
-                logger.warning(
-                    "Step '%s' was NOT evaluated (%s) — progress gate skipped, "
-                    "step allowed through by fail-open policy.",
-                    step.id,
-                    _eval.reasoning,
-                )
-            elif not _eval.passed:
-                logger.warning(
-                    "Step '%s' failed progress eval (score=%.2f, regression=%s): %s",
-                    step.id,
-                    _eval.score,
-                    _eval.regression_detected,
-                    _eval.reasoning,
-                )
-                context.set_state(UpdatingState())
-                return
-
-        # ── LongHorizon-Harness E1: per-step evidence gate ──────────
-        # Environment-grounded check (files exist, tests passed, images
-        # aren't placeholders) — runs BEFORE completion is committed, not
-        # after, and is scoped to this step's own events, not the whole
-        # session. See tasks/specs/longhorizon_harness_implementation_plan.md.
-        _audit_event = await self._evidence_gate(
-            context, step, _current_step_events, _step_elapsed
-        )
-        if _audit_event is not None:
-            yield _audit_event
-            return
-
-        # Update step as completed, carrying the extracted result through
-        context._plan = context._plan.update_step_status(
-            step.id, StepStatus.COMPLETED, result=step.result or None
-        )
-        logger.info("Step %s completed in %.1fs", step.id, _step_elapsed)
-
-        if getattr(context, "_hooks", None) is not None:
-            await context._hooks.execute_hooks(
-                "post_task",
-                {
-                    "session_id": context._session.id,
-                    "step_id": step.id,
-                    "step_description": step.description,
-                    "elapsed_ms": _step_elapsed * 1000,
-                    "plan": context._plan,
-                },
-            )
-
-        # A dead "persist executor facts" loop was deleted here; deleted
-        # rather than wired because `set_fact` writes where `.get` never reads
-        # (P3-3 in tasks/audits/static_defect_audit_v3.md).
-
-        # ── Capability 2: Knowledge Graph — upsert discovered facts ──
-        if context._knowledge_graph is not None:
-            try:
-                await context._knowledge_graph.extract_from_step_result(
-                    step_description=step.description,
-                    result=step.result or "",
-                    session_id=context._session.id,
-                )
-            except Exception as kg_exc:
-                logger.warning("Knowledge graph extraction failed: %s", kg_exc)
-        # ────────────────────────────────────────────────────────────
-
-        # Check if terminate was called — this means the executor finished
-        # the CURRENT step, not the entire plan.  Only transition to
-        # VerifyingState if there are no more pending steps.
-        if inner_should_terminate:
-            logger.info("Terminate detected for step %s", step.id)
-            # Check if there are more steps to execute
-            next_step = context._plan.get_next_step()
-            if next_step is not None:
-                logger.info(
-                    "Continuing to next step: %s (%d pending remaining)",
-                    next_step.id,
-                    len(context._plan.get_pending_steps()),
-                )
-                # Don't transition — the while loop in run() will re-enter
-                # ExecutingState which calls get_next_step()
-            else:
-                logger.info("All steps complete after terminate — verifying")
-                context.set_state(VerifyingState())
-            return
-
-        # Check if all steps are now complete
-        if context._auto_terminate_on_plan_complete and context._plan.is_complete():
-            self._audit_browser_invocation(context)
-            logger.info("All plan steps completed. Auto-terminating.")
-            context.set_state(VerifyingState())
-            return
-
-        # Compact memory after each step
-        context._session = context._compactor.compact_session(context._session)
-
-        # If there is still a pending step, continue executing without forced replanning.
-        # Replanning is handled on failures/uncertainty elsewhere.
-        next_step = context._plan.get_next_step()
-        if next_step is None:
-            context.set_state(VerifyingState())
-            return
-
-        # ── Phase 8: Per-step code review gate ──────────────────────
-        # If a code reviewer is configured and this step produced code,
-        # transition to ReviewingState instead of continuing directly.
-        if (
-            getattr(context, "_code_reviewer", None) is not None
-            and _is_code_step(step, events=_current_step_events)
-            and step.retry_count < _MAX_REVIEW_RETRIES_GATE
-        ):
-            from weebot.application.flows.states.reviewing import ReviewingState
-
-            context.set_state(
-                ReviewingState(
-                    step=step,
-                    reviewer=context._code_reviewer,
-                    step_events=list(_current_step_events),
-                )
-            )
-        else:
-            context.set_state(ExecutingState())

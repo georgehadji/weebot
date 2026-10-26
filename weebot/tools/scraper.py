@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 import httpx
 import sys
 import asyncio
@@ -22,6 +23,8 @@ class ScraperTool(BaseTool):
     Uses Spacescraper with local headless CLI execution as the default,
     falling back to headless Web API, and finally automated docker-compose cluster initiation.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     _tool_config: ToolConfig | None = PrivateAttr(default=None)
 

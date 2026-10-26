@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { RoleModelsPanel } from "@/components/models/RoleModelsPanel";
 import { api } from "@/lib/api";
 import { ModelInfo } from "@/types/events";
 import { Brain, Zap, DollarSign } from "lucide-react";
@@ -94,6 +95,8 @@ export default function ModelsPage() {
           <span>{models.length} models available</span>
         </div>
       </div>
+
+      <RoleModelsPanel models={models} />
 
       {Object.entries(groupedModels).map(([provider, providerModels]) => (
         <div key={provider} className="mb-8">

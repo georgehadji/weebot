@@ -34,7 +34,8 @@ from __future__ import annotations
 import pytest
 
 from weebot.application.flows.flow_router import FlowRouter
-from weebot.application.flows.states.executing import ExecutingState, _mark_user_gate
+from weebot.application.flows.states._execution_gates import mark_user_gate as _mark_user_gate
+from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.planning import PlanningState
 from weebot.domain.models.event import PlanEvent
 from weebot.domain.models.plan import Plan, Step

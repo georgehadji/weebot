@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 import httpx
 
 from pydantic import PrivateAttr
@@ -20,6 +21,8 @@ class ReasonerTool(BaseTool):
     Uses Reasoner at http://localhost:8003 to execute complex reasoning pipelines
     with various models, multi-perspective debate, and synthesis.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     _tool_config: ToolConfig | None = PrivateAttr(default=None)
 

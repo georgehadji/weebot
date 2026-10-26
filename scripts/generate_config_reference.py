@@ -49,6 +49,16 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "OpenAI API key"},
     {"var": "XAI_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "xAI (Grok) API key for direct access"},
+    {"var": "OLLAMA_ENABLED", "type": "bool", "default": "false",
+     "desc": "Use a local Ollama model for the roles in OLLAMA_ROLES (see docs/OLLAMA.md)"},
+    {"var": "OLLAMA_BASE_URL", "type": "str", "default": "http://localhost:11434/v1",
+     "desc": "Ollama's OpenAI-compatible endpoint"},
+    {"var": "OLLAMA_MODEL", "type": "str", "default": "qwen3:8b",
+     "desc": "Model tag from `ollama list`"},
+    {"var": "OLLAMA_CONTEXT_WINDOW", "type": "int", "default": "4096",
+     "desc": "Context the model really has (num_ctx); Ollama's /v1 ignores a per-request value"},
+    {"var": "OLLAMA_ROLES", "type": "str", "default": "summarizer,documentation",
+     "desc": "Roles that try an Ollama model first: `role` or `role=tag` (e.g. verifier=gemma4:31b-cloud)"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,
@@ -92,7 +102,13 @@ CONFIG_SCHEMA: list[dict] = [
 
     # ── Valkey (Event Bus) ────────────────────────────────────────
     {"var": "VALKEY_PASSWORD", "type": "str", "default": "weebot_default",
-     "desc": "Valkey password (set a strong value in production)"},
+     "desc": "Valkey password. The default is for local docker compose only: the Valkey service publishes no port (pinned by tests/unit/test_compose_valkey_unpublished.py). Set your own value before publishing it"},
+
+    # ── Session cost budget (plan 2.4, D6) ────────────────────────
+    {"var": "WEEBOT_SESSION_COST_SOFT_USD", "type": "float", "default": "0.50",
+     "desc": "Per-session spend (USD) above which the cascade skips PREMIUM models for the rest of the session; 0 disables"},
+    {"var": "WEEBOT_SESSION_COST_HARD_USD", "type": "float", "default": "2.50",
+     "desc": "Per-session spend (USD) at which the flow asks to continue, then ends as BUDGET_EXCEEDED if refused; 0 disables"},
 
     # ── Sandbox / Execution ───────────────────────────────────────
     {"var": "BASH_TIMEOUT", "type": "int",

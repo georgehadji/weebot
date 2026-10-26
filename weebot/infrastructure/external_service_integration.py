@@ -18,7 +18,7 @@ import logging
 from abc import ABC, abstractmethod
 
 from weebot.core.circuit_breaker import CircuitBreaker
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 
 class ServiceType(Enum):

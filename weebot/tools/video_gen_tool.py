@@ -15,7 +15,8 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import BaseModel, Field
 
@@ -64,6 +65,8 @@ class VideoGenTool(BaseTool):
     3. Downloads the generated video from the returned URL
     4. Saves it as MP4 to the specified output path
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     default_timeout_seconds: int = 180
     name: str = "video_gen"

@@ -36,6 +36,10 @@ class _Container:
     def get(self, key):
         return None
 
+    def create_llm_for_model(self, model_id):
+        # The CLI resolves its LLMPort here since WB-02; these tests never call it.
+        return object()
+
 
 def test_closed_stdin_leaves_the_session_waiting(monkeypatch):
     _Runner.resumed = []
@@ -43,9 +47,6 @@ def test_closed_stdin_leaves_the_session_waiting(monkeypatch):
     monkeypatch.setattr(flow_cmd, "_get_state_repo", lambda: None)
     monkeypatch.setattr(flow_cmd, "_get_mediator", lambda: None)
     monkeypatch.setattr(flow_cmd, "_container", _Container())
-    monkeypatch.setattr(
-        flow_cmd.ModelSelectionService, "create_llm_adapter", lambda self, m: object()
-    )
 
     result = CliRunner().invoke(
         flow_cmd.flow, ["run", "do it", "--session-id", "s-1"], input=""
@@ -73,9 +74,6 @@ def test_every_question_on_the_way_is_asked(monkeypatch):
     monkeypatch.setattr(flow_cmd, "_get_state_repo", lambda: None)
     monkeypatch.setattr(flow_cmd, "_get_mediator", lambda: None)
     monkeypatch.setattr(flow_cmd, "_container", _Container())
-    monkeypatch.setattr(
-        flow_cmd.ModelSelectionService, "create_llm_adapter", lambda self, m: object()
-    )
 
     result = CliRunner().invoke(flow_cmd.flow, ["run", "do it"], input="approve\nproceed\n")
 

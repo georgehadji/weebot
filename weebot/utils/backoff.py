@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 import asyncio
+import contextvars
 import random
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+
+# Monotonic time by which the caller will give up (ORCH-3). The cascade sets it
+# around each model call; a retry whose backoff would end past it is not scheduled,
+# so the real provider error surfaces instead of a cancellation mid-sleep.
+call_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "call_deadline", default=None
+)
+
+
+@contextmanager
+def deadline_scope(seconds: float) -> Generator[None, None, None]:
+    """Tasks created inside inherit a deadline ``seconds`` from now."""
+    token = call_deadline.set(time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        call_deadline.reset(token)
 
 
 @dataclass
@@ -59,6 +79,9 @@ class RetryWithBackoff:
                 if attempt < len(self._config.delays):
                     base = self._config.delays[attempt]
                     delay = base * (1.0 + (random.random() * 2 - 1) * self._config.jitter)
+                    deadline = call_deadline.get()
+                    if deadline is not None and time.monotonic() + delay >= deadline:
+                        break  # the caller gives up before this retry could run
                     self._delay_index = attempt + 1
                     await asyncio.sleep(delay)
 

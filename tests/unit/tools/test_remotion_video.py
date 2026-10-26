@@ -132,7 +132,7 @@ def test_the_render_script_ships_with_the_tool():
 
 
 def test_the_registry_offers_it_where_video_gen_is():
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     for role, tools in RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS.items():
         if "video_gen" in tools:

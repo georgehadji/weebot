@@ -9,7 +9,7 @@ tool sets. The cached "tool_registry" had the wiring; these two did not.
 
 from __future__ import annotations
 
-import weebot.tools.tool_registry as tr
+import weebot.application.services.tool_registry as tr
 from weebot.application.di import Container
 
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 
 from weebot.config.settings import WORKSPACE_ROOT
@@ -14,6 +15,8 @@ from weebot.infrastructure.security.security_validators import PathValidator, Va
 
 
 class StrReplaceEditorTool(BaseTool):
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
     name: str = "file_editor"
     description: str = (
         "View, create, or edit files on the local filesystem. "
@@ -75,7 +78,7 @@ class StrReplaceEditorTool(BaseTool):
         with no container access, and a DI binding with no reader is how the
         rest of this subsystem stayed dead for so long.
         """
-        from weebot.config.fs_permissions import load_fs_permission_checker
+        from weebot.application.services.fs_permission_policy import load_fs_permission_checker
 
         return load_fs_permission_checker()
 

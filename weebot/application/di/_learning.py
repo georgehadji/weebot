@@ -28,12 +28,26 @@ class LearningMixin:
         """Register learning services.  Called from configure_defaults()."""
         self.register("skill_distiller", lambda: self._create_skill_distiller(db_path))
         self.register("skill_materializer", self._create_skill_materializer)
+        self.register("misalignment_journal", lambda: self._create_misalignment_journal(db_path))
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
         self.register("behavioral_learner", self._create_behavioral_learner)
         self.register("correction_tracker", self._create_correction_tracker)
         self.register("session_constraint_extractor", self._create_session_constraint_extractor)
 
     # ── factories ─────────────────────────────────────────────────────────────
+
+    def _create_misalignment_journal(self, db_path: str):
+        """Cross-session, per-project journal of violations and lessons.
+
+        The port, adapter and planner read existed, but nothing bound the
+        journal, so every flow ran with ``None`` and the planner never saw
+        a prior session's notes.
+        """
+        from weebot.infrastructure.persistence.sqlite_misalignment_journal import (
+            SQLiteMisalignmentJournal,
+        )
+
+        return SQLiteMisalignmentJournal(db_path=db_path)
 
     def _create_behavioral_learner(self):
         """Session-scoped behavioral rule learner (plan Phase 7.1).

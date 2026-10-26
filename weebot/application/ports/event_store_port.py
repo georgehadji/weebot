@@ -9,6 +9,7 @@ persistence only.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -33,6 +34,15 @@ class EventStorePort(ABC):
         self, session_id: str, event_type: str | None = None
     ) -> list[dict[str, Any]]:
         """Get all events for a session, optionally filtered by type."""
+        ...
+
+    @abstractmethod
+    async def count_events(self, session_ids: Sequence[str]) -> dict[str, int]:
+        """Number of stored events per session, in one query.
+
+        Every id in *session_ids* is a key of the result (0 when it has no events), so a
+        list page costs one call, never one per session.
+        """
         ...
 
     @abstractmethod

@@ -22,7 +22,7 @@ from weebot.core.mcp_naming import (
     parse_namespaced_name,
 )
 from weebot.domain.models.mcp import MCPServerConfig, MCPToolInfo
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 logger = logging.getLogger(__name__)
 

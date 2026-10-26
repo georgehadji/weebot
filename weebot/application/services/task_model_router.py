@@ -10,21 +10,9 @@ Never uses qwen3-coder for non-coding tasks.
 from __future__ import annotations
 
 import re
-from enum import Enum
 
 from weebot.config.model_refs import ROLE_MODEL_CONFIG
-
-
-class TaskCategory(Enum):
-    CODING = "coding"
-    FILE_OPS = "file_ops"
-    RESEARCH = "research"
-    REVIEW = "review"
-    BROWSER = "browser"
-    PLANNING = "planning"
-    SECURITY = "security"
-    SUMMARIZATION = "summarization"
-    GENERAL = "general"
+from weebot.domain.models.task_category import TaskCategory  # noqa: F401 — re-export
 
 
 # ── Category → role → model ────────────────────────────────────────

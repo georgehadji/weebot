@@ -16,10 +16,15 @@ from collections.abc import AsyncGenerator
 from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import is_enforcing
-from weebot.core.trust_boundary import taints_egress_context
+from weebot.core.background_tasks import get_background_tasks
+from weebot.core.effect_key import effect_key, step_scope
+from weebot.core.log_context import bind_step
+from weebot.core.trust_boundary import must_taint, trust_of
+from weebot.domain.models.output_trust import OutputTrust
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
 
@@ -126,14 +131,10 @@ def _is_local_url(url: str) -> bool:
     return parsed.scheme == "file" or parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
 
-# Sessions whose context holds untrusted external content (see ToolExecutor).
-# shortcut: in-process only, so a resume in a new process starts untainted;
-# move it to a session fact if resumes cross processes in practice.
-_TAINTED_SESSIONS: set[str] = set()
-# Session id -> whether its browser tab was last navigated to a local page.
-_LOCAL_TAB: dict[str, bool] = {}
-# Session id -> paths file_editor wrote in it (viewing them adds no external content).
-_WRITTEN_FILES: dict[str, set[str]] = {}
+# Per-session security state (taint, tab locality, written files, hydration marker)
+# lives in a `SessionScope`, not in module-level containers: see _session_scope.py for
+# why it has an owner and a lifecycle (WB-03). The event store is the record; the scope
+# is the cache, replayed once per session by _hydrate_session_state.
 
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
@@ -151,7 +152,11 @@ class ToolExecutor:
         llm=None,  # LLMPort
         model: str | None = None,
         egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
+        effect_ledger=None,  # EffectLedger | None — outbound actions already taken (ORCH-2)
+        session_scope: SessionScope | None = None,
     ) -> None:
+        self._effect_ledger = effect_ledger
+        self._current_step_scope: str = ""
         self._tools = tools
         self._hooks = hooks
         self._conversation_buffer = conversation_buffer or deque(maxlen=15)
@@ -162,28 +167,86 @@ class ToolExecutor:
         self._current_session_id: str = ""
         self._egress_guard = egress_guard
         self._egress_guard_resolved: bool = egress_guard is not None
+        # Per-session state outlives this executor: one is built per step (WB-03).
+        self._scope = session_scope if session_scope is not None else get_session_scope()
         # True once any untrusted-output tool has run in this session. Egress
         # after that point always needs approval — the injected content is the
         # payload (the "lethal trifecta" escalation in egress_guard.py).
         self._tainted_here: bool = False
+        # Flag writes started by the sync taint setter, awaited before a result is returned.
+        self._pending_flags: list[asyncio.Task] = []
 
     @property
     def _untrusted_context_active(self) -> bool:
         # Per session, not per executor: each step builds a fresh executor.
-        return self._tainted_here or self._current_session_id in _TAINTED_SESSIONS
+        return self._tainted_here or self._scope.is_tainted(self._current_session_id)
 
     @_untrusted_context_active.setter
     def _untrusted_context_active(self, value: bool) -> None:
         self._tainted_here = value
-        if value and self._current_session_id:
-            _TAINTED_SESSIONS.add(self._current_session_id)
+        if value and self._scope.mark_tainted(self._current_session_id):
+            self._persist_flag("tainted")
 
     # ── Dynamic context ────────────────────────────────────────────
 
-    def set_step_context(self, step_id: str, session_id: str) -> None:
+    def set_step_context(self, step_id: str, session_id: str, step_description: str = "") -> None:
         """Update the current step/session context (called at step start)."""
         self._current_step_id = step_id
         self._current_session_id = session_id
+        self._current_step_scope = step_scope(step_description)
+        # Every log record from this step's tools, cascade and adapters carries the ids.
+        bind_step(step_id, session_id)
+
+    def _persist_flag(self, kind: str, **data: Any) -> None:
+        """Append a security-state change to the event store without blocking the caller."""
+        if self._effect_ledger is None or not self._current_session_id:
+            return
+        try:
+            self._pending_flags.append(
+                get_background_tasks().spawn(
+                    self._effect_ledger.note_flag(self._current_session_id, kind, **data),
+                    name=f"session-flag-{kind}",
+                )
+            )
+        except RuntimeError:
+            logger.debug("no running loop; %s flag not persisted", kind)
+
+    async def _flush_flags(self) -> None:
+        """Wait for this executor's flag writes, so a result is never returned ahead of them.
+
+        The setter that taints a session is sync, so it can only start the write. A crash
+        after the caller sees the result can therefore no longer lose the taint row.
+        """
+        pending, self._pending_flags = self._pending_flags, []
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _hydrate_session_state(self) -> None:
+        """Replay this session's persisted taint, local-tab and written-file state once."""
+        sid = self._current_session_id
+        if self._effect_ledger is None or not sid or not self._scope.claim_hydration(sid):
+            return
+        for row in await self._effect_ledger.flags(sid):
+            kind = row.get("kind")
+            if kind == "tainted":
+                self._scope.mark_tainted(sid)
+            elif kind == "local_tab":
+                self._scope.set_local_tab(sid, bool(row.get("local")))
+            elif kind == "file_written" and row.get("path"):
+                self._scope.note_written_file(sid, str(row["path"]))
+
+    def _effect_id(self, name: str, args: dict[str, Any]) -> str:
+        """The ledger key of this call: session, step, tool and canonical arguments."""
+        canonical = self._tools.canonical_args(name, args) if hasattr(
+            self._tools, "canonical_args"
+        ) else dict(args)
+        return effect_key(
+            self._current_session_id,
+            self._current_step_id,
+            self._current_step_scope,
+            name,
+            canonical,
+        )
 
     def _get_step_id(self) -> str:
         return self._current_step_id or "unknown"
@@ -307,6 +370,8 @@ class ToolExecutor:
         else:
             args = arguments or {}
 
+        await self._hydrate_session_state()
+
         # Determine effective timeout
         tool_obj = self._tools.get_tool(name)
         timeout = float(getattr(tool_obj, "default_timeout_seconds", 60) if tool_obj else 60)
@@ -345,11 +410,29 @@ class ToolExecutor:
                 )
                 return ToolResult.error_result(error=_msg, output=_msg, tool_name=name)
         approved_call = ""
+        effect_to_record = ""  # set when this call is an egress the ledger should remember
         network_ok = False  # W3.9: does this call get sandbox network?
         if guard is not None:
             decision = guard.classify(
                 name, args, untrusted_context_active=self._untrusted_context_active
             )
+            # ORCH-2: an outbound action this session already completed is not
+            # repeated, and a replay never reaches the approval gate below (the
+            # action is not happening again, so there is nothing to approve).
+            if self._effect_ledger is not None and decision.is_egress and self._current_session_id:
+                effect_id = self._effect_id(name, args)
+                prior = await self._effect_ledger.lookup(self._current_session_id, effect_id)
+                if prior is not None:
+                    await self._effect_ledger.note_replay(self._current_session_id, effect_id, name)
+                    summary = prior.get("summary", "")
+                    note = (
+                        f"'{name}' already ran earlier in this session with these arguments"
+                        f"{': ' + summary if summary else ''}. Not repeated."
+                    )
+                    return ToolResult.success_result(
+                        output=note, replayed=True, effect_key=effect_id, tool_name=name
+                    )
+                effect_to_record = effect_id
             if decision.requires_approval:
                 if is_enforcing():
                     refused = await _ask_about_egress(
@@ -401,6 +484,18 @@ class ToolExecutor:
             )
         _elapsed = (_timer.monotonic() - _t0) * 1000
 
+        # Remember a completed outbound action. A failed or paused call is not
+        # recorded: a retry of a send that never happened must go ahead.
+        if (
+            effect_to_record
+            and self._effect_ledger is not None
+            and not getattr(result, "is_error", False)
+            and not (getattr(result, "data", None) or {}).get("approval_required")
+        ):
+            await self._effect_ledger.record(
+                self._current_session_id, effect_to_record, name, str(result)[:500], ok=True
+            )
+
         # Post-tool hook
         if self._hooks is not None:
             await self._hooks.execute_hooks(
@@ -418,32 +513,49 @@ class ToolExecutor:
 
         # External content has now entered the session; taint it so later egress
         # needs approval even to an already-known recipient. Errors carry no
-        # external content, so they do not taint.
+        # external content, so they do not taint (D1; pinned in must_taint).
         #
-        # Narrower than the fence in _base.py by FENCE_ONLY_TOOLS: fencing is
-        # free, this taint is sticky for the rest of the session.
+        # Narrower than the fence in _base.py: fencing is free, this taint is
+        # sticky for the rest of the session. The tool's declared OutputTrust
+        # decides, and an unregistered name is EXTERNAL.
         # A file:// or loopback tab holds no external content, so reading it
         # does not taint. shortcut: tracked per session from the last navigate,
         # not the shared browser's real tab; read the tab URL if that drifts.
         if name == "advanced_browser" and args.get("url"):
-            _LOCAL_TAB[self._current_session_id] = _is_local_url(str(args["url"]))
-        local_page = name == "advanced_browser" and _LOCAL_TAB.get(self._current_session_id, False)
+            now_local = _is_local_url(str(args["url"]))
+            if self._scope.set_local_tab(self._current_session_id, now_local):
+                self._persist_flag("local_tab", local=now_local)
+        local_page = (
+            name == "advanced_browser"
+            and self._scope.local_tab(self._current_session_id) is True
+        )
         # Writing a file returns only a confirmation; `view` returns its content,
         # which is new only if this session did not write the file.
         own_file = False
         if name == "file_editor":
             path = str(args.get("path", ""))
-            written = _WRITTEN_FILES.setdefault(self._current_session_id, set())
-            own_file = args.get("command") != "view" or path in written
+            own_file = args.get("command") != "view" or self._scope.wrote_file(
+                self._current_session_id, path
+            )
             if args.get("command") != "view" and not getattr(result, "is_error", False):
-                written.add(path)
-        if (
-            taints_egress_context(name)
-            and not getattr(result, "is_error", False)
-            and not (local_page or own_file)
+                if self._scope.note_written_file(self._current_session_id, path):
+                    self._persist_flag("file_written", path=path)
+        if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
+            local_page or own_file
         ):
             self._untrusted_context_active = True
+        await self._flush_flags()
         return result
+
+    def taint_session(self, tool_name: str, is_error: bool) -> None:
+        """Taint the session because the injection scan escalated *tool_name* to EXTERNAL.
+
+        Called by the executor when a fixed-schema source returned text the scanner
+        flagged; ``must_taint`` still decides, so an error result does not taint.
+        """
+        if must_taint(OutputTrust.EXTERNAL, is_error):
+            logger.warning("session tainted: %s output carried suspected injection", tool_name)
+            self._untrusted_context_active = True
 
     async def _execute_single_tool_call(self, tc: dict[str, Any]) -> ToolResult:
         """Thin wrapper: parse tool call dict and delegate to execute_tool."""

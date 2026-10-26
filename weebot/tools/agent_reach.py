@@ -6,9 +6,9 @@ for web pages, ``gh`` for GitHub, ``yt-dlp`` for YouTube, ``bili`` for
 Bilibili, ``mcporter`` + Exa for web search, V2EX and RSS APIs. Weebot runs
 those commands here rather than through ``bash``:
 
-- The output is third-party text: ``agent_reach`` is in
-  ``core.trust_boundary.UNTRUSTED_OUTPUT_TOOLS``, so the executor fences it and
-  the session is tainted for the egress check.
+- The output is third-party text: ``agent_reach`` declares
+  ``OutputTrust.EXTERNAL``, so the executor fences it and the session is
+  tainted for the egress check.
 - Only read commands run. Each program has an allowlist of subcommands and
   flags; uploads (``curl -d/-T/-F``), method changes (``-X``), file writes,
   logins, cookie reads, installs and shell metacharacters are refused.
@@ -30,7 +30,8 @@ import shlex
 import shutil
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -238,6 +239,8 @@ def _child_env() -> dict[str, str]:
 
 class AgentReachTool(BaseTool):
     """Run one read-only Agent-Reach channel command, or read its routing guide."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "agent_reach"
     description: str = (

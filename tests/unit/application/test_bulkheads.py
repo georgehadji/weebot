@@ -21,13 +21,40 @@ instead, and assert the properties that matter:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock
 
 import pytest
 
+from weebot.application.di.keys import LLM_POOL
+
 from weebot.application.strategies.llm_pool import LLMPool
 from weebot.domain.exceptions import LLMCapacityExhaustedError
 from weebot.domain.models.llm_response import LLMResponse
+
+@contextlib.asynccontextmanager
+async def _slot_held_by_another_task(pool: LLMPool):
+    """Hold the pool's slot from a different task, as another session would.
+
+    The pool is re-entrant within one call (the cascade's slot admits the bounded
+    port below it), so nesting ``async with pool`` in the same task would model a
+    retry inside one call, not a competing caller.
+    """
+    held, release = asyncio.Event(), asyncio.Event()
+
+    async def holder():
+        async with pool:
+            held.set()
+            await release.wait()
+
+    task = asyncio.create_task(holder())
+    await held.wait()
+    try:
+        yield
+    finally:
+        release.set()
+        await task
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # LLMPool
@@ -64,11 +91,22 @@ async def test_saturation_raises_its_own_error_and_it_is_not_a_timeout():
     AllModelsTrippedError: local load reported as every provider being down.
     """
     pool = LLMPool(max_concurrent=1, acquire_timeout=0.05)
-    async with pool:
+    async with _slot_held_by_another_task(pool):
         with pytest.raises(LLMCapacityExhaustedError) as exc:
             async with pool:
                 pass
     assert not isinstance(exc.value, TimeoutError)
+    assert pool.available == 1
+
+
+@pytest.mark.asyncio
+async def test_the_same_call_can_re_enter_without_a_second_slot():
+    """Re-entrancy is per call: the cascade holds the slot, the bounded port below it passes."""
+    pool = LLMPool(max_concurrent=1, acquire_timeout=0.05)
+    async with pool:
+        async with pool:  # same task: admitted, takes nothing
+            assert pool.available == 0
+        assert pool.available == 0, "the inner exit must not release the outer slot"
     assert pool.available == 1
 
 
@@ -181,7 +219,7 @@ async def test_saturation_propagates_and_is_charged_to_no_model():
     pool = LLMPool(max_concurrent=1, acquire_timeout=0.05)
     cascade = _cascade(llm, pool)
 
-    async with pool:  # someone else holds the only slot
+    async with _slot_held_by_another_task(pool):  # someone else holds the only slot
         with pytest.raises(LLMCapacityExhaustedError):
             await cascade._cascade_try_chat([{"role": "user", "content": "x"}], "model-a")
 
@@ -200,7 +238,7 @@ async def test_a_tripped_model_does_not_queue_for_a_slot():
         cascade._cascade_record_failure("model-a")
     assert cascade.cascade_is_tripped("model-a")
 
-    async with pool:  # pool full; a tripped model must not wait for it
+    async with _slot_held_by_another_task(pool):  # full; a tripped model must not wait for it
         assert await cascade._cascade_try_chat([], "model-a") is None
 
 
@@ -242,7 +280,7 @@ def test_the_executor_that_runs_steps_holds_the_containers_pool(container):
 
     executor = factory(model="test-model", session=None)
 
-    pool = container.get("llm_pool")
+    pool = container.get(LLM_POOL)
     assert isinstance(pool, LLMPool)
     assert executor._cascade._llm_pool is pool
 

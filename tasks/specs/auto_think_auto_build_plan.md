@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-10
+---
+
 # Auto-think / Auto-build: 5 Enhancements Implementation Plan
 
 ## Context

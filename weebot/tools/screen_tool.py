@@ -89,12 +89,19 @@ class ScreenCaptureTool:
 
 # --- weebot BaseTool wrapper -------------------------------------------------
 import base64  # noqa: E402
+from typing import ClassVar  # noqa: E402
+
 from pydantic import ConfigDict, PrivateAttr  # noqa: E402
+from weebot.domain.models.output_trust import OutputTrust  # noqa: E402
 from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolResult  # noqa: E402
 
 
 class ScreenCaptureBaseTool(_WeebotBaseTool):
     """weebot BaseTool wrapper around ScreenCaptureTool for use in the ReAct agent."""
+
+    # An image of the user's own screen, like computer_use. Unfenced and
+    # untainting before SEC-1; revisit with computer_use (see the registry test).
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 30

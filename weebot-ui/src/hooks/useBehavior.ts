@@ -123,11 +123,9 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
       };
 
       ws.onerror = () => {
-        // Browsers deliberately expose no useful detail for WebSocket errors.
-        // `onclose` below moves the panel into its REST polling fallback and
-        // retries in the background, so logging an opaque `{}` only creates
-        // a false-alarm developer overlay for the operator.
-        setIsConnected(false);
+        // The browser gives no detail, and onclose reconnects; a socket closed by cleanup
+        // (dev double-mount, route change) also lands here, so this is a warning, not an error.
+        if (!disposed) console.warn("[Behavior] WebSocket error; reconnecting");
       };
 
       ws.onclose = () => {

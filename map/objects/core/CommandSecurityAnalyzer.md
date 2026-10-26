@@ -5,8 +5,8 @@ code: CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-23
-commit: c2f39937
+verified: 2026-10-24
+commit: 50a5d748
 ---
 
 # CommandSecurityAnalyzer
@@ -25,13 +25,13 @@ Defense in depth for the one tool that takes free-form shell text (`weebot/tools
   4. **Structure** (`:394-435`): more than 5 chain operators (20 when a PowerShell cmdlet is present or the command starts with `$`) or a URL together with `|`, `&&`, `||` gives SUSPICIOUS. A short list of known-safe PowerShell pipelines skips both checks (`:151-158`, `:411-413`).
 - Layers 1 to 3 can only return SAFE or DANGEROUS (`:269-278`, `:297-323`, `:351-392`). SUSPICIOUS comes from layer 4 alone.
 
-How `BashTool` uses it (`weebot/tools/bash_tool.py:244-310`):
-- DANGEROUS is final: the HMAC `security_override` token was retired by ADR-013 (F11), so a DENY is never approvable and an ASK is approved per call through the approval channel (`bash_tool.py:247-250`).
+How `BashTool` uses it (`weebot/tools/bash_tool.py:250-316`):
+- DANGEROUS is final: the HMAC `security_override` token was retired by ADR-013 (F11), so a DENY is never approvable and an ASK is approved per call through the approval channel (`bash_tool.py:253-256`).
 - SUSPICIOUS is logged and the command continues (`:281-291`).
 - An analyzer crash refuses the command (`:293-307`). If the analyzer could not be imported at construction, a legacy check runs instead (`:145-154`, `:308-310`).
 
 Consequences (read from source, not run):
-- SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:282-283`), but `ExecApprovalPolicy.evaluate(command)` is called with the command only, never with this verdict (`:393`).
+- SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:288-289`), but `ExecApprovalPolicy.evaluate(command)` is called with the command only, never with this verdict (`:393`).
 - Fixed in W3.6 (F10): the 1.2x entropy multiplier is gone. Layer 3 now refuses a base64 run only if it decodes to a shell command, or if it is a 40-character-plus run that is not pure hex, has a digit or `+/=`, is not a path, and has raw entropy above 4.0 bits/char (`bash_security.py:231-236`, `:296-304`, `:372-394`). Hex digests and CamelCase identifiers pass; `tests/unit/fixes/test_f10_entropy_hex_digest.py` pins `git checkout <40-hex sha>` and `docker pull ...@sha256:<64-hex>`. The false-positive test (`tests/unit/tools/test_bash_security_falsifying.py:229-240`) uses its own command list and does not catch this.
 - Layer 2's combination targets `|`, `.` and `+x` can never match, because the token set is built with a word-only regex (`:128-137`, `:305`). The `temp`/`tmp` combination flags any command that contains those words and `chmod` or `execute`.
 - The known-safe PowerShell allowlist is matched with `re.search` anywhere in the command (`:411-413`), so one safe-looking pipeline in a long command skips the chain-length and URL-chain checks for all of it. Layers 1 to 3 still run.
@@ -43,7 +43,7 @@ Consequences (read from source, not run):
 - Deleted 2026-10-22 (W1.6): the uncalled `_layer4_semantic_llm_analysis`, the unread `_DANGEROUS_OPERATORS`, and the docstring's timeout claim. The `.importlinter` exemption for `bash_security -> model_selection` went with them. Line numbers in this card are from `f00ea38`.
 
 ## Connected to
-- **Owned by** `BashTool` (`bash_tool.py:22-24, 90, 144`); no other tool uses it. `powershell` and `python_execute` do not call it (see the BashGuard card).
+- **Owned by** `BashTool` (`bash_tool.py:26-28, 90, 144`); no other tool uses it. `powershell` and `python_execute` do not call it (see the BashGuard card).
 - **Related:** `BashGuard` (separate regex set, four levels, run after this one), `ExecApprovalPolicy` (third gate), `weebot/config/constants.py` (`TEMPERATURE_DETERMINISTIC`, used only by the unwired LLM layer).
 - **Looks like but is not:** `BashGuard` (rates the same string with different rules; `RiskLevel` has BLOCKED, `CommandRiskLevel` does not); `EgressGuard` (data leaving the machine).
 

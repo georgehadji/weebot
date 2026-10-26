@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 from typing import Any
@@ -245,7 +246,9 @@ class DesktopSomRenderer(SomRenderer):
         """Load image and prepare overlay canvas, clipped to region if given."""
         import io as _io2
 
-        img = Image.open(_io2.BytesIO(screenshot_bytes)).convert("RGBA")
+        img = await asyncio.to_thread(
+            lambda: Image.open(_io2.BytesIO(screenshot_bytes)).convert("RGBA")
+        )
         if region:
             rx, ry, rw, rh = region
             img = img.crop((rx, ry, rx + rw, ry + rh))

@@ -1,3 +1,9 @@
+---
+status: open
+date: 2026-06-10
+note: phase 6 parallel pre-router (AgentPreRouter) never built
+---
+
 # Reasoner-Inspired Enhancements — Implementation Plan
 
 **Status:** Draft  

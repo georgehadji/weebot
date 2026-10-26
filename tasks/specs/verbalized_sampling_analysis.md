@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # Verbalized Sampling × weebot — Value Analysis
 
 **Paper:** *Verbalized Sampling: How to Mitigate Mode Collapse and Unlock LLM Diversity* (Zhang, Yu, Chong et al., arXiv:2510.01171v3, Oct 2025)

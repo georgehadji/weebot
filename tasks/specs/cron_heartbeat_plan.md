@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-10
+---
+
 # Cron & Heartbeat Integration Plan
 **Project**: weebot
 **Scope**: Wire the existing but unstarted `SchedulingManager`, add 4 default cron jobs,

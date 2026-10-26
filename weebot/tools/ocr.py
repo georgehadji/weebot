@@ -6,7 +6,8 @@ import base64
 import logging
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from PIL import Image
 from pydantic import Field
@@ -17,7 +18,7 @@ from weebot.tools.base import BaseTool, ToolResult
 def _read_refusal(image_path: str) -> str | None:
     """Why *image_path* may not be read, or None. Same rule as file_editor:
     inside the workspace, and allowed by the filesystem policy (F65)."""
-    from weebot.config.fs_permissions import load_fs_permission_checker
+    from weebot.application.services.fs_permission_policy import load_fs_permission_checker
     from weebot.config.settings import WORKSPACE_ROOT
 
     path = Path(image_path).resolve()
@@ -33,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 class OCRTool(BaseTool):
     """Extract text from images using Tesseract OCR."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "ocr"
     description: str = (
@@ -133,6 +136,8 @@ class OCRTool(BaseTool):
 
 class StructuredOCRTool(BaseTool):
     """Extract structured text with position information from images."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "ocr_structured"
     description: str = (

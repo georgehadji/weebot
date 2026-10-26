@@ -146,9 +146,32 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
     ``None`` or an unknown role gets the default cascade: the three tiers above
     the budget one.
     """
-    if role and role in ROLE_MODEL_CONFIG:
-        return list(ROLE_MODEL_CONFIG[role])
-    return list(_DEFAULT_ROLE_CASCADE)
+    cascade = (
+        list(ROLE_MODEL_CONFIG[role])
+        if role and role in ROLE_MODEL_CONFIG
+        else list(_DEFAULT_ROLE_CASCADE)
+    )
+    local = _local_model_for_role(role)
+    cascade = [local, *cascade] if local else cascade
+    # The user's pick from the UI goes first; everything else stays as its fallback.
+    from weebot.config.role_overrides import get_overrides
+
+    chosen = get_overrides().get(role or "")
+    return [chosen, *(m for m in cascade if m != chosen)] if chosen else cascade
+
+
+def _local_model_for_role(role: str | None) -> str | None:
+    """``ollama/<tag>`` when Ollama is on and *role* is listed in OLLAMA_ROLES, else None.
+
+    The Ollama model goes first and the normal cascade stays behind it, so a stopped server,
+    a spent cloud quota or a slow answer falls through to the models used before.
+    """
+    if not role:
+        return None
+    from weebot.config.local_models import local_model_id, role_models
+
+    tag = role_models().get(role)
+    return local_model_id(tag) if tag else None
 
 
 # Sub-agent model per AgentTier value ("budget", "standard", "premium"), for a

@@ -29,7 +29,17 @@ class GetPlanVisualizationHandler(QueryHandler):
 
             plan = session.get_last_plan() if hasattr(session, "get_last_plan") else None
             if plan is None:
-                return QueryResult.ok({"session_id": query.session_id, "plan": None})
+                # Same keys as a real plan (the UI's PlanVizData): without nodes and edges the
+                # Plan tab threw "Cannot read properties of undefined (reading 'map')".
+                return QueryResult.ok(
+                    {
+                        "session_id": query.session_id,
+                        "plan": None,
+                        "plan_status": "none",
+                        "nodes": [],
+                        "edges": [],
+                    }
+                )
 
             nodes = []
             edges = []

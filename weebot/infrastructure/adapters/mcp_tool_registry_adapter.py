@@ -12,7 +12,7 @@ class RoleBasedToolRegistryAdapter(McpToolRegistrationPort):
 
     The wrapped object must expose ``add_tool_to_role``, ``remove_tool_from_role``,
     ``add_role``, and ``list_roles`` methods.  We use ``Any`` to avoid importing
-    ``weebot.tools.tool_registry`` from infrastructure, which would transitively
+    ``weebot.application.services.tool_registry`` from infrastructure, which would transitively
     pull in application-layer modules and break Clean Architecture boundaries.
     """
 

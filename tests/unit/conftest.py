@@ -35,6 +35,13 @@ _AMBIENT_SETTINGS_VARS = (
     "SANDBOX_MAX_OUTPUT_BYTES",
     "SANDBOX_MODE",
     "SANDBOX_ALLOW_NETWORK",
+    # weebot.interfaces.web.main runs load_dotenv(override=True) when imported, which puts the
+    # developer's .env into os.environ for the rest of the run; local-model routing reads these.
+    "OLLAMA_ENABLED",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "OLLAMA_CONTEXT_WINDOW",
+    "OLLAMA_ROLES",
 )
 
 
@@ -62,6 +69,13 @@ def _isolate_weebot_settings(monkeypatch, tmp_path):
         monkeypatch.setattr(filesystem_memory, "DEFAULT_MEMORY_DIR", tmp_path / ".weebot_memory")
     except Exception:
         pass
+
+    # The model picked per role in the UI lives in <workspace>/.weebot/role_models.json; a
+    # developer's own picks must not change what the cascade tests expect.
+    from weebot.config import role_overrides
+
+    monkeypatch.setattr(role_overrides, "overrides_path", lambda: tmp_path / "role_models.json")
+    monkeypatch.setattr(role_overrides, "_cache", None)
 
     yield
 

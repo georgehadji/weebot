@@ -11,7 +11,8 @@ package is not installed (returns a clear error message).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -44,6 +45,8 @@ class ImageSearchTool(BaseTool):
     creates a fresh session per invocation.  The ``duckduckgo_search``
     library handles rate-limiting transparently.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "search_images"
     description: str = (

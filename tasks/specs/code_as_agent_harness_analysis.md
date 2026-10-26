@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # "Code as Agent Harness" → Value Analysis for weebot
 
 **Paper:** *Code as Agent Harness: Toward Executable, Verifiable, and Stateful Agent Systems* (UIUC / Meta / Stanford, arXiv:2605.18747v1, May 2026).

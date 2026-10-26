@@ -314,7 +314,9 @@ class Session(BaseModel):
         return self._memory_index.has_unresolved_wait_event(self.events)
 
     def set_title(self, title: str) -> Session:
-        return self.model_copy(update={"title": title})
+        new_session = self.model_copy(update={"title": title})
+        new_session._memory_index = self._memory_index.copy()  # model_copy resets private attrs
+        return new_session
 
     def add_user_message(self, text: str) -> Session:
         from .event import MessageEvent

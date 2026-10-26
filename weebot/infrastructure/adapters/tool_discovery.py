@@ -11,10 +11,20 @@ from __future__ import annotations
 import logging
 
 from weebot.domain.models.tool_manifest import ToolManifest
-from weebot.tools.base import BaseTool
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.domain.models.base_tool import BaseTool
+from typing import Protocol
 
 _log = logging.getLogger(__name__)
+
+
+class RoleRegistry(Protocol):
+    """What discovery needs from the role registry: which tools a role may use.
+
+    The concrete ``RoleBasedToolRegistry`` lives in application/services; infrastructure
+    may not import it, so the composition root injects it (plan 3.2).
+    """
+
+    def get_tools_for_role(self, role: str) -> list[str]: ...
 
 # ── Tool module import helper ───────────────────────────────────────────
 
@@ -175,8 +185,8 @@ class ToolDiscoveryAdapter:
     :class:`RoleBasedToolRegistry`.
     """
 
-    def __init__(self, role_registry: RoleBasedToolRegistry | None = None) -> None:
-        self._role_registry = role_registry or RoleBasedToolRegistry()
+    def __init__(self, role_registry: RoleRegistry) -> None:
+        self._role_registry = role_registry
 
     # ── ToolDiscoveryPort implementation ──────────────────────────────
 
@@ -220,7 +230,7 @@ class ToolDiscoveryAdapter:
         # Ensure tool modules are loaded so __subclasses__() sees them
         _import_tool_modules()
 
-        from weebot.tools.base import BaseTool as BT
+        BT = BaseTool
 
         subclasses: list[type[BaseTool]] = []
 

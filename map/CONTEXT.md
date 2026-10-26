@@ -24,7 +24,7 @@ Current flags (from `tasks/icm_slice0_inventory.md`):
 | ModelConfig | the catalog entry returned by `get_model_config` | `weebot/domain/models/model_config.py:22` | no other class of this name since W6.1 (2026-10-23) deleted the task-table dataclass in `weebot/core/model_cascade_config.py` |
 | approval | a rule outcome (`ApprovalMode`) from `ExecApprovalPolicy`, enforced by the shell tools | `weebot/core/approval_policy.py:21` | `ApprovalDecision` / `ApprovalManager` in `weebot/core/approval.py`, a human-answer layer that nothing calls |
 | risk level | `RiskLevel` (4 levels incl. BLOCKED) for `BashGuard` | `weebot/core/bash_guard.py:29` | `CommandRiskLevel` (3 levels) for `CommandSecurityAnalyzer`, `weebot/tools/bash_security.py:25` |
-| TaskCategory | a step category (`coding`, `file_ops`, ...) for per-step model routing | `weebot/application/services/task_model_router.py:16` | `TaskCategory` (`casual`, `code`, ...) for task routing in `weebot/domain/models/task_route.py:18`: a different enum with the same name |
+| TaskCategory | a step category (`coding`, `file_ops`, ...) for per-step model routing | `weebot/domain/models/task_category.py:13` | `TaskCategory` (`casual`, `code`, ...) for task routing in `weebot/domain/models/task_route.py:18`: a different enum with the same name |
 
 ## Walking order
 

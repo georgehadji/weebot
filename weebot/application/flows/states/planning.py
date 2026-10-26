@@ -8,7 +8,20 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.domain.services.session_lessons import (
+    journal_lessons,
+    project_key,
+    session_lessons,
+)
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    next_state_after_plan,
+    register_state,
+    task_text,
+)
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -63,13 +76,13 @@ def _infer_domain(prompt: str) -> str:
     return "general"
 
 
+@register_state(StateId.PLANNING)
 class PlanningState(FlowState):
     """Handles the creation of the initial execution plan."""
 
     status = AgentStatus.PLANNING
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.summarizing import SummarizingState
         from weebot.application.agents.planner import PlannerAgent
         from weebot.domain.models.event import ErrorEvent as EE
 
@@ -84,7 +97,7 @@ class PlanningState(FlowState):
                 error=(
                     "PlanningState requires a Mediator to be configured on PlanActFlow. "
                     "Construct PlanActFlow with mediator=container.get(Mediator) or "
-                    "use container.build_agent_runner()."
+                    "build it through container.get(\"create_flow\")."
                 )
             )
             return
@@ -175,9 +188,11 @@ class PlanningState(FlowState):
         _avoidance_notes: list[str] = []
         _journal = getattr(context, "_misalignment_journal", None)
         if _journal is not None:
-            _project_path = context._session.context.get("working_dir", "")
+            _project_path = project_key(context._session.context.get("working_dir"))
             try:
-                _recent = await _journal.get_recent(_project_path, limit=3)
+                _recent = await _journal.get_recent(_project_path, limit=10)
+                _avoidance_notes += journal_lessons(_recent, context._session.context.meta_notes)
+                _recent = [e for e in _recent if e.symptom != "session_lesson"][:3]
                 for _entry in _recent:
                     if _entry.symptom == "constraint_violation" and _entry.constraint_text:
                         _avoidance_notes.append(
@@ -190,6 +205,10 @@ class PlanningState(FlowState):
                         )
             except Exception:
                 pass  # journal read failures must never block planning
+        # ── Lessons MetaAnalysisState stored on this session ────────────────
+        # They were written (Session.add_meta_note) but never read back. They go first:
+        # the planner keeps only the last 5 notes, and a recorded violation must outlast them.
+        _avoidance_notes = session_lessons(context._session.context.meta_notes) + _avoidance_notes
         # ─────────────────────────────────────────────────────────────────────
 
         import time as _time
@@ -209,6 +228,11 @@ class PlanningState(FlowState):
         _plan_elapsed = _time.monotonic() - _plan_t0
         if not cmd_result.success:
             yield EE(error=f"Plan creation rejected: {cmd_result.error}")
+            # Left RUNNING, the flow loop re-entered this state at once, up to max_iterations
+            # times: 47+ identical 402 "insufficient credits" errors and a session stuck forever.
+            from weebot.domain.models.session import SessionStatus
+
+            context._session = context._session.set_status(SessionStatus.FAILED)
             return
 
         # Consume events from the mediator result using shared reconstructor.
@@ -240,9 +264,8 @@ class PlanningState(FlowState):
 
         if context._plan is None or len(context._plan.steps) == 0:
             logger.info("No steps in plan, transitioning to SUMMARIZING")
-            from weebot.application.flows.states.summarizing import SummarizingState
 
-            context.set_state(SummarizingState())
+            context.set_state(new_state(StateId.SUMMARIZING))
         else:
             context._snapshot_plan()
             # --- DPPM: parallel planning for complex tasks ---
@@ -310,10 +333,8 @@ class PlanningState(FlowState):
             )
             # Transition to CritiquingState if a critic is available
             if context._plan_critic is not None:
-                from weebot.application.flows.states.critiquing import CritiquingState
 
-                context.set_state(CritiquingState(critic=context._plan_critic))
+                context.set_state(new_state(StateId.CRITIQUING, critic=context._plan_critic))
             else:
-                from weebot.application.flows.states.plan_review import next_state_after_plan
 
                 context.set_state(next_state_after_plan())

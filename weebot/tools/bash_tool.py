@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+from weebot.domain.models.output_trust import OutputTrust
+
 import re
 import subprocess
 
@@ -11,6 +14,7 @@ from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
+from weebot.core.background_tasks import get_background_tasks
 from weebot.core.bash_guard import BashGuard
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -52,6 +56,8 @@ class BashTool(BaseTool):
     - Layer 3: Entropy analysis (encoded payload detection)
     - Layer 4: Semantic validation (command structure)
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     default_timeout_seconds: int = 300
     truncation_strategy: str = "tail"
@@ -356,25 +362,21 @@ class BashTool(BaseTool):
 
         # Fire post_bash_guard hook asynchronously via fire-and-forget
         if _bash_guard_hooks is not None:
-            import asyncio as _aio
-
-            try:
-                _loop = _aio.get_running_loop()
-                _loop.create_task(
-                    _bash_guard_hooks.execute_hooks(
-                        "post_bash_guard",
-                        {
-                            "session_id": "bash_tool",
-                            "command": command[:200],
-                            "risk_level": risk_level.value,
-                            "allowed": risk_level == RiskLevel.SAFE,
-                            "requires_approval": risk_level
-                            in (RiskLevel.SUSPICIOUS, RiskLevel.DANGEROUS),
-                        },
-                    )
-                )
-            except RuntimeError:
-                pass
+            # execute() is a coroutine, so a loop is always running here.
+            get_background_tasks().spawn(
+                _bash_guard_hooks.execute_hooks(
+                    "post_bash_guard",
+                    {
+                        "session_id": "bash_tool",
+                        "command": command[:200],
+                        "risk_level": risk_level.value,
+                        "allowed": risk_level == RiskLevel.SAFE,
+                        "requires_approval": risk_level
+                        in (RiskLevel.SUSPICIOUS, RiskLevel.DANGEROUS),
+                    },
+                ),
+                name="post-bash-guard",
+            )
 
         if risk_level == RiskLevel.BLOCKED:
             reasons = [c.description for c in checks if c.description]

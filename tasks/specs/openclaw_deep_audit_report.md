@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # OpenClaw Deep Technical Audit → WeeBot Optimization Report
 
 **Audit target:** `openclaw/openclaw` @ `main`, shallow-cloned 2026-06-22

@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-08-03
+---
+
 # Bilevel Autoresearch vs weebot — Analysis
 
 **Paper:** Qu & Lu, *Bilevel Autoresearch: Meta-Autoresearching Itself*, arXiv:2603.23420v2 (2 Jun 2026)

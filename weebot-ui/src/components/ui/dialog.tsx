@@ -80,6 +80,47 @@ function DialogContent({
   )
 }
 
+function DialogSheet({
+  className,
+  children,
+  side = "left",
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  side?: "left" | "right"
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay className="bg-black/50" />
+      <DialogPrimitive.Popup
+        data-slot="dialog-sheet"
+        className={cn(
+          "fixed inset-y-0 z-50 flex w-[85vw] max-w-xs flex-col bg-surface-1 shadow-xl outline-hidden duration-150 data-open:animate-in data-closed:animate-out",
+          side === "left"
+            ? "left-0 data-open:slide-in-from-left data-closed:slide-out-to-left"
+            : "right-0 data-open:slide-in-from-right data-closed:slide-out-to-right",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close
+          data-slot="dialog-close"
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close panel"
+              className="absolute top-2 right-2 z-10"
+            />
+          }
+        >
+          <XIcon />
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  )
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -155,6 +196,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogSheet,
   DialogTitle,
   DialogTrigger,
 }

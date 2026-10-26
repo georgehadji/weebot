@@ -274,7 +274,11 @@ def test_none_of_these_gates_has_a_production_caller():
         "security_validators": "CommandValidator",
         "identity_verifier": "IdentityVerifier",
         "state_verifier": "StateVerifier",
-        "trust_boundary_scanner": "scan_for_injection",
+        # "trust_boundary_scanner": "scan_for_injection" left this list on
+        # 2026-10-24 (plan 1.1b): application/di now hands it to the executor.
+        # Re-triaged then: it is a signal that escalates trust and names the
+        # pattern, never a block, so an unavailable scanner cannot fail open;
+        # that path is pinned in tests/unit/agents/test_tool_output_presentation.py.
         "chain_of_verification": "ChainOfVerificationService",
     }
 

@@ -21,9 +21,9 @@ const EVENT_ICON: Record<string, typeof Circle> = {
 };
 
 const EVENT_COLOR: Record<string, string> = {
-  "file.created": "text-status-live",
-  "file.modified": "text-status-waiting",
-  "file.deleted": "text-status-error",
+  "file.created": "text-status-live-fg",
+  "file.modified": "text-status-waiting-fg",
+  "file.deleted": "text-status-error-fg",
   "file.moved": "text-cyan-500",
 };
 

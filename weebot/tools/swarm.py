@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.domain.models.swarm import SwarmSpec
+from weebot.domain.models.swarm import SwarmResult, SwarmSpec
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,10 @@ logger = logging.getLogger(__name__)
 class SwarmTool(BaseTool):
     """Decompose a complex task into sub-goals, spawn parallel agents,
     and synthesize results — all driven by a single prompt."""
+
+    # Reviewed 2026-10-24: sub-agents with tools run inside it and may have browsed,
+    # so its result can carry third-party text.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     name: str = "swarm"
     description: str = (
@@ -63,16 +69,23 @@ class SwarmTool(BaseTool):
     # Injected dependencies
     _llm: Any = None
     _flow_factory: Any = None
+    _decompose: Any = None
+    _synthesize: Any = None
 
     def __init__(
         self,
         llm: Any = None,
         flow_factory: Any = None,
         swarm_bus: SwarmEventBusPort | None = None,
+        decompose: Callable[[str, int], Awaitable[SwarmSpec]] | None = None,
+        synthesize: Callable[[str, list[dict], str], Awaitable[SwarmResult]] | None = None,
         **data: Any,
     ) -> None:
         super().__init__(**data)
         object.__setattr__(self, "_llm", llm)
+        # The registry injects both callables (plan 3.3); the tool imports no agent.
+        object.__setattr__(self, "_decompose", decompose)
+        object.__setattr__(self, "_synthesize", synthesize)
         object.__setattr__(self, "_flow_factory", flow_factory)
         object.__setattr__(self, "_swarm_bus", swarm_bus)
 
@@ -81,16 +94,17 @@ class SwarmTool(BaseTool):
     ) -> ToolResult:
         if not self._llm:
             return ToolResult.error_result("SwarmTool has no LLMPort — wire it via DI")
+        if self._decompose is None or self._synthesize is None:
+            return ToolResult.error_result(
+                "SwarmTool has no decompose/synthesize agents — wire it via the tool registry"
+            )
 
         max_goals = min(max(max_goals, 1), 8)
         t_start = time.monotonic()
 
         # 1. Decompose
-        from weebot.application.agents.goal_agent import GoalAgent
-
-        goal_agent = GoalAgent(self._llm)
         try:
-            spec: SwarmSpec = await goal_agent.decompose(prompt, max_goals=max_goals)
+            spec: SwarmSpec = await self._decompose(prompt, max_goals)
         except Exception as exc:
             return ToolResult.error_result(f"Goal decomposition failed: {exc}")
 
@@ -132,8 +146,6 @@ class SwarmTool(BaseTool):
 
         # 3. Synthesize — optionally using swarm bus for real-time insights
         sub_results = dispatch_result.data.get("results", [])
-        from weebot.application.agents.synthesizer_agent import SynthesizerAgent
-
         # Collect bus messages for richer context
         insight_history = swarm_bus.get_all_topics()
         bus_insights = {}
@@ -141,10 +153,7 @@ class SwarmTool(BaseTool):
             msgs = swarm_bus.get_history(topic)
             bus_insights[topic] = [m.payload for m in msgs]
 
-        synthesizer = SynthesizerAgent(self._llm)
-        swarm_result = await synthesizer.synthesize(
-            prompt=prompt, results=sub_results, strategy=spec.synthesis_strategy
-        )
+        swarm_result = await self._synthesize(prompt, sub_results, spec.synthesis_strategy)
 
         swarm_result.elapsed_seconds = time.monotonic() - t_start
 

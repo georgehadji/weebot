@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-08-19
+---
+
 # Side-Constraint Integrity — Implementation Plan
 
 **Source paper:** Wang, Zhang, Lee, Yang — *Lost in Compaction: Evaluating Side-Constraint Loss under Context Compaction* (arXiv:2608.11242v1, Jul 2026)

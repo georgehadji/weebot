@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # Weebot Architecture Audit — EGFV Protocol v2.0
 
 **Date:** 2026-06-10  

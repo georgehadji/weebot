@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
-from weebot.tools.base import BaseTool, ToolResult
+from weebot.domain.models.base_tool import BaseTool
+from weebot.domain.models.tool_result import ToolResult
 
 
 class MCPToolAdapter(BaseTool):
     """Wraps a single MCP tool as a Weebot BaseTool."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     def __init__(
         self, name: str, description: str, parameters: dict[str, Any], manager: MCPClientManager

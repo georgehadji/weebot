@@ -13,6 +13,8 @@ export type StepStatus =
   | 'unverified'
   | 'error';
 export type ToolStatus = 'calling' | 'called';
+/** Client-side only: where a message the user typed is on its way to the server. */
+export type DeliveryState = 'sending' | 'sent' | 'failed';
 
 export interface BaseEvent {
   type: string;
@@ -49,6 +51,8 @@ export interface ToolEvent extends BaseEvent {
   function_args: Record<string, unknown>;
   status: ToolStatus;
   result?: string;
+  /** The tool finished with an error (set by the backend; absent on older events). */
+  is_error?: boolean;
   artifact?: unknown;
 }
 
@@ -56,6 +60,8 @@ export interface MessageEvent extends BaseEvent {
   type: 'message';
   role: 'user' | 'assistant';
   message: string;
+  /** Set on messages the UI created optimistically; the server's echo (same id) makes it 'sent'. */
+  delivery?: DeliveryState;
 }
 
 export interface TitleEvent extends BaseEvent {
@@ -129,6 +135,14 @@ export interface Session {
   created_at: string;
   updated_at: string;
   event_count: number;
+}
+
+/** One agent role: its built-in model cascade, the user's pick, and the model tried first. */
+export interface RoleModel {
+  role: string;
+  default: string[];
+  override: string | null;
+  effective: string;
 }
 
 export interface ModelInfo {

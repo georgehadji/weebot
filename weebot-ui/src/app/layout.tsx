@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { Header } from "@/components/layout/Header";
+import { AppShell } from "@/components/shell/AppShell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { EventStreamProvider } from "@/providers/EventStreamProvider";
+import { AnnouncerProvider } from "@/providers/AnnouncerProvider";
+import { ShellProvider } from "@/providers/ShellProvider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
@@ -34,10 +36,11 @@ export default function RootLayout({
           <ToastProvider>
             <EventStreamProvider>
               <TooltipProvider>
-                <div className="min-h-screen flex flex-col">
-                  <Header />
-                  <main className="flex-1">{children}</main>
-                </div>
+                <AnnouncerProvider>
+                  <ShellProvider>
+                    <AppShell>{children}</AppShell>
+                  </ShellProvider>
+                </AnnouncerProvider>
               </TooltipProvider>
             </EventStreamProvider>
           </ToastProvider>

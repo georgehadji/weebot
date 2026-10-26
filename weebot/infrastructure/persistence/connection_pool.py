@@ -420,7 +420,9 @@ class SQLiteConnectionPool:
         }
 
 
-# Singleton pool registry for reuse across repositories
+# One pool per database file, shared by every repository on it.
+# Owner: the application shutdown path calls close_all_pools(), which is also the test
+# reset (tests/conftest.py clears and checks it around each test).
 _pool_registry: dict[str, SQLiteConnectionPool] = {}
 _pool_lock: asyncio.Lock | None = None
 

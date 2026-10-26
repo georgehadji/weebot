@@ -12,6 +12,7 @@ Implementation follows the OSWorld environment protocol:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import base64
 from pathlib import Path
@@ -274,7 +275,7 @@ except ImportError:
 
         if not _re.match(r"^[a-zA-Z0-9/._\-\~]+$", remote_path):
             raise ValueError(f"Unsafe remote_path: {remote_path}")
-        content = local_path.read_bytes()
+        content = await asyncio.to_thread(local_path.read_bytes)
         encoded = base64.b64encode(content).decode()
         if self._mode == "remote":
             return await self._remote_put_file(remote_path, encoded)

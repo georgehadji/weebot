@@ -33,6 +33,17 @@ class PrioritizedSession:
     flow_factory: FlowFactory = field(compare=False)
 
 
+_RETRIES_KEY = "retries_remaining"
+_FAILURE_KEY = "failure_reason"
+
+
+def _with_extra(session: Session, **values: object) -> Session:
+    """A copy of *session* with keys set on ``context.extra`` (None removes one)."""
+    extra = {k: v for k, v in {**session.context.extra, **values}.items() if v is not None}
+    context = session.context.model_copy(update={"extra": extra})
+    return session.model_copy(update={"context": context})
+
+
 class TaskRunner:
     """Runs agent flows as background asyncio tasks with session persistence."""
 
@@ -78,11 +89,12 @@ class TaskRunner:
         # Fallback to asyncio.PriorityQueue when no external queue is provided
         self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending) if task_queue is None else None  # type: ignore[assignment]
         self._worker_task: asyncio.Task | None = None
+        # In-process cache of the persisted count (session.context.extra["retries_remaining"]);
+        # the Session is the source of truth, so a restart does not reset the budget (SCL-1).
         self._retry_counts: dict[str, int] = {}  # session_id -> attempts remaining
+        # Code, not state: a factory cannot be persisted, so a retry after a restart needs
+        # the caller to supply one again (rerun_failed_session says so).
         self._flow_factories: dict[str, FlowFactory] = {}  # session_id -> factory for retries
-        self._failed_sessions: dict[str, int] = (
-            {}
-        )  # session_id -> retry count exhausted (dead-letter queue)
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
@@ -91,7 +103,8 @@ class TaskRunner:
     async def _worker(self) -> None:
         """Background worker that consumes the task queue."""
         if self._task_queue is not None:
-            # External queue (Redis) — use TaskQueuePort interface
+            # External queue (Redis) — use TaskQueuePort interface.
+            # RESERVED for the Sep plan's Phase 5.2 (decision D4); see task_queue_port.py.
             while True:
                 try:
                     item = await self._task_queue.dequeue()
@@ -150,7 +163,9 @@ class TaskRunner:
         # Record the factory so _run_flow can retry on failure
         self._flow_factories[session_id] = flow_factory
         if session_id not in self._retry_counts:
-            self._retry_counts[session_id] = self._max_session_retries
+            self._retry_counts[session_id] = int(
+                session.context.extra.get(_RETRIES_KEY, self._max_session_retries)
+            )
 
         task = asyncio.create_task(
             self._run_flow_bounded(session_id, flow_factory(session), prompt),
@@ -238,6 +253,15 @@ class TaskRunner:
             await self._run_flow(session_id, flow, prompt)
 
     async def _run_flow(self, session_id: str, flow: BaseFlow, prompt: str | None = None) -> None:
+        """Run the flow with this session's ids bound to every log record (OBS-1)."""
+        from weebot.core.log_context import log_context
+
+        with log_context(session_id=session_id, new_correlation=True):
+            await self._run_flow_logged(session_id, flow, prompt)
+
+    async def _run_flow_logged(
+        self, session_id: str, flow: BaseFlow, prompt: str | None = None
+    ) -> None:
         """Internal runner that persists events and handles completion."""
         session = await self._state_repo.load_session(session_id)
         if session is None:
@@ -255,7 +279,14 @@ class TaskRunner:
             run_prompt = prompt if prompt is not None else session.context.get("last_prompt", "")
             async for event in flow.run(run_prompt):
                 session = session.add_event(event)
+                # The planner's title replaces the one derived from the prompt, and the
+                # rail learns of it through the presence event published below.
+                new_title = getattr(event, "title", "") if event.type == "title" else ""
+                if new_title and new_title != session.title:
+                    session = session.set_title(new_title)
                 await self._state_repo.save_session(session)
+                if new_title:
+                    await self._publish_presence(session)
                 # Only publish from the runner when the flow has no event_bus of its
                 # own.  When the flow carries an event_bus (the DI container always
                 # provides one), flow._emit() already published the event; publishing
@@ -264,12 +295,21 @@ class TaskRunner:
                 flow_has_bus = getattr(flow, "_event_bus", None) is not None
                 if self._event_bus and not flow_has_bus:
                     await self._event_bus.publish(event)
-        except Exception:
+        except Exception as failure:
             logger.exception("Flow failed for session %s", session_id)
             # Session-level retry: requeue with exponential backoff
             remaining = self._retry_counts.get(session_id, 0)
             if remaining > 0:
                 self._retry_counts[session_id] = remaining - 1
+                # Persist the spent attempt before sleeping: a crash during the backoff
+                # must not hand the session a fresh budget.
+                session = _with_extra(session, **{_RETRIES_KEY: remaining - 1})
+                try:
+                    await self._state_repo.save_session(session)
+                except Exception:
+                    logger.warning(
+                        "could not persist retry count for %s", session_id, exc_info=True
+                    )
                 backoff = 5.0 * (2 ** (self._max_session_retries - remaining))
                 logger.info(
                     "Retrying session %s in %.0fs (%d retries remaining)",
@@ -285,7 +325,10 @@ class TaskRunner:
                         await self._start_direct(reloaded, factory, prompt)
                         return
             try:
-                session = session.set_status(SessionStatus.FAILED)
+                session = _with_extra(
+                    session.set_status(SessionStatus.FAILED),
+                    **{_RETRIES_KEY: 0, _FAILURE_KEY: f"{type(failure).__name__}: {failure}"[:500]},
+                )
                 await self._state_repo.save_session(session)
                 await self._publish_presence(session)
             except Exception as persist_exc:
@@ -297,8 +340,9 @@ class TaskRunner:
                     persist_exc,
                 )
             finally:
-                # Dead-letter queue: track sessions that exhausted all retries
-                self._failed_sessions[session_id] = self._max_session_retries
+                # The dead-letter queue is the persisted FAILED status plus failure_reason
+                # (list_failed_sessions reads it); nothing else to record here.
+                self._retry_counts[session_id] = 0
         else:
             # Sync flow-mutated state (facts, compaction) back into
             # the local session before final save. The flow modifies
@@ -308,6 +352,10 @@ class TaskRunner:
                 session = session.model_copy(update={"context": flow_session.context})
             if flow.is_done():
                 session = session.set_status(SessionStatus.COMPLETED)
+            elif flow_session is not None and flow_session.status == SessionStatus.FAILED:
+                # A flow that ended FAILED (plan rejected, cancelled) was reset to WAITING here,
+                # so the UI showed "waiting for input" for a run that could never continue.
+                session = session.set_status(SessionStatus.FAILED)
             else:
                 session = session.set_status(SessionStatus.WAITING)
             await self._state_repo.save_session(session)
@@ -392,20 +440,29 @@ class TaskRunner:
 
         # Clear dead-letter and retry state so the new attempt gets a clean
         # retry budget.
-        self._failed_sessions.pop(session_id, None)
         self._retry_counts.pop(session_id, None)
+        session = _with_extra(
+            session, **{_RETRIES_KEY: self._max_session_retries, _FAILURE_KEY: None}
+        )
 
         await self._start_direct(session, factory)
         logger.info("Rerun initiated for failed session %s", session_id)
         return True
 
-    async def list_failed_sessions(self) -> dict[str, int]:
-        """Return sessions in the dead-letter queue with retry counts.
+    async def list_failed_sessions(self) -> dict[str, str]:
+        """The dead-letter queue: FAILED sessions that carry a failure reason.
+
+        Read from the persisted sessions, so it survives a restart.
 
         Returns:
-            Dict mapping session_id → number of retries attempted.
+            Dict mapping session_id -> the failure that exhausted its retries.
         """
-        return dict(self._failed_sessions)
+        failed = await self._state_repo.list_sessions(status=SessionStatus.FAILED.value)
+        return {
+            s.id: str(s.context.extra[_FAILURE_KEY])
+            for s in failed
+            if s.context.extra.get(_FAILURE_KEY)
+        }
 
     async def shutdown(self) -> None:
         """Cancel worker and wait for queue drain."""

@@ -15,7 +15,14 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    next_state_after_plan,
+    register_state,
+    task_text,
+)
 from weebot.domain.models.event import AgentEvent, PlanEvent, ThoughtEvent
 from weebot.domain.models.plan import PlanStatus
 
@@ -24,13 +31,13 @@ logger = logging.getLogger(__name__)
 PREMORTEM_MIN_STEPS = 3
 
 
+@register_state(StateId.PREMORTEM)
 class PremortmState(FlowState):
     """Runs a pre-mortem analysis and injects risk notes into the plan."""
 
     status = AgentStatus.PLANNING  # Planning sub-phase — reuses existing status
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.plan_review import next_state_after_plan
         from weebot.application.services.premortem_analyzer import PremortmAnalyzer
 
         plan = context._plan

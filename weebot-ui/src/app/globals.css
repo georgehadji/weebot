@@ -50,6 +50,10 @@
   --color-status-waiting: hsl(var(--status-waiting));
   --color-status-error: hsl(var(--status-error));
   --color-status-idle: hsl(var(--status-idle));
+  /* text-safe variants: the fills above are for dots and borders, these reach 4.5:1 as text */
+  --color-status-live-fg: hsl(var(--status-live-fg));
+  --color-status-waiting-fg: hsl(var(--status-waiting-fg));
+  --color-status-error-fg: hsl(var(--status-error-fg));
 
   --border-color-strong: hsl(var(--border-strong));
 
@@ -136,10 +140,10 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215 16% 40%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: var(--p-red-500);
+    --destructive: 0 72% 46%;
     --destructive-foreground: 0 0% 100%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -161,6 +165,9 @@
     --status-waiting: var(--p-amber-500);
     --status-error: var(--p-red-500);
     --status-idle: 215 16% 55%;
+    --status-live-fg: 142 72% 26%;
+    --status-waiting-fg: 30 90% 30%;
+    --status-error-fg: 0 72% 40%;
 
     /* layout chrome */
     --topbar-h: 48px;
@@ -212,6 +219,9 @@
     --status-waiting: var(--p-amber-500);
     --status-error: var(--p-red-500);
     --status-idle: var(--p-slate-400);
+    --status-live-fg: var(--p-green-500);
+    --status-waiting-fg: var(--p-amber-500);
+    --status-error-fg: 0 90% 68%;
   }
 }
 
@@ -229,7 +239,7 @@
   .surface-error {
     background-color: hsl(var(--status-error) / 0.12);
     border-color: hsl(var(--status-error) / 0.35);
-    color: hsl(var(--status-error));
+    color: hsl(var(--status-error-fg));
   }
   .dark .surface-error {
     background-color: hsl(var(--status-error) / 0.15);

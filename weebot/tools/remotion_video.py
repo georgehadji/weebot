@@ -30,7 +30,8 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import PrivateAttr
 
@@ -116,6 +117,8 @@ def _child_env() -> dict[str, str]:
 
 class RemotionVideoTool(BaseTool):
     """Scaffold, preview and render Remotion (React) video projects."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "remotion_video"
     description: str = (

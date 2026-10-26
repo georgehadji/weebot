@@ -79,3 +79,15 @@ class TestReplaceEvents:
         assert replaced.events == []
         assert replaced.get_last_plan() is None
         assert replaced.has_unresolved_wait_event() is False
+
+
+def test_a_tool_event_carries_an_explicit_failure_flag_on_the_wire():
+    """UI/UX plan D6: the tool row shows "Failed" from this field, not from the result text."""
+    from weebot.domain.models.event import ToolEvent, ToolStatus
+
+    ok = ToolEvent(tool_call_id="c", tool_name="bash", status=ToolStatus.CALLED, result="fine")
+    bad = ToolEvent(
+        tool_call_id="c", tool_name="bash", status=ToolStatus.CALLED, result="boom", is_error=True
+    )
+    assert ok.model_dump(mode="json")["is_error"] is False
+    assert bad.model_dump(mode="json")["is_error"] is True

@@ -48,6 +48,26 @@ class TokenBudgetTermination(TerminationCondition):
         return TerminationResult(False)
 
 
+class SessionCostTermination(TerminationCondition):
+    """Terminate when the session's spend reaches the hard limit now in force (D6).
+
+    Pure: the flow computes the spend and the allowance (the hard limit plus one
+    increment per human approval) and passes both in the context. The flow asks a
+    human before it acts on this result; see ``PlanActFlow._budget_gate``.
+    """
+
+    def check(self, ctx: TerminationContext) -> TerminationResult:
+        allowance = ctx.session_cost_allowance_usd
+        if allowance > 0 and ctx.session_cost_usd >= allowance:
+            return TerminationResult(
+                True,
+                f"BUDGET_EXCEEDED: session spend ${ctx.session_cost_usd:.2f} reached "
+                f"${allowance:.2f}",
+                code="BUDGET_EXCEEDED",
+            )
+        return TerminationResult(False)
+
+
 class WallClockTermination(TerminationCondition):
     """Terminate after a maximum wall-clock duration.
 

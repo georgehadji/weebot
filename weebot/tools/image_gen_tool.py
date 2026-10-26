@@ -15,7 +15,8 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import BaseModel, Field
 
@@ -262,6 +263,8 @@ class ImageGenTool(BaseTool):
     For raster image generation (PNG/JPG), requires REPLICATE_API_TOKEN to
     be configured — falls back to SVG generation otherwise.
     """
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     default_timeout_seconds: int = 90
     name: str = "image_gen"

@@ -7,7 +7,8 @@ the violation report with pass/fail verdict and score.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.application.ports.audit_port import AuditPort
 from weebot.tools.base import BaseTool, ToolResult
@@ -15,6 +16,8 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class AuditTool(BaseTool):
     """Audit agent outputs for safety, accuracy, and compliance."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "audit_session"
     description: str = (

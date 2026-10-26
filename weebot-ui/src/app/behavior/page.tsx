@@ -24,9 +24,12 @@ function MonitorTab() {
     <div className="space-y-6">
       <Card>
         <CardContent className="pt-4">
-          <label className="mb-2 block text-sm text-muted-foreground">Session ID</label>
+          <label htmlFor="behavior-session-id" className="mb-2 block text-sm text-muted-foreground">
+            Session ID
+          </label>
           <div className="flex gap-2">
             <input
+              id="behavior-session-id"
               type="text"
               value={sessionId}
               onChange={(e) => setSessionId(e.target.value)}
@@ -52,7 +55,7 @@ function MonitorTab() {
               href="https://github.com/Tetrahedroned/iterance"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-agent hover:underline"
+              className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
             >
               Iterance
             </a>{" "}
@@ -72,7 +75,7 @@ function MonitorTab() {
           </div>
           <div>
             <h3 className="mb-2 font-medium text-foreground">CLI commands</h3>
-            <pre className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
+            <pre tabIndex={0} aria-label="Example commands" className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
 {`weebot behavior watch ./my-project --session-id abc123
 weebot behavior trust
 weebot behavior log --count 20
@@ -132,7 +135,7 @@ function SettingsTab() {
           <p className="mb-3 text-sm text-muted-foreground">
             Tracking is on by default. Set these before starting the backend to change it.
           </p>
-          <pre className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
+          <pre tabIndex={0} aria-label="Example commands" className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
 {`export WEEBOT_BEHAVIOR_TRACKING=false
 export WEEBOT_LEDGER_DIR=/path/to/ledger
 export WEEBOT_EXTRA_IGNORE="*.log,dist/"`}

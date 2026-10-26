@@ -39,15 +39,17 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 _INVENTORY = _ROOT / "tasks" / "audits" / "candidates.yml"
 _AUDITS = _ROOT / "tasks" / "audits"
 
-# Candidate ids look like D30 or S4. Two digits at most, so that bandit codes
-# (B110) and ruff codes (S110, E501) cannot be mistaken for candidates -- `S110`
-# appears in the baseline audit as a *rule* name, not a candidate.
+# Candidate ids look like D30 or S4 (round 1) or H3.5 (round 2).
+# Round 1: Two digits at most, so that bandit codes (B110) and ruff codes
+# (S110, E501) cannot be mistaken for candidates -- `S110` appears in the
+# baseline audit as a *rule* name, not a candidate.
+# Round 2: H<wave>.<n> format, e.g. H3.5 for wave 3 candidate 5.
 #
 # The trailing lookahead drops the opening half of a range: the baseline writes
 # "Entry material is §7.3 D1-D12", which points at a plan section and is not a
 # claim about D1. The closing half still matches, which is correct -- D12 is a
 # real candidate with its own record.
-_ID = re.compile(r"\b([DS])([0-9]{1,2})\b(?![–—-][DS][0-9])")
+_ID = re.compile(r"\b([DSH])([0-9]{1,2}(?:\.[0-9]+)?)\b(?![–—-][DSH][0-9])")
 
 # Audit files that predate the defect hunt and use D/S numbering for other
 # things, or that are narrative rather than triage.
@@ -64,7 +66,21 @@ _NOT_HUNT_AUDITS = (
     "cross_phase",
     "weebot_refactoring",
     "residual_b1_inventory",
+    # The UI hunt is a separate program with its own numbering: its `D1` is
+    # `EventStreamProvider.tsx:109` and its `H3`/`H4` are W0 slice labels. None of them
+    # is a record here, and the collision is not a defect in either inventory -- but a
+    # scan that cannot tell the two apart reports this file's gaps as missing records
+    # (and did: `D1 is listed as a numbering gap but is mentioned in
+    # ui_defect_hunt_w1_transport.md`). Its own docs are the source of record for it.
+    "ui_defect_hunt",
 )
+
+# Ids that appear in an audit only as documentation of the ID FORMAT, not as a claim.
+# `H3.5` is the example the round-2 census uses to describe `H<wave>.<n>`
+# (defect_hunt_v71_w0_complete.md:151, 159). Recorded here rather than in the yml
+# because it has no claim to attribute -- the same reasoning as `numbering_gaps`, but
+# for a string that IS mentioned, which the gap guard correctly refuses.
+_FORMAT_EXAMPLES = frozenset({"H3.5"})
 
 _VALID_STATUSES = frozenset({"open", "investigating", "confirmed", "fixed", "cleared", "deferred"})
 _NEEDS_NOTE = frozenset({"cleared", "deferred"})
@@ -91,7 +107,10 @@ def _ids_mentioned_in_audits() -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for path in _hunt_audit_files():
         for letter, number in _ID.findall(path.read_text(encoding="utf-8")):
-            found.setdefault(f"{letter}{number}", []).append(path.name)
+            candidate = f"{letter}{number}"
+            if candidate in _FORMAT_EXAMPLES:
+                continue
+            found.setdefault(candidate, []).append(path.name)
     return found
 
 
@@ -117,6 +136,33 @@ class TestTheInventoryIsWellFormed:
     def test_statuses_are_from_the_declared_vocabulary(self):
         bad = [(r["id"], r["status"]) for r in _records() if r["status"] not in _VALID_STATUSES]
         assert bad == [], f"unknown status values: {bad}; valid are {sorted(_VALID_STATUSES)}"
+
+    def test_round_field_is_valid_when_present(self):
+        """Round field is optional for round 1 candidates, required for round 2."""
+        bad = [
+            (r["id"], r.get("round"))
+            for r in _records()
+            if r.get("round") is not None and r.get("round") not in (1, 2)
+        ]
+        assert bad == [], f"invalid round values (must be 1 or 2): {bad}"
+
+    def test_round_2_candidates_have_h_prefix_ids(self):
+        """Round 2 candidates use H<wave>.<n> format, round 1 uses D/S."""
+        bad = [
+            r["id"]
+            for r in _records()
+            if r.get("round") == 2 and not r["id"].startswith("H")
+        ]
+        assert bad == [], f"round 2 candidates must have H-prefixed IDs: {bad}"
+
+    def test_round_1_or_unspecified_candidates_have_d_or_s_ids(self):
+        """Round 1 (or unspecified) candidates use D/S prefix."""
+        bad = [
+            r["id"]
+            for r in _records()
+            if r.get("round", 1) == 1 and r["id"].startswith("H")
+        ]
+        assert bad == [], f"round 1 candidates must have D/S-prefixed IDs: {bad}"
 
 
 class TestNothingCanBeDroppedSilently:

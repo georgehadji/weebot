@@ -13,6 +13,7 @@ from contextlib import closing
 import uuid
 from pathlib import Path
 
+from weebot.application.ports.strategy_store_port import StrategyStorePort
 from weebot.domain.models.self_improvement import ImprovementStrategy
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,12 @@ CREATE INDEX IF NOT EXISTS idx_is_score
 """
 
 
-class StrategyStore:
-    """SQLite-backed store for improvement strategies."""
+class StrategyStore(StrategyStorePort):
+    """SQLite-backed store for improvement strategies.
+
+    Declared against `StrategyStorePort` rather than duck-typed: the app layer
+    annotates its collaborator with the port, and this is the class that satisfies it.
+    """
 
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = db_path or _DEFAULT_DB_PATH

@@ -54,9 +54,11 @@ class SemanticSkillRetriever(SkillRetrieverPort):
         self._registry = registry
         self._top_k = top_k
         if store is None:
-            from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
-
-            store = NumpyVectorStore(dim=_DEFAULT_DIM)
+            raise ValueError(
+                "SemanticSkillRetriever needs a store: construct one in the composition "
+                "root (application/di/_skills.py passes NumpyVectorStore) instead of "
+                "defaulting to an infrastructure adapter from here (WB-01)."
+            )
         self._store = store
         self._index_built = False
         self._embeddings = None  # LocalEmbeddings singleton, lazy

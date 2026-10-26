@@ -51,6 +51,29 @@ def load(text: str | None = None) -> dict[str, int]:
     return tomllib.loads(raw)["ceilings"]
 
 
+def load_floors(text: str | None = None) -> dict[str, int]:
+    """Parse the ``[floors]`` table: numbers that may only go UP (e.g. coverage).
+
+    A floor is the inverse of a ceiling. It fails below the number and passes
+    above it (coverage moves with the environment, so equality would flap), and
+    ``--verify-not-raised`` fails if a floor was lowered against the base.
+    """
+    raw = text if text is not None else _CEILINGS.read_text(encoding="utf-8")
+    return tomllib.loads(raw).get("floors", {})
+
+
+def check_floor(name: str, actual: float, floors: dict[str, int] | None = None) -> tuple[int, str]:
+    table = load_floors() if floors is None else floors
+    if name not in table:
+        return FAIL, f"unknown floor {name!r}. Known: {sorted(table)}. Add it to {_REL}."
+    if actual < table[name]:
+        return FAIL, (
+            f"{name}: {actual} is below the floor of {table[name]}. Coverage was lost -- "
+            "add tests; do not lower the floor."
+        )
+    return OK, f"{name}: {actual} >= floor {table[name]}."
+
+
 def check(name: str, actual: int, ceilings: dict[str, int] | None = None) -> tuple[int, str]:
     """Apply the bidirectional rule. Pure; the caller does the counting.
 
@@ -115,6 +138,13 @@ def _baseline_ceilings(ref: str) -> dict[str, int] | None:
     return load(proc.stdout)
 
 
+def _baseline_text(ref: str) -> str | None:
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:{_REL}"], capture_output=True, text=True, cwd=_ROOT
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def verify_not_raised(ref: str) -> tuple[int, str]:
     """Fail if any ceiling is higher than it is at *ref*."""
     try:
@@ -139,6 +169,19 @@ def verify_not_raised(ref: str) -> tuple[int, str]:
             + "\n  ".join(raised)
             + "\nA ratchet that can be raised is a rubber stamp. Fix the debt instead."
         )
+    floors_before = load_floors(_baseline_text(ref) or "")
+    floors_now = load_floors()
+    dropped = [
+        f"{name}: {floors_before[name]} -> {floors_now[name]}"
+        for name in sorted(floors_now)
+        if name in floors_before and floors_now[name] < floors_before[name]
+    ]
+    if dropped:
+        return FAIL, (
+            "these floors were LOWERED, which is never allowed:\n  "
+            + "\n  ".join(dropped)
+            + "\nA floor that can be lowered is a rubber stamp. Add tests instead."
+        )
     lowered = [
         f"{name}: {before[name]} -> {now[name]}"
         for name in sorted(now)
@@ -156,6 +199,9 @@ def verify_not_raised(ref: str) -> tuple[int, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--get", metavar="NAME", help="print one ceiling and exit")
+    parser.add_argument("--get-floor", metavar="NAME", help="print one floor and exit")
+    parser.add_argument("--check-floor", metavar="NAME", help="apply the floor rule to --actual")
+    parser.add_argument("--actual-float", type=float, help="the measured value, with --check-floor")
     parser.add_argument("--check", metavar="NAME", help="apply the rule to a measured count")
     parser.add_argument("--actual", type=int, help="the measured count, with --check")
     parser.add_argument(
@@ -173,6 +219,22 @@ def main(argv: list[str] | None = None) -> int:
             return FAIL
         print(table[args.get])
         return OK
+
+    if args.get_floor:
+        floors = load_floors()
+        if args.get_floor not in floors:
+            print(f"unknown floor {args.get_floor!r}", file=sys.stderr)
+            return FAIL
+        print(floors[args.get_floor])
+        return OK
+
+    if args.check_floor:
+        if args.actual_float is None:
+            print("--check-floor requires --actual-float", file=sys.stderr)
+            return FAIL
+        code, message = check_floor(args.check_floor, args.actual_float)
+        print(message, file=sys.stderr if code else sys.stdout)
+        return code
 
     if args.verify_not_raised:
         code, message = verify_not_raised(args.baseline)

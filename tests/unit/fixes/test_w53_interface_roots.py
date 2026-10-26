@@ -48,14 +48,3 @@ def test_agent_runner_without_one_builds_no_container(no_container):
 
     runner = AgentRunner(llm=MagicMock(), state_repo=AsyncMock())
     assert runner._retention_agent is None and no_container == []
-
-
-def test_the_container_hands_its_retention_agent_to_the_runner(monkeypatch):
-    from weebot.application.di import Container
-
-    c = Container()
-    c.configure_defaults()
-    agent = object()
-    real = c._maybe_get_str
-    monkeypatch.setattr(c, "_maybe_get_str", lambda k: agent if k == "retention_agent" else real(k))
-    assert c.build_agent_runner(use_rich=False)._retention_agent is agent

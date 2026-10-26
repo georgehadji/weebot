@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 class ApifyActorTool(BaseTool):
     """Generic Apify actor runner bound to a single actor_id."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     actor_id: str
     apify_service: Any  # ApifyService — Any to avoid circular import

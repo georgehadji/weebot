@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 from weebot.domain.models.mcp import MCPToolInfo
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
 logger = logging.getLogger(__name__)
 

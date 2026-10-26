@@ -16,7 +16,14 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    register_state,
+    task_text,
+)
 from weebot.application.ports.code_reviewer_port import CodeReviewerPort
 from weebot.domain.models.code_review import CodeReviewResult
 from weebot.domain.models.event import AgentEvent, CorrectionPatternDetected, ThoughtEvent
@@ -28,6 +35,7 @@ logger = logging.getLogger(__name__)
 _MAX_REVIEW_RETRIES = 2
 
 
+@register_state(StateId.REVIEWING)
 class ReviewingState(FlowState):
     """LLM code review gate between step completion and next-step dispatch."""
 
@@ -51,13 +59,11 @@ class ReviewingState(FlowState):
         self._step_events: list[Any] = step_events or []
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.executing import ExecutingState
-        from weebot.application.flows.states.updating import UpdatingState
 
         # ── Fast path: no reviewer configured ──────────────────────────
         if self._reviewer is None:
             logger.debug("No code reviewer configured — passing through")
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
             return
 
         # ── Guard: don't review a step that has already been revised too many times ──
@@ -67,12 +73,12 @@ class ReviewingState(FlowState):
                 self._step.id,
                 _MAX_REVIEW_RETRIES,
             )
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
             return
 
         if context._plan is None:
             logger.warning("ReviewingState: no plan on context — skipping")
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
             return
 
         # ── Build review context dict ────────────────────────────────
@@ -106,7 +112,7 @@ class ReviewingState(FlowState):
             logger.info("Review APPROVED step %s", self._step.id)
             async for evt in self._maybe_record_correction(context):
                 yield evt
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
 
         elif result.verdict == "revise":
             # ── Augment hint when step was over-engineered ──────────
@@ -148,14 +154,14 @@ class ReviewingState(FlowState):
             )
             await context._emit(plan_event)
             yield plan_event
-            context.set_state(ExecutingState())
+            context.set_state(new_state(StateId.EXECUTING))
 
         else:  # "reject"
             logger.warning("Review REJECTED step %s — %s", self._step.id, result.summary)
             context._plan = context._plan.update_step_status(
                 self._step.id, StepStatus.FAILED, result=f"[Code review rejected] {result.summary}"
             )
-            context.set_state(UpdatingState())
+            context.set_state(new_state(StateId.UPDATING))
 
     async def _maybe_record_correction(
         self, context: PlanActFlow

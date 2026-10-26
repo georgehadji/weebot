@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from weebot.application.agents.executor._base import sanitize_tool_call_pairing
+from weebot.application.agents.executor._tool_pairing import sanitize_tool_call_pairing
 from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
     _MAX_TOOL_CALLS_PER_STEP,

@@ -62,6 +62,25 @@ _EXPECTED = {
     # Hand-built Container() outside application/di. ICM fix plan W5.3 (F28).
     # See scripts/lint_container_construction.py.
     "container_construction",
+    # Import cycles between modules (Tarjan SCC). import-linter checks layers,
+    # not loops inside one. See scripts/lint_module_cycles.py.
+    "module_cycles",
+    # Literal import_module("weebot.…") targets, which hide edges from
+    # import-linter. See scripts/lint_import_exemptions.py.
+    "dynamic_weebot_imports",
+    # God methods: functions over 150 lines. See scripts/lint_long_functions.py.
+    "functions_over_150_lines",
+    # Total ruff violations at the configured rules. See scripts/lint_ruff_violations.py.
+    "ruff_violations",
+    # String-keyed container bindings; Key[T] replaces them. See scripts/lint_di_wiring.py.
+    "string_di_keys",
+    # weebot-ui debt, counted by scripts/lint_ui_debt.py (UI/UX remediation plan, Phase 0.4).
+    "ui_orientation_selectors",
+    "ui_tiny_text",
+    "ui_viewport_height",
+    "ui_main_landmarks",
+    "ui_click_on_static",
+    "ui_layer_violations",
 }
 
 
@@ -96,6 +115,31 @@ class TestTheCeilingsFile:
             f"these still define their own ceiling: {offenders}. "
             "A second source of truth is how the two drift apart."
         )
+
+
+class TestFloors:
+    """The inverse rule: a floor may only go up (CI-1, coverage)."""
+
+    def test_the_coverage_floor_exists_and_is_not_a_ceiling(self):
+        assert qc.load_floors()["unit_coverage_floor"] >= 61
+        assert "unit_coverage_floor" not in qc.load()
+
+    def test_at_or_above_the_floor_passes_below_fails(self):
+        floors = {"cov": 60}
+        assert qc.check_floor("cov", 60, floors)[0] == 0
+        assert qc.check_floor("cov", 71.5, floors)[0] == 0
+        code, msg = qc.check_floor("cov", 59.9, floors)
+        assert code == 1 and "below the floor" in msg
+
+    def test_an_unknown_floor_is_an_error(self):
+        assert qc.check_floor("typo", 99, {"cov": 60})[0] == 1
+
+    def test_ci_reads_the_floor_instead_of_a_literal(self):
+        workflow = (_ROOT / ".github" / "workflows" / "architecture.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "--get-floor unit_coverage_floor" in workflow
+        assert "--cov-fail-under=52" not in workflow
 
 
 class TestTheRuleIsBidirectional:

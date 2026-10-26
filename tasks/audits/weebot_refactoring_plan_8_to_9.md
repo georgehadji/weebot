@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-06-30
+---
+
 # REFACTORING PLAN: Architecture Score 8.0 → 9.5+
 
 **Based on:** `tasks/audits/weebot_architecture_audit_v2_full.md` (2026-06-10)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
@@ -64,3 +64,72 @@ class FlowState(ABC):
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         """Execute the state's logic."""
         ...
+
+
+# ── State registry (plan 3.6, LAY-2, pattern Q6) ─────────────────────────────
+# States used to reach their successors with function-local imports, which tied
+# eight modules into one import cycle. A state now names its successor by
+# ``StateId`` and asks the registry for it; every state module imports this file
+# and nothing imports a sibling. Classes register themselves with
+# ``@register_state`` and ``flows/states/__init__.py`` imports them all, so any
+# import of a state module populates the registry.
+
+
+class StateId(StrEnum):
+    PLANNING = "planning"
+    CRITIQUING = "critiquing"
+    PREMORTEM = "premortem"
+    PLAN_REVIEW = "plan_review"
+    EXECUTING = "executing"
+    VERIFYING = "verifying"
+    UPDATING = "updating"
+    REVIEWING = "reviewing"
+    SUMMARIZING = "summarizing"
+    COMPLETED = "completed"
+
+
+_STATES: dict[StateId, type[FlowState]] = {}
+
+
+def register_state(state_id: StateId):
+    """Class decorator: make *state_id* resolve to the decorated state class."""
+
+    def decorate(cls: type[FlowState]) -> type[FlowState]:
+        _STATES[state_id] = cls
+        return cls
+
+    return decorate
+
+
+def state_class(state_id: StateId) -> type[FlowState]:
+    try:
+        return _STATES[state_id]
+    except KeyError:
+        raise LookupError(
+            f"no state registered for {state_id!r}; import weebot.application.flows.states"
+        ) from None
+
+
+def new_state(state_id: StateId, *args, **kwargs) -> FlowState:
+    """Construct the state registered under *state_id*."""
+    return state_class(state_id)(*args, **kwargs)
+
+
+class ConfidentThresholds:
+    """Confidence thresholds for plan critique verdicts."""
+
+    REVISE_THRESHOLD = 0.5
+    WARN_THRESHOLD = 0.8
+
+
+def next_state_after_plan(min_steps: int = 1) -> FlowState:
+    """PlanReviewState or ExecutingState, by the plan-review feature flag.
+
+    Call this from any state that transitions to execution after plan creation or
+    critique, to insert the plan review gate.
+    """
+    from weebot.config.settings import get_settings
+
+    if not get_settings().plan_review_enabled:
+        return new_state(StateId.EXECUTING)
+    return new_state(StateId.PLAN_REVIEW, min_steps=min_steps)

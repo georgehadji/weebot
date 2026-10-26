@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-09-05
+---
+
 # B2 — the ratchets become bidirectional
 
 Execution record for phase B2 of

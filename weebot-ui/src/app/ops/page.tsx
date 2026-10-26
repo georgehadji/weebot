@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CostChart } from "@/components/dashboard/CostChart";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
-import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
+import { LazyPlanVisualizer } from "@/components/plan/LazyPlanVisualizer";
 import { api, ActiveSession, withToken } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ENDPOINTS } from "@/lib/endpoints";
@@ -44,9 +45,15 @@ const HEALTH_DOT: Record<string, string> = {
   degraded: "bg-status-waiting",
 };
 const HEALTH_TEXT: Record<string, string> = {
-  healthy: "text-status-live",
-  degraded: "text-status-waiting",
+  healthy: "text-status-live-fg",
+  degraded: "text-status-waiting-fg",
 };
+
+// recharts only matters once the cost tab is opened; keep it out of the first load.
+const CostChart = dynamic(() => import("@/components/dashboard/CostChart").then((m) => m.CostChart), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" aria-label="Loading chart" />,
+});
 
 export default function OpsPage() {
   const [health, setHealth] = useState<{ status: string; components: { name: string; status: string }[]; timestamp: string } | null>(null);
@@ -199,7 +206,7 @@ export default function OpsPage() {
                           className="flex items-center justify-between text-sm p-2 rounded bg-muted"
                         >
                           <span>{c.name}</span>
-                          <span className={HEALTH_TEXT[c.status] ?? "text-status-error"}>
+                          <span className={HEALTH_TEXT[c.status] ?? "text-status-error-fg"}>
                             {c.status}
                           </span>
                         </div>
@@ -207,7 +214,7 @@ export default function OpsPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-status-error">Failed to load health status</p>
+                  <p className="text-status-error-fg">Failed to load health status</p>
                 )}
               </CardContent>
             </Card>
@@ -343,7 +350,7 @@ export default function OpsPage() {
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[10px] h-4 px-1 shrink-0 border-green-800 text-green-500"
+                          className="text-xs h-4 px-1 shrink-0 border-green-800 text-green-500"
                         >
                           {entry.type}
                         </Badge>
@@ -416,10 +423,10 @@ function PlanVizTab() {
           </button>
         </div>
 
-        {error && <p className="text-sm text-status-error">{error}</p>}
+        {error && <p className="text-sm text-status-error-fg">{error}</p>}
 
         {planData ? (
-          <PlanVisualizer steps={planData.nodes} title={`Plan for ${sessionId}`} />
+          <LazyPlanVisualizer steps={planData.nodes} title={`Plan for ${sessionId}`} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Enter a session ID above to visualize its execution plan.

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.scheduling.scheduler import SchedulingManager
@@ -22,6 +23,8 @@ def get_scheduler() -> SchedulingManager:
 
 class ScheduleTool(BaseTool):
     """Schedule jobs and manage scheduled task execution."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     name: str = "schedule"
     description: str = (

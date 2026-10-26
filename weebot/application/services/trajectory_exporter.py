@@ -10,6 +10,7 @@ token budget — useful for creating fine-tuning datasets.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -67,12 +68,12 @@ class TrajectoryExporter:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        written = 0
-        with output_path.open("w", encoding="utf-8") as fh:
-            for event in events:
-                row = self._event_to_dict(event)
-                fh.write(json.dumps(row, default=str, ensure_ascii=False) + "\n")
-                written += 1
+        written = len(events)
+        lines = [
+            json.dumps(self._event_to_dict(event), default=str, ensure_ascii=False) + "\n"
+            for event in events
+        ]
+        await asyncio.to_thread(output_path.write_text, "".join(lines), encoding="utf-8")
 
         logger.info("Exported %d events from session %s → %s", written, session_id, output_path)
         return written

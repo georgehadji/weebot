@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 
-from weebot.application.flows.states.base import FlowState, AgentStatus
+from weebot.application.flows.states.base import AgentStatus, FlowState, StateId, register_state
 from weebot.config.constants import (
     MAX_TOKENS_BRIEF,
     MAX_TOKENS_COMPACT,
@@ -38,6 +38,7 @@ _log = logging.getLogger(__name__)
 _MAX_AUTH_RETRIES = 2
 
 
+@register_state(StateId.VERIFYING)
 class VerifyingState(FlowState):
     """CoVe verification state — fact-checks the summary before completion.
 

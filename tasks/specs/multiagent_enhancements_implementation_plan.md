@@ -1,3 +1,8 @@
+---
+status: done
+date: 2026-06-13
+---
+
 # Multi-Agent Enhancements — Implementation Plan
 
 **Source spec:** [`multiagent_patterns_integration_plan.md`](multiagent_patterns_integration_plan.md)

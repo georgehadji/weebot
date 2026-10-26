@@ -82,8 +82,6 @@ ignore_imports =
     weebot.tools.python_tool -> weebot.infrastructure.sandbox.factory
     # swarm tool lazily imports the Swarm event bus.
     weebot.tools.swarm -> weebot.infrastructure.swarm_event_bus
-    # tool_registry lazily creates Playwright browser instances.
-    weebot.tools.tool_registry -> weebot.infrastructure.browser.playwright_adapter
     # tool_collection increments tool-call metrics via the metrics_bridge
     # (the designated bridge between application models and infrastructure).
     weebot.application.models.tool_collection -> weebot.application.services.metrics_bridge
@@ -99,18 +97,10 @@ forbidden_modules =
     weebot.application.cqrs
     weebot.application.di
 ignore_imports =
-    # tool_discovery enumerates the tool registry to build capability metadata.
-    weebot.infrastructure.adapters.tool_discovery -> weebot.tools.tool_registry
-    weebot.infrastructure.adapters.tool_discovery -> weebot.tools.base
     # Apify actor registry wraps the Apify tool for actor-level discovery.
     weebot.infrastructure.adapters.apify.actor_registry -> weebot.tools.apify_actor_tool
-    # External service integration extends tool base for capability routing.
-    weebot.infrastructure.external_service_integration -> weebot.tools.base
     # Interface customization reads profile settings from the application service.
     weebot.infrastructure.interface_customization -> weebot.application.services.profile_manager
-    # MCP bridge and adapter extend tool base to expose MCP capabilities as tools.
-    weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.tools.base
-    weebot.infrastructure.mcp.mcp_toolkit_adapter -> weebot.tools.base
     # MCP tool bridge implements the MCP tool port defined in application.ports.
     weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
     # (moved — sqlite_state_repo -> domain.services.commitment_extractor is
@@ -143,15 +133,6 @@ ignore_imports =
     # Composition root: main.py configures structured logging at startup
     # (same category as the metrics wiring exempted above).
     weebot.interfaces.web.main -> weebot.infrastructure.observability.logging_config
-    # KNOWN SMELL — not a clean composition-root edge.  auth.py imports the
-    # SQLite key store *and its private helpers* (_lookup_hash, _verify_key)
-    # inside function bodies, and instantiates SQLiteApiKeyStore() directly
-    # instead of using the injected ApiKeyPort.  The hashing helpers belong
-    # on the port (or a shared crypto module) so the interface layer never
-    # reaches into infrastructure.  Exempted here rather than refactored in a
-    # broad sweep because this is the authentication verification path: it
-    # deserves a dedicated, reviewed change with security tests.
-    weebot.interfaces.web.auth -> weebot.infrastructure.security.sqlite_api_key_store
     # Rate-limit middleware emits Prometheus counters and audit events —
     # observability/audit wiring, same category as the metrics edge above.
     weebot.interfaces.web.rate_limit -> weebot.infrastructure.observability.metrics
@@ -159,7 +140,11 @@ ignore_imports =
     weebot.interfaces.web.routers.webhook -> weebot.application.di
     # Factories wire up the full tool set (composition root).
     weebot.interfaces.factories -> weebot.application.di
+    weebot.interfaces.factories -> weebot.application.flows.flow_builder
     weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
+    # The tool registry is application policy (plan 3.2) that discovers tool classes
+    # in weebot.tools by name; importing it is how the CLI/web build a tool collection.
+    weebot.interfaces.factories -> weebot.application.services.tool_registry
     # CLI agent runner resolves services from DI.
     # Gateway adapters use DI fallback for SafetyChecker LLMPort.
     # Windows-specific interfaces wire native platform adapters.
@@ -190,19 +175,23 @@ forbidden_modules =
     weebot.application
     weebot.interfaces
 ignore_imports =
-    # Core agent imports tool types and the tool registry to build
-    # agent configurations. Tools legitimately depend on application ports
-    # (e.g. sandbox_port, llm_port, memory_port) — these are NOT core
-    # reaching into application, they are core using the tool abstraction layer.
-    # agent_core_v2.py + agent_factory.py sunset in ARCH-AUDIT-V2 A5.
-    weebot.core.agent -> weebot.tools.browser_tool
-    weebot.core.agent -> weebot.tools.powershell_tool
-    # agent.py bridges SafetyChecker with LangChain fallback (DI container).
-    weebot.core.agent -> weebot.application.di
-    weebot.core.agent -> weebot.application.ports.llm_port
     # safety.py uses LLMPort (port, not concrete adapter).  Acceptable per
     # ADR-009: "port interfaces in core are allowed; framework deps are not."
     weebot.core.safety -> weebot.application.ports.llm_port
+
+[importlinter:contract:config-is-leaf]
+# Plan 3.9 (Q8). Configuration is data; it sits under every layer. It used to
+# import an application enum and build an application service, which is how
+# settings ended up depending on the code they configure. No exemptions.
+name = Config is a leaf: it must not import application, interfaces, infrastructure or tools
+type = forbidden
+source_modules =
+    weebot.config
+forbidden_modules =
+    weebot.application
+    weebot.interfaces
+    weebot.infrastructure
+    weebot.tools
 
 [importlinter:contract:app-no-interfaces]
 name = Application layer must not depend on interfaces
@@ -210,14 +199,57 @@ type = forbidden
 source_modules = weebot.application
 forbidden_modules =
     weebot.interfaces
+# No exemptions (plan 3.7): the composition root builds flows through
+# application/flows/flow_builder.py and no longer imports the interfaces layer.
+# Everything in application/ receives collaborators by injection -- see
+# CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory.
+
+[importlinter:contract:app-no-infrastructure]
+# WB-01 of tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md. Every other
+# arrow of the inward rule had a contract; this one had none. `application` speaks
+# to providers through ports and receives adapters by injection, and the only thing
+# checking it was an AST test scoped to application/services/ with a *filename*
+# allowlist -- so a new infrastructure import inside one of those seven files was
+# invisible. Measured when this contract was added: 47 direct
+# application->infrastructure edges, 42 of them in the composition root.
+#
+# `weebot.application.di` is deliberately NOT a source module: it is the composition
+# root, the one place adapters are constructed, and enumerating its 42 edges as
+# exemptions would put 42 more lines in this file to say what the directory name
+# already says. The gap that leaves -- a new application/ subpackage that nothing
+# governs -- is closed by
+# tests/unit/test_architecture_fitness.py::test_every_application_subpackage_is_under_the_inward_contract,
+# which fails until the new subpackage is listed below (same default-deny shape as
+# unassigned-no-infra).
+#
+# Direct imports only, like app-no-vendor-sdks: chains that run through a port are
+# the design, and checking them would flag every correct route.
+name = Application must depend on ports, not on infrastructure
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.application.abstractions
+    weebot.application.agents
+    weebot.application.cqrs
+    weebot.application.document
+    weebot.application.eval
+    weebot.application.flows
+    weebot.application.harness
+    weebot.application.middleware
+    weebot.application.models
+    weebot.application.ports
+    weebot.application.services
+    weebot.application.skills
+    weebot.application.strategies
+    weebot.application.termination
+    weebot.application.use_cases
+forbidden_modules =
+    weebot.infrastructure
 ignore_imports =
-    # weebot.application.di is the composition root. Wiring concrete
-    # implementations from every layer is precisely its job, so its imports
-    # into interfaces are by design rather than a leak. Everything else in
-    # application/ must receive collaborators by injection — see
-    # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory for the
-    # pattern.
-    weebot.application.di -> weebot.interfaces.**
+    # None. The four edges this contract first caught were fixed rather than excused:
+    # two were services defaulting to a concrete adapter (now ports:
+    # VectorStorePort, ClawHubAdapterPort, StrategyStorePort, SkillStorePort) and one
+    # was a collaborator nothing called, deleted with its parameter.
 
 [importlinter:contract:unassigned-no-infra]
 # Phase 3.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md -- the
@@ -266,8 +298,6 @@ ignore_imports =
     weebot.osworld.agent_adapter -> weebot.infrastructure.adapters.llm.openai_adapter
     # default_jobs records scheduler metrics directly.
     weebot.scheduling.default_jobs -> weebot.infrastructure.observability.metrics
-    # templates.integration builds tool collections from the tool registry.
-    weebot.templates.integration -> weebot.tools.tool_registry
 
 [importlinter:contract:app-no-vendor-sdks]
 # Phase 3.1, the anti-corruption layer. Application and domain speak to

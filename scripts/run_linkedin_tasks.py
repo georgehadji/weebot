@@ -37,7 +37,7 @@ _os.environ.setdefault("WEEBOT_COVE_ENABLED", "false")
 _os.environ.setdefault("CONSTRAINT_CHECK_ENABLED", "false")
 _os.environ.setdefault("CONTEXT_AWARE_MODEL_SELECTION", "false")
 
-TASKS_DIR = PROJECT_ROOT / "tasks"
+TASKS_DIR = PROJECT_ROOT / "tasks" / "evals"
 
 TASK_CONFIGS = [
     {
@@ -77,7 +77,6 @@ async def run_single_task(
 ) -> bool:
     """Run one LinkedIn task through weebot's PlanActFlow."""
     from weebot.application.di import Container
-    from weebot.application.services.model_selection import ModelSelectionService
     from weebot.config.model_refs import MODEL_BUDGET
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
@@ -107,8 +106,8 @@ async def run_single_task(
     container = Container()
     container.configure_defaults(db_path=db_path, default_model=model)
 
-    model_service = ModelSelectionService()
-    llm = model_service.create_llm_adapter(model or MODEL_BUDGET)
+    # WB-02: the container's factory applies the global LLM bulkhead.
+    llm = container.create_llm_for_model(model or MODEL_BUDGET)
 
     state_repo = container.get(StateRepositoryPort)
     mediator = container.get(Mediator)

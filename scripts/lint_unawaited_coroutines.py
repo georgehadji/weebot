@@ -40,6 +40,37 @@ def bare_calls(body_owner, names, label, path, kind):
               and fn.attr in names):
             findings.append((f"{path}:{node.lineno}", f"self.{fn.attr}(...)", label))
 
+_LOOPS = {"asyncio", "_asyncio", "_aio", "loop", "_loop", "event_loop", "_event_loop"}
+
+
+def discarded_tasks(tree, path):
+    """Report `create_task(...)` / `ensure_future(...)` whose result is dropped.
+
+    CON-1 (plan 2026-10, item 1.3). A task nobody holds can be garbage-collected
+    mid-flight (the loop keeps only a weak reference), and if it raises, the
+    failure surfaces as "Task exception was never retrieved" on stderr instead of
+    in the application's logs. `BackgroundTasks.spawn` keeps the reference and
+    logs the failure; use it. A task group's `tg.create_task` is owned by the
+    group and is not flagged.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        fn = node.value.func
+        name = recv = None
+        if isinstance(fn, ast.Name):
+            name = fn.id
+        elif isinstance(fn, ast.Attribute):
+            name = fn.attr
+            recv = fn.value.id if isinstance(fn.value, ast.Name) else getattr(fn.value, "attr", None)
+        if name not in {"create_task", "ensure_future"}:
+            continue
+        if recv is None or recv in _LOOPS:
+            findings.append(
+                (f"{path}:{node.lineno}", f"{ast.unparse(fn)}(...)", "result discarded; use BackgroundTasks.spawn")
+            )
+
+
 for root in ROOTS:
     for f in sorted(root.rglob("*.py")):
         try:
@@ -47,6 +78,7 @@ for root in ROOTS:
         except (SyntaxError, UnicodeDecodeError):
             continue
         scanned += 1
+        discarded_tasks(tree, f)
         # Module-level async defs, called by bare name anywhere in this module.
         mod_async = {n.name for n in tree.body if isinstance(n, ast.AsyncFunctionDef)}
         # A name rebound by a sync def at module level is ambiguous; drop it.

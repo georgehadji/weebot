@@ -1,3 +1,8 @@
+---
+status: reference
+date: 2026-07-24
+---
+
 # Hermes-Agent v0.19.0 → WeeBot — Architecture & Design Study
 
 **Study date:** 2026-07-22

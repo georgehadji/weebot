@@ -9,10 +9,12 @@
  * patched into the same array in place.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { api } from "@/lib/api";
+import { useRemote } from "./useRemote";
 import { useSessionPresence } from "./useSessionPresence";
 import { Session, SessionPresenceEvent } from "@/types/events";
+import { Remote, remoteData } from "@/types/remote";
 
 export function applyPresence(session: Session, update?: SessionPresenceEvent): Session {
   if (!update) return session;
@@ -21,51 +23,41 @@ export function applyPresence(session: Session, update?: SessionPresenceEvent): 
   return { ...session, status: update.status as Session["status"], title };
 }
 
+const loadSessions = () => api.sessions.list({ limit: "100" }).then((data) => data.sessions);
+
 export function useSessionList() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { state, reload } = useRemote(loadSessions);
   const presence = useSessionPresence();
-
-  const refresh = async () => {
-    try {
-      const data = await api.sessions.list({ limit: "100" });
-      setSessions(data.sessions);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const data = await api.sessions.list({ limit: "100" });
-        if (!cancelled) {
-          setSessions(data.sessions);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load sessions");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const sessions = remoteData(state);
 
   // Presence deltas are applied at read time rather than copied into
   // `sessions`, so an update that lands before the REST seed isn't lost.
   const liveSessions = useMemo(
-    () => (presence.size === 0 ? sessions : sessions.map((s) => applyPresence(s, presence.get(s.id)))),
+    () =>
+      sessions && presence.size > 0 ? sessions.map((s) => applyPresence(s, presence.get(s.id))) : sessions,
     [sessions, presence]
   );
 
-  return { sessions: liveSessions, loading, error, refresh };
+  // Presence only patches sessions already in the list, so a session created after the seed
+  // never showed in the rail until a reload. An id the list lacks triggers one reload.
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sessions) return;
+    const known = new Set(sessions.map((s) => s.id));
+    for (const id of presence.keys()) {
+      if (!known.has(id) && !asked.current.has(id)) {
+        asked.current.add(id);
+        reload();
+        return;
+      }
+    }
+  }, [sessions, presence, reload]);
+
+  const live = useMemo<Remote<Session[]>>(() => {
+    if (state.status === "ready") return { status: "ready", data: liveSessions ?? state.data };
+    if (state.status === "error") return { ...state, data: liveSessions };
+    return state;
+  }, [state, liveSessions]);
+
+  return { state: live, sessions: liveSessions ?? [], reload };
 }

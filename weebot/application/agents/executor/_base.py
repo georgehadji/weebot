@@ -7,7 +7,7 @@ import logging
 from collections import deque
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
@@ -19,7 +19,9 @@ from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
     IterationGuard,
 )
-from weebot.application.agents.executor._prompt_builder import build_executor_prompt
+from weebot.application.agents.executor._step_setup import build_step_prompts, prime_step
+from weebot.application.agents.executor._tool_batch import ToolBatchRunner
+from weebot.application.agents.executor._turn import next_turn
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
@@ -29,15 +31,11 @@ from weebot.application.services.ponytail_post_processor import PonytailPostProc
 from weebot.application.services.step_budget import StepBudget
 from weebot.config.constants import MAX_EXECUTOR_STEPS
 from weebot.config.model_refs import MODEL_CASCADE_TIER1
-from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
+from weebot.core.trust_boundary import escalate, must_fence, trust_of, wrap_untrusted
 from weebot.application.agents.executor._error_handler import (
     build_stuck_error,
-    classify_tool_error,
     follow_up_like,
-    is_expected_failure,
     normalize_text,
-    parse_args_for_event,
-    tool_signature,
 )
 from weebot.domain.models.event import (
     AgentEvent,
@@ -46,68 +44,41 @@ from weebot.domain.models.event import (
     StepEvent,
     StepStatus,
     ThoughtEvent,
-    ToolApprovalEvent,
-    ToolEvent,
-    ToolStatus,
-    WaitForUserEvent,
 )
-from weebot.domain.exceptions import AllModelsTrippedError, LLMCapacityExhaustedError
 from weebot.domain.models.plan import Plan, Step
-from weebot.domain.models.trajectory import TrajectoryHealth
 from weebot.application.models.tool_collection import ToolCollection
-from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 
-def sanitize_tool_call_pairing(messages: list[dict]) -> list[dict]:
-    """Drop tool/assistant messages whose counterpart is missing.
+# `sanitize_tool_call_pairing` now lives in `_tool_pairing.py` and
+# `_merge_middleware_result` in `_tool_batch.py`, with the code that calls them
+# (WB-06, phase 4.2).
 
-    The provider contract is symmetric: every ``role="tool"`` message must
-    follow an assistant message whose ``tool_calls`` contains its
-    ``tool_call_id``, and every advertised ``tool_call`` must be answered.
-    Violating either is a 400, not a degraded response.
 
-    Both halves can break here without anyone doing anything wrong. The
-    conversation buffer is a bounded deque that evicts from the left, so once
-    a step exceeds the window it splits assistant/tool pairs exactly at the
-    boundary; ``_maybe_compress`` independently rewrites the middle of the
-    buffer wholesale. Sizing the buffer to the tool budget makes eviction
-    unlikely, not impossible — a long tool result can still trip compression
-    mid-step — so the assembled message list is sanitized before dispatch
-    rather than trusting the buffer to stay well-formed.
+def _load_executor_system_prompt() -> str:
+    """Load the executor system prompt from the package or filesystem.
 
-    Returns a new list; the input is not modified.
+    Priority: (1) importlib.resources (packaged), (2) filesystem path
+    (source checkout), (3) inline fallback constant.
     """
-    answered: set[str] = set()
-    for msg in messages:
-        if msg.get("role") == "tool" and msg.get("tool_call_id"):
-            answered.add(msg["tool_call_id"])
+    # 1. Try importlib.resources (works when weebot is installed as a package)
+    with contextlib.suppress(Exception):
+        from importlib.resources import files as _resource_files
 
-    offered: set[str] = set()
-    result: list[dict] = []
-    for msg in messages:
-        role = msg.get("role")
-        if role == "assistant" and msg.get("tool_calls"):
-            kept = [
-                tc for tc in msg["tool_calls"] if isinstance(tc, dict) and tc.get("id") in answered
-            ]
-            if len(kept) != len(msg["tool_calls"]):
-                msg = {**msg, "tool_calls": kept}
-                if not kept:
-                    # An assistant turn with an empty tool_calls list is
-                    # itself invalid; drop the key and keep the prose.
-                    msg.pop("tool_calls")
-            offered.update(tc["id"] for tc in kept)
-            result.append(msg)
-            continue
-        if role == "tool":
-            if msg.get("tool_call_id") not in offered:
-                continue  # orphan: its parent assistant turn is gone
-            result.append(msg)
-            continue
-        result.append(msg)
-    return result
+        return (
+            _resource_files("weebot.config.prompts")
+            .joinpath("executor_system.txt")
+            .read_text(encoding="utf-8")
+        )
+
+    # 2. Try filesystem path (works in development / source checkout)
+    with contextlib.suppress(Exception):
+        if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
+            return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+
+    # 3. Inline fallback — kept in sync with executor_system.txt
+    return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
 
 
 # EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
@@ -165,46 +136,6 @@ _EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
     "next one.\n"
 )
 
-
-def _merge_middleware_result(result: ToolResult, mw: Any) -> ToolResult:
-    """The tool result with middleware's output (and error, if it set one).
-
-    Built with ``dataclasses.replace``: ``is_error`` is a property, so passing it
-    to ``ToolResult(...)`` raised TypeError, and data/metadata were dropped (F64).
-    """
-    import dataclasses
-
-    error = mw.error or result.error
-    if mw.is_error and not error:
-        error = "Tool output rejected by middleware"
-    return dataclasses.replace(result, output=mw.output, error=error, success=error is None)
-
-
-def _load_executor_system_prompt() -> str:
-    """Load the executor system prompt from the package or filesystem.
-
-    Priority: (1) importlib.resources (packaged), (2) filesystem path
-    (source checkout), (3) inline fallback constant.
-    """
-    # 1. Try importlib.resources (works when weebot is installed as a package)
-    with contextlib.suppress(Exception):
-        from importlib.resources import files as _resource_files
-
-        return (
-            _resource_files("weebot.config.prompts")
-            .joinpath("executor_system.txt")
-            .read_text(encoding="utf-8")
-        )
-
-    # 2. Try filesystem path (works in development / source checkout)
-    with contextlib.suppress(Exception):
-        if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
-            return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-
-    # 3. Inline fallback — kept in sync with executor_system.txt
-    return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
-
-
 # ── Policy-error-loop detection constants (Fix 5) ──
 _MAX_SAME_ERROR_CLASS = 3
 
@@ -243,7 +174,18 @@ class ExecutorAgent:
         llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
         provider_account: ProviderAccountPort | None = None,  # Credit check + live rescue
         pinned_model: str | None = None,  # `flow run --model`: the cascade tries it first
+        # Injection scan for fenced tool output (plan 1.1b): a signal that names the
+        # pattern and escalates trust, never the control. None = not configured.
+        injection_scan: Callable[[str], dict[str, Any] | None] | None = None,
+        # Outbound actions already taken, so a retried flow does not repeat them (ORCH-2).
+        effect_ledger: Any | None = None,
+        cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
+        # Awaitable returning the persistent-memory snapshot for the system prompt; the
+        # composition root supplies it, so the executor imports no tool (plan 3.4).
+        memory_snapshot: Callable[[], Awaitable[str]] | None = None,
     ):
+        self._memory_snapshot = memory_snapshot
+        self._injection_scan = injection_scan
         self._llm = llm
         self._tools = tools
         self._event_bus = event_bus
@@ -314,6 +256,7 @@ class ExecutorAgent:
             llm_pool=llm_pool,
             provider_account=provider_account,
             pinned_model=pinned_model,
+            cost_meter=cost_meter,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
             on_call_completed=self._publish_llm_call,
@@ -329,6 +272,7 @@ class ExecutorAgent:
             system_prompt=self._system_prompt,
             llm=llm,
             model=model,
+            effect_ledger=effect_ledger,
         )
 
     def set_harness_block(self, block: str | None) -> None:
@@ -379,6 +323,68 @@ class ExecutorAgent:
             except Exception:
                 pass
         return _load_executor_system_prompt()
+
+    async def _present_tool_output(self, tool_name: str, result: Any) -> str:
+        """The text of a tool result as the model sees it: fenced unless the tool is LOCAL.
+
+        Errors are fenced too (HTTP error pages and MCP messages carry remote
+        text); the taint still skips them, see ``must_taint``. The scan is a
+        signal: a hit names its pattern in the fence header, escalates a
+        fixed-schema source to tainting, and records ``InjectionSuspected``. The
+        content inside the fence is never altered.
+        """
+        content = str(result)
+        trust = trust_of(self._tools.get_tool(tool_name) if self._tools is not None else None)
+        if not must_fence(trust):
+            return content
+
+        detection = self._scan_tool_output(content)
+        suspected = None
+        if detection:
+            suspected = str(detection.get("pattern") or detection.get("type") or "suspected")
+            if escalate(trust, detection) != trust:
+                self._tool_executor.taint_session(tool_name, getattr(result, "is_error", False))
+            await self._emit_injection_suspected(tool_name, detection)
+        return wrap_untrusted(source=tool_name, content=content, suspected=suspected)
+
+    def _scan_tool_output(self, content: str) -> dict[str, Any] | None:
+        if self._injection_scan is None or not content:
+            return None
+        try:
+            return self._injection_scan(content)
+        except Exception:
+            # Fail closed: a scan that cannot run is a detection, not a clean bill.
+            logger.warning("injection scan raised; treating the output as suspect", exc_info=True)
+            return {
+                "type": "scanner_unavailable",
+                "pattern": "the injection scanner could not run",
+                "severity": "critical",
+                "unavailable": True,
+            }
+
+    async def _emit_injection_suspected(self, tool_name: str, detection: dict[str, Any]) -> None:
+        from weebot.domain.models.event import InjectionSuspected
+
+        session_id = getattr(self, "_current_session_id", "") or ""
+        logger.warning(
+            "injection suspected in %s output (session %s): %s [%s]",
+            tool_name,
+            session_id,
+            detection.get("pattern"),
+            detection.get("severity"),
+        )
+        if self._event_bus is None:
+            return
+        await self._event_bus.publish_domain_event(
+            InjectionSuspected(
+                session_id=session_id,
+                step_id=str(getattr(self._tool_executor, "_get_step_id", lambda: "")() or ""),
+                tool_name=tool_name,
+                pattern=str(detection.get("pattern", "")),
+                severity=str(detection.get("severity", "")),
+                scanner_unavailable=bool(detection.get("unavailable", False)),
+            )
+        )
 
     async def _publish_llm_call(self, event: Any) -> None:
         """Stamp the step's session on an LLMCallCompleted and publish it (W4.1)."""
@@ -523,135 +529,23 @@ class ExecutorAgent:
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None, session_id: str = ""
     ) -> AsyncGenerator[AgentEvent, None]:
+        """Run one plan step to completion, yielding every event as it happens.
+
+        This method is the loop's *shape*: setup, then turns until something stops it, then
+        completion. What each turn does lives in `_turn.py`, what a tool batch does in
+        `_tool_batch.py`, and what the first 130 lines of setup did in `_step_setup.py`.
+        It was 527 lines with all of that inline (WB-06 in
+        tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md).
+        """
         self._facts.clear()
         self._should_terminate = False
         self._conversation_buffer.clear()
 
-        # ── OTEL tracing: executor_step span ─────────────────────────
-        # ARCH-AUDIT-V2 B2 — span for a single step within PlanActFlow.
-        # Uses start_span (not start_as_current_span) for the same reason
-        # as plan_act_iteration — the generator body makes context-manager
-        # teardown unreliable.  Ended explicitly at the method's exit.
-        # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
-        _step_span = None
-        if self._tracing_port is not None:
-            from weebot.config.feature_flags import is_enabled
-
-            if is_enabled("OTEL_TRACING_ENABLED"):
-                _step_span = self._tracing_port.start_span("executor_step")
-                _step_span.set_attribute("step.id", step.id)
-                _step_span.set_attribute("step.description", step.description[:200])
-        self._current_step_id = step.id
-        self._current_session_id = session_id or getattr(self, "_current_session_id", "unknown")
-        # The approval scope and audit records read the session from here; it
-        # was never set, so Flow pause denied every web approval (B2c).
-        self._tool_executor.set_step_context(step.id, session_id)
-        self._tool_note = self._scope_tools_for(step)
+        primed = prime_step(self, step, session_id)
+        self._tool_note = primed.tool_note
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
-        # ═══ Policy-error-loop tracking (Fix 5) ═══
-        consecutive_error_class_counts: dict[str, int] = {}
-        last_error_class: str | None = None
-
-        base_prompt = self._load_prompt()
-
-        # ── User profile from dialectic consolidation (lazy-init) ──
-        if not hasattr(self, "_user_profile_cache"):
-            try:
-                import hashlib
-
-                from weebot.application.ports.state_roles_port import (
-                    MemoryMetadataStore,
-                    as_role,
-                )
-
-                repo = as_role(self._state_repo, MemoryMetadataStore)
-                if repo is not None:
-                    key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-                    row = await repo.get_memory_entry(key)
-                    txt = row.get("entry_text", "") if row else ""
-                    self._user_profile_cache = (
-                        txt[:500] if txt and txt != "No user data collected yet." else ""
-                    )
-                else:
-                    self._user_profile_cache = ""
-            except Exception:
-                self._user_profile_cache = ""
-
-        # ── Build system prompt via extracted builder ─────────────
-        _step_scope = getattr(step, "context_scope", None)
-        _scope_value = _step_scope.value if _step_scope is not None else "full"
-        system_prompt = await build_executor_prompt(
-            step_description=step.description,
-            base_prompt=base_prompt,
-            context_scope=_scope_value,
-            harness_block=self._harness_instruction_block,
-            skill_prompt=self._skill_prompt,
-            skill_retriever=self._skill_retriever,
-            behavioral_learner=self._behavioral_learner,
-            state_repo=self._state_repo,
-            personality=self._personality,
-            profile_name=self._profile_name,
-        )
-
-        # ── Append extra components not handled by builder ────────
-        # Gated by scope: minimal/skill steps don't need the cached user
-        # profile blob (ICM per-step context scoping — see _prompt_builder).
-        if _scope_value in ("full", "creative") and getattr(self, "_user_profile_cache", ""):
-            system_prompt += f"\n\n## User Profile\n{self._user_profile_cache}"
-
-        self._system_prompt = system_prompt
-        # Inject OUTPUT_ROOT so tools resolve paths consistently
-        from weebot.core.output_path import output_path as _op
-
-        self._system_prompt = self._system_prompt + (
-            f"\n\nOUTPUT_ROOT = {_op('Output')}"
-            "\nALL file writes MUST use this absolute path prefix. "
-            'Example: Set-Content -Path "{OUTPUT_ROOT}/refactor/file.md" -Value ...'
-        )
-        # Inject persistent memory snapshot
-        try:
-            from weebot.tools.persistent_memory import PersistentMemoryTool
-
-            snapshot = await PersistentMemoryTool.load_snapshot()
-            if snapshot:
-                self._system_prompt = self._system_prompt + "\n\n" + snapshot
-        except Exception as exc:
-            logger.warning("Persistent memory snapshot unavailable: %s", exc)
-
-        if not self._conversation_buffer:
-            # Build a rich context message so the LLM knows the full task,
-            # how far along the plan is, and what the current step requires.
-            completed_steps = [s for s in plan.steps if s.is_done()]
-            try:
-                current_idx = plan.steps.index(step) + 1
-            except ValueError:
-                current_idx = len(completed_steps) + 1
-
-            context_lines = [
-                f"Overall goal: {plan.title}",
-                f"Total steps: {len(plan.steps)} | Current: step {current_idx}",
-            ]
-            if plan.message:
-                context_lines.append(f"Plan summary: {plan.message}")
-            if completed_steps:
-                done_summary = "; ".join(s.description for s in completed_steps[-3:])
-                context_lines.append(f"Recently completed: {done_summary}")
-            context_lines += [
-                "",
-                f"Current step to execute: {step.description}",
-                "",
-                "Use available tools to execute this specific step.",
-            ]
-            self._conversation_buffer.append({"role": "user", "content": "\n".join(context_lines)})
-            # If this is a resume (user provided input), inject it so the LLM
-            # sees the answer instead of calling ask_human again.
-            if user_input:
-                self._conversation_buffer.append({"role": "user", "content": user_input})
-        else:
-            self._conversation_buffer.append(
-                {"role": "user", "content": f"Next step: {step.description}"}
-            )
+        await build_step_prompts(self, plan, step, user_input)
 
         guard = IterationGuard(
             step_id=step.id,
@@ -659,14 +553,11 @@ class ExecutorAgent:
             max_repeated_assistant_turns=2,
             repeated_tool_signature_limit=4,
         )
+        batch = ToolBatchRunner()
         step_result = ""
         loop_error: str | None = None
         abort_step = False
-        thought_iteration: int = 0
-        tool_calls_attempted: int = 0
-        tool_calls_succeeded: int = 0
-        semantic_loop_recoveries: int = 0
-        _MAX_SEMANTIC_LOOP_RECOVERIES = 2
+        thought_iteration = 0
 
         # ── Tier 1.3: TrajectoryMonitor — reset per-step windows, preserve cross-step ──
         if self._trajectory_monitor is not None:
@@ -676,6 +567,7 @@ class ExecutorAgent:
         self._step_budget.reset()
         while self._step_budget.consume():
             guard.record_iteration()
+
             if guard.is_tool_call_budget_exhausted():
                 logger.warning(
                     "Step %s: tool-call budget exhausted (%d calls). "
@@ -683,119 +575,29 @@ class ExecutorAgent:
                     step.id,
                     guard._max_tool_calls,
                 )
-                self._conversation_buffer.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "You have reached the maximum number of tool calls for this step. "
-                            "Summarize what you found and complete the step. Do NOT call "
-                            "any more tools."
-                        ),
-                    }
-                )
-                messages = sanitize_tool_call_pairing(
-                    [{"role": "system", "content": self._system_prompt + self._tool_note}]
-                    + list(self._conversation_buffer)
-                )
-                try:
-                    response = await self._cascade.call_with_cascade(
-                        messages=messages, description=step.description
-                    )
-                    step_result = response.content or "Step completed (budget cap)."
-                except Exception as exc:
-                    logger.warning("Budget-cap summary call failed: %s — using fallback", exc)
-                    step_result = "Step completed (budget cap)."
+                step_result = await self._summarize_on_budget_cap(step)
                 yield MessageEvent(role="assistant", message=step_result)
                 abort_step = True
                 break
-            # ── Pre-call compaction: ensure the LLM sees compacted context ──
+
+            # Pre-call compaction: ensure the LLM sees compacted context.
             await self._context_compressor._maybe_compress()
 
-            messages = sanitize_tool_call_pairing(
-                [{"role": "system", "content": self._system_prompt + self._tool_note}]
-                + list(self._conversation_buffer)
-            )
-
-            # ── Lost-in-Compaction: session constraints as messages[-1] ──────
-            # Paper's K_ub position (>98% compliance) — appended to the local
-            # list, never the buffer, so it can't be evicted or compacted away.
-            if self._session_constraints_block:
-                messages.append({"role": "user", "content": self._session_constraints_block})
-
-            # ── Middleware: before_request ──────────────────────────────────
-            if self._middleware_chain is not None and not self._middleware_chain.is_empty():
-                _mw_tools = self._tools.to_params() if self._tools else []
-                messages, _mw_tools = await self._middleware_chain.apply_before_request(
-                    messages=messages,
-                    tools=_mw_tools,
-                    step_id=step.id,
-                    step_description=step.description,
-                )
-
-            # Cost cascade: try budget model first, fall back to primary on failure.
-            try:
-                response = await self._cascade.call_with_cascade(
-                    messages, description=step.description
-                )
-            except LLMCapacityExhaustedError as exc:
-                # Not the branch below. That one tells the user to check their
-                # credits and API key, which is wrong advice here: nothing is
-                # wrong with any provider, this process is simply at its own
-                # concurrency limit.
-                yield ErrorEvent(error=str(exc))
-                yield MessageEvent(
-                    role="assistant",
-                    message=(
-                        "Weebot is at its limit for simultaneous AI requests, and no "
-                        "slot freed up in time. Nothing is wrong with your models or "
-                        "credits. Retry shortly, or raise llm_max_concurrent_requests "
-                        "if this persists."
-                    ),
-                )
-                break
-            except AllModelsTrippedError as exc:
-                yield ErrorEvent(error=str(exc))
-                yield MessageEvent(
-                    role="assistant",
-                    message=(
-                        "All AI models are currently unavailable. Please:\n"
-                        "1. Check your OpenRouter credits at https://openrouter.ai/credits\n"
-                        "2. Verify your OPENROUTER_API_KEY is valid\n"
-                        "3. Wait a few minutes for circuit breakers to cool down and retry"
-                    ),
-                )
+            turn = await next_turn(self, step)
+            for event in turn.events:
+                yield event
+            if turn.stop:
                 break
 
-            assistant_content = response.content or ""
-
-            # ── Middleware: after_response ─────────────────────────────────
-            if self._middleware_chain is not None and not self._middleware_chain.is_empty():
-                assistant_content, _modified_tc = await self._middleware_chain.apply_after_response(
-                    content=assistant_content,
-                    tool_calls=response.tool_calls or [],
-                    messages=messages,
-                    tools=self._tools.to_params() if self._tools else [],
-                )
-                if response.tool_calls:
-                    response.tool_calls = _modified_tc
-
-            assistant_msg: dict = {"role": "assistant", "content": assistant_content}
-            if response.tool_calls:
-                assistant_msg["tool_calls"] = response.tool_calls
-            self._conversation_buffer.append(assistant_msg)
-
-            # Emit reasoning as a ThoughtEvent so consumers (CLI, WebSocket) see
-            # the agent's thinking before each action.
-            if assistant_content.strip():
+            if turn.thought:
                 thought_iteration += 1
                 yield ThoughtEvent(
-                    step_id=step.id, thought=assistant_content.strip(), iteration=thought_iteration
+                    step_id=step.id, thought=turn.thought, iteration=thought_iteration
                 )
 
-            if not response.tool_calls:
-                guard.record_assistant_turn(normalize_text(assistant_content))
-
-                step_result = assistant_content or "No result"
+            if not turn.response.tool_calls:
+                guard.record_assistant_turn(normalize_text(turn.assistant_content))
+                step_result = turn.assistant_content or "No result"
                 if follow_up_like(step_result):
                     step_result = "Step completed. Continuing to the next plan step."
 
@@ -811,253 +613,19 @@ class ExecutorAgent:
                 yield MessageEvent(role="assistant", message=step_result)
                 break
 
-            abort_step = False
-            # ── Phase 2: Pre-flight checks (sequential) ─────────
-            _batch_tool_calls: list[dict] = []
-            for tc in response.tool_calls:
-                tool_name = tc["function"]["name"]
-                raw_arguments = tc["function"].get("arguments", "{}")
-                signature = tool_signature(tool_name, raw_arguments)
-                guard.record_tool_call(signature)
-
-                if guard.is_tool_signature_loop():
-                    loop_error = guard.build_stuck_error(
-                        reason=f"repeated identical tool call '{tool_name}'",
-                        step_description=step.description,
-                    )
-                    yield ErrorEvent(error=loop_error)
-                    abort_step = True
-                    break
-
-                event_args = parse_args_for_event(raw_arguments)
-                yield ToolEvent(
-                    tool_call_id=tc["id"],
-                    tool_name=tool_name,
-                    function_name=tool_name,
-                    function_args=event_args,
-                    status=ToolStatus.CALLING,
-                )
-                _batch_tool_calls.append(tc)
-
-            if abort_step:
-                break
-
-            # ── Phase 2: Execute all tool calls in parallel ─────
-            results = await self._tool_executor.execute_tool_batch(_batch_tool_calls)
-
-            # Guard: must have same length as input
-            assert len(results) == len(_batch_tool_calls), (
-                f"Mismatched result count {len(results)} vs "
-                f"tool call count {len(_batch_tool_calls)}"
+            outcome = await batch.run(
+                self,
+                step,
+                list(turn.response.tool_calls),
+                guard,
+                step_result=step_result,
             )
-
-            # ── Process results in declared order ───────────────
-            for tc, result in zip(_batch_tool_calls, results, strict=False):
-                tool_name = tc["function"]["name"]
-                raw_arguments = tc["function"].get("arguments", "{}")
-                event_args = parse_args_for_event(raw_arguments)
-                signature = tool_signature(tool_name, raw_arguments)
-                tool_calls_attempted += 1
-                if not result.is_error:
-                    tool_calls_succeeded += 1
-
-                # ── Tier 1.3: TrajectoryMonitor — detect degenerate patterns ──
-                if self._trajectory_monitor is not None:
-                    diagnosis = self._trajectory_monitor.diagnose(
-                        step_id=step.id,
-                        tool_signature=signature,
-                        tool_output=result.output or "",
-                        step_result=step_result if step_result else None,
-                        total_budget=self._max_steps,
-                        used_budget=tool_calls_attempted,
-                        available_tools=(list(self._tools._tools.keys()) if self._tools else None),
-                    )
-                    if diagnosis.recovery_message:
-                        self._conversation_buffer.append(
-                            {
-                                "role": "system",
-                                "content": f"[RECOVERY] {diagnosis.recovery_message}",
-                            }
-                        )
-                    if diagnosis.health == TrajectoryHealth.HEALTHY:
-                        logger.debug(
-                            "Trajectory %s for step %s: %s",
-                            diagnosis.health.value,
-                            step.id,
-                            diagnosis.detail,
-                        )
-                    else:
-                        logger.warning(
-                            "Trajectory %s for step %s: %s",
-                            diagnosis.health.value,
-                            step.id,
-                            diagnosis.detail,
-                        )
-                    # Give SEMANTIC_LOOP up to 2 recovery attempts before aborting.
-                    # The monitor already injected a recovery_message above.
-                    if diagnosis.health == TrajectoryHealth.SEMANTIC_LOOP:
-                        if semantic_loop_recoveries < _MAX_SEMANTIC_LOOP_RECOVERIES:
-                            semantic_loop_recoveries += 1
-                            logger.warning(
-                                "SEMANTIC_LOOP for step %s — injecting recovery hint "
-                                "(attempt %d/%d)",
-                                step.id,
-                                semantic_loop_recoveries,
-                                _MAX_SEMANTIC_LOOP_RECOVERIES,
-                            )
-                            continue
-
-                    _auto_abort_health = {
-                        TrajectoryHealth.TERMINAL,
-                        TrajectoryHealth.STAGNATING,
-                        TrajectoryHealth.EXHAUSTED,
-                    }
-                    if diagnosis.health in _auto_abort_health or (
-                        diagnosis.health == TrajectoryHealth.SEMANTIC_LOOP
-                        and semantic_loop_recoveries >= _MAX_SEMANTIC_LOOP_RECOVERIES
-                    ):
-                        # Enrich the abort message with policy context if the trajectory
-                        # degenerated due to security blocks rather than true semantic repetition
-                        security_context = ""
-                        if last_error_class in (
-                            "security_blocked",
-                            "policy_denied",
-                            "confirmation_required",
-                        ):
-                            count = consecutive_error_class_counts.get(last_error_class, 0)
-                            security_context = (
-                                f" (underlying cause: {count}× consecutive '{last_error_class}' "
-                                f"errors — check security_validators.py allowlists)"
-                            )
-                        loop_error = (
-                            f"Trajectory {diagnosis.health.value} for step '{step.id}': "
-                            f"{diagnosis.detail}{security_context}. Auto-aborting step."
-                        )
-                        yield ErrorEvent(error=loop_error)
-                        abort_step = True
-                        break
-
-                # ═══ Policy-error-loop detection (Fix 5) ═══
-                if result.is_error:
-                    if is_expected_failure(step.description or ""):
-                        # TDD RED phase — non-zero exit is expected.
-                        # Don't classify as an error for loop detection.
-                        err_class = None
-                    else:
-                        err_class = classify_tool_error(result.error or result.output or "")
-                    if err_class:
-                        if err_class == last_error_class:
-                            consecutive_error_class_counts[err_class] = (
-                                consecutive_error_class_counts.get(err_class, 0) + 1
-                            )
-                        else:
-                            consecutive_error_class_counts = {err_class: 1}
-                            last_error_class = err_class
-
-                        if (
-                            consecutive_error_class_counts.get(err_class, 0)
-                            >= _MAX_SAME_ERROR_CLASS
-                        ):
-                            loop_error = (
-                                f"Step '{step.id}' is stuck: the same error class '{err_class}' "
-                                f"has triggered {consecutive_error_class_counts[err_class]} "
-                                "consecutive times. "
-                                f"Last error: {(result.error or result.output)[:300]}. "
-                                "Requesting user input to unblock."
-                            )
-                            yield ErrorEvent(error=loop_error)
-                            yield WaitForUserEvent(
-                                question=(
-                                    f"The agent is blocked by a '{err_class}' policy and cannot "
-                                    f"proceed with step: {step.description!r}.\n"
-                                    f"Last error: {(result.error or result.output)[:500]}\n\n"
-                                    "Please either:\n"
-                                    "  1. Rephrase the task to avoid the blocked operation, or\n"
-                                    "  2. Adjust security settings if appropriate, then resume."
-                                )
-                            )
-                            abort_step = True
-                            break
-                else:
-                    last_error_class = None
-                    consecutive_error_class_counts.clear()
-
-                # ── Middleware: after_tool_call ──────────────────────────────
-                if self._middleware_chain is not None and not self._middleware_chain.is_empty():
-                    _mw_result = await self._middleware_chain.apply_after_tool_call(
-                        tool_name=tool_name,
-                        arguments=event_args,
-                        output=result.output or "",
-                        error=result.error,
-                        is_error=result.is_error,
-                    )
-                    # If middleware modified the output, update the result
-                    if _mw_result.output != (result.output or ""):
-                        result = _merge_middleware_result(result, _mw_result)
-
-                yield ToolEvent(
-                    tool_call_id=tc["id"],
-                    tool_name=tool_name,
-                    function_name=tool_name,
-                    function_args=event_args,
-                    status=ToolStatus.CALLED,
-                    result=str(result),
-                )
-
-                if result.data:
-                    self._facts[tool_name] = result.data
-
-                    if result.data.get("awaiting_human"):
-                        question = result.data.get("question", "")
-                        yield WaitForUserEvent(question=question)
-                        return
-
-                    # ADR-013 flow pause: a guard asked, and a human must answer.
-                    pending = result.data.get("approval_required")
-                    if pending:
-                        yield ToolApprovalEvent(
-                            tool_name=pending.get("tool_name", tool_name),
-                            arguments=pending.get("arguments", {}),
-                            risk_level=pending.get("guard", ""),
-                            reason=pending.get("reason", ""),
-                            prompt=pending.get("prompt", "Allow this command? (yes/no)"),
-                            fingerprint=pending.get("fingerprint", ""),
-                            allow_always=pending.get("allow_always"),
-                        )
-                        # The UI, CLI and SSE render wait_for_user, not
-                        # tool_approval: this is the question a person sees.
-                        yield WaitForUserEvent(question=pending.get("prompt", ""))
-                        return
-
-                if tool_name == "terminate":
-                    logger.info("Terminate tool called, task completed")
-                    self._should_terminate = True
-                    step_result = self._maybe_truncate_ponytail(result.output or "Task completed")
-                    yield MessageEvent(role="assistant", message=step_result)
-                    self._step_budget.refund(self._step_budget.remaining)
-                    abort_step = True
-                    break
-
-                _tool_content = str(result)
-                if not result.is_error and is_untrusted_tool(tool_name):
-                    _tool_content = wrap_untrusted(source=tool_name, content=_tool_content)
-                self._conversation_buffer.append(
-                    {"role": "tool", "content": _tool_content, "tool_call_id": tc["id"]}
-                )
-
-                # Vision-in-the-loop: let a vision-capable model SEE the screen
-                # state a tool produced, instead of driving blind off DOM/OCR text.
-                if getattr(result, "base64_image", None) and self._vision_enabled():
-                    self._needs_vision = True  # Next LLM call must use a VLM
-                    await self._context_compressor.inject_screenshot(tool_name, result.base64_image)
-                    # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
-                    # Grounded in the step description so the model can judge progress.
-                    reflection = await self._context_compressor.reflect_on_screenshot(
-                        tool_name, result.base64_image, task_context=step.description
-                    )
-                    if reflection is not None:
-                        self._context_compressor.inject_reflection(reflection)
-
+            for event in outcome.events:
+                yield event
+            step_result = outcome.step_result
+            if outcome.loop_error:
+                loop_error = outcome.loop_error
+            abort_step = outcome.abort_step
             if abort_step:
                 break
 
@@ -1067,17 +635,33 @@ class ExecutorAgent:
             loop_error=loop_error,
             step_result=step_result,
             recent_tool_signatures=list(guard.state.recent_tool_signatures),
-            tool_calls_attempted=tool_calls_attempted,
-            tool_calls_succeeded=tool_calls_succeeded,
+            tool_calls_attempted=batch.tool_calls_attempted,
+            tool_calls_succeeded=batch.tool_calls_succeeded,
             step=step,
         ):
             yield event
             if isinstance(event, ErrorEvent):
                 loop_error = event.error
 
-        # End the executor_step span (ARCH-AUDIT-V2 B2)
-        if _step_span is not None:
-            _step_span.end()
+        if primed.span is not None:
+            primed.span.end()
+
+    async def _summarize_on_budget_cap(self, step: Step) -> str:
+        """One last call asking for what the agent found, with tools withheld."""
+        from weebot.application.agents.executor._tool_pairing import sanitize_tool_call_pairing
+
+        messages = sanitize_tool_call_pairing(
+            [{"role": "system", "content": self._system_prompt + self._tool_note}]
+            + list(self._conversation_buffer)
+        )
+        try:
+            response = await self._cascade.call_with_cascade(
+                messages=messages, description=step.description
+            )
+            return response.content or "Step completed (budget cap)."
+        except Exception as exc:
+            logger.warning("Budget-cap summary call failed: %s — using fallback", exc)
+            return "Step completed (budget cap)."
 
     # ── Phase 2: Parallel tool execution ─────────────────────────
     # Per-tool semaphore gating is handled by ToolCollection.execute().
@@ -1172,9 +756,11 @@ def _maybe_record_skill_gap(
             best_score=best_score,
         )
         if executor._event_bus is not None:
-            import asyncio
+            from weebot.core.background_tasks import get_background_tasks
 
-            asyncio.ensure_future(executor._event_bus.publish_domain_event(event))
+            get_background_tasks().spawn(
+                executor._event_bus.publish_domain_event(event), name="skill-gap-detected"
+            )
     except Exception:
         logger.debug("SkillGapDetected event emission failed (non-blocking)")
         pass  # event emission must never block the execution loop

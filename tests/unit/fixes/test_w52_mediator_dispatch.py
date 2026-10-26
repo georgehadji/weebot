@@ -61,7 +61,7 @@ async def test_no_tracer_builds_no_container(monkeypatch):
 def test_a_tool_less_mediator_is_marked_degraded(monkeypatch, caplog):
     from weebot.application.di import Container
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     def _fail(self, *a, **k):
         raise RuntimeError("tool wiring broke")

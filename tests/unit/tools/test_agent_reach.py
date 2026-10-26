@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import pytest
 
-from weebot.core.trust_boundary import is_untrusted_tool, taints_egress_context
+from weebot.core.trust_boundary import must_fence, must_taint, trust_of
 from weebot.tools import agent_reach as ar
 from weebot.tools.agent_reach import AgentReachTool
 
@@ -43,7 +43,8 @@ def runner(monkeypatch):
 
 
 def test_agent_reach_is_on_the_trust_boundary():
-    assert is_untrusted_tool("agent_reach") and taints_egress_context("agent_reach")
+    trust = trust_of(AgentReachTool)
+    assert must_fence(trust) and must_taint(trust, False)
 
 
 @pytest.mark.parametrize(
@@ -185,7 +186,7 @@ async def test_a_missing_program_says_how_to_install_it(monkeypatch):
 
 
 def test_the_registry_offers_it_to_research_roles():
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     for role in ("researcher", "admin", "webhook"):
         assert "agent_reach" in RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS[role]

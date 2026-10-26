@@ -26,7 +26,9 @@ def test_cancel_files_a_request_for_a_run_in_another_process(tmp_path, monkeypat
     # WAITING: a resumed run keeps that status in the store while it works.
     repo.load_session = AsyncMock(return_value=Session(id="s1", status=SessionStatus.WAITING))
     repo.update_session_status = AsyncMock()
-    with patch("cli.commands.flow.AgentRunner", return_value=runner),          patch("cli.commands.flow.ModelSelectionService"),          patch("cli.commands.flow._get_state_repo", return_value=repo):
+    with patch("cli.commands.flow.AgentRunner", return_value=runner), \
+         patch("cli.commands.flow._get_container"), \
+         patch("cli.commands.flow._get_state_repo", return_value=repo):
         out = CliRunner().invoke(flow, ["cancel", "s1"]).output
     assert "Cancel requested" in out and cancel_requests.take("s1")
 

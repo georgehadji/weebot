@@ -165,7 +165,7 @@ def agents_pack_list() -> None:
 def agents_pack_apply(division: str, execute: bool) -> None:
     """Create or spawn a division pack."""
     from weebot.agents.registry import AgentRegistry
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
 
     registry = AgentRegistry(Path.cwd())
     personas = registry.pack(division)

@@ -187,7 +187,7 @@ def list_projects() -> None:
 
     for session in sessions:
         table.add_row(
-            session.session_id,
+            session.id,
             session.status.value if session.status else "unknown",
             str(session.created_at) if session.created_at else "-",
         )

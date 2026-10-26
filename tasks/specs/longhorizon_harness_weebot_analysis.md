@@ -1,3 +1,9 @@
+---
+status: superseded
+date: 2026-08-10
+note: specs/longhorizon_harness_implementation_plan.md
+---
+
 # LongHorizon-Harness → weebot: analysis and enhancement plan
 
 **Date:** 2026-08-09

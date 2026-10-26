@@ -8,7 +8,14 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
+from weebot.application.flows.states.base import (
+    AgentStatus,
+    FlowState,
+    StateId,
+    new_state,
+    register_state,
+    task_text,
+)
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus, StepStatus
 
@@ -31,13 +38,13 @@ def _leave_unhandled(plan: Plan, step, reason: str) -> Plan:
     return plan.update_step_status(step.id, StepStatus.FAILED, result=reason)
 
 
+@register_state(StateId.UPDATING)
 class UpdatingState(FlowState):
     """Handles the updating of the execution plan after a step completes."""
 
     status = AgentStatus.UPDATING
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.executing import ExecutingState
 
         if context._plan is None:
             yield ErrorEvent(error="No plan available during update")
@@ -128,7 +135,7 @@ class UpdatingState(FlowState):
                     last_step,
                     f"Plan update rejected: {cmd_result.error}",
                 )
-                context.set_state(ExecutingState())
+                context.set_state(new_state(StateId.EXECUTING))
                 return
 
             logger.info("Plan updated in %.1fs", _update_elapsed)
@@ -218,7 +225,7 @@ class UpdatingState(FlowState):
         # ── Phase 2: Post-revision critique (reuses CritiquingState logic) ──
         if context._plan_critic is not None and context._plan is not None:
             try:
-                from weebot.application.flows.states.critiquing import ConfidentThresholds
+                from weebot.application.flows.states.base import ConfidentThresholds
 
                 critique_context = {
                     "task": task_text(context, prompt),
@@ -242,4 +249,4 @@ class UpdatingState(FlowState):
                 context._plan_critique = None
 
         context._snapshot_plan()
-        context.set_state(ExecutingState())
+        context.set_state(new_state(StateId.EXECUTING))

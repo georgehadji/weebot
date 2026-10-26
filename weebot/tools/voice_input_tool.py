@@ -5,7 +5,8 @@ Requires pip install openai-whisper.  Returns clean error when missing.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
+from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.tools.base import BaseTool, ToolResult
@@ -13,6 +14,8 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class VoiceInputTool(BaseTool):
     """Transcribe an audio file to text using Whisper."""
+
+    output_trust: ClassVar[OutputTrust] = OutputTrust.LOCAL
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 20

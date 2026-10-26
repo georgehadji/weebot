@@ -19,11 +19,12 @@ Returns:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+
+from weebot.core.background_tasks import get_background_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def slack_events(request: Request):
     if request.headers.get("X-Slack-Retry-Num"):
         return JSONResponse(content={"ok": True})
 
-    asyncio.create_task(_handle_event(adapter, payload))
+    get_background_tasks().spawn(_handle_event(adapter, payload), name="slack-webhook-event")
     return JSONResponse(content={"ok": True})
 
 

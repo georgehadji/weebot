@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction check-arch check
+.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -59,6 +59,27 @@ lint-unawaited:
 	@echo "=== Un-awaited coroutine check (AST) ==="
 	@python scripts/lint_unawaited_coroutines.py
 
+lint-module-cycles:
+	@echo "=== Module import cycles (AST + Tarjan SCC, ratcheted) ==="
+	@python scripts/lint_module_cycles.py
+
+lint-import-exemptions:
+	@echo "=== Import exemptions and dynamic weebot imports (ratcheted) ==="
+	@python scripts/lint_import_exemptions.py
+
+lint-ruff:
+	@echo "=== ruff violations at the configured rules (ratcheted) ==="
+	@python scripts/lint_ruff_violations.py
+
+lint-long-functions:
+	@echo "=== Functions over 150 lines (AST, ratcheted) ==="
+	@python scripts/lint_long_functions.py
+
+lint-ui:
+	@echo "=== weebot-ui debt (ratcheted) ==="
+	@python scripts/lint_ui_debt.py
+	@python scripts/check_ui_contrast.py
+
 lint-ruleset:
 	@echo "=== Ruleset / workflow consistency (offline) ==="
 	@python scripts/check_ruleset_consistency.py
@@ -114,9 +135,10 @@ gen-map-index:
 	@python scripts/gen_map_index.py
 
 lint-map:
-	@echo "=== map/ index generated, card citations resolve ==="
+	@echo "=== map/ and tasks/ indexes generated, card citations resolve ==="
 	@python scripts/gen_map_index.py --check
-	@python scripts/check_map_citations.py
+	@python scripts/check_map_citations.py --drift
+	@python scripts/gen_tasks_index.py --check
 
 lint-settings-construction:
 	@echo "=== Direct WeebotSettings() construction (AST, ratcheted) ==="
@@ -126,5 +148,5 @@ lint-container-construction:
 	@echo "=== Hand-built Container() outside application/di (AST, ratcheted) ==="
 	@python scripts/lint_container_construction.py
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-settings-construction lint-container-construction
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui
 	@echo "=== All checks passed ==="
