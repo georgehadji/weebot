@@ -154,7 +154,10 @@ class CascadeExecutor:
         if c >= CascadeExecutor._BREAKER_TRIP_AT:
             logger.warning("Circuit breaker tripped for %s after %d failures", model_id, c)
         elif c >= 3:
-            logger.info("%s has failed %d times in a row", model_id, c)
+            logger.warning(
+                "Circuit breaker warning for %s: %d failures in a row (trips at %d)",
+                model_id, c, CascadeExecutor._BREAKER_TRIP_AT,
+            )
 
     def _cascade_reset(self, model_id: str) -> None:
         self._circuit_breaker_failures[model_id] = 0

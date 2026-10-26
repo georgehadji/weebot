@@ -175,3 +175,43 @@ def test_the_index_says_what_superseded_a_record(monkeypatch):
             ("done", "2026-10-27", "new.md", "New", "")]
     gen = _index_with(monkeypatch, rows, {"old.md": ["new.md"]})
     assert "superseded by [New](new.md)" in gen.render(rows, {"old.md": ["new.md"]})
+
+
+def test_fix_keeps_a_list_followed_by_a_range_intact(tmp_path, monkeypatch):
+    """`a, b-c` lost its `-c` tail or kept it unshifted (`441, 452-449`)."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    lines = [f"line {i}" for i in range(1, 9)]
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(lines) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "eight lines")
+    sha = _git(tmp_path, "rev-parse", "--short", "HEAD")
+    card.write_text(f"---\nstatus: verified\nverified: 2026-01-01\ncommit: {sha}\n---\n"
+                    "`f` is at `weebot/mod.py:2, 5-6`.\n")
+    _git(tmp_path, "commit", "-q", "-am", "card2")
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(["new", *lines]) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift")
+    cm.drifted_citations(fix=True)
+    assert "weebot/mod.py:3, 6-7" in card.read_text()
+
+
+def test_fix_is_idempotent_on_a_card_it_marks_stale(tmp_path, monkeypatch):
+    """Relocated numbers without a restamped commit were shifted again by the next run."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    lines = [f"line {i}" for i in range(1, 9)]
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(lines) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "eight lines")
+    sha = _git(tmp_path, "rev-parse", "--short", "HEAD")
+    card.write_text(f"---\nstatus: verified\nverified: 2026-01-01\ncommit: {sha}\n---\n"
+                    "`a` is at `weebot/mod.py:3`, and `b` is at `weebot/mod.py:6`.\n")
+    _git(tmp_path, "commit", "-q", "-am", "card2")
+    changed = ["new", *lines]
+    changed[6] = "line 6 rewritten"  # line 6 moves to 7 and its text changes
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(changed) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift and rewrite")
+    cm.drifted_citations(fix=True)
+    once = card.read_text()
+    assert "status: stale" in once and "weebot/mod.py:4" in once
+    # A person re-reading the card flips it back to verified; the numbers it kept must not
+    # be shifted a second time.
+    card.write_text(once.replace("status: stale", "status: verified"))
+    cm.drifted_citations(fix=True)
+    assert "weebot/mod.py:4" in card.read_text()

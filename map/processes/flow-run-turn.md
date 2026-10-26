@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 5643d0ac
+commit: 3223b7f2
 consumes:
   - ../objects/interfaces/CLI.md
   - ../objects/application/DIContainer.md
@@ -56,12 +56,12 @@ produces:
 18. **Reviewing.** With no reviewer it passes straight back to `ExecutingState` (`weebot/application/flows/states/reviewing.py:64-67`); at the retry cap it approves (`:70-77`); approved goes to `ExecutingState` (`:111-115`), revise emits an updated `PlanEvent` and goes to `ExecutingState` (`:117-157`), reject marks the step FAILED and goes to `UpdatingState` (`:159-164`).
 19. **Verifying.** `VerifyingState.execute` skips to `CompletedState` when CoVe is off, no plan, or no completed step (`weebot/application/flows/states/verifying.py:66-93`); otherwise it runs the CoVe questions inside `WorkspaceIntegrityGuard.watch` (`:104-112`) and ends in `CompletedState` (`:228`).
 20. **Completed.** `CompletedState.execute` stamps the plan FAILED if any step failed, else COMPLETED (`weebot/application/flows/states/completed.py:174-178`), emits that `PlanEvent` (`:199-201`), sets the session COMPLETED or FAILED and saves it (`:292-295`), yields `DoneEvent` (`:302`), then scores the trajectory (`:304-315`) and spawns background jobs (`:433-489`).
-21. **Persistence on every emit.** `PlanActFlow._emit` hands the event to `EventPublisher.emit` (`plan_act_flow.py:241-260`): truth binding, credential sanitization, `session.add_event`, bus publish plus domain events, then save (`weebot/application/flows/event_publisher.py:60-80`); see [session-persistence](session-persistence.md).
+21. **Persistence on every emit.** `PlanActFlow._emit` hands the event to `EventPublisher.emit` (`plan_act_flow.py:241-260`): truth binding, credential sanitization, `session.add_event`, bus publish plus domain events, then save (`weebot/application/flows/event_publisher.py:60-82`); see [session-persistence](session-persistence.md).
 22. **Epilogue.** `AgentRunner` publishes each yielded event the flow had not already emitted (`agent_runner.py:243-244`), takes the flow's session (`:247-251`), keeps COMPLETED, WAITING or FAILED and turns any other status into WAITING (`settled_status`, `:33-39`, `:253`) and saves (`:255`). `_run_async` drains background tasks, closes the MCP toolkit and the DB pools (`cli/commands/flow.py:58-73`).
 
 Consequences (read from source, not run):
 - A termination condition does not skip `CompletedState`: it sets it with the reason and the state runs on the same pass (`session_budget.py:112-116`; `completed.py:168-169`). The session ends FAILED only when a step FAILED (`completed.py:174-178, 292`), so a turn cut short by a cap with steps still pending ends COMPLETED.
-- `--model` reaches the planner command (`planning.py:223`), the step command (`_step_run.py:74`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:728`; `weebot/application/models/step_execution_context.py:31`; `_base.py:258`; `weebot/application/agents/executor/_cascade.py:531`).
+- `--model` reaches the planner command (`planning.py:223`), the step command (`_step_run.py:74`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:728`; `weebot/application/models/step_execution_context.py:31`; `_base.py:258`; `weebot/application/agents/executor/_cascade.py:543`).
 - The step handler reads the plan from the database (`execute_step_handler.py:72-78`), not from the flow; the flow saves the routed session, with any applied plan-file edit, before the first step (`plan_act_flow.py:424-428`).
 
 ## If you change this

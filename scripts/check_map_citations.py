@@ -24,7 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 _CITE = re.compile(
-    r"`([\w./\\\-\[\]]+\.(?:py|tsx|ts|mjs|json|toml|yml|yaml))(?::(\d+)(?:[-,]\s?(\d+))?)?"
+    r"`([\w./\\\-\[\]]+\.(?:py|tsx|ts|mjs|json|toml|yml|yaml))"
+    # groups 2-5: first line, separator ("-" range or "," list), second line, tail of `a, b-c`
+    r"(?::(\d+)(?:([-,])\s?(\d+))?(?:-(\d+))?)?"
 )
 
 
@@ -60,7 +62,7 @@ def broken_citations() -> list[str]:
             continue
         rel = card.relative_to(ROOT).as_posix()
         for m in _CITE.finditer(text):
-            path, first, last = m.group(1), m.group(2), m.group(3)
+            path, first, last = m.group(1), m.group(2), m.group(5) or m.group(4)
             resolved = _resolve(path, tracked, tracked_set)
             if resolved is None:
                 if "/" in path:  # a bare file name ("config.py") is prose, not a citation
@@ -151,9 +153,14 @@ def drifted_citations(fix: bool = False) -> list[str]:
             if old is None or new is None:
                 continue
             first = int(m.group(2))
-            # "a-b" is a range; "a, b" two lines.
-            spans = ([(first, int(m.group(3)))] if m.group(3) and "-" in m.group(0)
-                     else [(first, first)] + ([(int(m.group(3)),) * 2] if m.group(3) else []))
+            # "a-b" is a range; "a, b" two lines; "a, b-c" a line and a range.
+            second = int(m.group(4)) if m.group(4) else None
+            if m.group(3) == "-":
+                spans = [(first, second)]
+            elif second is None:
+                spans = [(first, first)]
+            else:
+                spans = [(first, first), (second, int(m.group(5) or second))]
             moved = []
             for a, b in spans:
                 block = old[a - 1:max(a, b)]
@@ -166,10 +173,9 @@ def drifted_citations(fix: bool = False) -> list[str]:
                                 f"{commit.group(1)}")
                 moved.append(at or a)
             if moved != [a for a, _ in spans]:
-                cite = m.group(1) + ":" + (
-                    f"{moved[0]}-{moved[0] + spans[0][1] - spans[0][0]}"
-                    if m.group(3) and "-" in m.group(0)
-                    else ", ".join(str(x) for x in moved)
+                cite = m.group(1) + ":" + ", ".join(
+                    f"{mv}-{mv + b - a}" if b != a else str(mv)
+                    for mv, (a, b) in zip(moved, spans, strict=True)
                 )
                 edits.append((m.start(1), m.end(), cite))
                 problems.append(f"{rel}: {m.group(0)[1:]} moved to {cite}")
@@ -177,10 +183,13 @@ def drifted_citations(fix: bool = False) -> list[str]:
         if fix and (edits or gone):
             for start, end, cite in sorted(edits, reverse=True):
                 text = text[:start] + cite + text[end:]
+            # The relocated numbers are right for HEAD, so the commit moves with them: left at
+            # the old commit, the next run (or a person flipping the card back to verified)
+            # would shift them a second time. The verified date moves only when nothing is gone.
+            text = re.sub(r"^commit:.*$", f"commit: {head}", text, count=1, flags=re.M)
             if gone:
                 text = text.replace("status: verified", "status: stale", 1)
             else:
-                text = re.sub(r"^commit:.*$", f"commit: {head}", text, count=1, flags=re.M)
                 text = re.sub(r"^verified:.*$", f"verified: {date.today().isoformat()}",
                               text, count=1, flags=re.M)
             card.write_text(text, encoding="utf-8")

@@ -91,7 +91,9 @@ class TestCircuitBreaker:
         with caplog.at_level(logging.WARNING):
             for _ in range(3):
                 executor._cascade_record_failure("warn/model")
-        assert "Circuit breaker tripped" in caplog.text
+        # A warning, but not a false "tripped": the breaker trips at 5, not 3.
+        assert "Circuit breaker warning for warn/model: 3 failures in a row" in caplog.text
+        assert "tripped" not in caplog.text
 
 
 # ── Fast-fail detection ───────────────────────────────────────────
