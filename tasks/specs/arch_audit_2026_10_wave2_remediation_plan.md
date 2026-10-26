@@ -559,6 +559,32 @@ that no second attempt is made.
 | Ratchets | `module_cycles 0`, `unresolved_di_keys 0`, `unregistered_di_keys 0`, `string_di_keys 44`, `import_exemptions 62`, `dynamic_weebot_imports 15`, `silent_except_handlers 112`, `blocking_io_in_async 0`, `unawaited 0`, `functions_over_150_lines 28`, `settings_construction 0`, `container_construction 7` -- all unchanged. `bare_env_reads 68` (lowered, ceiling moved). |
 | `ruff_violations` | **741, at its ceiling** (was 743). The audit read this as a tool-version artifact; that was wrong. Running at `e72f5126` — the commit that *introduced* the 741 ceiling — measures **743**, so the ceiling was recorded before its two fixes were counted and the gate had been red since the day it was added. The two were paid in `cli/commands/flow.py`'s `decisions` panel (two E501 lines, now wrapped), `web/auth.py` itself being clean. `ruff` is pinned to `==0.17.2` in `requirements.txt` in the same change, because an exact-count ceiling cannot depend on a floating tool version. No ceiling moved. |
 | Map / index | Initially reported green because I ran `check_map_citations.py` without `--drift`, the flag `make lint-map` actually uses. With it: **155 citations were already drifted on `b9c4c378`** and 202 on this branch, so the gate had been red on `main` too. `--fix` relocated the shifts and demoted the 8 cards whose cited text was already gone (`DIContainer`, `PlanActFlow`, `Browser`, `LLMAdapters`, `CLI`, `WebUI`, `BrowserTools`, `IntegrationTools`) to `status: stale` -- honest, where they had been silently wrong. The 2 cards my own change made stale (`SkillRegistry`, `BuiltinSkills`, both citing `di/_skills.py` where the store is now constructed) were re-read against source and re-verified by hand. `map/objects/_index.md` regenerated. Final: 0 broken, 0 drifted. |
+| Map / `plan_act_flow.py` | Shrinking the constructor moved every citation below it, so the 22 `plan_act_flow.py` citations were **repointed by locating each claim's construct in the current source** -- not by arithmetic, because their line numbers predate several refactors. Two were rewritten in substance, not just renumbered: `PlanActFlow.md` said "996 lines" and described the constructor as 79-120 with normalisation at 121-165 (now 767 lines, constructor 79-97, normalisation in `_plan_act_wiring.py`), and `EventBus.md` cited the `SkillGapDetected` subscription at a line that is now the step-duration metric (`_plan_act_wiring.py:273`). Their baselines went to HEAD because the cards were re-verified against source, which is what `commit:` means. |
+
+### A wrong root cause I published, and the real one
+
+For about an hour I recorded that `check_map_citations.py` skips cards with no `commit:` field,
+and that this is why 22 citations went stale with a green gate. **That was false**, and it came
+from reading `Get-Content <card> -TotalCount 8` -- the `commit:` line was the ninth, so my own
+truncated read produced the "missing field". All 34 verified cards had one, on `main` included.
+
+The real mechanism, which is worse because nothing can detect it cheaply:
+
+`--drift` reads each cited line **at the card's `commit:`** and relocates that same text if it
+moved. Its premise is that the citation was *correct at that commit*. `FlowRouter.md` declared
+`commit: 50a5d748` while citing `plan_act_flow.py:661` for `get_last_plan()` -- a line that held
+`elif isinstance(initial_state, PlanningState):` at 50a5d748 and only became `get_last_plan()`
+at `12624041`. Someone had rewritten the citations without advancing `commit:`, so the checker
+was comparing the wrong blocks: it reported `422 moved to 647` and `429 moved to 197` for
+citations I had just verified by hand, and `--fix` would have rewritten correct citations onto
+unrelated code with the same confidence it reports a real move.
+
+Corrections made: the cards' baselines were advanced to HEAD (they were re-read against source,
+which is what `commit:` asserts), the hazard is now in `map/CLAUDE.md` and in the function's
+docstring, and the false claim was removed from the PR body. No gate was added, because the
+invariant that would catch it -- "the citation was right at its baseline" -- is exactly the thing
+that is unverifiable after the fact; what is verifiable is the human step, so it is written down
+where the next person edits a citation.
 
 ### Out of this ledger, but found on the way
 

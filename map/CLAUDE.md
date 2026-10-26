@@ -22,5 +22,6 @@ Every noun in `objects/_index.md` has a card (Wave G of `tasks/remaining_fix_pla
 
 - One home per fact. Link, do not copy.
 - `status: verified` needs a date, a commit hash and `path:line` citations. Otherwise `stub` or `stale`.
+- **Editing a citation means moving the card's `commit:` too.** `check_map_citations.py --drift` reads the cited lines *at that commit* and relocates the same text if it moved; it assumes the citation was correct there. Rewrite a citation without advancing `commit:` and the tool will happily "relocate" an unrelated block into a plausible-looking place -- which is how a wrong citation survives a green gate (`FlowRouter.md` declared `50a5d748` while citing lines that only held at `12624041`). After a heavy refactor, review `--fix`'s moves instead of trusting them.
 - Never restate as-built behavior; point at the file that owns it.
 - This file is hand-edited. Keep it under 60 lines.
