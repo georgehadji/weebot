@@ -38,7 +38,7 @@ Format: name — source — status — card
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-24 — [card](interfaces/WebUI.md)
 
 ## core
-- ApprovalManager (interactive approval layer) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-25 — [card](core/ApprovalManager.md)
+- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-25 — [card](core/ApprovalManager.md)
 - BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-10-25 — [card](core/BashGuard.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-10-24 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — verified 2026-10-25 — [card](core/EgressGuard.md)

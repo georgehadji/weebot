@@ -1,7 +1,7 @@
 ---
 status: superseded
 date: 2026-06-28
-note: specs/arch_audit_2026_09_remediation_plan.md
+supersedes: plans/architecture_elevation_plan.md
 ---
 
 # Architecture Elevation Plan — 8/10 → 9.5+/10 (V2)

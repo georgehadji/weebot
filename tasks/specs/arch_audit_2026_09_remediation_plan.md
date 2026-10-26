@@ -2,6 +2,7 @@
 status: open
 date: 2026-09-09
 note: phase 5 not built: Postgres backend, scheduler extraction, replica proof
+supersedes: plans/architecture_elevation_v2.md, specs/ssot_constants_remediation_plan.md
 ---
 
 # Architecture Remediation — Path to 9+

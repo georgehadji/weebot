@@ -145,3 +145,33 @@ def test_the_citation_check_covers_process_cards():
     cards = _load("check_map_citations")._cards()
     assert any(p.parent.name == "processes" for p in cards)
     assert any("objects" in p.parts for p in cards)
+
+
+def _index_with(monkeypatch, rows, succ):
+    import sys
+
+    gen = _load("gen_tasks_index")
+    monkeypatch.setattr(gen, "records", lambda: rows)
+    monkeypatch.setattr(gen, "successors", lambda: succ)
+    monkeypatch.setattr(sys, "argv", ["gen_tasks_index.py"])
+    return gen
+
+
+def test_a_superseded_record_must_be_named_by_its_successor(monkeypatch, capsys):
+    rows = [("superseded", "2026-10-27", "old.md", "Old", "")]
+    assert _index_with(monkeypatch, rows, {}).main() == 1
+    assert "old.md" in capsys.readouterr().out
+
+
+def test_supersedes_must_name_a_superseded_record(monkeypatch, capsys):
+    rows = [("done", "2026-10-27", "old.md", "Old", ""),
+            ("done", "2026-10-27", "new.md", "New", "")]
+    assert _index_with(monkeypatch, rows, {"old.md": ["new.md"]}).main() == 1
+    assert "old.md" in capsys.readouterr().out
+
+
+def test_the_index_says_what_superseded_a_record(monkeypatch):
+    rows = [("superseded", "2026-10-27", "old.md", "Old", ""),
+            ("done", "2026-10-27", "new.md", "New", "")]
+    gen = _index_with(monkeypatch, rows, {"old.md": ["new.md"]})
+    assert "superseded by [New](new.md)" in gen.render(rows, {"old.md": ["new.md"]})

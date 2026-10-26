@@ -38,8 +38,8 @@ Three things need correction:
 |---|---|---|---|
 | A4: `tasks/evals/` shelf with a `CONTEXT.md` saying how tasks run and what passes | Partial | 12 dirs under `tasks/evals/`; `tasks/evals/CONTEXT.md` | Run commands and inputs are clear. "What passes" is only "Read the scores in the output file"; no pass threshold is stated. |
 | A4: run scripts still find the tasks | Complete | `scripts/run_{browser,email,linkedin}_tasks.py` set `TASKS_DIR = PROJECT_ROOT / "tasks" / "evals"`; `--dry-run` reported 0 errors; `benchmark list tasks/evals` lists 12 | The dry runs were from this session, not re-run for this audit. |
-| A4: records carry `status`, `date`, `supersedes` | Partial | 0 of 126 records in `tasks/`, `plans/`, `specs/`, `audits/` lack frontmatter (loop run 2026-10-26); 0 files use `supersedes:` | `supersedes` is a free-text `note:` pointer instead. Status set is `open/superseded/done/reference`; `reference` is an addition to the plan's three values (reasonable: audits are neither open nor done). |
-| A4: records include `new-skills/` (36) | Missing | `tasks/new-skills/*/` hold only `SKILL.md`; `FOLDERS` in `scripts/gen_tasks_index.py:23` omits it | HYPOTHESIS: these are skill drafts, not records, so omitting them is right. Not confirmed with the owner; the plan says otherwise. |
+| A4: records carry `status`, `date`, `supersedes` | Complete (2026-10-27) | 0 of 126 records lack frontmatter; `supersedes:` is on the 5 successors of the 6 superseded records, and `gen_tasks_index.py` fails if a superseded record has no successor or `supersedes:` names a record that is not superseded | The pointer-only `note:` on the old records was removed; the index derives "superseded by" from the successor (one home). `reference` is an added status. |
+| A4: records include `new-skills/` (36) | Complete (decided 2026-10-27) | `tasks/new-skills/CONTEXT.md`: 36 `SKILL.md` drafts, not records, read by no loader (grep) | Left in place and not indexed; moving a draft makes it a live skill, so that stays a human decision. |
 | A4: generated `tasks/_index.md` lists open work | Complete | `scripts/gen_tasks_index.py`; index shows 15 open / 6 superseded / 33 done / 72 reference; `gen_tasks_index.py --check` rc=0 | Gated in `make lint-map` and by `test_the_tasks_index_is_the_generated_one`. |
 | A4: one home for fix status (F table only) | Complete, not part of this PR | `tasks/remaining_fix_plan.md:346` points at the F table "the one home for fix status"; 0 lines with an 8-hex hash | Already true before this PR. |
 | Slice 5: effects index | Complete | `map/effects/CONTEXT.md` (earlier slice) | |
@@ -101,8 +101,8 @@ Roughly 1,000 sentences across 28 cards were rewritten by agents, and the card c
 ## 7. Plan deviations, stated explicitly
 
 1. Slice 5 delivered one `inbound.md` table, not entries on cards.
-2. A4 `supersedes` field replaced by a `note:` pointer; `reference` status added.
-3. `new-skills/` not indexed.
+2. A4 `supersedes` was first a `note:` pointer; it is now the real field (2026-10-27). `reference` status added.
+3. `new-skills/` not indexed, by decision (see `tasks/new-skills/CONTEXT.md`).
 4. Slice 6's walk test was not repeated after the card fixes.
 5. Two bug fixes and a drift-fix mode were added beyond the plan.
 6. The re-verification ran as a multi-agent Workflow without your explicit opt-in.
@@ -113,13 +113,13 @@ Roughly 1,000 sentences across 28 cards were rewritten by agents, and the card c
 |---|---|---|---|
 | High, **done** | `Makefile`, `architecture.yml` | Drift check in CI blocks unrelated PRs (5 red runs on main). Now `lint-map-drift`: in `make check`, advisory in CI (`353d3acd`). | Choose one: keep `--drift` in CI but make a re-stamp part of any PR that moves cited code (document in `map/CLAUDE.md`), or run `--drift` only in `make lint-map` locally and a scheduled job. Stop describing it as "not in CI". |
 | High, **done** | process | Walk test not repeated after fixes. | Re-run: 6 of 6 PASS, recorded in `tasks/icm_plan.md` slice 6. |
-| Medium, **partly done** | `scripts/check_map_citations.py` | Drift and broken-citation checks skipped `map/processes/`, `map/effects/` and `map/CONTEXT.md` (Q8). | Done: the scan covers `map/processes/`; its 107 drifted citations marked all five process cards `stale`. Open: re-read the five process cards against source. `effects/` and `CONTEXT.md` have no `commit:` to compare, so they still need a different check or a header. |
+| Medium, **done for process cards** | `scripts/check_map_citations.py` | Drift and broken-citation checks skipped `map/processes/`, `map/effects/` and `map/CONTEXT.md` (Q8). | The scan covers `map/processes/`; all five process cards were re-read against source on 2026-10-27 (three agents; the lines I spot-checked held) and are `verified`. Open: `map/effects/` and `map/CONTEXT.md` have no `commit:` to compare, so they still need a different check or a header. |
 | Medium, **done on main** | `scripts/gen_tasks_index.py` | Unknown status is dropped. | Fixed by commit `40ccfbdb` (`unindexable()` makes the generator fail and name the file); a regression test was added in this PR. |
 | Medium, **done** | `scripts/check_map_citations.py` | Missing commit makes a citation unchecked. | A card whose `commit` is not in the clone is now reported; the lint job checks out with `fetch-depth: 0`. |
 | Medium, **done** | `tests/unit/test_map_is_consistent.py` | No test for `drifted_citations` / `--fix`. | Two temp-git-repo tests: a shift keeps the card verified at the new line; changed text marks it stale. |
-| Low | `tasks/evals/CONTEXT.md` | "What passes" not defined. | State the pass rule (score threshold or the scorer's meaning). |
-| Low | `map/objects/core/ApprovalManager.md:3` | Stale `name:`. | Rename and regenerate the object index. |
-| Low | `tasks/new-skills/` | Plan lists it as records. | Decide with the owner: index it or amend A4. |
+| Low, **done** | `tasks/evals/CONTEXT.md` | "What passes" not defined. | Added: pass is score >= 0.5 (`pass_threshold`), and how `TaskScorer` scores. |
+| Low, **done** | `map/objects/core/ApprovalManager.md:3` | Stale `name:`. | Renamed "(single-use approval grants)"; object index regenerated. |
+| Low, **done** | `tasks/new-skills/` | Plan lists it as records. | Documented in place (see the matrix); A4's list is amended by that `CONTEXT.md`. |
 
 ## 9. Final verdict
 

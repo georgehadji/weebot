@@ -16,7 +16,7 @@ Read this before changing code you did not write. The map is an index of nouns a
 
 ## Status of this map
 
-Every noun in `objects/_index.md` has a card (Wave G of `tasks/remaining_fix_plan.md` finished the domain, interfaces, browser and tools clusters on 2026-10-23). Defects the cards found are planned in `tasks/icm_fix_plan.md` (F38 onward for Wave G). `processes/` holds five process cards and `effects/CONTEXT.md` the change-impact table (both 2026-10-23). The citation check covers process cards since 2026-10-26, and all five are `stale`: re-read one against source before trusting its line numbers.
+Every noun in `objects/_index.md` has a card (Wave G of `tasks/remaining_fix_plan.md` finished the domain, interfaces, browser and tools clusters on 2026-10-23). Defects the cards found are planned in `tasks/icm_fix_plan.md` (F38 onward for Wave G). `processes/` holds five process cards and `effects/CONTEXT.md` the change-impact table (both 2026-10-23). The citation check covers process cards since 2026-10-26; all five were re-read against source on 2026-10-27.
 
 ## Rules for editing the map
 
