@@ -15,11 +15,9 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-if TYPE_CHECKING:
-    from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
+from weebot.application.ports.clawhub_adapter_port import ClawHubAdapterPort
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +81,16 @@ class ClawHubImporter:
                                           install_dir=Path.home() / ".weebot/skills")
     """
 
-    def __init__(self, repo_path: Path | None = None, git_adapter: ClawHubGitAdapter | None = None):
-        if git_adapter is not None:
-            self._git_adapter = git_adapter
-        else:
-            from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
-
-            self._git_adapter = ClawHubGitAdapter(repo_path=repo_path)
+    def __init__(
+        self, repo_path: Path | None = None, git_adapter: ClawHubAdapterPort | None = None
+    ):
+        if git_adapter is None:
+            raise ValueError(
+                "ClawHubImporter needs a git adapter: construct ClawHubGitAdapter in the "
+                "composition root and inject it. Defaulting to it here is the "
+                "application->infrastructure edge app-no-infrastructure forbids (WB-01)."
+            )
+        self._git_adapter = git_adapter
 
     @property
     def repo_path(self) -> Path:

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: open
 date: 2026-10-25
 ---
 

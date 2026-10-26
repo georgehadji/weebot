@@ -98,6 +98,19 @@ def drifted_citations(fix: bool = False) -> list[str]:
     numbers are rewritten and, when every citation then holds, its commit and
     date move to HEAD. Text that is gone needs a human re-read: *fix* marks
     that card `stale` and the citation is reported.
+
+    The premise is that the citation was CORRECT at the card's `commit`. When it was
+    not -- someone rewrote the citation without advancing `commit:`, which nothing
+    detects -- the "moved" answer is a relocation of whatever unrelated text sat at
+    that line in the baseline, and it looks exactly as confident as a real one. That
+    is how `FlowRouter.md` came to cite `plan_act_flow.py:661` while declaring
+    `commit: 50a5d748`, a commit where 661 held `elif isinstance(initial_state,
+    PlanningState):` rather than the `get_last_plan()` the claim named. Reproduced
+    2026-10-25: `--fix` wanted to relocate a correct citation to a line holding an
+    unrelated block.
+
+    So after a heavy refactor, READ the moves before accepting them, and prefer
+    repointing each citation at the construct its claim names. See `map/CLAUDE.md`.
     """
     tracked = _tracked()
     tracked_set = set(tracked)

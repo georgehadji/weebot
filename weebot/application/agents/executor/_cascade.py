@@ -23,7 +23,9 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4
+from weebot.config.token_bounds import completion_bound
 from weebot.core.error_classifier import ErrorClassifier
+from weebot.application.strategies.llm_pool import unwrap_llm
 
 # Import for ACR telemetry enrichment (Phase P0)
 from weebot.core.model_cascade_tracker import (
@@ -104,6 +106,9 @@ class CascadeExecutor:
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
         self._server_error_models: set[str] = set()
+        # E1: resolved once, from the adapter, so both call sites pass the same number
+        # the adapter would otherwise have chosen for itself (see config/token_bounds).
+        self._completion_bound = completion_bound(unwrap_llm(llm))
 
     @staticmethod
     def _classify_description(description: str) -> str:
@@ -354,6 +359,10 @@ class CascadeExecutor:
                         tool_choice="auto",
                         model=model_id,
                         temperature=TEMPERATURE_BALANCED,
+                        # The orchestrator owns the length bound now: resolved from the
+                        # adapter (E1), so the number this call would have inherited is
+                        # passed explicitly and lives in one named table.
+                        max_tokens=self._completion_bound,
                     ),
                     timeout=effective,
                 )
@@ -700,7 +709,10 @@ class CascadeExecutor:
             try:
                 resp = await asyncio.wait_for(
                     self._llm.chat(
-                        messages=messages, model=rescue_id, temperature=TEMPERATURE_BALANCED
+                        messages=messages,
+                        model=rescue_id,
+                        temperature=TEMPERATURE_BALANCED,
+                        max_tokens=self._completion_bound,
                     ),
                     timeout=30.0,
                 )

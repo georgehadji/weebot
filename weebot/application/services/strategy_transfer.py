@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from weebot.infrastructure.persistence.strategy_store import StrategyStore
+    from weebot.application.ports.strategy_store_port import StrategyStorePort
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,12 @@ class StrategyTransferService:
     """
 
     def __init__(
-        self, store: StrategyStore, min_score: float = 0.7, max_strategies: int = 3
+        self, store: StrategyStorePort, min_score: float = 0.7, max_strategies: int = 3
     ) -> None:
         if store is None:
             raise TypeError(
                 "StrategyTransferService requires a store. "
-                "Inject StrategyStore via DI container."
+                "Inject a StrategyStorePort adapter via the DI container."
             )
         self._store = store
         self._min_score = min_score

@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import hashlib
+import json
 import logging
 import time
 import weakref
@@ -232,7 +233,7 @@ class BoundedLLMAdapter(LLMPort):
             raise
         finally:
             await self._record_call(
-                messages, model, response, outcome, time.monotonic() - started, direct
+                messages, model, response, outcome, time.monotonic() - started, direct, tools
             )
 
     async def _record_call(
@@ -243,6 +244,7 @@ class BoundedLLMAdapter(LLMPort):
         outcome: str,
         elapsed_s: float,
         direct: bool,
+        tools: list[dict[str, Any]] | None = None,
     ) -> None:
         """One structured record per call; never raises into the caller's call."""
         try:
@@ -252,13 +254,14 @@ class BoundedLLMAdapter(LLMPort):
             used_model = getattr(response, "model", None) or model or "unknown"
             logger.info(
                 "llm_call model=%s outcome=%s latency_ms=%d prompt_tokens=%d "
-                "completion_tokens=%d prompt_sha=%s",
+                "completion_tokens=%d prompt_sha=%s tools_sha=%s",
                 used_model,
                 outcome,
                 int(elapsed_s * 1000),
                 prompt_tokens,
                 completion_tokens,
                 prompt_sha(messages),
+                tools_sha(tools),
             )
             if direct and outcome == "ok" and self._on_completed is not None:
                 from weebot.core.log_context import session_id_var
@@ -319,6 +322,19 @@ def prompt_sha(messages: list[dict[str, Any]]) -> str:
             text = content if isinstance(content, str) else str(content)
             return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:12]
     return "none"
+
+
+def tools_sha(tools: list[dict[str, Any]] | None) -> str:
+    """A 12-hex digest of the tool schema, alongside `prompt_sha`.
+
+    Without it the prompt version is only half-visible: a change to a tool's description
+    or parameters alters behaviour exactly as a prompt change does, and used to look like
+    an unchanged prompt in the log.
+    """
+    if not tools:
+        return "none"
+    blob = json.dumps(tools, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode("utf-8", "replace")).hexdigest()[:12]
 
 
 def unwrap_llm(llm: Any) -> Any:

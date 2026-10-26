@@ -5,8 +5,8 @@ code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # SQLiteStateRepository
@@ -35,7 +35,7 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `load_session` | CQRS handlers (create_plan, execute_step, update_plan, summarize, process_message, plan_queries, trajectory) and `save_policy.py`; `flows/collaborators/fact_resolver.py`; services (`session_search_service`, `task_runner`, `trajectory_exporter`); `infrastructure/persistence/legacy_project_adapter.py`; web: `interfaces/web/main.py`, `routers/{chat_router,ops_router,sessions,sse,webhook}.py`; gateway: `interfaces/gateways/telegram.py`; CLI: `cli/main.py`, `cli/commands/flow.py`, `interfaces/cli/agent_runner.py`; `scheduling/default_jobs.py` |
 | `list_sessions` | web: `routers/{chat_router,dashboard,health,sessions}.py`; MCP: `mcp/resources.py`; CLI: `cli/main.py`, `cli/commands/hyper.py`, `interfaces/cli/agent_runner.py`; `cqrs/handlers/active_queries.py`; `services/{task_runner,trajectory_exporter}.py`; `infrastructure/persistence/legacy_project_adapter.py`; monitors/health: `infrastructure/monitors/session_staleness_monitor.py`, `infrastructure/observability/health_checks.py`; `scheduling/default_jobs.py` |
 | `count_sessions` | `interfaces/web/routers/sessions.py` |
-| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:253` |
+| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:265` |
 | `delete_session` | `services/session_deletion_orchestrator.py` only |
 | `search_sessions` | `services/session_search_service.py` only |
 | `get_low_salience_entries` | `services/memory_lifecycle_service.py`, `services/user_model_consolidator.py` |
@@ -48,12 +48,12 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `save/revoke/list_active_session_constraint(s)` | `flows/collaborators/session_constraint_accumulator.py` |
 | `save_opportunity` | `services/opportunity_engine.py` |
 | `upsert_memory_metadata`, `delete_memory_entries` | `services/{user_model_consolidator,memory_lifecycle_service}.py`, `tools/persistent_memory.py` |
-| `get_memory_entry` | `agents/executor/_base.py` (user-profile lookup), `agents/executor/_prompt_builder.py` |
+| `get_memory_entry` | `agents/executor/_step_setup.py` (user-profile lookup), `agents/executor/_prompt_builder.py` |
 | `save_plan_template` / `increment_template_use` | `flows/states/completed.py` / `cqrs/handlers/create_plan_handler.py` |
 | `find_plan_templates_by_hash`, `list_all_plan_templates` | `domain/services/plan_template_cache.py` (domain layer) |
 | `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:334`) |
 
-Consequence: `InMemoryStateRepo` and the PostgreSQL repo implement the port but none of the roles (only `sqlite_state_repo.py` defines `save_behavioral_rule`, `get_memory_entry`, `save_commitment`, `save_plan_template`; grep 2026-10-24). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-100`), get `None` on those repositories, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `application/agents/executor/_base.py:643-646`.
+Consequence: `InMemoryStateRepo` and the PostgreSQL repo implement the port but none of the roles (only `sqlite_state_repo.py` defines `save_behavioral_rule`, `get_memory_entry`, `save_commitment`, `save_plan_template`; grep 2026-10-24). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-100`), get `None` on those repositories, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:127-130`.
 
 ## Connected to
 - **Implements** `StateRepositoryPort` (`application/ports/state_repo_port.py`); 68 files under `weebot/` mention the port (grep 2026-10-24). Other implementers: `persistence/in_memory_state_repo.py`, `persistence/postgresql/state_repo.py`.

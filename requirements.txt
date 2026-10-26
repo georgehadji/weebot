@@ -131,4 +131,7 @@ pytest-timeout==2.4.0
 hypothesis>=6.100
 
 # Linting (drives test_no_b006_violations in test_architecture_fitness.py)
-ruff>=0.8.0
+# Pinned, not ranged: `ruff_violations` in tasks/quality/ceilings.toml is an exact
+# count, and a ruff upgrade can move it with no code change (0.17.1 vs 0.17.2 differ).
+# A floating pin made that ratchet depend on whatever pip resolved that day.
+ruff==0.17.2

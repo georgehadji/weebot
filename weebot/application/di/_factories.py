@@ -124,6 +124,23 @@ class FactoriesMixin:
             on_completed=bus.publish_domain_event if bus is not None else None,
         )
 
+    def create_llm_for_model(self, model_id: str) -> LLMPort:
+        """A pool-bounded ``LLMPort`` for *model_id* — the public way to get one (WB-02).
+
+        This exists because the CLI used to build its own adapter through
+        ``ModelSelectionService.create_llm_adapter``, outside this container. That was a
+        second construction site, and ``test_llm_clients_are_built_by_the_factory`` could
+        not see it: that gate looks for concrete adapter *classes*, while the CLI path
+        went through the factory *function*. So the port reached ``ExecutorAgent``
+        unwrapped and its two direct ``chat`` calls (``_tool_executor.py:587``,
+        ``_context_compressor.py:246``) escaped ``LLMPool`` entirely.
+
+        Delegates to the per-model factory the SkillOpt mixin already owns rather than
+        duplicating it; both mixins are part of this container, and that method already
+        applies ``_bounded_llm``.
+        """
+        return self._create_llm_by_id(model_id)
+
     def _create_llm(self, default_model: str | None) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
         from weebot.config.model_registry import ModelProvider

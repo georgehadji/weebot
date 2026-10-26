@@ -4,7 +4,7 @@ name: DI Container
 code: Container
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-10-24
 commit: eeb0e80e
 ---
@@ -28,9 +28,9 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 - `validate()` resolves every type-keyed binding and returns error strings; string keys are skipped (`:713-724`).
 
 ## Connected to
-- **Creates:** the Mediator (`_create_mediator` calls `build_mediator`, `weebot/application/di/_factories.py:135-136`), every flow, the step executor, and the ports' adapters.
+- **Creates:** the Mediator (`_create_mediator` calls `build_mediator`, `weebot/application/di/_factories.py:152-153`), every flow, the step executor, and the ports' adapters.
 - **Shared root:** `weebot/interfaces/factories.py:54-71` (`shared_container()`, one configured container per process; `reset_shared_container` at `:73-81`), used by the web lifespan (`weebot/interfaces/web/main.py:187-189`) and the CLI (`cli/main.py:76-88`).
-- **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:278-311`): `weebot/interfaces/factories.py:67`, `cli/commands/flow.py:332`, `cli/commands/harness.py:55, 95, 256, 352`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
+- **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:282-315`): `weebot/interfaces/factories.py:67`, `cli/commands/flow.py:343`, `cli/commands/harness.py:55, 95, 256, 352`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
 - **Checked by:** `scripts/lint_di_wiring.py` (`make lint-di-wiring`) and `tests/unit/test_architecture_fitness.py`.
 - **Looks like but is not:** a framework container; there is no scope, no auto-wiring, no constructor injection. It is looked up by hand.
 
@@ -39,7 +39,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 **Does not hit:** adapters' own behavior; the flow state machine. Changing a binding key hits string-keyed lookups silently: `_maybe_get_str` returns `None` (the source records a bug of that shape at `:534-540`).
 
 ## Surfaces
-Process start-up: the web server calls `warm_up` (`weebot/interfaces/web/main.py:235`). The CLI takes `shared_container()` and builds `AgentRunner` itself (`cli/commands/flow.py:116`).
+Process start-up: the web server calls `warm_up` (`weebot/interfaces/web/main.py:235`). The CLI takes `shared_container()` and builds `AgentRunner` itself (`cli/commands/flow.py:131`).
 
 ## See
 `weebot/application/di/__init__.py`

@@ -73,6 +73,12 @@ _HIDDEN_VIOLATIONS: dict[tuple[str, str], str] = {
     ("weebot.interfaces.web.main", "weebot.infrastructure.adapters.llm.resilient_adapter"): "breaker state persistence; needs a port method",
     ("weebot.interfaces.web.routers.health", "weebot.infrastructure.browser.session_pool"): "health probe; needs a port method",
     ("weebot.interfaces.web.routers.health", "weebot.infrastructure.cache.llm_cache"): "health probe; needs a port method",
+    # WB-01 of the 2026-10 wave 2 plan: `app-no-infrastructure` exposed this one. The
+    # "bridge" keeps the application layer free of a *static* edge by hiding the
+    # crossing from import-linter behind importlib, which is the same silence in a
+    # different place. The fix is a MetricsPort call site (the port exists); until then
+    # this row is the visible home for it, not an exemption nobody can see.
+    ("weebot.application.services.metrics_bridge", "weebot.infrastructure.observability.metrics"): "WB-01: needs a MetricsPort call site; the bridge hides the edge behind importlib",
 }
 
 

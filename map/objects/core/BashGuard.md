@@ -5,8 +5,8 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # BashGuard
@@ -34,7 +34,7 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 
 Consequences (read from source, not run):
 - Inside the tools, DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`; `get_risk_description` says DANGEROUS needs "explicit approval", and only the `GuardedTool` chain asks (`tool_guards.py:89-115`). A bare `BashTool()` has no such gate.
-- `bash`, `powershell` and `python_execute` from the registry (`application/services/tool_registry.py:532-534`, flows pass `include_egress=False` because `ToolExecutor` gates egress) are wrapped in `GuardedTool`; the MCP server wraps `bash` and `python_execute` (`weebot/mcp/server.py:392`). Default mode is `enforce` since W3.7 (`weebot/config/settings.py:194-199`); `observe` only logs the verdict and the tools' own gates decide (`tool_guards.py:11-17`).
+- `bash`, `powershell` and `python_execute` from the registry (`application/services/tool_registry.py:532-534`, flows pass `include_egress=False` because `ToolExecutor` gates egress) are wrapped in `GuardedTool`; the MCP server wraps `bash` and `python_execute` (`weebot/mcp/server.py:392`). Default mode is `enforce` since W3.7 (`weebot/config/settings.py:208-213`); `observe` only logs the verdict and the tools' own gates decide (`tool_guards.py:11-17`).
 - The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:374-375`). It is a report only, spawned through `core/background_tasks.py` (`:363-379`); nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:24-26`).
 - The `powershell` tool itself skips BashGuard, although the root `CLAUDE.md` rule says every shell command goes through `bash_guard.py`: its `Invoke-Expression`, `iex`, `-EncodedCommand` and `Remove-Item -Recurse -Force` rules reach it only through `GuardedTool` (`tests/unit/fixes/test_f01_powershell_skips_bash_guard.py`); built bare, only `ExecApprovalPolicy` and the two validators apply.
 - `CommandSecurityAnalyzer.analyze` returns early only on DANGEROUS from layers 1-3 and otherwise returns the layer 4 verdict alone (`tools/bash_security.py:315-325`). Layers 1-3 can only return SAFE or DANGEROUS, so nothing is dropped today; a future SUSPICIOUS rule in those layers would be. See its own card.

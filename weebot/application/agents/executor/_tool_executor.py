@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import is_enforcing
@@ -130,17 +131,10 @@ def _is_local_url(url: str) -> bool:
     return parsed.scheme == "file" or parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
 
-# Sessions whose context holds untrusted external content (see ToolExecutor).
-# A cache: every change is also appended to the event store as a session_flag row
-# and replayed by _hydrate_session_state, so a resume in a new process keeps it.
-_TAINTED_SESSIONS: set[str] = set()
-# Session id -> whether its browser tab was last navigated to a local page.
-_LOCAL_TAB: dict[str, bool] = {}
-# Session id -> paths file_editor wrote in it (viewing them adds no external content).
-_WRITTEN_FILES: dict[str, set[str]] = {}
-# Sessions whose three sets above were already replayed from the event store in this
-# process (plan Phase 8). The dicts are caches; the store is the record.
-_HYDRATED: set[str] = set()
+# Per-session security state (taint, tab locality, written files, hydration marker)
+# lives in a `SessionScope`, not in module-level containers: see _session_scope.py for
+# why it has an owner and a lifecycle (WB-03). The event store is the record; the scope
+# is the cache, replayed once per session by _hydrate_session_state.
 
 class ToolExecutor:
     """Executes tool calls with pre/post hooks, timeouts, and batching.
@@ -159,6 +153,7 @@ class ToolExecutor:
         model: str | None = None,
         egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
         effect_ledger=None,  # EffectLedger | None — outbound actions already taken (ORCH-2)
+        session_scope: SessionScope | None = None,
     ) -> None:
         self._effect_ledger = effect_ledger
         self._current_step_scope: str = ""
@@ -172,6 +167,8 @@ class ToolExecutor:
         self._current_session_id: str = ""
         self._egress_guard = egress_guard
         self._egress_guard_resolved: bool = egress_guard is not None
+        # Per-session state outlives this executor: one is built per step (WB-03).
+        self._scope = session_scope if session_scope is not None else get_session_scope()
         # True once any untrusted-output tool has run in this session. Egress
         # after that point always needs approval — the injected content is the
         # payload (the "lethal trifecta" escalation in egress_guard.py).
@@ -182,15 +179,13 @@ class ToolExecutor:
     @property
     def _untrusted_context_active(self) -> bool:
         # Per session, not per executor: each step builds a fresh executor.
-        return self._tainted_here or self._current_session_id in _TAINTED_SESSIONS
+        return self._tainted_here or self._scope.is_tainted(self._current_session_id)
 
     @_untrusted_context_active.setter
     def _untrusted_context_active(self, value: bool) -> None:
         self._tainted_here = value
-        if value and self._current_session_id:
-            if self._current_session_id not in _TAINTED_SESSIONS:
-                _TAINTED_SESSIONS.add(self._current_session_id)
-                self._persist_flag("tainted")
+        if value and self._scope.mark_tainted(self._current_session_id):
+            self._persist_flag("tainted")
 
     # ── Dynamic context ────────────────────────────────────────────
 
@@ -229,17 +224,16 @@ class ToolExecutor:
     async def _hydrate_session_state(self) -> None:
         """Replay this session's persisted taint, local-tab and written-file state once."""
         sid = self._current_session_id
-        if self._effect_ledger is None or not sid or sid in _HYDRATED:
+        if self._effect_ledger is None or not sid or not self._scope.claim_hydration(sid):
             return
-        _HYDRATED.add(sid)
         for row in await self._effect_ledger.flags(sid):
             kind = row.get("kind")
             if kind == "tainted":
-                _TAINTED_SESSIONS.add(sid)
+                self._scope.mark_tainted(sid)
             elif kind == "local_tab":
-                _LOCAL_TAB[sid] = bool(row.get("local"))
+                self._scope.set_local_tab(sid, bool(row.get("local")))
             elif kind == "file_written" and row.get("path"):
-                _WRITTEN_FILES.setdefault(sid, set()).add(str(row["path"]))
+                self._scope.note_written_file(sid, str(row["path"]))
 
     def _effect_id(self, name: str, args: dict[str, Any]) -> str:
         """The ledger key of this call: session, step, tool and canonical arguments."""
@@ -529,21 +523,23 @@ class ToolExecutor:
         # not the shared browser's real tab; read the tab URL if that drifts.
         if name == "advanced_browser" and args.get("url"):
             now_local = _is_local_url(str(args["url"]))
-            if _LOCAL_TAB.get(self._current_session_id) != now_local:
+            if self._scope.set_local_tab(self._current_session_id, now_local):
                 self._persist_flag("local_tab", local=now_local)
-            _LOCAL_TAB[self._current_session_id] = now_local
-        local_page = name == "advanced_browser" and _LOCAL_TAB.get(self._current_session_id, False)
+        local_page = (
+            name == "advanced_browser"
+            and self._scope.local_tab(self._current_session_id) is True
+        )
         # Writing a file returns only a confirmation; `view` returns its content,
         # which is new only if this session did not write the file.
         own_file = False
         if name == "file_editor":
             path = str(args.get("path", ""))
-            written = _WRITTEN_FILES.setdefault(self._current_session_id, set())
-            own_file = args.get("command") != "view" or path in written
+            own_file = args.get("command") != "view" or self._scope.wrote_file(
+                self._current_session_id, path
+            )
             if args.get("command") != "view" and not getattr(result, "is_error", False):
-                if path not in written:
+                if self._scope.note_written_file(self._current_session_id, path):
                     self._persist_flag("file_written", path=path)
-                written.add(path)
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):

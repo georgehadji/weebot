@@ -5,8 +5,8 @@ code: weebot/application/ports/*_port.py
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-26
+commit: 9ef23ae7
 ---
 
 # Ports
@@ -22,10 +22,10 @@ Dependency inversion: application code types against the port, and an adapter is
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
 | AnalyticsSinkPort | analytics_port.py:20 | ParquetActivitySink `infrastructure/analytics/parquet_sink.py:35`, OtelActivitySink | none |
-| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:175` (factory `di/_factories.py:206`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:208`, read at `interfaces/web/auth.py:50-56`) |
+| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:175` (factory `di/_factories.py:223`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:208`, read at `interfaces/web/auth.py:50-56`) |
 | ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:103-135` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:164` |
-| BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:32` |
+| BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:33` |
 | BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:25` | none |
 | CanonicalizerPort | canonicalizer_port.py:18 | ActionCanonicalizer `infrastructure/adapters/action_canonicalizer.py:34` | key `"build_action_canonicalizer"` `di/__init__.py:291` |
 | CheckpointPort | checkpoint_port.py:14 | SQLiteCheckpointStore `infrastructure/persistence/checkpoint_store.py:24` | none |
@@ -36,16 +36,16 @@ Dependency inversion: application code types against the port, and an adapter is
 | DreamerPort | dreamer_port.py:11 | DreamerAgent `application/agents/dreamer.py:53` | key `"dreamer_agent"` `di/__init__.py:184` |
 | EventBusPort | event_bus_port.py:15 (extends EventPublisherPort) | AsyncEventBus / DurableEventBus `infrastructure/event_bus.py:43, 180`, ValkeyEventBus, SessionScopedEventBus | port `di/__init__.py:142` |
 | EventPublisherPort | event_publisher_port.py:16 | WebSocketEventBroadcaster `interfaces/web/event_broadcaster.py:15` | none |
-| EventStorePort | event_store_port.py:15 | AsyncEventStore `infrastructure/event_store.py:93` | port `di/__init__.py:169` |
+| EventStorePort | event_store_port.py:15 | AsyncEventStore `infrastructure/event_store.py:94` | port `di/__init__.py:169` |
 | FileStoragePort | file_storage_port.py:14 | LocalFileStorageAdapter `infrastructure/adapters/file_storage_adapter.py:18` | port `di/__init__.py:189` |
 | IGatewaySessionStorePort (Protocol) / AbstractGatewaySessionStore | gateway_session_store_port.py:15, 67 | SQLiteGatewaySessionStore `infrastructure/persistence/gateway_session_store.py:40` | port `di/__init__.py:172` |
-| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:232`, `models/plan_act_flow_config.py:185`) |
-| IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:185`, `di/_factories.py:247-255` |
+| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:163`, `models/plan_act_flow_config.py:185`) |
+| IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:185`, `di/_factories.py:266-274` |
 | JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:43, 100` | none |
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
 | LLMPort | llm_port.py:9 | adapters in `infrastructure/adapters/llm/` (LLMAdapters card) | port `di/__init__.py:146` |
 | MainReviewPort | main_review_port.py:12 | MainReviewService `application/services/main_review_service.py:39` | inside `"idea_gate"` (same) |
-| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:377` builds `MCPToolRegistryBridge` instead, `di/_factories.py:524-539`) |
+| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:377` builds `MCPToolRegistryBridge` instead, `di/_factories.py:543-558`) |
 | McpToolRegistrationPort | mcp_tool_registration_port.py:13 | RoleBasedToolRegistryAdapter `infrastructure/adapters/mcp_tool_registry_adapter.py:10` | none |
 | McpToolRetrievalPort | mcp_tool_retrieval_port.py:17 | LocalEmbeddingMcpToolRetrievalAdapter `infrastructure/adapters/mcp_tool_retrieval_adapter.py:26` | none |
 | MemoryPort | memory_port.py:8 | FileSystemMemoryAdapter `infrastructure/persistence/filesystem_memory.py:29` | key `FileSystemMemoryAdapter` `di/__init__.py:167` |
@@ -67,7 +67,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | SkillRetrieverPort | skill_retriever_port.py:15 | BM25 / Semantic / Reranking retrievers `application/services/` | key `"skill_retriever"` `di/__init__.py:182` |
 | SkillStorePort | skill_store_port.py:15 | SkillStore `infrastructure/persistence/skill_store.py:23`, MaterializingSkillStore | key `"skill_store"` `di/_skillopt.py:24` |
 | SkillVariantStorePort | skill_variant_store_port.py:14 | SkillVariantStore `infrastructure/persistence/skill_variant_store.py:45` | none |
-| SoulProviderPort | soul_provider_port.py:6 (re-export of `weebot/core/soul_provider_port.py`) | FileSystemSoulProvider `infrastructure/adapters/soul_provider.py` (`di/_factories.py:225-228`) | key `"soul_provider"` `di/__init__.py:180` |
+| SoulProviderPort | soul_provider_port.py:6 (re-export of `weebot/core/soul_provider_port.py`) | FileSystemSoulProvider `infrastructure/adapters/soul_provider.py` (`di/_factories.py:242-245`) | key `"soul_provider"` `di/__init__.py:180` |
 | SpeechPort | speech_port.py:12 | OpenRouter / Whisper speech adapters `infrastructure/adapters/speech/` | port `di/__init__.py:168` |
 | StateRepositoryPort | state_repo_port.py:10 | SQLiteStateRepository (card), InMemory, PostgreSQL | port `di/__init__.py:140` |
 | BehavioralRuleStore, CorrectionStore, SessionConstraintStore, OpportunityStore, MemoryMetadataStore, PlanTemplateWriter (Protocols) | state_roles_port.py:35-86 | structural, the state repo | none (narrowed from `StateRepositoryPort` with `as_role`) |
@@ -91,7 +91,7 @@ Dependency inversion: application code types against the port, and an adapter is
 Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
 
 Consequences (read from source, not run):
-- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:293` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
+- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:296` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:223`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).

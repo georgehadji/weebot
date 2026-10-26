@@ -5,8 +5,8 @@ code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-24
-commit: 50a5d748
+verified: 2026-10-25
+commit: 12624041
 ---
 
 # Event store
@@ -17,7 +17,7 @@ An append-only SQLite journal of events and per-session cost, used for audit, co
 Kept apart from session state so event logging is a cheap insert and can fail without affecting a run: `DurableEventBus` journals every event best-effort before fan-out and "never blocks event delivery" (`weebot/infrastructure/event_bus.py:180-199`, journal helpers `:221-262`). Behind `EventStorePort` so tests can use an in-memory store (`application/ports/event_store_port.py:1-8`).
 
 ## Shape
-- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:93`), exported under the old name `EventStore = AsyncEventStore` (`:487-488`); DI imports `EventStore` (`application/di/_factories.py:99-102`).
+- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:94`), exported under the old name `EventStore = AsyncEventStore` (`:487-488`); DI imports `EventStore` (`application/di/_factories.py:99-102`).
 - File: `~/.weebot/events.db` by default (`:106`), created on construction (`:107`). Pool: shared `SQLiteConnectionPool`, 3 read connections, WAL (`:111-119`).
 - Tables: `sessions(id, started_at, ended_at, status, user_id, total_cost, total_tokens)` and `events(id, timestamp, session_id, event_type, data_json, cost, model, tokens_used)` with indexes on session, type, timestamp (`:121-158`). Note this `sessions` table is not the state repository's `sessions` table.
 - Cost columns are written for one event type only: `DurableEventBus._journal_domain` passes `cost`, `model` and `tokens_used` when the event is `LLMCallCompleted` (W4.1, 2026-10-22), which `CascadeExecutor` raises after each successful executor LLM call. Every other event keeps the defaults (0, "", 0). LLM calls outside the executor cascade (planner, verifier) are not recorded.
@@ -39,7 +39,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 
 ## Surfaces
 Audit data only. Cost views do **not** read this store:
-- Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:71-92`, `infrastructure/event_store.py:253`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
+- Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:71-92`, `infrastructure/event_store.py:271`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
 - `python -m cli.main costs` prints hard-coded rows ("Today $2.45 / 12,340"; comment "Placeholder data", `cli/main.py:255-268`).
 - MCP `build_costs_json` reads a tracker only if one is passed to `WeebotMCPServer`; `run_mcp.py:59-63` does not pass one, so it returns its "Pass cascade_tracker=" note (`mcp/resources.py:219-229`).
 - `AsyncEventStore.get_cost_summary` computes real totals from this DB but nothing calls it.

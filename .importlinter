@@ -204,6 +204,53 @@ forbidden_modules =
 # Everything in application/ receives collaborators by injection -- see
 # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory.
 
+[importlinter:contract:app-no-infrastructure]
+# WB-01 of tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md. Every other
+# arrow of the inward rule had a contract; this one had none. `application` speaks
+# to providers through ports and receives adapters by injection, and the only thing
+# checking it was an AST test scoped to application/services/ with a *filename*
+# allowlist -- so a new infrastructure import inside one of those seven files was
+# invisible. Measured when this contract was added: 47 direct
+# application->infrastructure edges, 42 of them in the composition root.
+#
+# `weebot.application.di` is deliberately NOT a source module: it is the composition
+# root, the one place adapters are constructed, and enumerating its 42 edges as
+# exemptions would put 42 more lines in this file to say what the directory name
+# already says. The gap that leaves -- a new application/ subpackage that nothing
+# governs -- is closed by
+# tests/unit/test_architecture_fitness.py::test_every_application_subpackage_is_under_the_inward_contract,
+# which fails until the new subpackage is listed below (same default-deny shape as
+# unassigned-no-infra).
+#
+# Direct imports only, like app-no-vendor-sdks: chains that run through a port are
+# the design, and checking them would flag every correct route.
+name = Application must depend on ports, not on infrastructure
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.application.abstractions
+    weebot.application.agents
+    weebot.application.cqrs
+    weebot.application.document
+    weebot.application.eval
+    weebot.application.flows
+    weebot.application.harness
+    weebot.application.middleware
+    weebot.application.models
+    weebot.application.ports
+    weebot.application.services
+    weebot.application.skills
+    weebot.application.strategies
+    weebot.application.termination
+    weebot.application.use_cases
+forbidden_modules =
+    weebot.infrastructure
+ignore_imports =
+    # None. The four edges this contract first caught were fixed rather than excused:
+    # two were services defaulting to a concrete adapter (now ports:
+    # VectorStorePort, ClawHubAdapterPort, StrategyStorePort, SkillStorePort) and one
+    # was a collaborator nothing called, deleted with its parameter.
+
 [importlinter:contract:unassigned-no-infra]
 # Phase 3.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md -- the
 # default-deny contract. Every other contract is scoped to a layer directory,

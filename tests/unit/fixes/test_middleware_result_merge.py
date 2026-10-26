@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from weebot.application.agents.executor._base import _merge_middleware_result
+from weebot.application.agents.executor._tool_batch import _merge_middleware_result
 from weebot.domain.models.tool_result import ToolResult
 
 

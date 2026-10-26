@@ -26,7 +26,7 @@ from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.infrastructure.persistence.skill_store import SkillStore
+    from weebot.application.ports.skill_store_port import SkillStorePort
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class AutonomousSkillCreator:
     def __init__(
         self,
         llm: LLMPort | None = None,
-        skill_store: SkillStore | None = None,
+        skill_store: SkillStorePort | None = None,
         skills_dir: str | None = None,  # legacy param, ignored when skill_store provided
         proposal_tracker: ProposalTracker | None = None,
     ) -> None:

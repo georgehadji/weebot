@@ -5,8 +5,8 @@ code: FlowRouter
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-24
-commit: 50a5d748
+verified: 2026-10-25
+commit: 9dca8292
 ---
 
 # FlowRouter
@@ -17,7 +17,7 @@ Decides which `FlowState` a turn starts in, from the session's pause flags and p
 Extracted from `PlanActFlow.run()` so routing is testable alone (`weebot/application/flows/flow_router.py:1-10`). It returns the state *and* a possibly changed `Session`, so the caller applies flag clearing and status changes in the same step as the transition (`:8-9`, `:49-51`). Resume after a human pause always goes through it, which is why the pause flags live in `session.context.extra`.
 
 ## Shape
-`resolve_initial_state(session, prompt, extra)` at `flow_router.py:48-212`. Priority order, first match wins:
+`resolve_initial_state(session, prompt, extra)` at `flow_router.py:49-213`. Priority order, first match wins:
 
 | # | Condition | Result | Lines |
 |---|---|---|---|
@@ -33,21 +33,21 @@ Extracted from `PlanActFlow.run()` so routing is testable alone (`weebot/applica
 
 Two details that look like bugs and are deliberate:
 - An empty answer approves a plan (`:93`) but does **not** approve a gate (`:135-138`): gates guard untrusted input, silence is not consent.
-- Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`:96-98, 108-113, 188-193`; loop break at `weebot/application/flows/plan_act_flow.py:816-821`).
+- Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`:96-98, 108-113, 188-193`; loop break at `weebot/application/flows/plan_act_flow.py:522`).
 
-Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:658`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:272-274`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
+Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:429`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:288-290`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
 
-Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out` as `{**(extra or {}), ...}` (`:73, 88`), which erases other keys if a caller omits `extra` (`:129-132`). Priority 2 merges onto the session's own extra instead (`:133`). The one production caller passes `extra` (`plan_act_flow.py:651`).
+Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out` as `{**(extra or {}), ...}` (`:73, 88`), which erases other keys if a caller omits `extra` (`:129-132`). Priority 2 merges onto the session's own extra instead (`:133`). The one production caller passes `extra` (`plan_act_flow.py:422`).
 
 ## Connected to
-- **Called by** `PlanActFlow.run()` (`plan_act_flow.py:648-652`) and, for `record_misalignment`, `plan_act_flow.py:669`.
-- **Reads flags written by** `states/executing.py:108` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:280-292` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:94` (`plan_pending_approval`), `states/product_gate.py:153` (`_product_gate_pending`).
-- **Approve words:** `_APPROVE_TOKENS`, `states/plan_review.py:36` (imported lazily at `flow_router.py:83, 126`).
+- **Called by** `PlanActFlow.run()` (`plan_act_flow.py:651-655`) and, for `record_misalignment`, `plan_act_flow.py:440`.
+- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:280-292` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:94` (`plan_pending_approval`), `states/product_gate.py:153` (`_product_gate_pending`).
+- **Approve words:** `_APPROVE_TOKENS`, `states/plan_review.py:36` (imported lazily at `flow_router.py:84, 127`).
 - **Not** the state machine itself: transitions *between* states are `context.set_state(...)` calls inside each state (see FlowState).
 
 ## If you change this
 **Hits:** every resume path after a pause (plan approval, product gate, inbound-mail, constraint and tool-approval gates); the flag writers above (a renamed key silently stops routing); `tool_approval.record_flow_reply` grants; tests `tests/unit/application/flows/test_user_gate_answer_is_honoured.py`, `tests/e2e/test_gate_pause_survives_the_seam.py`, `tests/unit/test_architecture_fitness.py`, `tests/integration/test_mcp_scoped_retrieval.py`, `tests/integration/test_mcp_tool_budget.py` (all reference `FlowRouter`).
-**Does not hit:** `PlanActFlow.set_state` and state-to-state transitions; the iteration loop; persistence (it only returns a new `Session` object; the flow saves it, `plan_act_flow.py:656-657`).
+**Does not hit:** `PlanActFlow.set_state` and state-to-state transitions; the iteration loop; persistence (it only returns a new `Session` object; the flow saves it, `plan_act_flow.py:428`).
 
 ## Surfaces
 Internal only. Reached by CLI, web and MCP indirectly through `PlanActFlow`. The plan file at `Output/<session>/01_plan.md` is a human-editable input.

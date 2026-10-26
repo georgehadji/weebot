@@ -120,12 +120,18 @@ def _is_task_text_call(node: ast.AST) -> bool:
         "premortem.py",
         "meta_analysis.py",
         "completed.py",
-        "executing.py",
+        "_execution_gates.py",
         "planning.py",
     ],
 )
 def test_every_task_wanting_state_asks_for_the_task(module: str):
-    """Each of these read a bare `prompt` as if it were the task."""
+    """Each of these read a bare `prompt` as if it were the task.
+
+    `executing.py` is on this list through `_execution_gates.py` since WB-06: the
+    constraint gate is what asks for the task now, and the gate moved with the rest of
+    the pre-step checks. The invariant is unchanged -- whichever module reads a prompt as
+    the task must go through `task_text` -- so the check follows the call site.
+    """
     tree = ast.parse((_STATES / module).read_text(encoding="utf-8"))
     assert _calls_named(tree, "task_text"), (
         f"{module} no longer calls task_text; if a site was removed on purpose, "
@@ -164,10 +170,14 @@ def test_the_executor_and_the_learner_still_read_the_turn_input():
     If these ever route through `task_text`, the original task is replayed to
     the model as a fresh user turn on every re-entry to ExecutingState, and
     mined for behavioural rules as though the user had corrected the agent.
-    """
-    tree = ast.parse((_STATES / "executing.py").read_text(encoding="utf-8"))
 
-    learn = _calls_named(tree, "learn_from_correction")
+    Both sites moved in WB-06 and the check moved with them: the learner call is in
+    `_execution_gates.py` (it runs before the step) and the command construction is in
+    `_step_run.py` (it is the mediated call). Checking `executing.py` alone would now
+    pass while asserting nothing.
+    """
+    gates = ast.parse((_STATES / "_execution_gates.py").read_text(encoding="utf-8"))
+    learn = _calls_named(gates, "learn_from_correction")
     assert len(learn) == 1, "expected exactly one learn_from_correction call"
     first_arg = learn[0].args[0]
     assert isinstance(first_arg, ast.Name) and first_arg.id == "prompt", (
@@ -176,7 +186,8 @@ def test_the_executor_and_the_learner_still_read_the_turn_input():
         "agent; the original task is not a correction"
     )
 
-    commands = _calls_named(tree, "ExecuteStepCommand")
+    run = ast.parse((_STATES / "_step_run.py").read_text(encoding="utf-8"))
+    commands = _calls_named(run, "ExecuteStepCommand")
     assert len(commands) == 1, "expected exactly one ExecuteStepCommand construction"
     user_input = [kw.value for kw in commands[0].keywords if kw.arg == "user_input"]
     assert len(user_input) == 1, "ExecuteStepCommand no longer takes user_input"
@@ -185,6 +196,12 @@ def test_the_executor_and_the_learner_still_read_the_turn_input():
         "a user turn; handing it the original task replays the task to the model "
         "on every re-entry to ExecutingState"
     )
+
+    # The state itself must not build the command or call the learner any more --
+    # otherwise there would be two sites and only one of them checked.
+    executing = ast.parse((_STATES / "executing.py").read_text(encoding="utf-8"))
+    assert not _calls_named(executing, "ExecuteStepCommand")
+    assert not _calls_named(executing, "learn_from_correction")
 
 
 @pytest.mark.asyncio
