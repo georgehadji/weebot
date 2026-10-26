@@ -120,12 +120,20 @@ class TestSafeCommands:
 
 class TestEdgeCases:
     def test_empty_command(self, guard):
+        """SAFE, and named: H1.1 decided 2026-10-25 that the absence is stated.
+
+        This used to assert `len(checks) == 0`, which made "nothing to evaluate" and
+        "evaluated, nothing found" the same value. The contract lives in
+        tests/unit/core/test_an_empty_command_is_named.py.
+        """
         risk, checks = guard.evaluate("")
-        assert len(checks) == 0
+        assert risk is RiskLevel.SAFE
+        assert [c.pattern for c in checks] == ["<empty>"]
 
     def test_whitespace_only(self, guard):
         risk, checks = guard.evaluate("   ")
-        assert len(checks) == 0
+        assert risk is RiskLevel.SAFE
+        assert [c.pattern for c in checks] == ["<empty>"]
 
     def test_null_bytes(self, guard):
         risk, checks = guard.evaluate("ls\x00la")

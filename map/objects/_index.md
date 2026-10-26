@@ -6,24 +6,24 @@ Format: name — source — status — card
 
 ## domain
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-25 — [card](domain/Event.md)
-- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-26 — [card](domain/Plan.md)
+- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-25 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-26 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-25 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-26 — [card](domain/Step.md)
 
 ## application
-- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-25 — [card](application/CascadeExecutor.md)
+- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-26 — [card](application/CascadeExecutor.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-10-24 — [card](application/DIContainer.md)
-- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-26 — [card](application/ExecutorAgent.md)
+- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-25 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-25 — [card](application/FlowRouter.md)
-- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-26 — [card](application/FlowState.md)
+- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-25 — [card](application/FlowState.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — verified 2026-10-26 — [card](application/Mediator.md)
-- PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-24 — [card](application/PlanActFlow.md)
+- PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-25 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-10-25 — [card](application/PlannerAgent.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — verified 2026-10-25 — [card](application/SkillRegistry.md)
 
 ## infrastructure
-- Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-24 — [card](infrastructure/Browser.md)
+- Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-25 — [card](infrastructure/Browser.md)
 - Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-25 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-25 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-10-24 — [card](infrastructure/LLMAdapters.md)
@@ -32,7 +32,7 @@ Format: name — source — status — card
 
 ## interfaces
 - Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-25 — [card](interfaces/ChatGateways.md)
-- CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-10-24 — [card](interfaces/CLI.md)
+- CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-10-25 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-10-25 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-25 — [card](interfaces/WebAPI.md)
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-24 — [card](interfaces/WebUI.md)

@@ -5,8 +5,8 @@ code: PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtra
 cluster: infrastructure
 universe: live
 status: stale
-verified: 2026-10-24
-commit: eeb0e80e
+verified: 2026-10-25
+commit: 9dca8292
 ---
 
 # Browser adapter and session pool

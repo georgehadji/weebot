@@ -5,8 +5,8 @@ code: ExecutorAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-26
-commit: 9ef23ae7
+verified: 2026-10-25
+commit: 9dca8292
 ---
 
 # ExecutorAgent

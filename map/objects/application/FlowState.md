@@ -5,8 +5,8 @@ code: FlowState
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-26
-commit: 4ab7c78f
+verified: 2026-10-25
+commit: 9dca8292
 ---
 
 # FlowState
