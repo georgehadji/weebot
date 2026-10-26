@@ -9,7 +9,7 @@ Usage:
     from weebot.infrastructure.persistence.session_persistence_adapter import (
         SessionPersistenceAdapter,
     )
-    adapter = SessionPersistenceAdapter(repo, retry=RetryWithBackoff())
+    adapter = SessionPersistenceAdapter(repo)  # retries with PERSISTENCE_RETRY_CONFIG
     ok = await adapter.save_session(session)
     if not ok:
         # session was dead-lettered — notify the user

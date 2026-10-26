@@ -345,8 +345,9 @@ class FactoriesMixin:
         """Create an MCPClientManager from config.
 
         Reads server configurations from the configured config path.
-        Environment variables (``${VAR}``) are expanded via
-        ``config_loader.expand_env`` so secrets are resolved from env.
+        Environment variables (``${VAR}``) are expanded per server via
+        ``config_loader.expand_env``: an unset one skips only its own server
+        (a warning is logged), not every configured one.
         Returns an empty (no-op) manager if no servers are configured.
 
         Gated behind ``WEEBOT_ENABLE_X_MCP`` — the DI factory returns an

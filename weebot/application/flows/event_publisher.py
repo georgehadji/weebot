@@ -74,9 +74,12 @@ class EventPublisher:
         if self._event_bus:
             await self._event_bus.publish(event)
             await self._emit_domain_event(event)
-        # 5. DB persistence
+        # 5. DB persistence. Serialised: a retried write for an older snapshot must not
+        # finish after, and overwrite, a newer one. `save_session` never calls `emit`,
+        # so holding the lock here cannot deadlock.
         if self._state_repo:
-            await self._persist_session()
+            async with self._emit_lock:
+                await self._persist_session()
         return self._session
 
     # ── Step 1: Truth binding ─────────────────────────────────────────────
