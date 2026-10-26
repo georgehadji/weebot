@@ -42,3 +42,29 @@ def test_the_tasks_index_is_the_generated_one():
     gen = _load("gen_tasks_index")
     current = (ROOT / "tasks" / "_index.md").read_text(encoding="utf-8")
     assert current.replace("\r\n", "\n") == gen.render(), "run python scripts/gen_tasks_index.py"
+
+
+def test_drift_is_enforced_by_make_check_and_advisory_in_ci():
+    """A code move must not turn every unrelated PR red (main was red for 5 runs).
+
+    `make check` is what an author runs before merging, so it enforces drift. CI
+    blocks only on the stable checks (indexes, broken citations) and reports drift
+    as an advisory step.
+    """
+    import pytest
+
+    yaml = pytest.importorskip("yaml")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    check_line = next(line for line in makefile.splitlines() if line.startswith("check:"))
+    assert "lint-map-drift" in check_line.split()
+    assert "check_map_citations.py --drift" not in makefile.split("lint-map-drift:")[0].split(
+        "lint-map:"
+    )[-1], "lint-map must not run the drift check"
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "architecture.yml").read_text(encoding="utf-8")
+    )
+    steps = [s for job in workflow["jobs"].values() for s in job.get("steps", [])]
+    by_run = {s.get("run"): s for s in steps if s.get("run")}
+    assert not by_run["make lint-map"].get("continue-on-error")
+    assert by_run["make lint-map-drift"].get("continue-on-error") is True

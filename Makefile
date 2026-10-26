@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui check-arch check
+.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-map-drift lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -137,8 +137,13 @@ gen-map-index:
 lint-map:
 	@echo "=== map/ and tasks/ indexes generated, card citations resolve ==="
 	@python scripts/gen_map_index.py --check
-	@python scripts/check_map_citations.py --drift
+	@python scripts/check_map_citations.py
 	@python scripts/gen_tasks_index.py --check
+
+# Drift is enforced by `make check` (run it, or `check_map_citations.py --fix`, after moving cited
+# code) and reported by CI as an advisory step, so one code move does not turn every PR red.
+lint-map-drift:
+	@python scripts/check_map_citations.py --drift
 
 lint-settings-construction:
 	@echo "=== Direct WeebotSettings() construction (AST, ratcheted) ==="
@@ -148,5 +153,5 @@ lint-container-construction:
 	@echo "=== Hand-built Container() outside application/di (AST, ratcheted) ==="
 	@python scripts/lint_container_construction.py
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-map-drift lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui
 	@echo "=== All checks passed ==="
