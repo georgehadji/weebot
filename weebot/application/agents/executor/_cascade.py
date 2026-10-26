@@ -64,8 +64,10 @@ class CascadeExecutor:
     _OPENROUTER_MIN_CREDIT_USD: float = 0.10
     # Seconds a Phase 1 probe runs alone before the next one is started.
     _HEDGE_DELAY_S: float = 20.0
-    # Consecutive failures after which a model is skipped for the rest of the session.
+    # Consecutive failures after which a model is skipped for the rest of the session,
+    # and the earlier count at which the log starts warning about it.
     _BREAKER_TRIP_AT: int = 5
+    _BREAKER_WARN_AT: int = 3
 
     @classmethod
     def _get_credit_threshold(cls) -> float:
@@ -145,18 +147,18 @@ class CascadeExecutor:
 
     def cascade_is_tripped(self, model_id: str) -> bool:
         """Return True if *model_id* has tripped its per-session breaker."""
-        return self._circuit_breaker_failures.get(model_id, 0) >= CascadeExecutor._BREAKER_TRIP_AT
+        return self._circuit_breaker_failures.get(model_id, 0) >= self._BREAKER_TRIP_AT
 
     def _cascade_record_failure(self, model_id: str) -> None:
         c = self._circuit_breaker_failures[model_id] = (
             self._circuit_breaker_failures.get(model_id, 0) + 1
         )
-        if c >= CascadeExecutor._BREAKER_TRIP_AT:
+        if c >= self._BREAKER_TRIP_AT:
             logger.warning("Circuit breaker tripped for %s after %d failures", model_id, c)
-        elif c >= 3:
+        elif c >= self._BREAKER_WARN_AT:
             logger.warning(
                 "Circuit breaker warning for %s: %d failures in a row (trips at %d)",
-                model_id, c, CascadeExecutor._BREAKER_TRIP_AT,
+                model_id, c, self._BREAKER_TRIP_AT,
             )
 
     def _cascade_reset(self, model_id: str) -> None:

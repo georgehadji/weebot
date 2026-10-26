@@ -24,5 +24,5 @@ Every noun in `objects/_index.md` has a card (Wave G of `tasks/remaining_fix_pla
 - `status: verified` needs a date, a commit hash and `path:line` citations. Otherwise `stub` or `stale`.
 - **Editing a citation means moving the card's `commit:` too.** `check_map_citations.py --drift` reads the cited lines *at that commit* and relocates the same text if it moved; it assumes the citation was correct there. Rewrite a citation without advancing `commit:` and the tool will happily "relocate" an unrelated block into a plausible-looking place -- which is how a wrong citation survives a green gate (`FlowRouter.md` declared `50a5d748` while citing lines that only held at `12624041`). After a heavy refactor, review `--fix`'s moves instead of trusting them.
 - Never restate as-built behavior; point at the file that owns it.
-- After moving code a card cites, run `python scripts/check_map_citations.py --fix`, then re-read any card it marks `stale`. `make check` enforces this (`lint-map-drift`); CI only warns.
+- After moving code a card cites, run `python scripts/check_map_citations.py --fix`, then re-read any card it marks `stale` and replace its `[stale N]` markers (`make lint-map` fails while a verified card has one). `make check` and the Map Drift workflow (main, weekly) enforce this; a PR only gets a warning.
 - This file is hand-edited. Keep it under 60 lines.

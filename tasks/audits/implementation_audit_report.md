@@ -121,6 +121,10 @@ Roughly 1,000 sentences across 28 cards were rewritten by agents, and the card c
 | Low, **done** | `map/objects/core/ApprovalManager.md:3` | Stale `name:`. | Renamed "(single-use approval grants)"; object index regenerated. |
 | Low, **done** | `tasks/new-skills/` | Plan lists it as records. | Documented in place (see the matrix); A4's list is amended by that `CONTEXT.md`. |
 
+## 8b. Review follow-up (2026-10-27, code review of PRs #103 and #104)
+
+Seven findings, all fixed in PR #104: `--fix` sets a gone citation aside as `path:[stale N]` and `lint-map` rejects it in a verified card (a restamped commit can no longer hide it); a citation to a file missing at the card's commit is reported; saves are coalesced under the emit lock so a failing write is retried once for the queue; breaker thresholds come from `self` and are named; the tasks index derives successors from the parsed records; a `Map Drift` workflow runs on main and weekly (red = report, never on PRs); the all-tripped test drives the real raise. The new missing-file check also exposed two cards stamped before the files they cite existed (`ExecApprovalPolicy`, `SQLiteStateRepository`); they are re-stamped at `9ef23ae7`.
+
 ## 9. Final verdict
 
 **APPROVED WITH CHANGES.** The plan's goals are met and the code is sound; two High items (CI gating and the missing walk-test re-run) should be fixed or consciously accepted before the work is called done.

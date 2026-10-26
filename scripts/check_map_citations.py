@@ -29,6 +29,10 @@ _CITE = re.compile(
     r"(?::(\d+)(?:([-,])\s?(\d+))?(?:-(\d+))?)?"
 )
 
+# `--fix` rewrites a citation whose cited text is gone to `path:[stale N]`, keeping the old number
+# where a person can see it and where no line check can mistake it for a current citation.
+_STALE_MARK = re.compile(r"`([^`\s]+):\[stale ([^\]]*)\]")
+
 
 def _tracked() -> list[str]:
     out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True)
@@ -61,6 +65,10 @@ def broken_citations() -> list[str]:
         if "status: verified" not in text:
             continue
         rel = card.relative_to(ROOT).as_posix()
+        for mark in _STALE_MARK.finditer(text):
+            problems.append(
+                f"{rel}: unresolved stale citation {mark.group(1)}:[stale {mark.group(2)}]"
+            )
         for m in _CITE.finditer(text):
             path, first, last = m.group(1), m.group(2), m.group(5) or m.group(4)
             resolved = _resolve(path, tracked, tracked_set)
@@ -95,6 +103,11 @@ def _commit_exists(rev: str) -> bool:
     done = subprocess.run(["git", "cat-file", "-e", f"{rev}^{{commit}}"], cwd=ROOT,
                           capture_output=True)
     return done.returncode == 0
+
+
+def _stale_mark(m: re.Match) -> str:
+    """`path:[stale N]`: the citation as written, set aside until a person re-reads it."""
+    return f"{m.group(1)}:[stale {m.group(0)[len(m.group(1)) + 2:]}]"
 
 
 def _relocate(block: list[str], new: list[str], old_start: int) -> int | None:
@@ -150,7 +163,11 @@ def drifted_citations(fix: bool = False) -> list[str]:
             resolved = _resolve(m.group(1), tracked, tracked_set)
             old = _lines_at(commit.group(1), resolved, cache) if resolved else None
             new = _lines_at("HEAD", resolved, cache) if resolved else None
-            if old is None or new is None:
+            if new is None:
+                continue  # not committed yet: nothing to compare against
+            if old is None:
+                gone.append(f"{rel}: {m.group(1)} did not exist at {commit.group(1)}")
+                edits.append((m.start(1), m.end(), _stale_mark(m)))
                 continue
             first = int(m.group(2))
             # "a-b" is a range; "a, b" two lines; "a, b-c" a line and a range.
@@ -162,6 +179,7 @@ def drifted_citations(fix: bool = False) -> list[str]:
             else:
                 spans = [(first, first), (second, int(m.group(5) or second))]
             moved = []
+            lost = False
             for a, b in spans:
                 block = old[a - 1:max(a, b)]
                 if new[a - 1:max(a, b)] == block:
@@ -169,10 +187,13 @@ def drifted_citations(fix: bool = False) -> list[str]:
                     continue
                 at = _relocate(block, new, a) if any(s.strip() for s in block) else None
                 if at is None:
+                    lost = True
                     gone.append(f"{rel}: {m.group(1)}:{a} no longer says what it said at "
                                 f"{commit.group(1)}")
                 moved.append(at or a)
-            if moved != [a for a, _ in spans]:
+            if lost:
+                edits.append((m.start(1), m.end(), _stale_mark(m)))
+            elif moved != [a for a, _ in spans]:
                 cite = m.group(1) + ":" + ", ".join(
                     f"{mv}-{mv + b - a}" if b != a else str(mv)
                     for mv, (a, b) in zip(moved, spans, strict=True)
@@ -185,7 +206,9 @@ def drifted_citations(fix: bool = False) -> list[str]:
                 text = text[:start] + cite + text[end:]
             # The relocated numbers are right for HEAD, so the commit moves with them: left at
             # the old commit, the next run (or a person flipping the card back to verified)
-            # would shift them a second time. The verified date moves only when nothing is gone.
+            # would shift them a second time. Citations whose text is gone were set aside as
+            # `[stale N]` markers, which `broken_citations` rejects in a verified card, so
+            # restamping cannot hide them. The verified date moves only when nothing is gone.
             text = re.sub(r"^commit:.*$", f"commit: {head}", text, count=1, flags=re.M)
             if gone:
                 text = text.replace("status: verified", "status: stale", 1)

@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 TASKS = ROOT / "tasks"
@@ -47,8 +48,17 @@ def _title(text: str, fallback: str) -> str:
     return m.group(1).strip() if m else fallback
 
 
-def records() -> list[tuple[str, str, str, str, str]]:
-    """(status, date, relative path, title, note) per record."""
+class Record(NamedTuple):
+    status: str
+    date: str
+    rel: str
+    title: str
+    note: str = ""
+    supersedes: tuple[str, ...] = ()
+
+
+def records() -> list[Record]:
+    """One Record per file in tasks/, plans/, specs/ and audits/."""
     rows = []
     for folder in FOLDERS:
         for path in sorted((TASKS / folder).glob("*.md"), key=lambda p: p.name.lower()):
@@ -57,37 +67,32 @@ def records() -> list[tuple[str, str, str, str, str]]:
             text = path.read_text(encoding="utf-8")
             fm = _front(text)
             rel = path.relative_to(TASKS).as_posix()
-            rows.append((fm.get("status", "unknown"), fm.get("date", ""), rel,
-                         _title(text, path.stem), fm.get("note", "")))
+            listed = tuple(s.strip() for s in fm.get("supersedes", "").split(",") if s.strip())
+            rows.append(Record(fm.get("status", "unknown"), fm.get("date", ""), rel,
+                               _title(text, path.stem), fm.get("note", ""), listed))
     return rows
 
 
-def successors() -> dict[str, list[str]]:
-    """old record -> records that list it under `supersedes:` (comma list, paths under tasks/)."""
+def successors(rows: list[Record]) -> dict[str, list[str]]:
+    """old record -> the records that list it under `supersedes:` (paths under tasks/)."""
     out: dict[str, list[str]] = {}
-    for folder in FOLDERS:
-        for path in sorted((TASKS / folder).glob("*.md"), key=lambda p: p.name.lower()):
-            if path == INDEX:
-                continue
-            new = path.relative_to(TASKS).as_posix()
-            listed = _front(path.read_text(encoding="utf-8")).get("supersedes", "")
-            for old in (o.strip() for o in listed.split(",") if o.strip()):
-                out.setdefault(old, []).append(new)
+    for r in rows:
+        for old in r.supersedes:
+            out.setdefault(old, []).append(r.rel)
     return out
 
 
-def render(rows: list[tuple[str, str, str, str, str]] | None = None,
-           succ: dict[str, list[str]] | None = None) -> str:
+def render(rows: list[Record] | None = None) -> str:
     rows = records() if rows is None else rows
-    succ = successors() if succ is None else succ
-    title_of = {r[2]: r[3] for r in rows}
+    succ = successors(rows)
+    title_of = {r.rel: r.title for r in rows}
     parts = [HEADER]
     for status in STATUSES:
-        group = sorted((r for r in rows if r[0] == status), key=lambda r: r[2].lower())
+        group = sorted((r for r in rows if r.status == status), key=lambda r: r.rel.lower())
         if not group:
             continue
         parts.append(f"\n## {status} ({len(group)})\n\n")
-        for _, date, rel, title, note in group:
+        for _, date, rel, title, note, _sup in group:
             by = ", ".join(f"[{title_of.get(n, n)}]({n})" for n in succ.get(rel, []))
             tail = (f" — superseded by {by}" if by and status == "superseded" else "")
             tail += f" — {note}" if note else ""
@@ -95,7 +100,7 @@ def render(rows: list[tuple[str, str, str, str, str]] | None = None,
     return "".join(parts)
 
 
-def unindexable(rows: list[tuple[str, str, str, str, str]]) -> list[tuple[str, str, str]]:
+def unindexable(rows: list[Record]) -> list[tuple[str, str, str]]:
     """(status, path, problem) for every record this generator cannot index.
 
     A record whose ``status`` is not one of STATUSES used to be dropped from the
@@ -106,7 +111,7 @@ def unindexable(rows: list[tuple[str, str, str, str, str]]) -> list[tuple[str, s
     less severe reasons -- the record still indexes, but with a placeholder.
     """
     found: list[tuple[str, str, str]] = []
-    for status, date, rel, _title, _note in rows:
+    for status, date, rel, *_ in rows:
         if status not in STATUSES:
             found.append((status, rel, f"status {status!r} is not one of {', '.join(STATUSES)}"))
         elif not date:
@@ -114,9 +119,10 @@ def unindexable(rows: list[tuple[str, str, str, str, str]]) -> list[tuple[str, s
     return found
 
 
-def supersession_problems(rows, succ) -> list[tuple[str, str, str]]:
+def supersession_problems(rows: list[Record]) -> list[tuple[str, str, str]]:
     """Each `superseded` record needs a successor naming it; `supersedes:` must name one."""
-    status = {r[2]: r[0] for r in rows}
+    succ = successors(rows)
+    status = {r.rel: r.status for r in rows}
     found: list[tuple[str, str, str]] = []
     for old, news in succ.items():
         if old not in status:
@@ -131,8 +137,7 @@ def supersession_problems(rows, succ) -> list[tuple[str, str, str]]:
 
 def main() -> int:
     rows = records()
-    succ = successors()
-    stray = unindexable(rows) + supersession_problems(rows, succ)
+    stray = unindexable(rows) + supersession_problems(rows)
     if stray:
         print("Records this index cannot place (fix the frontmatter, then rerun):")
         for status, rel, problem in stray:
@@ -142,7 +147,7 @@ def main() -> int:
             "`date:` in its frontmatter."
         )
         return 1
-    new = render(rows, succ)
+    new = render(rows)
     if "--check" in sys.argv:
         current = INDEX.read_text(encoding="utf-8") if INDEX.exists() else ""
         if current.replace("\r\n", "\n") != new:
