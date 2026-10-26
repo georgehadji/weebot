@@ -79,7 +79,7 @@ Format: date — record — note
 - 2026-06-10 — [Tool Handling Enhancements — Implementation Plan](specs/tool_enhancements_plan.md)
 - 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 
-## reference (78)
+## reference (79)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
@@ -97,6 +97,7 @@ Format: date — record — note
 - 2026-09-05 — [Wave 7 — Tools & Resource Lifecycle](audits/defect_hunt_w7_resources.md)
 - 2026-09-05 — [Wave 8 — Seams & Fix-Interaction](audits/defect_hunt_w8_seams.md)
 - 2026-10-23 — [ICM optimization research (2026-10-23)](audits/icm_optimization_2026_10_23.md)
+- 2026-10-26 — [Implementation audit: ICM A4 and slices 5-6 (PR #98)](audits/implementation_audit_report.md) — audit of ICM A4 and slices 5-6 (PR #98); verdict APPROVED WITH CHANGES
 - 2026-10-23 — [Model routing against current scores (2026-10-23)](audits/model_routing_2026_10_23.md)
 - 2026-09-06 — [Updating the models from OpenRouter — instrument repaired, then run](audits/openrouter_catalog_refresh.md)
 - 2026-06-30 — [Implementation Audit Report](audits/phase01_implementation_audit.md)

@@ -62,7 +62,7 @@ map/                       new shelf, next to docs/, not inside weebot/
 
 **Slice 5, effects index plus outside-in pass.** Write `effects/CONTEXT.md`. Then list what points INTO the repo from outside (Claude Desktop config via `claude_desktop_config.json.example`, `run_mcp.py` path, CI, docker entrypoints) and record each on the card it lands on. Done 2026-10-24: `map/effects/inbound.md` lists each outside consumer with its citation.
 
-**Slice 6, re-verify.** Re-check Hits / Does not hit against source. Cold walk test (section 7). Done 2026-10-24: the cold walk answered 5 of 6 questions in 2 to 4 hops (about 6.5k tokens); the miss was a stale EgressGuard card, so `scripts/check_map_citations.py --drift` now compares cited lines with the card's `commit` (`make lint-map`), and all 42 cards were re-verified at d4ffb555.
+**Slice 6, re-verify.** Re-check Hits / Does not hit against source. Cold walk test (section 7). Done 2026-10-24: the cold walk answered 5 of 6 questions in 2 to 4 hops (about 6.5k tokens); the miss was a stale EgressGuard card, so `scripts/check_map_citations.py --drift` now compares cited lines with the card's `commit` (`make lint-map`), and all 42 cards were re-verified at d4ffb555. Re-run 2026-10-26 (fresh agent, same questions): 6 of 6 PASS, about 7.1k tokens. It found wrong citations in `map/effects/CONTEXT.md` and `map/CONTEXT.md` (fixed) and in `map/processes/flow-run-turn.md` (marked stale); the drift check does not scan those files yet.
 
 **Slice 7, clean-up (separate PR, needs approval).** Per the slice 0 table:
 - `transcript*`, `subs.en.vtt`, `chunk_transcript.py`, `fetch_transcript.py` to `Output/` or a `_archive/`, after referrer check.

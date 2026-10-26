@@ -4,7 +4,7 @@ name: flow run turn
 code: cli flow run -> AgentRunner.run_prompt -> PlanActFlow.run
 cluster: interfaces
 universe: live
-status: verified
+status: stale
 verified: 2026-10-23
 commit: c2f39937
 consumes:
@@ -28,6 +28,8 @@ produces:
   - ../objects/infrastructure/SQLiteStateRepository.md
   - ../objects/infrastructure/EventBus.md
 ---
+
+> Stale since 2026-10-26: the `plan_act_flow.py` citations point at moved lines (`PlanActFlow.run` is at 336, not 556). Re-read the card against source before trusting its line numbers.
 
 # flow run turn
 
