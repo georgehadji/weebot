@@ -93,7 +93,10 @@ export async function mockBackend(page: Page, options: BackendOptions = {}): Pro
       if (options.failSessionList) return json(route, { detail: "boom" }, options.failSessionList);
       return json(route, { sessions, total: sessions.length });
     }
-    if (path === "/sessions/active") return json(route, { ok: true, data: [] });
+    // Same shape as GetActiveSessionsHandler (weebot/application/cqrs/handlers/active_queries.py).
+    if (path === "/sessions/active") {
+      return json(route, { ok: true, data: { sessions: [], total: 0, limit: 20 } });
+    }
     const input = path.match(/^\/sessions\/([^/]+)\/input$/);
     if (input && method === "POST") {
       if (options.inputDelayMs) await new Promise((r) => setTimeout(r, options.inputDelayMs));
