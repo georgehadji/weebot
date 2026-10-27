@@ -541,13 +541,6 @@ class TaskRunner:
         """List IDs of currently running sessions."""
         return [sid for sid, t in self._tasks.items() if not t.done()]
 
-    async def list_all_sessions(self, status_filter: SessionStatus | None = None) -> list[Session]:
-        """List all persisted sessions with optional status filtering."""
-        sessions = await self._state_repo.list_sessions()
-        if status_filter is not None:
-            sessions = [s for s in sessions if s.status == status_filter]
-        return sessions
-
     def create_plan_act_factory(
         self,
         llm: LLMPort,

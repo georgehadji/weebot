@@ -84,7 +84,9 @@ def build_state_json(state_repo: Any | None = None) -> str:
         )
 
     try:
-        sessions = _run_async(state_repo.list_sessions())
+        from weebot.application.ports.state_repo_port import all_sessions
+
+        sessions = _run_async(all_sessions(state_repo))
         active = [s for s in sessions if s.status.value not in ("completed", "failed")]
         return json.dumps(
             sanitize_json_fields(

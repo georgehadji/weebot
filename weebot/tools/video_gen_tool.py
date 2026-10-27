@@ -107,7 +107,7 @@ class VideoGenTool(BaseTool):
 
     async def _execute_xai_direct(
         self, model: str, prompt: str, output_path: str, xai_key: str
-    ) -> ToolResult | None:
+    ) -> ToolResult | str | None:
         """Call xAI's video generation endpoint directly.
 
         Uses the xAI chat completions API with the given *model* ID
@@ -116,10 +116,13 @@ class VideoGenTool(BaseTool):
         before sending).
 
         Returns:
-            ToolResult on success, None on failure (caller should fall back).
+            ToolResult on success; a reason string when a paid 200 gave nothing usable
+            (the caller stops: the next model would be bought again); None on an unpaid
+            failure (caller should fall back).
         """
         import aiohttp
 
+        paid = False
         xai_model = model.split("/", 1)[-1]  # "x-ai/grok-imagine-video" → "grok-imagine-video"
 
         headers = {"Authorization": f"Bearer {xai_key}", "Content-Type": "application/json"}
@@ -142,18 +145,21 @@ class VideoGenTool(BaseTool):
                     )
                     return None
 
+                paid = True
+                await record_media_call(model, "video")
                 result = await resp.json()
                 video_url = self._extract_video_url(result)
                 if not video_url:
-                    return None
+                    return f"{model}: no video URL in response (billed; not retrying)"
 
-                return await self._download_video(video_url, output_path, model, prompt)
+                downloaded = await self._download_video(video_url, output_path, model, prompt)
+                return downloaded or f"{model}: download failed (billed; not retrying)"
 
         except TimeoutError:
             return None
         except Exception:
             logger.info("xAI direct video gen failed", exc_info=True)
-            return None
+            return f"{model}: failed after a paid answer (billed; not retrying)" if paid else None
 
     # ── OpenRouter video generation ──────────────────────────────────
 
@@ -326,6 +332,9 @@ class VideoGenTool(BaseTool):
                 xai_result = await self._execute_xai_direct(
                     model=model, prompt=prompt, output_path=output_path, xai_key=xai_key
                 )
+                if isinstance(xai_result, str):  # paid, nothing usable: buy nothing more
+                    last_error = xai_result
+                    break
                 if xai_result is not None:
                     return xai_result
 

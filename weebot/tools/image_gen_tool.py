@@ -430,7 +430,7 @@ class ImageGenTool(BaseTool):
 
     async def _execute_ideogram_direct(
         self, prompt: str, output_path: str, ideogram_key: str, rendering_speed: str = "TURBO"
-    ) -> ToolResult | None:
+    ) -> ToolResult | str | None:
         """Call Ideogram's native image generation API.
 
         Endpoint: POST https://api.ideogram.ai/v1/ideogram-v3/generate
@@ -443,10 +443,14 @@ class ImageGenTool(BaseTool):
             rendering_speed: "TURBO" (fast, $0.03), "DEFAULT" ($0.06), "QUALITY" ($0.10).
 
         Returns:
-            ToolResult on success, None on failure (caller should fall back).
+            ToolResult on success; a reason string when a paid 200 gave nothing usable
+            (the caller stops: the next model would be bought again); None on an unpaid
+            failure (caller should fall back).
         """
         import aiohttp
 
+        model = "ideogram/ideogram-v3-turbo"
+        paid = False
         headers = {"Api-Key": ideogram_key, "Content-Type": "application/json"}
         payload: dict = {"prompt": prompt, "rendering_speed": rendering_speed, "style_type": "AUTO"}
 
@@ -469,29 +473,25 @@ class ImageGenTool(BaseTool):
                     )
                     return None
 
+                paid = True
+                await record_media_call(model, "image")
                 result = await resp.json()
                 data = result.get("data", [])
-                if not data:
-                    return None
-
-                image_url = data[0].get("url", "")
+                image_url = data[0].get("url", "") if data else ""
                 if not image_url:
-                    return None
+                    return f"{model}: no image in response (billed; not retrying)"
 
                 path = Path(output_path)
                 path.parent.mkdir(parents=True, exist_ok=True)
 
-                return await self._download_image(
-                    image_url,
-                    output_path,
-                    "ideogram/ideogram-v3-turbo",
-                    prompt,
-                    kind="ideogram-direct",
+                downloaded = await self._download_image(
+                    image_url, output_path, model, prompt, kind="ideogram-direct"
                 )
+                return downloaded or f"{model}: download failed (billed; not retrying)"
 
         except Exception as exc:
             logger.info("Ideogram direct image gen failed: %s", exc)
-            return None
+            return f"{model}: {exc} (billed; not retrying)" if paid else None
 
     async def _execute_xai_direct(
         self,
@@ -501,7 +501,7 @@ class ImageGenTool(BaseTool):
         xai_key: str,
         n: int = 1,
         response_format: str = "url",
-    ) -> ToolResult | None:
+    ) -> ToolResult | str | None:
         """Call xAI's native image generation API.
 
         Endpoint: POST https://api.x.ai/v1/images/generations
@@ -516,10 +516,13 @@ class ImageGenTool(BaseTool):
             response_format: "url" (default) or "b64_json".
 
         Returns:
-            ToolResult on success, None on failure (caller should fall back).
+            ToolResult on success; a reason string when a paid 200 gave nothing usable
+            (the caller stops); None on an unpaid failure (caller should fall back).
         """
         import aiohttp
 
+        model = f"x-ai/{xai_model}"
+        paid = False
         headers = {"Authorization": f"Bearer {xai_key}", "Content-Type": "application/json"}
         payload: dict = {
             "model": xai_model,
@@ -545,10 +548,12 @@ class ImageGenTool(BaseTool):
                         )
                         return None
 
+                    paid = True
+                    await record_media_call(model, "image")
                     result = await resp.json()
                     data = result.get("data", [])
                     if not data:
-                        return None
+                        return f"{model}: no image in response (billed; not retrying)"
 
                     image = data[0]
                     url = image.get("url", "")
@@ -562,11 +567,12 @@ class ImageGenTool(BaseTool):
 
                         path.write_bytes(_b64.b64decode(b64))
                     elif url.startswith("http"):
-                        return await self._download_image(
-                            url, output_path, f"x-ai/{xai_model}", prompt, kind="xai-direct"
+                        downloaded = await self._download_image(
+                            url, output_path, model, prompt, kind="xai-direct"
                         )
+                        return downloaded or f"{model}: download failed (billed; not retrying)"
                     else:
-                        return None
+                        return f"{model}: no image in response (billed; not retrying)"
 
                     size = path.stat().st_size
                     return ToolResult(
@@ -585,7 +591,7 @@ class ImageGenTool(BaseTool):
             return None
         except Exception:
             logger.info("xAI direct image gen failed", exc_info=True)
-            return None
+            return f"{model}: failed after a paid answer (billed; not retrying)" if paid else None
 
     async def _execute_openrouter(self, params: ImageGenParams) -> ToolResult:
         """Call text-to-image models with cascade fallback.
@@ -632,7 +638,7 @@ class ImageGenTool(BaseTool):
         last_error = None
 
         # ── Helper: try Ideogram direct for ideogram/* models ──────
-        async def _try_ideogram_direct(model: str) -> ToolResult | None:
+        async def _try_ideogram_direct(model: str) -> ToolResult | str | None:
             """Try Ideogram direct image generation."""
             if not ideogram_key or not model.startswith("ideogram/"):
                 return None
@@ -641,7 +647,7 @@ class ImageGenTool(BaseTool):
             )
 
         # ── Helper: try xAI direct for x-ai/* models ───────────────
-        async def _try_xai_direct(model: str) -> ToolResult | None:
+        async def _try_xai_direct(model: str) -> ToolResult | str | None:
             """Try xAI direct image generation. Returns result on success, None to fall through."""
             if not xai_key or not model.startswith("x-ai/"):
                 return None
@@ -655,6 +661,9 @@ class ImageGenTool(BaseTool):
         for model in models_to_try:
             # ── Try Ideogram direct first for ideogram/* models ─────
             ideogram_result = await _try_ideogram_direct(model)
+            if isinstance(ideogram_result, str):  # paid, nothing usable: buy nothing more
+                last_error = ideogram_result
+                break
             if ideogram_result is not None:
                 return ideogram_result
             if model.startswith("ideogram/"):
@@ -667,6 +676,9 @@ class ImageGenTool(BaseTool):
 
             # ── Try xAI direct for x-ai/* models ────────────────────
             xai_result = await _try_xai_direct(model)
+            if isinstance(xai_result, str):  # paid, nothing usable: buy nothing more
+                last_error = xai_result
+                break
             if xai_result is not None:
                 return xai_result
 

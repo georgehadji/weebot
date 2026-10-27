@@ -111,3 +111,24 @@ class StateRepositoryPort(ABC):
             ``salience``, ``access_count``, ``last_accessed``, ``created_at``.
         """
         ...
+
+
+async def all_sessions(
+    repo: StateRepositoryPort,
+    *,
+    user_id: str | None = None,
+    status: str | None = None,
+    page: int = 500,
+) -> list[Session]:
+    """Every matching session, paged: ``list_sessions()`` alone returns the newest 100.
+
+    A function, not a port method, so any object with ``list_sessions`` works.
+    """
+    sessions: list[Session] = []
+    while True:
+        batch = await repo.list_sessions(
+            user_id=user_id, status=status, limit=page, offset=len(sessions)
+        )
+        sessions.extend(batch)
+        if len(batch) < page:
+            return sessions

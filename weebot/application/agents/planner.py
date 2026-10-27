@@ -21,11 +21,15 @@ from weebot.domain.models.event import (
 )
 from weebot.domain.models.plan import ContextScope, Plan, Step
 from weebot.models.structured_output import extract_json_text
+from weebot.utils.backoff import deadline_scope
 
 logger = logging.getLogger(__name__)
 
 # Prompts loaded from files in config/prompts/ with inline fallbacks.
 from pathlib import Path
+
+# One planning call's budget: a slow provider's full timeout plus one retry.
+_PLAN_CALL_DEADLINE_S = 240.0
 
 _PLANNER_PROMPT_PATH = (
     Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_system.txt"
@@ -186,6 +190,20 @@ class PlannerAgent:
             )
         return parsed
 
+    async def _chat_json(self, messages: list[dict[str, Any]]) -> Any:
+        """One planning call, inside a deadline the retry layer below honours.
+
+        Without it the adapter's retry ladder could sleep through all its delays
+        on one plan, since only the cascade set a deadline (A26).
+        """
+        with deadline_scope(_PLAN_CALL_DEADLINE_S):
+            return await self._llm.chat(
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_PLANNING,
+            )
+
     async def _request_json_retry(self, memory: list[dict[str, Any]]) -> dict[str, Any]:
         retry_memory = list(memory)
         retry_memory.append(
@@ -194,12 +212,7 @@ class PlannerAgent:
                 "content": "Your previous response was invalid JSON. Return ONLY a valid JSON object matching the required schema.",
             }
         )
-        retry_response = await self._llm.chat(
-            messages=retry_memory,
-            response_format={"type": "json_object"},
-            temperature=TEMPERATURE_DETERMINISTIC,
-            max_tokens=MAX_TOKENS_PLANNING,
-        )
+        retry_response = await self._chat_json(retry_memory)
         return self._parse_json_content(retry_response.content)
 
     @staticmethod
@@ -247,12 +260,7 @@ class PlannerAgent:
 
         yield MessageEvent(role="assistant", message="Creating plan...")
 
-        response = await self._llm.chat(
-            messages=self._memory,
-            response_format={"type": "json_object"},
-            temperature=TEMPERATURE_DETERMINISTIC,
-            max_tokens=MAX_TOKENS_PLANNING,
-        )
+        response = await self._chat_json(self._memory)
 
         self._memory.append({"role": "assistant", "content": response.content})
 
@@ -292,12 +300,7 @@ class PlannerAgent:
 
         yield MessageEvent(role="assistant", message="Updating plan...")
 
-        response = await self._llm.chat(
-            messages=update_memory,
-            response_format={"type": "json_object"},
-            temperature=TEMPERATURE_DETERMINISTIC,
-            max_tokens=MAX_TOKENS_PLANNING,
-        )
+        response = await self._chat_json(update_memory)
 
         try:
             parsed = self._parse_json_content(response.content)
