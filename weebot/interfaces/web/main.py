@@ -435,11 +435,6 @@ def create_app() -> FastAPI:
         "no",
         "off",
     )
-    app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
-    if _rate_limit_enabled:
-        logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
-    else:
-        logger.info("Rate limiting disabled (WEEBOT_RATE_LIMIT_ENABLED=false)")
 
     # ── Global exception handlers ──────────────────────────────────
     from weebot.domain.exceptions import WeebotError, ErrorCode
@@ -574,6 +569,14 @@ def create_app() -> FastAPI:
         BodyLimitMiddleware,
         max_bytes=int(_max_body) if _max_body.isdigit() else DEFAULT_MAX_BODY_BYTES,
     )
+
+    # Added after everything else, so outermost: a rejected request (bad key, oversize body)
+    # still reaches it, which is what lets it throttle key guessing.
+    app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
+    if _rate_limit_enabled:
+        logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
+    else:
+        logger.info("Rate limiting disabled (WEEBOT_RATE_LIMIT_ENABLED=false)")
 
     # ── Global exception handlers ─────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
