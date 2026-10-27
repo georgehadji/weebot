@@ -172,6 +172,9 @@ class PlanningState(FlowState):
         context._session = context._session.model_copy(update={"context": _new_ctx})
         # ──────────────────────────────────────────────────────────────────────
 
+        # An answer to the clarifying questions is planned with the task it answers.
+        prompt, context._session = with_clarification(context._session, prompt)
+
         # ── Plan modification request (Enhancement 4) ────────────────────────
         # When the user rejected a plan during review and asked for changes,
         # the modification request is stored in session context extra.
@@ -353,3 +356,22 @@ async def _awm_hints(context, prompt: str) -> list[str] | None:
     except Exception as exc:
         logger.debug("AWM: workflow query skipped: %s", exc)
         return None
+
+
+def with_clarification(session, prompt: str):
+    """The prompt to plan from, and the session with the stored answer used up.
+
+    After a pre-plan clarifying question, FlowRouter stores the user's answer as
+    ``_clarification_answer``; the answer alone is not the task.
+    """
+    answer = session.context.get("_clarification_answer")
+    if not answer:
+        return prompt, session
+    task = session.context.original_task or session.title or ""
+    extra_out = {**session.context.extra, "_clarification_answer": ""}
+    session = session.model_copy(
+        update={"context": session.context.model_copy(update={"extra": extra_out})}
+    )
+    if not task or task.strip() == answer.strip():
+        return prompt or answer, session
+    return f"{task}\n\nAnswers to the clarifying questions: {answer}", session
