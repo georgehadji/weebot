@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 import re
 import shlex
 import types
@@ -112,6 +113,13 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint="Taking ownership changes file access control.",
+    ),
+    # Links make a path lead somewhere else, which defeats every path check after them
+    CommandRule(
+        r"\bnew-item\b[^;|]*-itemtype\s+['\"]?(symboliclink|symlink|junction|hardlink)\b|\bmklink\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Remove the link with `(Get-Item <path>).Delete()`; the target is untouched.",
     ),
     # Boot configuration — always ask
     CommandRule(
@@ -398,6 +406,8 @@ _PATH_PARAMS = {"-path", "-literalpath", "-destination", "-filepath"}
 _VALUE_PARAMS = {"-value", "-encoding", "-itemtype", "-filter", "-include", "-exclude"}
 _NAME_PARAMS = {"-newname", "-name"}
 _SWITCHES = {"-force", "-recurse", "-nonewline", "-append", "-passthru", "-confirm:$false"}
+# `New-Item -ItemType` values that make a path lead somewhere else.
+_LINK_TYPES = {"symboliclink", "symlink", "junction", "hardlink"}
 
 
 def _in_output(path: str) -> bool:
@@ -412,7 +422,15 @@ def _in_output(path: str) -> bool:
         return False  # absolute, and not under this workspace
     p = p.removeprefix("./")
     head, _, rest = p.partition("/")
-    return head.lower() == "output" and bool(rest)
+    if not (head.lower() == "output" and bool(rest)):
+        return False
+    # The text says Output/, but a junction or symlink inside it may lead elsewhere:
+    # judge where the path really lands.
+    try:
+        real = (Path(os.getcwd()) / p).resolve(strict=False)
+        return real.is_relative_to((Path(os.getcwd()) / head).resolve(strict=False))
+    except (OSError, ValueError):
+        return False
 
 
 _IF_GUARD = re.compile(
@@ -456,6 +474,8 @@ def _output_scoped(segment: str) -> bool:
                 names.append(value)
             elif "$" in value:
                 return False  # content built from a variable
+            elif low == "-itemtype" and value.strip("'\"").lower() in _LINK_TYPES:
+                return False
             i += 2
             continue
         if tok.startswith("-"):

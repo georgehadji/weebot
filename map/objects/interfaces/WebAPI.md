@@ -4,14 +4,14 @@ name: Web API (FastAPI)
 code: create_app, lifespan
 cluster: interfaces
 universe: live
-status: verified
+status: stale
 verified: 2026-10-27
-commit: 04d20f3b
+commit: 94ba7bf2
 ---
 
 # Web API (FastAPI)
 
-The HTTP and WebSocket backend, `python -m weebot.interfaces.web.main`. `create_app()` (`weebot/interfaces/web/main.py:404-688`) builds the app; `lifespan` (`:180-397`) builds the container, the event fan-out, the scheduler and the long-polling gateways.
+The HTTP and WebSocket backend, `python -m weebot.interfaces.web.main`. `create_app()` (`weebot/interfaces/web/main.py:404-698`) builds the app; `lifespan` (`:180-397`) builds the container, the event fan-out, the scheduler and the long-polling gateways.
 
 ## Why this shape
 The lifespan is the web process's composition root. It takes the process's `shared_container()` and stores it on `app.state.container` (`:184-190`); routers resolve ports from it per request. Events reach browsers because the lifespan subscribes `WebSocketEventBroadcaster.publish` to the bus (`:215-218`); nothing in the application layer knows a socket exists. The Mediator is warmed at boot (`container.warm_up()`, `:235-236`) so the first `/sessions` request does not pay for it. Approvals pause the flow (`FlowPauseApproval`, `:202`). The one API-key store is put on `app.state.api_key_store` (`:205-208`). Shutdown drains `BackgroundTasks` before it closes the MCP toolkit, the key store and the DB pools (`:376-391`).
