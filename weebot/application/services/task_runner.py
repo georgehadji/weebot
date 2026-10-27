@@ -45,6 +45,27 @@ def _with_extra(session: Session, **values: object) -> Session:
     return session.model_copy(update={"context": context})
 
 
+def _owns_persistence(flow: object) -> bool:
+    """True when the flow saves its own session (it has a repo and a session of its own)."""
+    has_repo = getattr(flow, "_state_repo", None) is not None
+    return has_repo and getattr(flow, "_session", None) is not None
+
+
+def _flow_view(session: Session, flow: object, yielded: list, title: str) -> Session:
+    """The session to write when the flow persists its own: the flow's copy plus what only this
+    runner saw (events the flow yielded without emitting, the planner's title). The runner's own
+    copy would drop every event the flow emitted and saved, so it is not the base."""
+    base = flow._session  # type: ignore[attr-defined]
+    known = {e.id for e in base.events}
+    for event in yielded:
+        if event.id not in known:
+            base = base.add_event(event)
+            known.add(event.id)
+    if title and title != base.title:
+        base = base.set_title(title)
+    return base
+
+
 class TaskRunner:
     """Runs agent flows as background asyncio tasks with session persistence."""
 
@@ -295,6 +316,9 @@ class TaskRunner:
         except Exception:
             logger.debug("Failed to increment session metrics", exc_info=True)
 
+        owns = _owns_persistence(flow)
+        yielded: list = []
+        title = ""
         try:
             run_prompt = prompt if prompt is not None else session.context.get("last_prompt", "")
             async for event in flow.run(run_prompt):
@@ -304,7 +328,13 @@ class TaskRunner:
                 new_title = getattr(event, "title", "") if event.type == "title" else ""
                 if new_title and new_title != session.title:
                     session = session.set_title(new_title)
-                await self._state_repo.save_session(session)
+                    title = new_title
+                if owns:
+                    # The flow's EventPublisher saves each event it emits; a second whole-session
+                    # save from this copy would overwrite them. This runner writes once, at the end.
+                    yielded.append(event)
+                else:
+                    await self._state_repo.save_session(session)
                 if new_title:
                     await self._publish_presence(session)
                 # Only publish from the runner when the flow has no event_bus of its
@@ -323,6 +353,8 @@ class TaskRunner:
                 self._retry_counts[session_id] = remaining - 1
                 # Persist the spent attempt before sleeping: a crash during the backoff
                 # must not hand the session a fresh budget.
+                if owns:
+                    session = _flow_view(session, flow, yielded, title)
                 session = _with_extra(session, **{_RETRIES_KEY: remaining - 1})
                 try:
                     await self._state_repo.save_session(session)
@@ -345,6 +377,8 @@ class TaskRunner:
                         await self._start_direct(reloaded, factory, prompt)
                         return
             try:
+                if owns:
+                    session = _flow_view(session, flow, yielded, title)
                 session = _with_extra(
                     session.set_status(SessionStatus.FAILED),
                     **{_RETRIES_KEY: 0, _FAILURE_KEY: f"{type(failure).__name__}: {failure}"[:500]},
@@ -368,7 +402,9 @@ class TaskRunner:
             # the local session before final save. The flow modifies
             # flow._session independently of this runner's copy.
             flow_session = getattr(flow, "_session", None)
-            if flow_session is not None:
+            if owns:
+                session = _flow_view(session, flow, yielded, title)
+            elif flow_session is not None:
                 session = session.model_copy(update={"context": flow_session.context})
             if flow.is_done():
                 session = session.set_status(SessionStatus.COMPLETED)
