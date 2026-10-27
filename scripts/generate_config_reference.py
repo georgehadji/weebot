@@ -176,6 +176,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce egress guard (block outbound requests not in allowlist)"},
     {"var": "WEEBOT_ENFORCE_SESSION_OWNERSHIP", "type": "bool", "default": "true",
      "desc": "Enforce user_id matching on session access"},
+    {"var": "WEEBOT_SHELL_DEFAULT_ASK", "type": "str", "default": "observe",
+     "desc": "Shell commands no approval rule covers: off, observe (log what would ask) or enforce"},
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},

@@ -174,6 +174,29 @@ class ApprovalPolicyAdapter:
             return GuardVerdict(
                 GuardAction.ASK, self.name, result.reason or result.undo_hint or "confirm"
             )
+        return self._default_ask(tool_name, command)
+
+    def _default_ask(self, tool_name: str, command: str) -> GuardVerdict | None:
+        """A shell segment no rule covers and that is not a plain read (audit A20, D3a).
+
+        WEEBOT_SHELL_DEFAULT_ASK: ``off``; ``observe`` (default) logs "would ask" and lets it
+        run, to count the extra prompts before enforcing; ``enforce`` asks. Shell tools only:
+        python_execute must keep running calls such as ``executor.shutdown()`` unasked.
+        """
+        if tool_name not in SHELL_TOOLS:
+            return None
+        from weebot.config.settings import get_settings
+
+        mode = get_settings().shell_default_ask
+        if mode == "off":
+            return None
+        unreviewed = self._policy.unreviewed_segments(command)
+        if not unreviewed:
+            return None
+        reason = f"no approval rule covers: {unreviewed[0][:120]}"
+        if mode == "enforce":
+            return GuardVerdict(GuardAction.ASK, self.name, reason)
+        logger.warning("shell_default_ask would ask (%s): %s", tool_name, reason)
         return None
 
 

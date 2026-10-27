@@ -329,6 +329,19 @@ class ExecApprovalPolicy:
             undo_hint=worst.undo_hint,
         )
 
+    def unreviewed_segments(self, command: str) -> list[str]:
+        """Segments no rule has an opinion on and that are not plain reads (audit A20).
+
+        Evaluate approves these (default-allow); the shell guard decides what to do with
+        them (record, or ask) so the default can be tightened in steps.
+        """
+        segments = _inline_literal_vars(split_segments(command))
+        chained = len(segments) > 1
+        return [
+            s for s in segments
+            if not self._evaluate_segment(s, chained).matched and not is_read_only_segment(s)
+        ]
+
     def _evaluate_segment(self, segment: str, chained: bool) -> _SegmentDecision:
         """Judge one segment.
 
@@ -369,7 +382,7 @@ class ExecApprovalPolicy:
                         f"Command contains separator with destructive keyword '{kw}'.",
                         "Chained destructive command detected.",
                     )
-        return _NO_MATCH
+        return _UNMATCHED
 
 
 @dataclass(frozen=True)
@@ -377,6 +390,7 @@ class _SegmentDecision:
     rank: int
     reason: str = ""
     undo_hint: str = ""
+    matched: bool = True  # False only when no rule, carve-out or keyword said anything
 
 
 _RANK: dict[ApprovalMode, int] = {
@@ -386,6 +400,39 @@ _RANK: dict[ApprovalMode, int] = {
     ApprovalMode.DENY: 2,
 }
 _NO_MATCH = _SegmentDecision(_RANK[ApprovalMode.AUTO_APPROVE])
+_UNMATCHED = _SegmentDecision(_RANK[ApprovalMode.AUTO_APPROVE], matched=False)
+
+# Commands that only read. A shell segment that matches no rule and is not one of these is
+# "unreviewed": nothing in the policy has an opinion about it (audit A20). Data, not logic:
+# extend it here when a harmless command keeps asking.
+READ_ONLY_COMMANDS: frozenset[str] = frozenset({
+    "ls", "dir", "cat", "type", "head", "tail", "wc", "grep", "findstr", "find", "echo", "pwd",
+    "cd", "sl", "which", "where", "whoami", "hostname", "date", "tree", "stat", "file", "diff",
+    "sort", "uniq", "cut", "basename", "dirname", "realpath", "env", "printenv",
+    "gc", "gci", "gl", "gm", "gps", "select", "measure", "sls", "ft", "fl", "fw",
+    "out-null", "sort-object", "where-object", "group-object", "write-output", "write-host",
+    "test-path", "resolve-path", "split-path", "join-path",
+})
+_READ_ONLY_PREFIXES = ("get-", "select-", "measure-", "compare-", "test-")
+_READ_ONLY_GIT = frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files", "blame"})
+# A segment holding any of these can write or run code whatever its first word is.
+_NOT_PLAIN = ("::", ">", "{", "$(", chr(96))
+
+
+def is_read_only_segment(segment: str) -> bool:
+    """True for a plain read: a known read-only command with no redirect, script block or
+    static call. Conservative on purpose: unknown means not read-only."""
+    low = segment.strip().lower()
+    if not low or any(mark in low for mark in _NOT_PLAIN):
+        return False
+    tokens = low.split()
+    first = tokens[0].strip("&.\"'").replace(chr(92), "/").rsplit("/", 1)[-1].removesuffix(".exe")
+    if first == "git":
+        sub = next((t for t in tokens[1:] if not t.startswith("-")), "")
+        return sub in _READ_ONLY_GIT
+    if first == "find" and ("-delete" in low or "-exec" in low):
+        return False
+    return first in READ_ONLY_COMMANDS or first.startswith(_READ_ONLY_PREFIXES)
 
 
 # File cmdlets the agent uses on its own Output/ work, and how each takes its
