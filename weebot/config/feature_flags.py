@@ -132,11 +132,11 @@ OTEL_TRACING_ENABLED: bool = _env_bool("WEEBOT_OTEL_TRACING", default=False)
 # ── Adaptive Capability Router (ACR) — Phase P1+ ────────────────────────────
 # Master switch: when True, the static task_model_router is replaced by the
 # ACR pipeline: classify → constrain → score → (optional bandit) → ordered list.
-# Default OFF until P4 GA.
-WEEBOT_ENABLE_ACR: bool = _env_bool("WEEBOT_ENABLE_ACR", default=False)
+# Default ON: one shared router learns per step category which models answer.
+WEEBOT_ENABLE_ACR: bool = _env_bool("WEEBOT_ENABLE_ACR", default=True)
 # When True, the bandit stage (Thompson sampling) is enabled inside the ACR.
 # Requires WEEBOT_ENABLE_ACR=True.  When False, ACR uses deterministic scoring.
-WEEBOT_ACR_BANDIT: bool = _env_bool("WEEBOT_ACR_BANDIT", default=False)
+WEEBOT_ACR_BANDIT: bool = _env_bool("WEEBOT_ACR_BANDIT", default=True)
 # Shadow mode: when True, ACR logs its routing decisions but the static router
 # still controls execution.  Useful for offline comparison during rollout.
 WEEBOT_ACR_SHADOW: bool = _env_bool("WEEBOT_ACR_SHADOW", default=False)

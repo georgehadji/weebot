@@ -197,8 +197,9 @@ class TestBanditRouterIntegration:
         assert isinstance(result, list)
         assert all(isinstance(m, str) for m in result)
 
-    def test_router_without_bandit(self):
-        """Default: bandit disabled, router returns pure utility ranking."""
+    def test_router_without_bandit(self, monkeypatch):
+        """Bandit disabled: the router returns the pure utility ranking."""
+        monkeypatch.setattr("weebot.application.services.routing.adaptive_capability_router.WEEBOT_ACR_BANDIT", False)  # on by default
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )

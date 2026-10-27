@@ -111,6 +111,11 @@ class BanditSelector:
                 else:
                     blend_factor = 1.0
                 blended = (1 - 0.3 * blend_factor) * utility + 0.3 * blend_factor * thompson
+            elif model_id in posteriors:
+                # Exploit what has been learned: the posterior mean, not a sample.
+                alpha, beta = posteriors[model_id]
+                mean = alpha / (alpha + beta) if alpha + beta > 0 else 0.5
+                blended = 0.7 * utility + 0.3 * mean
             else:
                 blended = utility
 
@@ -134,13 +139,21 @@ class BanditSelector:
             success: Whether the step succeeded (hard signal).
             posterior_repo: Optional ``PosteriorRepository`` instance.
         """
-        if posterior_repo is not None:
-            try:
-                import anyio
+        if posterior_repo is None:
+            return
+        import asyncio
 
-                anyio.from_thread.run(posterior_repo.record_outcome, category, model_id, success)
-            except Exception:
-                logger.debug("Bandit: failed to record outcome (non-blocking)")
+        from weebot.core.background_tasks import get_background_tasks
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            logger.debug("Bandit: no running loop; outcome not stored")
+            return
+        # anyio.from_thread.run fails on the loop thread, so every write was dropped.
+        get_background_tasks().spawn(
+            posterior_repo.record_outcome(category, model_id, success), name="acr-outcome"
+        )
 
     # ── Internal ────────────────────────────────────────────────────
 

@@ -18,6 +18,7 @@ Feature-flagged:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from weebot.application.services.routing.bandit import BanditSelector
@@ -45,6 +46,12 @@ def default_candidate_pool() -> list[str]:
     return [
         m for m in get_all_profiles() if get_model_config(m) is not None and claude_model_allowed(m)
     ]
+
+# Mirrors PosteriorRepository's update (decay 0.95, prior Beta(5, 1)), so the in-memory
+# copy matches what the store writes.
+_DECAY = 0.95
+_PRIOR = (5.0, 1.0)
+
 
 class AdaptiveCapabilityRouter:
     """Closed-loop model router: classify → constrain → score → (bandit).
@@ -77,6 +84,26 @@ class AdaptiveCapabilityRouter:
         self._checker = ConstraintChecker(is_tripped=is_tripped)
         self._scorer = UtilityScorer(tracker=tracker)
         self._bandit = BanditSelector() if (force_bandit or WEEBOT_ACR_BANDIT) else None
+        # {category: {model: (alpha, beta)}}: loaded once from the store, then kept in
+        # step with every recorded outcome, because route() is sync and the store is not.
+        self._posteriors: dict[str, dict[str, tuple[float, float]]] = {}
+        self._loaded = posterior_repo is None
+        self._pending: set[asyncio.Task] = set()
+
+    async def ensure_loaded(self) -> None:
+        """Load the stored posteriors once; a failure leaves the priors in place."""
+        if self._loaded:
+            return
+        self._loaded = True
+        try:
+            self._posteriors = await self._posterior_repo.get_all_posteriors()
+        except Exception as exc:
+            logger.warning("ACR: could not load posteriors: %s", exc)
+
+    async def flush(self) -> None:
+        """Wait for outcome writes still in flight (tests, shutdown)."""
+        if self._pending:
+            await asyncio.gather(*list(self._pending), return_exceptions=True)
 
     # ── Routing ─────────────────────────────────────────────────────
 
@@ -141,6 +168,8 @@ class AdaptiveCapabilityRouter:
             bandit_used = False
             if self._bandit and self._bandit_enabled and len(scored) > 1:
                 bandit_used = True
+                if posteriors is None:
+                    posteriors = self._posteriors.get(category.value)
                 utility_scores = {r.model_id: r.score for r in scored}
                 premium_models = set(PREMIUM_MODELS)
                 scored = self._bandit.select(
@@ -204,18 +233,29 @@ class AdaptiveCapabilityRouter:
 
         Reward logic (hard signals only, per plan §1.3):
         - SUCCESS outcome → success (True)
-        - FAILED or CIRCUIT_OPEN → failure (False)
+        - FAILED → failure (False)
+        - CIRCUIT_OPEN → nothing: the model was never called.
+
+        Called from the cascade on the event-loop thread. The in-memory posterior is
+        updated at once, the same way the store does it, and the store write runs as a
+        task on the running loop (it used to go through anyio.from_thread.run, which
+        fails on the loop thread, so every write was dropped).
         """
-        if not self._tracker or not self._posterior_repo or not self._bandit:
+        if not self._posterior_repo or not self._bandit:
             return  # bandit learning not wired
+        if decision.outcome == CascadeOutcome.CIRCUIT_OPEN:
+            return
 
         success = decision.outcome == CascadeOutcome.SUCCESS
-        self._bandit.record_outcome(
-            category=decision.task_category,
-            model_id=decision.model_name,
-            success=success,
-            posterior_repo=self._posterior_repo,
-        )
+        category, model = decision.task_category, decision.model_name
+        self._remember(category, model, success)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no loop (sync caller): the in-memory update still counts
+        task = loop.create_task(self._write(category, model, success))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
         logger.debug(
             "ACR outcome: %s/%s → %s",
             decision.task_category,
@@ -225,7 +265,20 @@ class AdaptiveCapabilityRouter:
 
     # ── Utilities ──────────────────────────────────────────────────
 
-    @property
+    def _remember(self, category: str, model: str, success: bool) -> None:
+        known = self._posteriors.setdefault(category, {})
+        if model in known:
+            alpha, beta = (v * _DECAY for v in known[model])
+        else:
+            alpha, beta = _PRIOR
+        known[model] = (alpha + 1.0, beta) if success else (alpha, beta + 1.0)
+
+    async def _write(self, category: str, model: str, success: bool) -> None:
+        try:
+            await self._posterior_repo.record_outcome(category, model, success)
+        except Exception as exc:
+            logger.warning("ACR: could not store an outcome for %s: %s", model, exc)
+
     def static_model(self, description: str) -> str:
         """Return the static model for *description* (same as ``model_for_step``)."""
         return model_for_step(description)

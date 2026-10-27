@@ -18,6 +18,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from weebot.application.services.routing.adaptive_capability_router import (
+        AdaptiveCapabilityRouter,
+    )
     from weebot.application.ports.skill_store_port import SkillStorePort
     from weebot.application.services.session_cost import SessionCostMeter
     from weebot.application.strategies.llm_pool import LLMPool
@@ -37,3 +40,5 @@ LLM_POOL: Key[LLMPool] = Key("llm_pool")
 SESSION_COST_METER: Key[SessionCostMeter] = Key("session_cost_meter")
 # The skill store live steps count candidate-skill uses against (RecordSkillUseHandler).
 LEARNING_SKILL_STORE: Key[SkillStorePort] = Key("learning_skill_store")
+# One model router for every step executor, so what it learns is shared and stored.
+ACR_ROUTER: Key[AdaptiveCapabilityRouter] = Key("acr_router")
