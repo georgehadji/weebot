@@ -22,6 +22,7 @@ from weebot.application.ports.state_roles_port import (  # W5.1: the roles it pl
     PlanTemplateStore,
     PlanTemplateWriter,
     SessionConstraintStore,
+    WorkflowTemplateStore,
 )
 from weebot.domain.models.correction import CorrectionRecord
 from weebot.domain.models.session import Session, SessionStatus
@@ -68,6 +69,7 @@ class SQLiteStateRepository(
     PlanTemplateWriter,
     PlanTemplateStore,
     CommitmentStore,
+    WorkflowTemplateStore,
 ):
     """Persist sessions to SQLite using connection pooling.
 

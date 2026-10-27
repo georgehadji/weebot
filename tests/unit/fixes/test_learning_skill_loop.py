@@ -435,3 +435,42 @@ def test_self_improver_cannot_target_itself_while_its_flag_is_off(monkeypatch):
     assert SelfImprover._is_allowed_target(target) is False
     monkeypatch.setattr(flags, "METACOGNITIVE_IMPROVEMENT_ENABLED", True)
     assert SelfImprover._is_allowed_target(target) is True
+
+
+# ── end to end, with the real store, disk, retriever and counter ────────────
+
+
+async def test_a_candidate_goes_from_disk_to_prompt_to_trusted(tmp_path):
+    from weebot.application.agents.executor._prompt_builder import build_executor_prompt
+    from weebot.application.cqrs.handlers.validation_handler import RecordSkillUseHandler
+    from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
+    from weebot.application.services.materializing_skill_store import MaterializingSkillStore
+    from weebot.application.services.skill_materializer import SkillMaterializer
+    from weebot.application.skills.skill_registry import SkillRegistry
+    from weebot.infrastructure.persistence.skill_store import SkillStore
+
+    skills_dir = tmp_path / "skills"
+    registry = SkillRegistry(search_paths=[skills_dir])
+    retriever = BM25SkillRetriever(registry)
+    store = MaterializingSkillStore(
+        store=SkillStore(db_path=str(tmp_path / "skills.db")),
+        materializer=SkillMaterializer(registry=registry, retriever=retriever, skills_dir=skills_dir),
+    )
+
+    # The review gate's output: a reviewed candidate.
+    await store.save(_skill("deploy-static-site", trust="candidate"))
+    assert (skills_dir / "deploy-static-site" / "SKILL.md").exists()
+
+    used: list[str] = []
+    prompt = await build_executor_prompt(
+        "deploy static site steps", base_prompt="base", skill_retriever=retriever, skills_used=used
+    )
+    assert "deploy-static-site" in prompt and used == ["deploy-static-site"]
+
+    counter = RecordSkillUseHandler(skill_store=store)
+    for session in ("s1", "s2", "s3"):
+        await counter.handle(_use("deploy-static-site", session))
+    assert (await store.load("deploy-static-site")).metadata.trust == "trusted"
+    assert "trust: trusted" in (skills_dir / "deploy-static-site" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
