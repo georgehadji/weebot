@@ -48,6 +48,7 @@ class SessionCostMeter:
         self._totals: dict[str, float] = {}
         self._parent: dict[str, str] = {}
         self._own: dict[str, float] = {}
+        self._allowance: dict[str, float] = {}
         self._seeded: set[str] = set()
         self._soft_announced: set[str] = set()
 
@@ -79,6 +80,18 @@ class SessionCostMeter:
 
     def total(self, session_id: str) -> float:
         return self._totals.get(self._root(session_id), 0.0) if session_id else 0.0
+
+    def set_allowance(self, session_id: str, usd: float) -> None:
+        """The flow's current hard limit for *session_id*'s tree: the limit times its grants,
+        or 0 when the flow turned the limit off. Lets a caller below the flow (the cascade)
+        stop at the same number the flow asks at."""
+        self._allowance[self._root(session_id)] = max(0.0, float(usd))
+
+    def hard_exceeded(self, session_id: str | None) -> bool:
+        if not session_id:
+            return False
+        limit = self._allowance.get(self._root(session_id), self.hard_usd)
+        return limit > 0 and self.total(session_id) >= limit
 
     def soft_exceeded(self, session_id: str | None, soft_usd: float | None = None) -> bool:
         limit = self.soft_usd if soft_usd is None else soft_usd

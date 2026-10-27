@@ -29,11 +29,12 @@ async def budget_gate(flow: Any) -> tuple[str, str]:
     """
     meter = flow._cost_meter
     hard = meter.hard_usd if flow._cost_hard_override is None else flow._cost_hard_override
+    session_id = flow._session.id
+    allowance = hard * (1 + flow._budget_grants) if hard > 0 else 0.0
+    meter.set_allowance(session_id, allowance)  # the cascade stops at this number mid-step
     if hard <= 0:
         return "ok", ""
-    session_id = flow._session.id
     total = meter.total(session_id)
-    allowance = hard * (1 + flow._budget_grants)
     reached = SessionCostTermination().check(
         TerminationContext(session_cost_usd=total, session_cost_allowance_usd=allowance)
     )

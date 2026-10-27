@@ -20,6 +20,7 @@ from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import BaseModel, Field
 
+from weebot.core.media_spend import record_media_call
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.config.api_endpoints import (
     IDEOGRAM_GENERATION_URL,
@@ -690,6 +691,9 @@ class ImageGenTool(BaseTool):
                         last_error = f"{model}: HTTP {resp.status} — {error_text[:150]}"
                         continue  # try next model in cascade
 
+                    # A 200 was billed. From here a missing image, a failed download or an
+                    # odd format stops the cascade: the next model would be paid for again.
+                    await record_media_call(model, "image")
                     result = await resp.json()
                     choice = result.get("choices", [{}])[0]
                     message = choice.get("message", {})
@@ -697,8 +701,8 @@ class ImageGenTool(BaseTool):
                     # Extract image URL/data from response
                     url = self._extract_image_url(message, result)
                     if not url:
-                        last_error = f"{model}: no image in response"
-                        continue  # try next model
+                        last_error = f"{model}: no image in response (billed; not retrying)"
+                        break
 
                     # Save the image
                     path = Path(output_path)
@@ -715,11 +719,11 @@ class ImageGenTool(BaseTool):
                         )
                         if download_result is not None:
                             return download_result
-                        last_error = f"{model}: download failed"
-                        continue
+                        last_error = f"{model}: download failed (billed; not retrying)"
+                        break
                     else:
-                        last_error = f"{model}: unsupported format {url[:80]}"
-                        continue
+                        last_error = f"{model}: unsupported format {url[:80]} (billed)"
+                        break
 
                     size = path.stat().st_size
                     return ToolResult(

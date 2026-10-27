@@ -478,6 +478,7 @@ class LLMCallCompleted(DomainEvent):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0  # estimate_cost(); USD
+    estimated: bool = False  # no usage came back (a cancelled or timed-out call): prompt only
 
 
 class InjectionSuspected(DomainEvent):

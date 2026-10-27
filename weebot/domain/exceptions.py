@@ -65,6 +65,14 @@ class TaskExecutionError(WeebotError):
         self.severity = ErrorSeverity.ERROR
 
 
+class SessionBudgetExceededError(WeebotError):
+    """A call was refused because the session's spend reached its hard limit.
+
+    Raised before the call is made; the flow's budget gate, at the top of its next
+    iteration, asks the user, pauses or stops.
+    """
+
+
 class AllModelsTrippedError(WeebotError):
     """Raised when every model in the LLM cascade has tripped its circuit breaker.
 

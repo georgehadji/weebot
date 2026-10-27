@@ -243,9 +243,15 @@ class CascadeExecutor:
             self._acr_router.record_cascade_outcome(decision)
 
     async def _call_completed(
-        self, model_id: str, prompt_tokens: int, completion_tokens: int
+        self,
+        model_id: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_prompt: int = 0,
+        *,
+        estimated: bool = False,
     ) -> None:
-        """Report one successful call; the hook must never fail the call."""
+        """Report one billed call; the hook must never fail the call."""
         if self._on_call_completed is None:
             return
         from weebot.domain.models.event import LLMCallCompleted
@@ -256,11 +262,23 @@ class CascadeExecutor:
                     model=model_id,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
-                    cost=_estimate_cost(model_id, prompt_tokens, completion_tokens),
+                    cost=_estimate_cost(
+                        model_id, prompt_tokens, completion_tokens, cached_prompt=cached_prompt
+                    ),
+                    estimated=estimated,
                 )
             )
         except Exception:
             logger.warning("LLMCallCompleted hook failed for %s", model_id, exc_info=True)
+
+    async def _call_unanswered(self, model_id: str, messages: list[dict[str, Any]]) -> None:
+        """Bill a request that was sent but gave no usage (cancelled hedge probe, timeout).
+
+        A cancelled non-streamed request still bills; the prompt is the part we can estimate,
+        so the limit stays on the safe side without guessing the completion.
+        """
+        prompt = sum(len(str(m.get("content") or "")) for m in messages) // 4
+        await self._call_completed(model_id, prompt, 0, estimated=True)
 
     @staticmethod
     def _usage_tokens(resp: LLMResponse) -> tuple[int, int]:
@@ -394,6 +412,7 @@ class CascadeExecutor:
                 _usage = getattr(resp, "usage", None) or {}
                 _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
                 _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
+                _cached = int(_usage.get("cached_tokens", 0) or 0)
                 self._record_decision(
                     model_name=model_id,
                     tier=tier,
@@ -405,10 +424,12 @@ class CascadeExecutor:
                     # No caller ever supplied this, so the tracker's
                     # total_cost_estimate was structurally 0.0 -- and
                     # mcp/resources.py:297 publishes that number as cost accounting.
-                    cost_estimate=_estimate_cost(model_id, _prompt_tokens, _completion_tokens),
+                    cost_estimate=_estimate_cost(
+                        model_id, _prompt_tokens, _completion_tokens, cached_prompt=_cached
+                    ),
                     task_category=task_category,
                 )
-                await self._call_completed(model_id, _prompt_tokens, _completion_tokens)
+                await self._call_completed(model_id, _prompt_tokens, _completion_tokens, _cached)
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
@@ -432,6 +453,8 @@ class CascadeExecutor:
                 error_message="timeout",
                 task_category=task_category,
             )
+            self._cascade_record_failure(model_id)
+            await self._call_unanswered(model_id, messages)
             return None
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
@@ -505,6 +528,19 @@ class CascadeExecutor:
         """
         from weebot.config.model_refs import get_model_cascade_for_role
 
+        # The flow checks the hard limit between steps; a step can make many calls, so
+        # check again before each one. The flow's gate then asks, pauses or stops.
+        if self._cost_meter is not None:
+            from weebot.core.log_context import session_id_var
+
+            sid = session_id_var.get()
+            if self._cost_meter.hard_exceeded(sid):
+                from weebot.domain.exceptions import SessionBudgetExceededError
+
+                raise SessionBudgetExceededError(
+                    f"session spend ${self._cost_meter.total(sid):.2f} reached its hard limit"
+                )
+
         role_cascade = get_model_cascade_for_role(self._agent_role)
         role_primary = role_cascade[0]
         role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
@@ -563,9 +599,13 @@ class CascadeExecutor:
             # fails, or after _HEDGE_DELAY_S without an answer.
             queue = list(parallel)
 
+            launched: dict[asyncio.Future, str] = {}
+
             def _launch() -> asyncio.Future:
                 model = queue.pop(0)
-                return asyncio.ensure_future(_try(model, 90.0, tier=self._tier_of(model)))
+                fut = asyncio.ensure_future(_try(model, 90.0, tier=self._tier_of(model)))
+                launched[fut] = model
+                return fut
 
             # Wait for a probe that actually SUCCEEDS, not merely one that
             # finishes first.
@@ -616,6 +656,7 @@ class CascadeExecutor:
                 # an adapter that swallows CancelledError.
                 for pf in pending:
                     pf.cancel()
+                    await self._call_unanswered(launched[pf], messages)
                 if pending:
                     await asyncio.wait(pending, timeout=5.0)
 

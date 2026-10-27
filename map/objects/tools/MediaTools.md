@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 7d1ce324
+commit: ae284495
 ---
 
 # Media tools
@@ -14,14 +14,14 @@ commit: 7d1ce324
 Tools that make or ingest images, video and audio: `image_gen`, `video_gen`, `video_ingest`, `remotion_video`, `voice_input`, `voice_output`, and `youtube_download`.
 
 ## Why this shape
-Each tool owns its backend and writes files under the workspace. Paid generation reads provider keys straight from the environment and falls back to a free path (SVG templates for images, `weebot/tools/image_gen_tool.py:589-622`). Tools whose backend is a port (`ToolRepositoryPort`, `SpeechPort`) refuse to construct without it (`weebot/tools/video_ingest_tool.py:229-236`, `weebot/tools/voice_input_tool.py:42-49`, `weebot/tools/voice_output_tool.py:50-57`), and the registry supplies it from `wiring()["collaborators"]` (`weebot/application/di/_factories.py:504-506`).
+Each tool owns its backend and writes files under the workspace. Paid generation reads provider keys straight from the environment and falls back to a free path (SVG templates for images, `weebot/tools/image_gen_tool.py:590-623`). Tools whose backend is a port (`ToolRepositoryPort`, `SpeechPort`) refuse to construct without it (`weebot/tools/video_ingest_tool.py:229-236`, `weebot/tools/voice_input_tool.py:42-49`, `weebot/tools/voice_output_tool.py:50-57`), and the registry supplies it from `wiring()["collaborators"]` (`weebot/application/di/_factories.py:504-506`).
 
 ## Shape
 
 | Tool name | Class, file:line | Backend | Collaborator | Roles |
 |---|---|---|---|---|
-| `image_gen` | `ImageGenTool` `weebot/tools/image_gen_tool.py:256` | kinds `hero/card/icon/logo/testimonial` (SVG), `svg/ai` (Replicate if `REPLICATE_API_TOKEN`, else themed SVG), `openrouter` (OpenRouter, xAI or Ideogram direct, `IMAGE_CASCADE`) (`weebot/tools/image_gen_tool.py:880-932, 589-622`) | none | admin, webhook, coder, designer |
-| `video_gen` | `VideoGenTool` `weebot/tools/video_gen_tool.py:52` | OpenRouter video models or xAI direct (`weebot/tools/video_gen_tool.py:107-149, 277-285`) | none | automation, admin, webhook, coder, designer |
+| `image_gen` | `ImageGenTool` `weebot/tools/image_gen_tool.py:257` | kinds `hero/card/icon/logo/testimonial` (SVG), `svg/ai` (Replicate if `REPLICATE_API_TOKEN`, else themed SVG), `openrouter` (OpenRouter, xAI or Ideogram direct, `IMAGE_CASCADE`) (`weebot/tools/image_gen_tool.py:884-936, 589-622`) | none | admin, webhook, coder, designer |
+| `video_gen` | `VideoGenTool` `weebot/tools/video_gen_tool.py:53` | OpenRouter video models or xAI direct (`weebot/tools/video_gen_tool.py:108-150, 277-285`) | none | automation, admin, webhook, coder, designer |
 | `video_ingest` | `VideoIngestTool` `weebot/tools/video_ingest_tool.py:172` | `youtube_transcript_api` + oEmbed; actions `ingest_youtube`, `list_sources`, `export_jsonl` (`weebot/tools/video_ingest_tool.py:180-184`) | `repo: ToolRepositoryPort` | researcher, admin, webhook |
 | `remotion_video` | `RemotionVideoTool` `weebot/tools/remotion_video.py:118` | `node remotion_render.cjs` in `REMOTION_HOST` or `~/.weebot-remotion` (`weebot/tools/remotion_video.py:44, 109-111, 209-238`) | `ToolConfig` | automation, admin, webhook, coder, designer |
 | `voice_input` | `VoiceInputTool` `weebot/tools/voice_input_tool.py:15` | `SpeechPort.transcribe` (`weebot/tools/voice_input_tool.py:63`) | `speech: SpeechPort` | admin, webhook |
@@ -30,12 +30,12 @@ Each tool owns its backend and writes files under the workspace. Paid generation
 
 Roles: `weebot/application/services/tool_registry.py:27-185`.
 
-Path guards: `image_gen` checks `output_path` before any branch runs (`weebot/tools/image_gen_tool.py:906-911`, `_sanitize_output_path` `:780-799`); `video_gen` checks `output_path` before any work (`weebot/tools/video_gen_tool.py:391-394`); `video_ingest` `export_jsonl` and `voice_output` resolve it with `core.output_path`, which refuses `..` and absolute paths outside the project (`weebot/tools/video_ingest_tool.py:335-340`, `weebot/tools/voice_output_tool.py:82-87`, `weebot/core/output_path.py:18-33`); `youtube_download` resolves it against the cwd (`weebot/tools/youtube_download_tool.py:202, 276-284`); `remotion_video` accepts only a `project` matching `^[a-z0-9][a-z0-9_-]{0,48}$` and a composition id, and builds every path itself under `Output/remotion` (`weebot/tools/remotion_video.py:48-49, 105-106, 160-189`), passing the child only `_ENV_KEYS` (`weebot/tools/remotion_video.py:114-115`).
+Path guards: `image_gen` checks `output_path` before any branch runs (`weebot/tools/image_gen_tool.py:910-915`, `_sanitize_output_path` `:780-799`); `video_gen` checks `output_path` before any work (`weebot/tools/video_gen_tool.py:396-399`); `video_ingest` `export_jsonl` and `voice_output` resolve it with `core.output_path`, which refuses `..` and absolute paths outside the project (`weebot/tools/video_ingest_tool.py:335-340`, `weebot/tools/voice_output_tool.py:82-87`, `weebot/core/output_path.py:18-33`); `youtube_download` resolves it against the cwd (`weebot/tools/youtube_download_tool.py:202, 276-284`); `remotion_video` accepts only a `project` matching `^[a-z0-9][a-z0-9_-]{0,48}$` and a composition id, and builds every path itself under `Output/remotion` (`weebot/tools/remotion_video.py:48-49, 105-106, 160-189`), passing the child only `_ENV_KEYS` (`weebot/tools/remotion_video.py:114-115`).
 
 Consequences (read from source, not run):
 - `image_gen`, `video_gen` are paid per call and match `WEEBOT_OUTBOUND_TOOL_PATTERNS` (`weebot/config/settings.py:445-458`), so the guard chain wraps them and they always ask (see the BaseTool card). `remotion_video`, `video_ingest` and the voice tools match no pattern.
 - `youtube_download` passes a model-chosen `js_runtime` executable path to yt-dlp (`weebot/tools/youtube_download_tool.py:388-396`). The built-in skill `youtube-download` names it (`weebot/skills/builtin/youtube-download/SKILL.md:9, 15-21`), but only `researcher` and `admin` have it.
-- `image_gen`'s raster branch opens an `aiohttp.ClientSession` it never uses (`weebot/tools/image_gen_tool.py:948-951`).
+- `image_gen`'s raster branch opens an `aiohttp.ClientSession` it never uses (`weebot/tools/image_gen_tool.py:952-955`).
 - `video_ingest` and `youtube_download` declare `OutputTrust.EXTERNAL`, so their output is fenced and taints the session (`weebot/tools/video_ingest_tool.py:187`, `weebot/tools/youtube_download_tool.py:89`); the other five tools are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
 
 ## Connected to
@@ -48,7 +48,7 @@ Consequences (read from source, not run):
 **Does not hit:** the shell guards (BashGuard, ExecApprovalPolicy); `KnowledgeTool` itself.
 
 ## Surfaces
-Files under `Output/` (`image_gen_tool.py:938`, `youtube_download_tool.py:200`, `remotion_video.py:106`) and `WORKSPACE_ROOT` (`voice_output_tool.py:81`); the knowledge base.
+Files under `Output/` (`image_gen_tool.py:942`, `youtube_download_tool.py:200`, `remotion_video.py:106`) and `WORKSPACE_ROOT` (`voice_output_tool.py:81`); the knowledge base.
 
 ## See
 `weebot/tools/image_gen_tool.py`

@@ -20,6 +20,7 @@ from weebot.domain.models.output_trust import OutputTrust
 
 from pydantic import BaseModel, Field
 
+from weebot.core.media_spend import record_media_call
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.config.api_endpoints import OPENROUTER_API_BASE, XAI_API_BASE
 
@@ -350,18 +351,22 @@ class VideoGenTool(BaseTool):
                         last_error = f"{model}: HTTP {resp.status} — {error_text[:150]}"
                         continue
 
+                    # A 200 was billed: a missing URL or failed download stops the cascade
+                    # instead of buying the clip again from the next model.
+                    await record_media_call(model, "video")
                     result = await resp.json()
                     video_url = self._extract_video_url(result)
                     if not video_url:
-                        last_error = f"{model}: no video URL in response"
-                        continue
+                        last_error = f"{model}: no video URL in response (billed; not retrying)"
+                        break
 
                     download_result = await self._download_video(
                         video_url, output_path, model, prompt
                     )
                     if download_result is not None:
                         return download_result
-                    last_error = f"{model}: download failed"
+                    last_error = f"{model}: download failed (billed; not retrying)"
+                    break
 
             except TimeoutError:
                 last_error = f"{model}: timed out (180s)"

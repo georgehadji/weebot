@@ -289,6 +289,20 @@ MODEL_IMAGE_QWEN_PRO: str = "qwen/qwen-image-3-pro"
 66K context. Precise text/detail rendering down to 10px, richer world knowledge."""
 
 
+# Price of one image or video request, USD. Estimates from the model notes above; a model not
+# listed costs the default for its kind. Conservative on purpose: these feed the session limit.
+MEDIA_CALL_USD: dict[str, float] = {
+    "krea/krea-2-large": 0.06,
+    "krea/krea-2-medium-turbo": 0.015,
+    "krea/krea-2-medium": 0.03,
+    "ideogram/ideogram-v3-turbo": 0.03,
+    "qwen/qwen-image-3": 0.03,
+    "qwen/qwen-image-3-pro": 0.04,
+    "x-ai/grok-imagine-image-quality": 0.05,
+}
+MEDIA_CALL_USD_DEFAULT: dict[str, float] = {"image": 0.05, "video": 0.50}
+
+
 def get_image_models() -> list[str]:
     """Return the canonical list of image generation model IDs."""
     return [
