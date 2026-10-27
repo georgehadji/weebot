@@ -1,7 +1,7 @@
 ---
 status: superseded
 date: 2026-06-28
-note: plans/architecture_elevation_v2.md
+supersedes: plans/architecture_score_9_plan.md
 ---
 
 # Architecture Elevation Plan — 7/10 → 9.5+/10

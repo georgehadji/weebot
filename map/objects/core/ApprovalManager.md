@@ -1,6 +1,6 @@
 ---
 type: object
-name: ApprovalManager (interactive approval layer)
+name: ApprovalManager (single-use approval grants)
 code: ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback
 cluster: core
 universe: live

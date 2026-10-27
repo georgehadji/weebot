@@ -1,6 +1,7 @@
 ---
 status: done
 date: 2026-08-10
+supersedes: specs/longhorizon_harness_weebot_analysis.md
 ---
 
 # LongHorizon-Harness → weebot: implementation plan

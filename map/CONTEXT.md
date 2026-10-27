@@ -18,8 +18,8 @@ Current flags (from `tasks/icm_slice0_inventory.md`):
 | Word | Means here | Source | Do not confuse with |
 |---|---|---|---|
 | persona | a markdown-defined agent identity, routed by score | `AgentPersona` `weebot/agents/models.py:46`, `PersonaScore` `weebot/agents/router.py:11`, CLI `agents list` | the LLM roles `PlannerAgent` `weebot/application/agents/planner.py:77` and `ExecutorAgent` `weebot/application/agents/executor/_base.py:197` |
-| skill | a `SKILL.md` / manifest package, looked up by `SkillRegistry` `weebot/application/skills/skill_registry.py:27` | `weebot/skills/builtin/` | a tool: callable code in `weebot/tools/`, registered in `RoleBasedToolRegistry` `weebot/tools/tool_registry.py:15` |
-| flow | the state machine `PlanActFlow` `weebot/application/flows/plan_act_flow.py:73` | `weebot/application/flows/` | a session: persisted record `Session` `weebot/domain/models/session.py:201`; `cli flow run` creates one |
+| skill | a `SKILL.md` / manifest package, looked up by `SkillRegistry` `weebot/application/skills/skill_registry.py:27` | `weebot/skills/builtin/` | a tool: callable code in `weebot/tools/`, registered in `RoleBasedToolRegistry` `weebot/application/services/tool_registry.py:14` |
+| flow | the state machine `PlanActFlow` `weebot/application/flows/plan_act_flow.py:60` | `weebot/application/flows/` | a session: persisted record `Session` `weebot/domain/models/session.py:201`; `cli flow run` creates one |
 | plan / step | domain models `Plan` `weebot/domain/models/plan.py:154`, `Step` `:53` | | a "workflow template" (YAML, `weebot/templates/`) |
 | ModelConfig | the catalog entry returned by `get_model_config` | `weebot/domain/models/model_config.py:22` | no other class of this name since W6.1 (2026-10-23) deleted the task-table dataclass in `weebot/core/model_cascade_config.py` |
 | approval | a rule outcome (`ApprovalMode`) from `ExecApprovalPolicy`, enforced by the shell tools | `weebot/core/approval_policy.py:21` | `ApprovalDecision` / `ApprovalManager` in `weebot/core/approval.py`, a human-answer layer that nothing calls |
