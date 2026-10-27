@@ -259,7 +259,7 @@ def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
     try:
         return ipaddress.ip_address(host)
     except ValueError:
-        pass
+        _log.debug("egress_guard: %r is not a plain IP literal", host)
     try:  # the resolver also takes 127.1, 0x7f000001 and 2130706433
         return ipaddress.IPv4Address(socket.inet_aton(host))
     except OSError:
