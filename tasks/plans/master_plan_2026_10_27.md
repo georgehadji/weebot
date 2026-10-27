@@ -1,7 +1,7 @@
 ---
 status: open
 date: 2026-10-27
-note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 fixed (branch fix/audit-track-a2); the rest not started
+note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 A28 fixed (A28 without the scheduler timezone change; branch fix/audit-track-a2); the rest not started
 ---
 
 # Master plan: everything still open

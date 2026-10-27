@@ -1,6 +1,6 @@
-"""A28 repros (strict xfail until fixed): naive local job times, a listing limit that hides the
-oldest sessions from the background jobs, and a trajectory consolidation that deletes every
-row when none qualifies as a keeper."""
+"""A28: naive local job times, a listing limit that hid the oldest sessions from the
+background jobs, and a trajectory consolidation that deleted every row when none qualified
+as a keeper."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from weebot.domain.models.session import SessionStatus
 from weebot.domain.models.trajectory import TrajectorySummary
 
 
-@pytest.mark.xfail(strict=True, reason="A28: job times are naive local datetimes")
 def test_job_times_are_timezone_aware():
     from weebot.scheduling.scheduler import ScheduledJob
 
@@ -40,7 +39,6 @@ class _PagedRepo:
         return None
 
 
-@pytest.mark.xfail(strict=True, reason="A28: list_sessions default limit 100")
 async def test_compaction_reaches_sessions_past_the_first_hundred(monkeypatch):
     from weebot.application.services import memory_compactor
     from weebot.scheduling import default_jobs
@@ -56,7 +54,6 @@ async def test_compaction_reaches_sessions_past_the_first_hundred(monkeypatch):
 
 
 @pytest.mark.parametrize("keepers", [0])
-@pytest.mark.xfail(strict=True, reason="A28: consolidation deletes every row")
 async def test_consolidation_keeps_something_when_none_qualifies(tmp_path, keepers):
     from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
 
@@ -70,3 +67,40 @@ async def test_consolidation_keeps_something_when_none_qualifies(tmp_path, keepe
     rows = await pool.execute_read("SELECT id FROM trajectories WHERE skill_name = ?", ("k",))
     assert len(rows) >= 1
     del keepers
+
+
+def test_a_job_row_written_before_the_fix_is_read_as_utc():
+    from weebot.scheduling.scheduler import ScheduledJob
+
+    job = ScheduledJob.from_dict(
+        {"job_id": "j", "name": "j", "created_at": "2026-01-01T10:00:00", "last_run": None}
+    )
+    assert job.created_at.utcoffset().total_seconds() == 0
+
+
+async def test_paging_stops_on_a_page_boundary(monkeypatch):
+    from weebot.application.services import memory_compactor
+    from weebot.scheduling import default_jobs
+
+    class _Compactor:
+        def compact_session(self, session):
+            return session
+
+    repo = _PagedRepo(1000)  # exactly two pages of 500
+    monkeypatch.setattr(memory_compactor, "MemoryCompactor", _Compactor)
+    await default_jobs._memory_compact_job(repo)
+    assert len(repo.loaded) == 1000
+
+
+async def test_consolidation_still_keeps_two_qualifying_trajectories(tmp_path):
+    from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
+
+    repo = TrajectoryRepository(str(tmp_path / "t.db"))
+    for i in range(6):
+        await repo.save(
+            TrajectorySummary(
+                task_id=f"t{i}", session_id="s", skill_name="k", score=i / 10,
+                tool_call_count=1, total_tokens=10,
+            )
+        )
+    assert await repo.consolidate_by_skill("k", min_count=5) == 4

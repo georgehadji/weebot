@@ -36,9 +36,20 @@ BACKUP_DEST_DIR_ENV = "WEEBOT_BACKUP_DIR"
 # ── Job implementations ──────────────────────────────────────────────
 
 
+async def _all_sessions(state_repo: StateRepositoryPort, page: int = 500) -> list:
+    """Every session, paged: list_sessions() alone returns 100, and the oldest are the ones
+    the background jobs most need to reach."""
+    sessions: list = []
+    while True:
+        batch = await state_repo.list_sessions(limit=page, offset=len(sessions))
+        sessions.extend(batch)
+        if len(batch) < page:
+            return sessions
+
+
 async def _session_health_job(state_repo: StateRepositoryPort, event_bus: EventBusPort) -> None:
     """Scan all RUNNING sessions and publish SessionStalenessEvent for stale ones."""
-    sessions = await state_repo.list_sessions()
+    sessions = await _all_sessions(state_repo)
     now = datetime.now(UTC)
     stale_count = 0
 
@@ -77,7 +88,7 @@ async def _memory_compact_job(state_repo: StateRepositoryPort) -> None:
     # list_sessions() is a lightweight listing (events not populated — see
     # SQLiteStateRepository._row_to_session's load_events=False fast path),
     # so re-load each RUNNING session in full before compacting it.
-    sessions = await state_repo.list_sessions()
+    sessions = await _all_sessions(state_repo)
     compactor = MemoryCompactor()
     compacted_count = 0
 

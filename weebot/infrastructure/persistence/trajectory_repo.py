@@ -206,6 +206,10 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                 keep_ids.add(t.task_id)
                 if len(keep_ids) >= 2:
                     break
+        if not keep_ids:
+            # None qualifies: keep the best two anyway. Deleting all of them erased every
+            # trajectory of a skill whose runs carried no tool calls or token counts.
+            keep_ids = {t.task_id for t in trajectories[:2]}
 
         delete_ids = [r["id"] for r in rows if r["task_id"] not in keep_ids]
         if not delete_ids:

@@ -40,6 +40,11 @@ class TriggerType(Enum):
     ONCE = "once"
 
 
+def _aware_utc(value: datetime) -> datetime:
+    """Rows written before job times were aware hold naive values; read them as UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 @dataclass
 class ScheduledJob:
     """Represents a scheduled job."""
@@ -62,7 +67,7 @@ class ScheduledJob:
 
     def __post_init__(self) -> None:
         if self.created_at is None:
-            self.created_at = datetime.now()
+            self.created_at = datetime.now(UTC)
         if self.trigger_config is None:
             self.trigger_config = {}
 
@@ -78,12 +83,9 @@ class ScheduledJob:
     def from_dict(cls, data: dict[str, Any]) -> ScheduledJob:
         """Create from dictionary."""
         data = dict(data)
-        if data.get("created_at"):
-            data["created_at"] = datetime.fromisoformat(data["created_at"])
-        if data.get("last_run"):
-            data["last_run"] = datetime.fromisoformat(data["last_run"])
-        if data.get("next_run"):
-            data["next_run"] = datetime.fromisoformat(data["next_run"])
+        for key in ("created_at", "last_run", "next_run"):
+            if data.get(key):
+                data[key] = _aware_utc(datetime.fromisoformat(data[key]))
         # Deserialize trigger_config if it's a JSON string
         if isinstance(data.get("trigger_config"), str):
             data["trigger_config"] = json.loads(data["trigger_config"])
@@ -438,7 +440,7 @@ class SchedulingManager:
         self._running_jobs.add(job_id)
         try:
             # Update status
-            await self._record_run_start(job_id, datetime.now())
+            await self._record_run_start(job_id, datetime.now(UTC))
 
             # Execute payload
             if job.callable_name:
@@ -703,7 +705,7 @@ class SchedulingManager:
         """
         caught_up = 0
         jobs = self.list_jobs(enabled_only=True)
-        now = datetime.now()
+        now = datetime.now(UTC)
 
         for job in jobs:
             if job.last_run is None:
