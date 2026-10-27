@@ -265,8 +265,13 @@ class BoundedLLMAdapter(LLMPort):
             )
             if direct and outcome == "ok" and self._on_completed is not None:
                 from weebot.core.log_context import session_id_var
+                from weebot.config.model_registry import get_model_config
                 from weebot.core.model_cascade_config import estimate_cost
                 from weebot.domain.models.event import LLMCallCompleted
+
+                # Price the id the caller asked for when the catalog lists it, as the
+                # cascade does: a direct provider answers with a bare id the catalog lacks.
+                priced = model if model and get_model_config(model) else used_model
 
                 await self._on_completed(
                     LLMCallCompleted(
@@ -274,7 +279,7 @@ class BoundedLLMAdapter(LLMPort):
                         model=used_model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
-                        cost=estimate_cost(used_model, prompt_tokens, completion_tokens),
+                        cost=estimate_cost(priced, prompt_tokens, completion_tokens),
                     )
                 )
         except Exception:

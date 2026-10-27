@@ -16,6 +16,7 @@ from weebot.config.settings import WORKSPACE_ROOT as _WORKSPACE_ROOT
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
+from weebot.core.encoded_command import has_encoded_command
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -98,13 +99,6 @@ class PowerShellTool(BaseTool):
         r"\bAdd-WindowsCapability\b|\bRemove-WindowsFeature\b",
     ]
 
-    # Encoded command patterns (command injection vector)
-    ENCODED_COMMAND_PATTERNS: ClassVar[list] = [
-        r"-enc\s+\S+",  # -enc followed by base64
-        r"-EncodedCommand\s+\S+",  # Full parameter name
-        r"-e\s+[A-Za-z0-9+/]{100,}",  # Short form with base64-like content
-    ]
-
     def _validate_path_safety(self, command: str) -> bool:
         """Ensure command doesn't access dangerous system paths."""
         # Block dangerous system paths but allow user directories
@@ -131,13 +125,11 @@ class PowerShellTool(BaseTool):
         """
         cmd_lower = command.lower()
 
-        # Check for encoded command patterns
-        for pattern in self.ENCODED_COMMAND_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
-                return False, (
-                    "Security Error: Encoded PowerShell commands are not allowed. "
-                    "Use plain text commands only."
-                )
+        if has_encoded_command(command):
+            return False, (
+                "Security Error: Encoded PowerShell commands are not allowed. "
+                "Use plain text commands only."
+            )
 
         # Check for base64-like strings that could be encoded commands
         # Base64 encoding often has = padding and specific character set

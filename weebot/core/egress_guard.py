@@ -19,9 +19,11 @@ Set WEEBOT_EGRESS_ENFORCE=false to run in detect-only mode (logs but doesn't blo
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -232,6 +234,78 @@ class EgressDecision:
 
 
 # ---------------------------------------------------------------------------
+# Network targets: what a host name or address points at
+# ---------------------------------------------------------------------------
+
+
+class HostClass(Enum):
+    PUBLIC = "public"
+    LOOPBACK = "loopback"
+    LINK_LOCAL = "link_local"  # includes 169.254.169.254, the cloud metadata address
+    PRIVATE = "private"  # RFC1918, unique-local
+
+
+def _host_only(host: str) -> str:
+    """``user:pw@[::1]:80`` -> ``::1``; ``127.0.0.1:8000`` -> ``127.0.0.1``."""
+    host = host.rsplit("@", 1)[-1].strip().lower()
+    if host.startswith("["):
+        return host[1:].split("]", 1)[0]
+    if host.count(":") == 1:  # host:port; two or more colons is a bare IPv6 literal
+        host = host.split(":", 1)[0]
+    return host.rstrip(".")
+
+
+def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    try:  # the resolver also takes 127.1, 0x7f000001 and 2130706433
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except OSError:
+        return None
+
+
+def _classify_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> HostClass:
+    mapped = getattr(ip, "ipv4_mapped", None)
+    ip = mapped or ip
+    if ip.is_loopback or ip.is_unspecified:
+        return HostClass.LOOPBACK
+    if ip.is_link_local:
+        return HostClass.LINK_LOCAL
+    if ip.is_private:
+        return HostClass.PRIVATE
+    return HostClass.PUBLIC
+
+
+def classify_host(host: str, resolve: bool = False) -> HostClass:
+    """What *host* points at, from the address itself, never from the spelling.
+
+    ``resolve=True`` also looks the name up and returns the most internal answer; it blocks
+    on DNS, so async callers run it in a thread. A name that does not resolve is PUBLIC:
+    nothing internal answers it. Resolution is a point-in-time check, not a defence against
+    a name that changes its answer afterwards.
+    """
+    name = _host_only(host)
+    ip = _literal_ip(name)
+    if ip is not None:
+        return _classify_ip(ip)
+    if name == "localhost" or name.endswith(".localhost"):
+        return HostClass.LOOPBACK
+    if not resolve or not name:
+        return HostClass.PUBLIC
+    try:
+        answers = {a[4][0] for a in socket.getaddrinfo(name, None)}
+    except OSError:
+        return HostClass.PUBLIC
+    classes = {_classify_ip(ipaddress.ip_address(a.split("%")[0])) for a in answers}
+    for internal in (HostClass.LOOPBACK, HostClass.LINK_LOCAL, HostClass.PRIVATE):
+        if internal in classes:
+            return internal
+    return HostClass.PUBLIC
+
+
+# ---------------------------------------------------------------------------
 # Allowlist (persisted as JSON, keyed on stable IDs)
 # ---------------------------------------------------------------------------
 
@@ -381,11 +455,22 @@ class EgressGuard:
             host = _DEFAULT_HOSTS.get(kind) if kind else None
         return True, host
 
+    @staticmethod
+    def _is_internal(stable_id: str) -> bool:
+        """A host id that points inside the machine or network; an address (``@``) is not."""
+        return "@" not in stable_id and classify_host(stable_id) is not HostClass.PUBLIC
+
     def is_known_recipient(self, stable_id: str | None) -> bool:
-        return bool(stable_id) and self._allowlist.is_known(stable_id)
+        """Internal targets are never known: an "always" there is one prompt-injection from SSRF."""
+        if not stable_id or self._is_internal(stable_id):
+            return False
+        return self._allowlist.is_known(stable_id)
 
     def approve_recipient(self, stable_id: str) -> None:
         """Persist a recipient as approved (called after human approval)."""
+        if self._is_internal(stable_id):
+            _log.warning("egress_guard: %s is an internal target, not stored as always", stable_id)
+            return
         self._allowlist.approve(stable_id)
 
     # ------------------------------------------------------------------

@@ -219,7 +219,10 @@ class EgressAdapter:
         from weebot.core.egress_guard import EgressReason
 
         # "Always allow this host" only for a new host with nothing else wrong.
-        first_time_only = decision.reasons == [EgressReason.FIRST_TIME_RECIPIENT]
+        # Never for an internal target (loopback, link-local, private): see EgressGuard.
+        first_time_only = decision.reasons == [EgressReason.FIRST_TIME_RECIPIENT] and not (
+            decision.recipient and self._guard._is_internal(decision.recipient)
+        )
         return GuardVerdict(
             GuardAction.ASK,
             self.name,

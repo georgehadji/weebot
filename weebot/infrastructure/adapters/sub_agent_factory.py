@@ -51,12 +51,14 @@ class SubAgentFactory(SubAgentFactoryPort):
         cost_tracker: SubAgentCostTrackerPort,
         swarm_bus: SwarmEventBusPort | None = None,
         flow_factory: callable | None = None,
+        cost_meter: Any | None = None,  # SessionCostMeter: rolls a child's spend up to its parent
     ) -> None:
         self._llm = llm
         self._tools = tools
         self._cost_tracker = cost_tracker
         self._swarm_bus = swarm_bus
         self._flow_factory = flow_factory
+        self._cost_meter = cost_meter
 
     async def spawn(self, spec: SubAgentSpec) -> SubAgentResult:
         session = Session(
@@ -65,6 +67,12 @@ class SubAgentFactory(SubAgentFactoryPort):
             agent_id=spec.role.value,
             status=SessionStatus.RUNNING,
         )
+        if self._cost_meter is not None:
+            # The calling step's session is the parent. Without this link the child's
+            # calls were totalled under its own id and the parent's limits never saw them.
+            from weebot.core.log_context import session_id_var
+
+            self._cost_meter.link(session.id, session_id_var.get() or "")
         # Build PlanActFlow inline to avoid circular imports at module level
         flow = self._build_flow(session, spec)
         start = time.monotonic()
@@ -103,7 +111,8 @@ class SubAgentFactory(SubAgentFactoryPort):
 
             elapsed = time.monotonic() - start
             summary = summary_parts[-1] if summary_parts else "(no output)"
-            self._cost_tracker.record_cost(session.id, token_count, 0.0)
+            spent = self._cost_meter.spent(session.id) if self._cost_meter is not None else 0.0
+            self._cost_tracker.record_cost(session.id, token_count, spent)
 
             return SubAgentResult(
                 spec_id=spec.id,

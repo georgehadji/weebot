@@ -172,6 +172,9 @@ class DirectOrFallbackAdapter(LLMPort):
         try:
             result = await self._primary.chat(**primary_kwargs)
             await self._breaker.record_success("primary")
+            if model:
+                # The native answer carries a bare id; price and log the id that was asked for.
+                result.model = model
             return result
         except Exception as exc:
             # Surface the actual API error for debugging.
