@@ -259,9 +259,10 @@ class SelfImprover(SelfImprovementPort):
         ext = Path(target_file).suffix
 
         effective = _get_effective_allowlist()
-        # Check meta-tier first (allows .py files for self-improvement)
+        # Meta tier (the .py self-improvement machinery) only while its flag is on: the
+        # effective allowlist holds it then, and not otherwise.
         for allowed in _META_ALLOWED_TARGET_DIRS:
-            if path.startswith(allowed):
+            if allowed in effective and path.startswith(allowed):
                 return True
 
         # Tier-1 check: normal extensions only

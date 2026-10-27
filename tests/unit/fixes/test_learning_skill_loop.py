@@ -421,3 +421,17 @@ async def test_a_bootstrap_validation_pass_records_no_use():
         )
     )
     assert store.saved == []  # a bootstrap "pass" at score 0.1 proves nothing
+
+
+# ── the self-editing flag actually blocks self-edits ────────────────────────
+
+
+def test_self_improver_cannot_target_itself_while_its_flag_is_off(monkeypatch):
+    import weebot.config.feature_flags as flags
+    from weebot.application.services.self_improver import SelfImprover
+
+    target = "weebot/application/services/self_improver.py"
+    monkeypatch.setattr(flags, "METACOGNITIVE_IMPROVEMENT_ENABLED", False)
+    assert SelfImprover._is_allowed_target(target) is False
+    monkeypatch.setattr(flags, "METACOGNITIVE_IMPROVEMENT_ENABLED", True)
+    assert SelfImprover._is_allowed_target(target) is True
