@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-27
-commit: ae284495
+commit: f36ab8e5
 consumes:
   - ../objects/interfaces/CLI.md
   - ../objects/application/DIContainer.md
@@ -61,7 +61,7 @@ produces:
 
 Consequences (read from source, not run):
 - A termination condition does not skip `CompletedState`: it sets it with the reason and the state runs on the same pass (`session_budget.py:113-117`; `completed.py:168-169`). The session ends FAILED only when a step FAILED (`completed.py:174-178, 292`), so a turn cut short by a cap with steps still pending ends COMPLETED.
-- `--model` reaches the planner command (`planning.py:223`), the step command (`_step_run.py:74`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:728`; `weebot/application/models/step_execution_context.py:31`; `_base.py:258`; `weebot/application/agents/executor/_cascade.py:584`).
+- `--model` reaches the planner command (`planning.py:223`), the step command (`_step_run.py:74`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:728`; `weebot/application/models/step_execution_context.py:31`; `_base.py:258`; `weebot/application/agents/executor/_cascade.py:597`).
 - The step handler reads the plan from the database (`execute_step_handler.py:72-78`), not from the flow; the flow saves the routed session, with any applied plan-file edit, before the first step (`plan_act_flow.py:424-428`).
 
 ## If you change this

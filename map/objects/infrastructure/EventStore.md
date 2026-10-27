@@ -5,8 +5,8 @@ code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-27
+commit: f36ab8e5
 ---
 
 # Event store
@@ -41,7 +41,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 Audit data only. Cost views do **not** read this store:
 - Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:71-92`, `infrastructure/event_store.py:271`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
 - `python -m cli.main costs` prints hard-coded rows ("Today $2.45 / 12,340"; comment "Placeholder data", `cli/main.py:255-268`).
-- MCP `build_costs_json` reads a tracker only if one is passed to `WeebotMCPServer`; `run_mcp.py:59-63` does not pass one, so it returns its "Pass cascade_tracker=" note (`mcp/resources.py:219-229`).
+- MCP `build_costs_json` reads a tracker only if one is passed to `WeebotMCPServer`; `run_mcp.py:59-63` does not pass one, so it returns its "Pass cascade_tracker=" note (`mcp/resources.py:221-231`).
 - `AsyncEventStore.get_cost_summary` computes real totals from this DB but nothing calls it.
 
 ## See

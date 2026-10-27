@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-27
-commit: ae284495
+commit: f36ab8e5
 ---
 
 # Built-in skills
@@ -23,7 +23,7 @@ A skill is prose the model reads, so a file per skill keeps it editable without 
 - `_parse_manifest` (`weebot/application/skills/skill_registry.py:188-211`): `name`, `description`, `emoji`, `env`, `homepage`, `trust` from `manifest.json`; the body is `prompt_file` (default `prompt.md`).
 - `trust` defaults to `"trusted"` when absent; a value outside `quarantined/candidate/trusted` becomes `"quarantined"` with a warning (`weebot/application/skills/skill_registry.py:244-252`). The retrievers inject only trusted skills (`weebot/application/services/bm25_skill_retriever.py:75`, `weebot/application/services/semantic_skill_retriever.py:135`).
 - `is_ready` is true when `metadata.env` is empty or all set (`weebot/domain/models/skill.py:266-275`).
-- Consumers: the DI skill retriever, BM25 or semantic, optionally reranked (`weebot/application/di/_skills.py:27-70`); also `SkillRegistry()` built directly at `weebot/application/di/_factories.py:578`, `weebot/application/di/_learning.py:173`, `weebot/application/services/ponytail_skill_prompt.py:76`, `weebot/scheduling/default_jobs.py:121`, `cli/commands/ponytail.py:77`, `cli/commands/skills.py:31, 119, 186, 279, 350`.
+- Consumers: the DI skill retriever, BM25 or semantic, optionally reranked (`weebot/application/di/_skills.py:27-70`); also `SkillRegistry()` built directly at `weebot/application/di/_factories.py:578`, `weebot/application/di/_learning.py:173`, `weebot/application/services/ponytail_skill_prompt.py:76`, `weebot/scheduling/default_jobs.py:110`, `cli/commands/ponytail.py:77`, `cli/commands/skills.py:31, 119, 186, 279, 350`.
 
 | Skill (frontmatter / manifest name) | Dir | Format | Tools it names |
 |---|---|---|---|
