@@ -1,7 +1,7 @@
 ---
 status: open
 date: 2026-10-27
-note: built on fix/audit-wave-1: A01 A02 A04 A05 A06 A08 A10 A12 A15 A19 A31 A32 A34 and the Discord replay part of A27; wave 0 and the rest of waves 2-6 not started; decisions D1-D4 need the owner
+note: built on fix/audit-wave-1: A01 A02 A04 A05 A06 A08 A10 A12 A13 A14 A15 A16 A19 A31 A32 A34 and the Discord replay part of A27; A11 deferred (needs a product call, see the register); wave 0 and the rest of waves 2-6 not started; decisions D1-D4 need the owner
 ---
 
 # Plan: fix the findings of the 2026-10-27 whole-repo audit

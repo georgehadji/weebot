@@ -14,7 +14,7 @@ Format: date — record — note
 - 2026-10-25 — [Wave 3 — Flow Engine and State Machine](audits/defect_hunt_v71_w3_flows.md)
 - 2026-10-23 — [Plan: fix the findings recorded in the map cards](icm_fix_plan.md) — F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
-- 2026-10-27 — [Plan: fix the findings of the 2026-10-27 whole-repo audit](plans/audit_2026_10_27_fix_plan.md) — built on fix/audit-wave-1: A01 A02 A04 A05 A06 A08 A10 A12 A15 A19 A31 A32 A34 and the Discord replay part of A27; wave 0 and the rest of waves 2-6 not started; decisions D1-D4 need the owner
+- 2026-10-27 — [Plan: fix the findings of the 2026-10-27 whole-repo audit](plans/audit_2026_10_27_fix_plan.md) — built on fix/audit-wave-1: A01 A02 A04 A05 A06 A08 A10 A12 A13 A14 A15 A16 A19 A31 A32 A34 and the Discord replay part of A27; A11 deferred (needs a product call, see the register); wave 0 and the rest of waves 2-6 not started; decisions D1-D4 need the owner
 - 2026-10-23 — [Plan: fix everything still open](remaining_fix_plan.md) — F28 type-safe mediator dispatch; container_construction ceiling still 8
 - 2026-07-21 — [Plan: Greek Scientific Book Generation via LaTeX](scientific-book-latex-plan.md) — LLM drafting, TeX Live image, CLI/Web wiring missing
 - 2026-08-13 — [Memory subsystem repair plan (AgeMem-derived)](specs/agentic_memory_fix_plan.md) — phases 5-8 not built (retrieval, preservation check, filter_context, memory-quality job)
