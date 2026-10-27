@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from weebot.domain.models.session import Session, SessionStatus
 
@@ -14,6 +15,21 @@ class StateRepositoryPort(ABC):
     async def save_session(self, session: Session) -> None:
         """Persist a session."""
         ...
+
+    async def save_session_if_unchanged(
+        self, session: Session, expected_updated_at: datetime
+    ) -> bool:
+        """Save *session* only if the stored row's ``updated_at`` is still *expected_updated_at*.
+
+        For a writer working from an old copy (the compaction job): False means someone saved
+        in between and nothing was written. The default is load, compare, save, which another
+        writer can race between the awaits; SQLiteStateRepository does it in one statement.
+        """
+        current = await self.load_session(session.id)
+        if current is None or current.updated_at != expected_updated_at:
+            return False
+        await self.save_session(session)
+        return True
 
     async def create_session(self, session: Session) -> bool:
         """Insert *session* only if its id is free; False when it already exists.

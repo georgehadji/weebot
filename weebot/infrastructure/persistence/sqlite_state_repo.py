@@ -306,6 +306,21 @@ class SQLiteStateRepository(
         # process: see the full-re-index branch below, which replaces a
         # session's entries once the watermark is gone.
         await sq.save(session)
+        await self._index_saved_session(session)
+
+    async def save_session_if_unchanged(
+        self, session: Session, expected_updated_at: datetime
+    ) -> bool:
+        await self._init_helpers()
+        sq = self._session_queries
+        assert sq is not None
+        if not await sq.save_if_unchanged(session, expected_updated_at.isoformat()):
+            return False
+        await self._index_saved_session(session)
+        return True
+
+    async def _index_saved_session(self, session: Session) -> None:
+        """Commitments and the FTS index for a session row that was just written."""
 
         # ── Extract commitments from assistant messages ───────────
         #

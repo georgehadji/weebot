@@ -90,8 +90,12 @@ async def _memory_compact_job(state_repo: StateRepositoryPort) -> None:
                 continue
             compacted = compactor.compact_session(session)
             if compacted is not session:  # identity check — compactor returns new instance
-                await state_repo.save_session(compacted)
-                compacted_count += 1
+                # The session is RUNNING: its flow may have saved since the load above. Write
+                # only over the row that was compacted; otherwise skip and retry next run.
+                if await state_repo.save_session_if_unchanged(compacted, session.updated_at):
+                    compacted_count += 1
+                else:
+                    logger.info("Compaction skipped for %s: it changed meanwhile", session.id)
         except Exception:
             logger.exception("Compaction failed for session %s", session_summary.id)
 

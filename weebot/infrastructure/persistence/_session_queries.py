@@ -36,6 +36,66 @@ class SessionQueries:
         Returning the count is what lets the caller act on the outcome instead
         of recomputing it.
         """
+        events_json, dropped = self._events_json(session)
+        params = self._row_params(session, events_json)
+        async with self._pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                INSERT INTO sessions
+                    (id, user_id, agent_id, status, title, events_json, context_json, created_at, updated_at)
+                VALUES
+                    (:id, :user_id, :agent_id, :status, :title, :events_json, :context_json, :created_at, :updated_at)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    title = excluded.title,
+                    events_json = excluded.events_json,
+                    context_json = excluded.context_json,
+                    updated_at = excluded.updated_at
+                """,
+                params,
+            )
+        return dropped
+
+    async def save_if_unchanged(self, session: Session, expected_updated_at: str) -> bool:
+        """Overwrite the row only if its ``updated_at`` is still *expected_updated_at*.
+
+        One UPDATE on the single write connection, so nothing can write between the check and
+        the write. False when the row changed (or is gone) and nothing was written.
+        """
+        events_json, _ = self._events_json(session)
+        params = self._row_params(session, events_json) | {"expected": expected_updated_at}
+        async with self._pool.acquire_write() as conn:
+            cursor = await conn.execute(
+                """
+                UPDATE sessions SET
+                    status = :status,
+                    title = :title,
+                    events_json = :events_json,
+                    context_json = :context_json,
+                    updated_at = :updated_at
+                WHERE id = :id AND updated_at = :expected
+                """,
+                params,
+            )
+            return cursor.rowcount == 1
+
+    @staticmethod
+    def _row_params(session: Session, events_json: str) -> dict[str, Any]:
+        return {
+            "id": session.id,
+            "user_id": session.user_id,
+            "agent_id": session.agent_id,
+            "status": session.status.value,
+            "title": session.title,
+            "events_json": events_json,
+            "context_json": json.dumps(session.context.model_dump(mode="json")),
+            "created_at": session.created_at.isoformat(),
+            "updated_at": session.updated_at.isoformat(),
+        }
+
+    @staticmethod
+    def _events_json(session: Session) -> tuple[str, int]:
+        """The session's events as JSON under the byte ceiling, and how many were dropped."""
         events_data = [e.model_dump() for e in session.events]
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
 
@@ -75,33 +135,7 @@ class SessionQueries:
                 original_count,
             )
 
-        async with self._pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT INTO sessions
-                    (id, user_id, agent_id, status, title, events_json, context_json, created_at, updated_at)
-                VALUES
-                    (:id, :user_id, :agent_id, :status, :title, :events_json, :context_json, :created_at, :updated_at)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    title = excluded.title,
-                    events_json = excluded.events_json,
-                    context_json = excluded.context_json,
-                    updated_at = excluded.updated_at
-                """,
-                {
-                    "id": session.id,
-                    "user_id": session.user_id,
-                    "agent_id": session.agent_id,
-                    "status": session.status.value,
-                    "title": session.title,
-                    "events_json": events_json,
-                    "context_json": json.dumps(session.context.model_dump(mode="json")),
-                    "created_at": session.created_at.isoformat(),
-                    "updated_at": session.updated_at.isoformat(),
-                },
-            )
-        return dropped
+        return events_json, dropped
 
     async def load(self, session_id: str) -> dict[str, Any] | None:
         """Load a session row by ID.
