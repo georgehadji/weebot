@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 3c0a7d5a
+commit: 7d1ce324
 ---
 
 # Ports
@@ -91,7 +91,7 @@ Dependency inversion: application code types against the port, and an adapter is
 Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
 
 Consequences (read from source, not run):
-- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:296` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
+- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:301` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:223`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).

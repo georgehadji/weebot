@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 3223b7f2
+commit: 7d1ce324
 ---
 
 # WebTools
@@ -48,7 +48,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `RoleBasedToolRegistry`: `set_config` for `spacescraper`, `moli_fetch`, `agent_reach`; `set_rerank` for `web_search`; collaborators for `knowledge` and `ocr` (`weebot/application/services/tool_registry.py:446-525`, `weebot/application/di/_factories.py:480-522`).
-- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `:74`, `must_taint` `:79`, `wrap_untrusted` `:107`) through the executor (`weebot/application/agents/executor/_base.py:327-348`, `weebot/application/agents/executor/_tool_executor.py:543-546`). A tool that declares nothing is `EXTERNAL`.
+- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `:74`, `must_taint` `:79`, `wrap_untrusted` `:107`) through the executor (`weebot/application/agents/executor/_base.py:327-348`, `weebot/application/agents/executor/_tool_executor.py:548-551`). A tool that declares nothing is `EXTERNAL`.
 - **Related:** the BaseTool card (call path), the EgressGuard card, the Browser card (`advanced_browser`, `camofox_browser`).
 - **Looks like but is not:** `web_scraper`, `screenshot_ocr`, `youtube_download`: other tools, each declaring its own `output_trust` in its module, not covered here.
 
