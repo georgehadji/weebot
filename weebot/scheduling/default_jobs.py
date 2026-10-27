@@ -17,7 +17,7 @@ import time as _time
 from datetime import datetime, UTC
 from typing import Any
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort, all_sessions
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import SessionStalenessEvent
 from weebot.domain.models.session import SessionStatus
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 STALE_THRESHOLD_MINUTES = 60
 COMPACT_INTERVAL_HOURS = 4
 HEALTH_INTERVAL_HOURS = 12
-# Backup: once daily at 03:00 UTC.  Paths set via env vars.
+# Backup: once daily at 03:00 in the scheduler's local time zone.  Paths set via env vars.
 BACKUP_DB_PATH_ENV = "WEEBOT_SESSIONS_DB"
 BACKUP_DEST_DIR_ENV = "WEEBOT_BACKUP_DIR"
 
@@ -36,20 +36,9 @@ BACKUP_DEST_DIR_ENV = "WEEBOT_BACKUP_DIR"
 # ── Job implementations ──────────────────────────────────────────────
 
 
-async def _all_sessions(state_repo: StateRepositoryPort, page: int = 500) -> list:
-    """Every session, paged: list_sessions() alone returns 100, and the oldest are the ones
-    the background jobs most need to reach."""
-    sessions: list = []
-    while True:
-        batch = await state_repo.list_sessions(limit=page, offset=len(sessions))
-        sessions.extend(batch)
-        if len(batch) < page:
-            return sessions
-
-
 async def _session_health_job(state_repo: StateRepositoryPort, event_bus: EventBusPort) -> None:
     """Scan all RUNNING sessions and publish SessionStalenessEvent for stale ones."""
-    sessions = await _all_sessions(state_repo)
+    sessions = await all_sessions(state_repo)
     now = datetime.now(UTC)
     stale_count = 0
 
@@ -88,7 +77,7 @@ async def _memory_compact_job(state_repo: StateRepositoryPort) -> None:
     # list_sessions() is a lightweight listing (events not populated — see
     # SQLiteStateRepository._row_to_session's load_events=False fast path),
     # so re-load each RUNNING session in full before compacting it.
-    sessions = await _all_sessions(state_repo)
+    sessions = await all_sessions(state_repo)
     compactor = MemoryCompactor()
     compacted_count = 0
 

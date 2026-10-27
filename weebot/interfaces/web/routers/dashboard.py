@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort, all_sessions
 from weebot.domain.models.session import SessionStatus
 from weebot.interfaces.web.auth import get_current_user_id
 from weebot.interfaces.web.schemas.responses import DashboardMetricsResponse, CostData, ModelUsage
@@ -35,10 +35,10 @@ async def get_dashboard_metrics(
 
     try:
         # The caller's sessions only, as GET /api/sessions (F58).
-        all_sessions = await state_repo.list_sessions(user_id=get_current_user_id(http_request))
-        total_sessions = len(all_sessions)
-        active_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.RUNNING)
-        completed_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.COMPLETED)
+        sessions = await all_sessions(state_repo, user_id=get_current_user_id(http_request))
+        total_sessions = len(sessions)
+        active_sessions = sum(1 for s in sessions if s.status == SessionStatus.RUNNING)
+        completed_sessions = sum(1 for s in sessions if s.status == SessionStatus.COMPLETED)
     except Exception as e:
         logger.warning(f"Failed to query session metrics: {e}")
 

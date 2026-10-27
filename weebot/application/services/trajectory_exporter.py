@@ -99,7 +99,9 @@ class TrajectoryExporter:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        sessions = await self._repo.list_sessions(user_id=user_id)
+        from weebot.application.ports.state_repo_port import all_sessions
+
+        sessions = await all_sessions(self._repo, user_id=user_id)
         results: dict[str, int] = {}
 
         for session in sessions:

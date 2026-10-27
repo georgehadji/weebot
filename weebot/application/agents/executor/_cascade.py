@@ -317,6 +317,7 @@ class CascadeExecutor:
         *,
         tier: CascadeTier = CascadeTier.BUDGET,
         task_category: str = "general",
+        sent: set[str] | None = None,
     ) -> LLMResponse | None:
         """Hold an LLM concurrency slot around one model attempt.
 
@@ -342,6 +343,7 @@ class CascadeExecutor:
             first_error=first_error,
             tier=tier,
             task_category=task_category,
+            sent=sent,
         )
         if self._llm_pool is None or self.cascade_is_tripped(model_id):
             return await self._cascade_try_chat_unpooled(messages, model_id, **kwargs)
@@ -358,6 +360,7 @@ class CascadeExecutor:
         *,
         tier: CascadeTier = CascadeTier.BUDGET,
         task_category: str = "general",
+        sent: set[str] | None = None,
     ) -> LLMResponse | None:
         """Try a single model call with tiered timeout.
 
@@ -380,6 +383,8 @@ class CascadeExecutor:
         effective = min(timeout, 15.0) if fast_fail else timeout
         # Starts only once the caller holds an LLM slot -- see _cascade_try_chat.
         start = _cascade_time.monotonic()
+        if sent is not None:
+            sent.add(model_id)  # from here a cancel can still bill; before it, nothing was sent
 
         try:
             # The retry layer below reads this deadline and stops scheduling retries
@@ -560,6 +565,7 @@ class CascadeExecutor:
 
         fast_fail: bool = False
         first_error: dict[str, str] = {}
+        sent: set[str] = set()  # models whose request left; a probe queued for a slot did not
         self._server_error_models.clear()  # fresh per-run set
 
         async def _try(
@@ -567,7 +573,14 @@ class CascadeExecutor:
         ) -> LLMResponse | None:
             nonlocal fast_fail
             resp = await self._cascade_try_chat(
-                messages, model, tmo, fast_fail, first_error, tier=tier, task_category=task_category
+                messages,
+                model,
+                tmo,
+                fast_fail,
+                first_error,
+                tier=tier,
+                task_category=task_category,
+                sent=sent,
             )
             if resp is None and not fast_fail:
                 if any(self._is_fast_fail_error(ee) for ee in first_error.values() if ee):
@@ -656,7 +669,8 @@ class CascadeExecutor:
                 # an adapter that swallows CancelledError.
                 for pf in pending:
                     pf.cancel()
-                    await self._call_unanswered(launched[pf], messages)
+                    if launched[pf] in sent:
+                        await self._call_unanswered(launched[pf], messages)
                 if pending:
                     await asyncio.wait(pending, timeout=5.0)
 

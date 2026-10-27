@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort, all_sessions
 from weebot.domain.models.session import SessionStatus
 from weebot.infrastructure.observability import metrics
 from .base import Monitor, MonitorReport, MonitorState
@@ -39,7 +39,8 @@ class SessionStalenessMonitor(Monitor):
 
     async def check(self) -> MonitorReport:
         """Scan running sessions and classify staleness."""
-        sessions = await self._state_repo.list_sessions()
+        # Every running session: the newest 100 of all statuses miss the old stuck ones.
+        sessions = await all_sessions(self._state_repo, status=SessionStatus.RUNNING.value)
         now = datetime.now(UTC)
         stale: list[str] = []
 
