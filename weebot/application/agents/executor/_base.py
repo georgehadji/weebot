@@ -218,6 +218,7 @@ class ExecutorAgent:
             self._trajectory_monitor = TrajectoryMonitor()
         # Phase 2: skill-gap signals collected during retrieval; processed at session end
         self._skill_gaps: list[dict] = []
+        self._skills_used: list[str] = []  # candidate skills injected into this step
         self._max_context_turns = max_context_turns
         self._system_prompt: str | None = None
         self._conversation_buffer: deque[dict[str, Any]] = deque(maxlen=max_context_turns)

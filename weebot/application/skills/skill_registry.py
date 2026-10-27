@@ -217,6 +217,10 @@ class SkillRegistry:
         """Insert or replace *skill* in the in-memory registry by name."""
         self._skills[skill.name] = skill
 
+    def remove_skill(self, name: str) -> None:
+        """Forget *name* in memory (its file was moved away, e.g. archived)."""
+        self._skills.pop(name, None)
+
     def list_skills(self) -> list[Skill]:
         return list(self._skills.values())
 

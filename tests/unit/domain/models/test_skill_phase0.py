@@ -60,8 +60,9 @@ class TestSkillIsInjectable:
     def test_trusted_is_injectable(self):
         assert self._skill("trusted").is_injectable is True
 
-    def test_candidate_not_injectable(self):
-        assert self._skill("candidate").is_injectable is False
+    def test_candidate_is_injectable(self):
+        # Candidates are injected (one per step) so their live uses can promote them.
+        assert self._skill("candidate").is_injectable is True
 
     def test_quarantined_not_injectable(self):
         assert self._skill("quarantined").is_injectable is False

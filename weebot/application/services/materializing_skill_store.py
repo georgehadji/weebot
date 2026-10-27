@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class MaterializingSkillStore(SkillStorePort):
-    """Decorates a SkillStorePort: materializes on every 'trusted' save.
+    """Decorates a SkillStorePort: materializes every injectable save.
+
+    Candidates and trusted skills are written so the retriever can inject them; a
+    skill demoted to quarantined is rewritten too, so its new tier takes it out of
+    the index. A skill that was never written and is quarantined stays off disk.
 
     Args:
         store: The real SkillStorePort implementation to delegate to.
@@ -36,15 +40,18 @@ class MaterializingSkillStore(SkillStorePort):
 
     async def save(self, skill: Skill) -> None:
         await self._store.save(skill)
-        if skill.metadata.trust != "trusted":
+        if skill.metadata.trust == "quarantined" and not self._materializer.is_materialized(
+            skill.name
+        ):
             return
         try:
             await self._materializer.materialize(skill)
         except Exception as exc:
             logger.warning(
-                "Skill '%s' saved as trusted but materialization failed — "
+                "Skill '%s' saved as %s but materialization failed — "
                 "it will not be retrievable until the registry next reloads: %s",
                 skill.name,
+                skill.metadata.trust,
                 exc,
             )
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from weebot.application.ports.skill_store_port import SkillStorePort
     from weebot.application.services.session_cost import SessionCostMeter
     from weebot.application.strategies.llm_pool import LLMPool
 
@@ -34,3 +35,5 @@ class Key[T]:
 
 LLM_POOL: Key[LLMPool] = Key("llm_pool")
 SESSION_COST_METER: Key[SessionCostMeter] = Key("session_cost_meter")
+# The skill store live steps count candidate-skill uses against (RecordSkillUseHandler).
+LEARNING_SKILL_STORE: Key[SkillStorePort] = Key("learning_skill_store")

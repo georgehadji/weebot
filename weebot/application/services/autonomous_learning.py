@@ -131,6 +131,10 @@ class AutonomousSkillCreator:
             return None
 
         name, description, content = parsed
+        if self._skill_store is not None and await self._skill_store.load(name) is not None:
+            # INSERT OR REPLACE would overwrite it, a trusted or human skill included.
+            logger.info("Distilled skill '%s' already exists; not overwriting it", name)
+            return None
 
         prov = SkillProvenance(
             origin="distilled", session_id=session_id, created_at=datetime.now(UTC)

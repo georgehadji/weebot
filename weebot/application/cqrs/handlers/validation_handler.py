@@ -10,7 +10,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
-from weebot.application.cqrs.commands.validation_commands import ValidateSkillCommand
+from weebot.application.cqrs.commands.validation_commands import (
+    RecordSkillUseCommand,
+    ValidateSkillCommand,
+)
 
 if TYPE_CHECKING:
     from weebot.application.ports.skill_store_port import SkillStorePort
@@ -55,7 +58,7 @@ class ValidateSkillHandler(CommandHandler):
                 harness=command.harness,
             )
 
-            if result.passed:
+            if result.passed and _measured(result):
                 await self._record_positive_use(command.skill_name)
 
             return CommandResult.ok(data=result)
@@ -107,3 +110,74 @@ class ValidateSkillHandler(CommandHandler):
                 )
         except Exception as exc:
             logger.warning("Failed to record positive use for skill '%s': %s", skill_name, exc)
+
+
+# A bootstrap run (no baseline) "passes" at any score; count it only at this score.
+_BOOTSTRAP_PASS_SCORE = 0.5
+
+
+def _measured(result) -> bool:
+    """A pass that measured something: tasks ran, and a bootstrap run scored well."""
+    if getattr(result, "n_tasks", 0) <= 0:
+        return False
+    if getattr(result, "current_score", 0.0) < 0:  # no baseline
+        return getattr(result, "candidate_score", 0.0) >= _BOOTSTRAP_PASS_SCORE
+    return True
+
+
+class RecordSkillUseHandler(CommandHandler):
+    """Count a live use of a candidate skill: promote at 3 passes, quarantine at 2 failures.
+
+    Each session counts once per outcome, so one long session cannot promote a skill
+    alone. Only candidates change; trusted and unknown skills are left as they are.
+    """
+
+    def __init__(
+        self, skill_store: SkillStorePort, max_promotions_per_run: int | None = None
+    ) -> None:
+        from weebot.config.learning import MAX_SKILL_PROMOTIONS_PER_RUN
+
+        self._skill_store = skill_store
+        if max_promotions_per_run is None:
+            max_promotions_per_run = MAX_SKILL_PROMOTIONS_PER_RUN
+        self._max_promotions = max_promotions_per_run
+        self._promotions = 0
+
+    async def handle(self, command: RecordSkillUseCommand) -> CommandResult:
+        from weebot.config.learning import CANDIDATE_DEMOTION_FAILURES, CANDIDATE_PROMOTION_USES
+
+        try:
+            skill = await self._skill_store.load(command.skill_name)
+            if skill is None:
+                return CommandResult.ok(data={"changed": False})
+            updated = skill.record_live_use(
+                session_id=command.session_id,
+                passed=command.passed,
+                promotion_threshold=CANDIDATE_PROMOTION_USES,
+                demotion_threshold=CANDIDATE_DEMOTION_FAILURES,
+            )
+            if updated is None:
+                return CommandResult.ok(data={"changed": False})
+            if updated.metadata.trust == "trusted":
+                if self._promotions >= self._max_promotions:
+                    logger.warning(
+                        "Skill promotion cap (%d/run) reached; '%s' stays candidate",
+                        self._max_promotions,
+                        skill.name,
+                    )
+                    updated = updated.with_trust("candidate")
+                else:
+                    self._promotions += 1
+            await self._skill_store.save(updated)
+            if updated.metadata.trust != skill.metadata.trust:
+                logger.info(
+                    "Skill '%s' %s -> %s after a live use in session %s",
+                    skill.name,
+                    skill.metadata.trust,
+                    updated.metadata.trust,
+                    command.session_id[:8],
+                )
+            return CommandResult.ok(data={"changed": True, "trust": updated.metadata.trust})
+        except Exception as exc:
+            logger.warning("Could not record a use of skill '%s': %s", command.skill_name, exc)
+            return CommandResult.fail(error=str(exc), error_code="SKILL_USE_ERROR")

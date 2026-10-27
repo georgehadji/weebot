@@ -36,7 +36,7 @@ from weebot.application.flows.states._step_outcome import (
     quality_gate,
     route_failure,
 )
-from weebot.application.flows.states._step_run import run_step_command
+from weebot.application.flows.states._step_run import record_skill_uses, run_step_command
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +260,7 @@ class ExecutingState(FlowState):
             return
 
         if run.execution_failed:
+            await record_skill_uses(context, step, run, passed=False)
             await error_hooks(context, step)
             await route_failure(context, step, run)
             return
@@ -277,6 +278,7 @@ class ExecutingState(FlowState):
             return
 
         complete_step(context, step, run)
+        await record_skill_uses(context, step, run, passed=True)
         await post_task_hooks(context, step, run)
         await absorb_step_result(context, step)
         next_transition(

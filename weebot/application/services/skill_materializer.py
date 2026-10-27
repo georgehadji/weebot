@@ -62,6 +62,10 @@ class SkillMaterializer:
         self._retriever = retriever
         self._skills_dir = skills_dir or (Path.cwd() / ".weebot" / "skills")
 
+    def is_materialized(self, name: str) -> bool:
+        """Whether a SKILL.md for *name* is already on disk."""
+        return (self._skills_dir / name / "SKILL.md").exists()
+
     async def materialize(self, skill: Skill) -> Path:
         """Write *skill* as SKILL.md, reload the registry, refresh the index.
 

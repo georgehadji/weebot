@@ -31,8 +31,14 @@ class SkillsMixin:
         registry = SkillRegistry()
         registry.load_all()
 
-        # Phase 3: semantic (embedding-based) first stage
-        if SEMANTIC_SKILL_RETRIEVAL_ENABLED:
+        # Phase 3: semantic (embedding-based) first stage. Without its embedding backend the
+        # semantic retriever indexes nothing and every step loses its skills, so fall back.
+        from weebot.qmd_integration import embeddings as _embeddings
+
+        semantic = SEMANTIC_SKILL_RETRIEVAL_ENABLED and _embeddings.semantic_embeddings_available()
+        if SEMANTIC_SKILL_RETRIEVAL_ENABLED and not semantic:
+            logger.info("Skill retriever: semantic requested, no embedding backend; using BM25")
+        if semantic:
             from weebot.application.services.semantic_skill_retriever import (
                 _DEFAULT_DIM,
                 SemanticSkillRetriever,

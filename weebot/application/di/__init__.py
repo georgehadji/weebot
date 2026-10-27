@@ -29,7 +29,11 @@ from weebot.application.cqrs.handlers import register_default_handlers  # noqa: 
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E402
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
-from weebot.application.di.keys import LLM_POOL, SESSION_COST_METER  # noqa: E402
+from weebot.application.di.keys import (  # noqa: E402
+    LEARNING_SKILL_STORE,
+    LLM_POOL,
+    SESSION_COST_METER,
+)
 from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
@@ -580,6 +584,7 @@ class Container(
             executor_factory=_executor_factory,
             trajectory_repo=trajectory_repo,
             event_store=self._maybe_get(EventStorePort),
+            skill_store=self._maybe_get(LEARNING_SKILL_STORE),
         )
         return mediator
 

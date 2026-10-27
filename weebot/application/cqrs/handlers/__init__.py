@@ -19,7 +19,10 @@ from weebot.application.cqrs.handlers.summarize_handler import SummarizeHandler
 # ---- Specialized handlers ----
 from weebot.application.cqrs.handlers.skill_edit_handler import ApplySkillEditsHandler
 from weebot.application.cqrs.handlers.harness_edit_handler import ApplyHarnessEditsHandler
-from weebot.application.cqrs.handlers.validation_handler import ValidateSkillHandler
+from weebot.application.cqrs.handlers.validation_handler import (
+    RecordSkillUseHandler,
+    ValidateSkillHandler,
+)
 from weebot.application.cqrs.handlers.transfer_handler import ValidateTransferHandler
 from weebot.application.cqrs.handlers.trajectory_handler import (
     ScoreTrajectoryHandler,
@@ -52,7 +55,10 @@ from weebot.application.cqrs.commands.trajectory_commands import (
     BuildOptimizationBatchCommand,
     ScoreTrajectoryCommand,
 )
-from weebot.application.cqrs.commands.validation_commands import ValidateSkillCommand
+from weebot.application.cqrs.commands.validation_commands import (
+    RecordSkillUseCommand,
+    ValidateSkillCommand,
+)
 from weebot.application.cqrs.commands.transfer_commands import ValidateTransferCommand
 from weebot.application.cqrs.commands.failure_signature_commands import (
     BatchExtractSignaturesCommand,
@@ -90,6 +96,7 @@ def register_default_handlers(
     executor_factory=None,
     trajectory_repo=None,
     event_store=None,
+    skill_store=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -106,6 +113,8 @@ def register_default_handlers(
             When provided, ExecuteStepHandler uses it instead of building a
             bare 4-kwarg ExecutorAgent — see execute_step_handler.py and
             tasks/specs/side_constraint_integrity_plan.md Phase 0.
+        skill_store: Optional SkillStorePort; when given, live steps count their uses
+            of candidate skills (RecordSkillUseCommand) toward promotion.
     """
     from weebot.application.cqrs.mediator import Mediator
 
@@ -152,6 +161,11 @@ def register_default_handlers(
             ScoreTrajectoryHandler(
                 scoring_port, state_repo, trajectory_builder, trajectory_repo=trajectory_repo
             ),
+        )
+
+    if skill_store is not None:
+        mediator.register_command_handler(
+            RecordSkillUseCommand, RecordSkillUseHandler(skill_store=skill_store)
         )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────

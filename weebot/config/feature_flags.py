@@ -1,8 +1,8 @@
 """Feature flags for weebot — gating experimental or high-risk capabilities.
 
-Flags default to OFF unless their comment says otherwise (in-loop vision is
-on). Toggle them through environment variables, never by editing a default
-here for one deployment.
+Flags default to OFF unless their comment says otherwise (in-loop vision and
+the deployment-time learning loops are on). Toggle them through environment
+variables, never by editing a default here for one deployment.
 
 HyperAgents Enhancement 7: METACOGNITIVE_IMPROVEMENT_ENABLED controls whether
 the SelfImprover can edit its own prompt and allowlist (self-referential
@@ -36,31 +36,32 @@ METACOGNITIVE_IMPROVEMENT_ENABLED: bool = _env_bool(
 
 
 # ── Deployment-time learning (Memento-Skills plan, Phases 1–5) ──────────────
-# Each phase ships behind a default-OFF flag. Phase 0 (foundations) is always
-# active but inert until a downstream phase is enabled.
+# The skill loop is ON by default: distil from successful runs, review, inject as
+# candidate, promote after three successful sessions, quarantine after two failed
+# ones. Each flag still turns its phase off. Online SkillOpt stays OFF (no consumer).
 
 # Phase 1 — distil a new skill from a completed task (quarantined on creation).
-LIVE_SKILL_DISTILLATION_ENABLED: bool = _env_bool("WEEBOT_LIVE_SKILL_DISTILLATION", default=False)
+LIVE_SKILL_DISTILLATION_ENABLED: bool = _env_bool("WEEBOT_LIVE_SKILL_DISTILLATION", default=True)
 # Phase 2 — on a retrieval miss, enqueue a gated skill-creation request.
-SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool("WEEBOT_SKILL_GAP_TRIGGER", default=False)
+SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool("WEEBOT_SKILL_GAP_TRIGGER", default=True)
 # Phase 3 — add a semantic (embedding) first stage to skill retrieval.
-SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool("WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=False)
+SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool("WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=True)
 # Phase 3b — replace keyword task router with embedding-based classification.
 WEEBOT_SEMANTIC_TASK_ROUTER: bool = _env_bool("WEEBOT_SEMANTIC_TASK_ROUTER", default=False)
 # Phase 4 — let the curator act (archive) and validate/dedup imports.
-CURATION_ACTIONS_ENABLED: bool = _env_bool("WEEBOT_CURATION_ACTIONS", default=False)
+CURATION_ACTIONS_ENABLED: bool = _env_bool("WEEBOT_CURATION_ACTIONS", default=True)
 # Phase 5 — attribute live failures to a skill and run online SkillOpt.
 ONLINE_SKILLOPT_ENABLED: bool = _env_bool("WEEBOT_ONLINE_SKILLOPT", default=False)
 # Phase 1b — LLM-judged review that promotes a freshly-distilled skill from
 # quarantined -> candidate (SkillReviewGate). Without this, every skill
 # LIVE_SKILL_DISTILLATION_ENABLED distils sits quarantined forever, since
 # nothing else in production ever moves a skill off that tier.
-SKILL_REVIEW_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_REVIEW_GATE", default=False)
+SKILL_REVIEW_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_REVIEW_GATE", default=True)
 # Phase 1c — materialize a 'trusted' skill to disk as SKILL.md and refresh
 # the live retriever's index (MaterializingSkillStore), so a skill promoted
 # all the way to trusted becomes retrievable in the same process instead of
 # only on the next restart.
-SKILL_MATERIALIZE_ENABLED: bool = _env_bool("WEEBOT_SKILL_MATERIALIZE", default=False)
+SKILL_MATERIALIZE_ENABLED: bool = _env_bool("WEEBOT_SKILL_MATERIALIZE", default=True)
 
 
 # ── Product-Mode (product-led thinking pipeline) ──────────────────────────

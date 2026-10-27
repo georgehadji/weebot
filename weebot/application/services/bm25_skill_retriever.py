@@ -66,9 +66,10 @@ class BM25SkillRetriever(SkillRetrieverPort):
 
         self._corpus = []
         self._skill_names = []
+        self._trust: dict[str, str] = {}
 
         for skill_name, skill in skills.items() if isinstance(skills, dict) else skills:
-            # Trust gate: only 'trusted' skills may be injected. Non-Skill
+            # Trust gate: quarantined skills are never injected. Non-Skill
             # duck-typed inputs (e.g. test doubles) without this property
             # default to permissive, matching this loop's existing
             # getattr-based tolerance for loose skill-like objects.
@@ -79,9 +80,9 @@ class BM25SkillRetriever(SkillRetrieverPort):
             text = f"{desc} {content[:500]}"
             if text.strip():
                 self._corpus.append(text)
-                self._skill_names.append(
-                    skill_name if isinstance(skill_name, str) else getattr(skill, "name", "?")
-                )
+                name = skill_name if isinstance(skill_name, str) else getattr(skill, "name", "?")
+                self._skill_names.append(name)
+                self._trust[name] = getattr(getattr(skill, "metadata", None), "trust", "trusted")
 
         if HAS_BM25 and self._corpus:
             try:
@@ -143,6 +144,7 @@ class BM25SkillRetriever(SkillRetrieverPort):
                     description=text[:100],
                     content_preview=preview,
                     score=round(score, 4),
+                    trust=getattr(self, "_trust", {}).get(name, "trusted"),
                 )
             )
 

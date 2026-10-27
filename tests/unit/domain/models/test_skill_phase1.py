@@ -106,6 +106,7 @@ class TestAnalyzeSession:
             llm.chat = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
         store = AsyncMock()
         store.save = AsyncMock()
+        store.load = AsyncMock(return_value=None)  # no skill of that name yet
         # Fresh tracker per test so the module-level singleton doesn't
         # accumulate counts across test runs and trigger suppression.
         tracker = ProposalTracker(suppression_threshold=100)

@@ -107,6 +107,7 @@ class SemanticSkillRetriever(SkillRetrieverPort):
                 description=meta.get("description", ""),
                 content_preview=meta.get("preview", ""),
                 score=round(score, 4),
+                trust=meta.get("trust", "trusted"),
             )
             for doc_id, score, meta in store_results
         ]
@@ -127,9 +128,10 @@ class SemanticSkillRetriever(SkillRetrieverPort):
         descriptions: list[str] = []
         previews: list[str] = []
         texts: list[str] = []
+        trusts: list[str] = []
 
         for skill_name, skill in skills.items():
-            # Trust gate: only 'trusted' skills may be injected — see the
+            # Trust gate: quarantined skills are never injected — see the
             # identical guard in BM25SkillRetriever.refresh(). Duck-typed
             # inputs without this property default to permissive.
             if not getattr(skill, "is_injectable", True):
@@ -143,6 +145,7 @@ class SemanticSkillRetriever(SkillRetrieverPort):
                 descriptions.append(desc[:200])
                 previews.append(text[:300])
                 texts.append(text)
+                trusts.append(_trust_of(skill))
 
         if not texts:
             self._index_built = False
@@ -164,7 +167,10 @@ class SemanticSkillRetriever(SkillRetrieverPort):
             return
 
         # Push to vector store
-        metadata = [{"description": d, "preview": p} for d, p in zip(descriptions, previews)]
+        metadata = [
+            {"description": d, "preview": p, "trust": t}
+            for d, p, t in zip(descriptions, previews, trusts)
+        ]
         await self._store.upsert(names, matrix, metadata)
         self._index_built = True
         logger.info(
@@ -182,3 +188,8 @@ class SemanticSkillRetriever(SkillRetrieverPort):
 
             self._embeddings = get_local_embeddings()
         return self._embeddings
+
+
+def _trust_of(skill) -> str:
+    """The skill's trust tier; duck-typed skills without metadata count as trusted."""
+    return getattr(getattr(skill, "metadata", None), "trust", "trusted")

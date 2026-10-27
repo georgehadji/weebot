@@ -81,6 +81,7 @@ async def build_executor_prompt(
     state_repo: Any | None = None,
     personality: Any | None = None,
     profile_name: str = "",
+    skills_used: list[str] | None = None,
 ) -> str:
     """Assemble the system prompt from all configured sources.
 
@@ -97,6 +98,7 @@ async def build_executor_prompt(
         state_repo: State repository for user profile lookup.
         personality: Personality module for core personality injection.
         profile_name: Profile name for personality selection.
+        skills_used: Filled with the candidate skills injected, so their uses count.
 
     Returns:
         Assembled system prompt string, with included sources framed under
@@ -126,11 +128,21 @@ async def build_executor_prompt(
     if "skill_retriever" in sources and skill_retriever is not None:
         try:
             matches = await skill_retriever.retrieve(step_description, top_k=2)
+            candidates = 0
             for m in matches:
-                if m.score > 0.15:
-                    constraints.append(
-                        f"\n\n## Relevant Skill: {m.skill_name}\n{m.content_preview}"
-                    )
+                if m.score <= 0.15:
+                    continue
+                if getattr(m, "trust", "trusted") == "candidate":
+                    # One unproven skill per step, counted so its uses can promote
+                    # or quarantine it.
+                    if candidates:
+                        continue
+                    candidates += 1
+                    if skills_used is not None:
+                        skills_used.append(m.skill_name)
+                constraints.append(
+                    f"\n\n## Relevant Skill: {m.skill_name}\n{m.content_preview}"
+                )
         except Exception as exc:
             logger.warning("Skill retrieval failed: %s", exc)
 
