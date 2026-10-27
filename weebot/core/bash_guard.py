@@ -567,7 +567,8 @@ class BashGuard:
             try:
                 self._on_security_event(max_risk)
             except Exception:
-                pass  # callback is best-effort — never break security evaluation
+                # best-effort: a broken metrics callback must never break evaluation
+                _log.warning("Security event callback failed", exc_info=True)
 
         return max_risk, checks
 

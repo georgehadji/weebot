@@ -8,6 +8,8 @@ Covers:
 - Webhook router (initialization, auth failure)
 """
 
+import time
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -57,7 +59,7 @@ class TestDiscordAdapter:
         # Patch the adapter's verify method to simulate success
         adapter._verify_key.verify = MagicMock(return_value=None)
         fake_sig = "ab" * 64
-        assert adapter.verify_signature(b'{"test":1}', fake_sig, "1700000000") is True
+        assert adapter.verify_signature(b'{"test":1}', fake_sig, str(int(time.time()))) is True
 
     def test_verify_tampered_signature(self, adapter):
         """Tampered body/signature returns False."""

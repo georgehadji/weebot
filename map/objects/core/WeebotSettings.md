@@ -5,8 +5,8 @@ code: WeebotSettings, OSWorldSettings
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-27
+commit: 1e017340
 ---
 
 # WeebotSettings
@@ -24,7 +24,7 @@ A pydantic `BaseSettings` so values are validated once at construction (`weebot/
 - Not part of the class: module constants `WORKSPACE_ROOT`, `LOGS_DIR`, `SESSIONS_DB`, `MEMORY_DIR`, `PROFILES_DIR`, read with `os.getenv` at import (`:16-27`). They stay import-time constants by decision (plan W2.4b option a), because tools read `WORKSPACE_ROOT` in class bodies. The entry points call `load_dotenv(override=True)` before importing (`run.py:17`, `cli/main.py:59-61`, `run_mcp.py:19-21`); other entry points were not checked.
 - `OSWorldSettings` lives in `weebot/config/osworld_settings.py` (`settings.py:500`); its only reader is `weebot/infrastructure/sandbox/osworld.py:28, 59`.
 
-Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:138`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:279-280`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:484-490`).
+Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:138`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:282-283`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:484-490`).
 
 Consequences (read from source, not run; `pydantic_settings` is not installed here):
 - `run_mcp.py:102` calls `get_settings().validate_at_least_one_key()` on an instance; `tests/unit/fixes/test_f13_run_mcp_key_check.py` covers it.
