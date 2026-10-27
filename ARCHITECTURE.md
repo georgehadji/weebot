@@ -225,6 +225,10 @@ graph LR
     style DOT fill:#0f3460,stroke:#4a4a6a,color:#e0e0e0,stroke-dasharray: 4 4
 ```
 
+### Session persistence during a run
+
+The flow's `EventPublisher` owns session persistence: it saves after every event it emits. When a flow has its own state repo and session, `TaskRunner` does not save per event; it writes once, at the end, from the flow's copy plus the events and title only the runner saw. A job that works from an old copy of a RUNNING session (memory compaction) writes with `save_session_if_unchanged`, which refuses when the row's `updated_at` has moved. Two whole-session writers from two copies lose each other's events (audit A24, A25).
+
 ### Architecture Enforcement
 
 Architecture boundaries are enforced at three levels:

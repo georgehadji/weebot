@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: fd5b0c76
+commit: 2c6a2a72
 ---
 
 # Session
@@ -39,7 +39,7 @@ Consequences (read from source, not run):
 ## Connected to
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
 - **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:488-526`); see that card.
-- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:326, 350, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
+- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:358, 377, 384`; when the flow persists its own session, the runner writes once at the end from the flow's copy, audit A25), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
 - **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:108`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this

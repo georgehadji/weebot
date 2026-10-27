@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 7d1ce324
+commit: 2c6a2a72
 ---
 
 # ExecApprovalPolicy
@@ -35,7 +35,7 @@ Consequences (read from source, not run):
 - Fixed 2026-10-23 (ADR-013): a confirmation now reaches a human. `GuardedTool` sends an ASK verdict to the approval channel and runs the approved call inside `human_approved_call` (`application/services/tool_guards.py:462-469`, `core/approval.py:143-155`). `bash`, `python_execute` and `powershell` return "requires confirmation" as an error string only outside that block (`tools/bash_tool.py:398-402`, `python_tool.py:166-171`, `powershell_tool.py:193-197`). `ApprovalManager` (`core/approval.py:157`) is now the single-use grant store behind it (`application/services/tool_approval.py:93`).
 
 ## Connected to
-- **Callers:** `BashTool` (`bash_tool.py:144, 395`), `PythonTool` (`python_tool.py:114, 162`), `PowerShellTool` (`powershell_tool.py:186-187`, a new instance per call), `ExecutingState` inbound-mail gate (`weebot/application/flows/states/_execution_gates.py:98-104`; the pause and the answer handling live in FlowRouter, see its card), `SafetyChecker.generate_plan_b` (`core/safety.py:43,64`; `SafetyChecker` is referenced by the gateways base, `interfaces/gateways/base.py:12`).
+- **Callers:** `BashTool` (`bash_tool.py:144, 395`), `PythonTool` (`python_tool.py:114, 162`), `PowerShellTool` (`powershell_tool.py:186-187`, a new instance per call), `ExecutingState` inbound-mail gate (`weebot/application/flows/states/_execution_gates.py:98-104`; the pause and the answer handling live in FlowRouter, see its card), `SafetyChecker.generate_plan_b` (`core/safety.py:43,64`; no production caller since the gateway gate was deleted, audit A33).
 - **Related:** `BashGuard` (risk levels, own card), `EgressGuard` (outbound sends, own card), `weebot/core/approval.py` (unused interactive layer).
 - **Looks like but is not:** `BashGuard.requires_approval()` (a method on the scanner, not enforced by the tools); `ApprovalMode` here vs `ApprovalDecision` in `approval.py`.
 
