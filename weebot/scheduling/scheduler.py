@@ -529,13 +529,16 @@ class SchedulingManager:
         await asyncio.to_thread(_save)
 
     async def load_from_config(self, config_path: Path | None = None) -> int:
-        """Load job definitions from a YAML config file.
+        """Sync job definitions from a YAML config file into the jobs table.
+
+        New entries are created, changed entries are updated in place, and ids listed
+        under ``retired_jobs`` are deleted.
 
         Args:
             config_path: Path to jobs.yaml. Defaults to project config/jobs.yaml.
 
         Returns:
-            Number of jobs loaded.
+            Number of jobs created, updated or deleted.
         """
         if config_path is None:
             config_path = Path(__file__).resolve().parent.parent / "config" / "jobs.yaml"
@@ -550,20 +553,36 @@ class SchedulingManager:
             data = yaml.safe_load(text)
 
             loaded = 0
-            for job_def in data.get("jobs", []):
+            for job_def in data.get("jobs") or []:
+                fields = {
+                    "name": job_def["name"],
+                    "description": job_def.get("description", ""),
+                    "trigger_type": job_def["trigger_type"],
+                    "trigger_config": job_def.get("trigger_config", {}),
+                    "callable_name": job_def.get("callable_name"),
+                    "enabled": bool(job_def.get("enabled", True)),
+                }
                 existing = self.get_job(job_def["job_id"])
                 if existing is None:
-                    await self.create_job(
-                        job_id=job_def["job_id"],
-                        name=job_def["name"],
-                        description=job_def.get("description", ""),
-                        trigger_type=job_def["trigger_type"],
-                        trigger_config=job_def.get("trigger_config", {}),
-                        callable_name=job_def.get("callable_name"),
-                        enabled=bool(job_def.get("enabled", True)),
-                    )
+                    await self.create_job(job_id=job_def["job_id"], **fields)
                     loaded += 1
-            logger.info("Loaded %d jobs from %s", loaded, config_path)
+                    continue
+                # The yaml owns its jobs: an edit there (enabled, interval) must reach
+                # the stored row, which used to keep its first values forever.
+                changed = {
+                    k: v
+                    for k, v in fields.items()
+                    if (bool(getattr(existing, k)) if k == "enabled" else getattr(existing, k)) != v
+                }
+                if changed:
+                    await self.update_job(job_def["job_id"], **changed)
+                    loaded += 1
+            # Jobs removed from the yaml are named here; the table also holds jobs made
+            # in code and by users, so absence from the yaml alone is not a reason to delete.
+            for job_id in data.get("retired_jobs") or []:
+                if await self.delete_job(job_id):
+                    loaded += 1
+            logger.info("Loaded %d job changes from %s", loaded, config_path)
             return loaded
         except Exception as exc:
             logger.error("Failed to load jobs from config: %s", exc)

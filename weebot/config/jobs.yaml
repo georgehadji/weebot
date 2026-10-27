@@ -2,9 +2,15 @@
 # Each job runs on a schedule, records its last successful run,
 # and supports catch-up on restart.
 
+# Jobs once defined here and since removed. The scheduler deletes them from the jobs
+# table on startup; a job simply missing from `jobs` is left alone, because the table
+# also holds jobs created in code and by users.
+retired_jobs:
+  # Candidates are promoted by their live uses (RecordSkillUseHandler, three
+  # successful sessions), not by a batch gate.
+  - skill_promotion_check
+
 jobs:
-  # skill_promotion_check was removed: candidates are promoted by their live uses
-  # (RecordSkillUseHandler, three successful sessions), not by a batch gate.
 
   - job_id: memory_salience_sweep
     name: "Memory Salience Sweep"

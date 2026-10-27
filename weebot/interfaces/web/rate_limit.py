@@ -192,11 +192,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not bucket.allow(principal):
             retry_after = int(bucket.retry_after(principal))
             _metrics.mcp_rate_limits_hit_total.labels(tool=tier).inc()
-            from weebot.infrastructure.security.audit_logger import AuditEventType, AuditLogger
+            from weebot.infrastructure.security.audit_logger import (
+                AuditEventType,
+                get_security_logger,
+            )
 
-            AuditLogger.log(
+            get_security_logger().log_event(
                 AuditEventType.RATE_LIMIT_EXCEEDED,
-                {"tier": tier, "principal": principal, "path": path, "retry_after": retry_after},
+                agent_id=principal,
+                action=f"rate_limit {path}",
+                result="denied",
+                ip_address=client_ip,
+                metadata={"tier": tier, "retry_after": retry_after},
             )
             logger.warning("Rate limit hit: tier=%s principal=%s path=%s", tier, principal, path)
             return Response(
