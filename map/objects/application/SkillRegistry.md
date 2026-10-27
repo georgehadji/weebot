@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-27
-commit: f36ab8e5
+commit: 0034f08b
 ---
 
 # SkillRegistry
@@ -23,15 +23,15 @@ A skill is data on disk, not code, so the registry is a directory scan plus a pa
 - Reads: `get` and `get_skill` (same body, `:94-96, 174-175`), `list_names`, `list_all`, `list_skills` (`:86-92, 181-182`), `get_active_skills` (env-ready skills, `:184-186`), `build_system_prompt_extensions` (`:188-199`). Write: `update_skill` (`:177-179`).
 
 Consequences (read from source, not run):
-- **Missing or invalid trust means trusted.** A skill with no `metadata.trust`, or a value outside the three tiers, is loaded as `trusted` (`:129-131`), matching the model default (`weebot/domain/models/skill.py:97-98`). The retrievers' only trust gate is `is_injectable` (`application/services/bm25_skill_retriever.py:75`, `semantic_skill_retriever.py:135`), so any `SKILL.md` placed in the working directory's `.weebot/skills` is injected into the live executor prompt. A typo such as `trust: quarantine` opens the gate rather than closing it.
+- **Missing or invalid trust means trusted.** A skill with no `metadata.trust`, or a value outside the three tiers, is loaded as `trusted` (`:129-131`), matching the model default (`weebot/domain/models/skill.py:108-109`). The retrievers' only trust gate is `is_injectable` (`application/services/bm25_skill_retriever.py:76`, `semantic_skill_retriever.py:137`), so any `SKILL.md` placed in the working directory's `.weebot/skills` is injected into the live executor prompt. A typo such as `trust: quarantine` opens the gate rather than closing it.
 - **Built-ins win name collisions.** Paths load project, then user, then built-in, and later ones overwrite (`:52-61, 84`). A project skill with the same name as a built-in is silently replaced by the built-in. No log line.
 - **`manifest.json` skills are invisible here.** Only `SKILL.md` is read (`:72`). Seven built-ins ship only `manifest.json` + `prompt.md`: `berb-research`, `competitive_analysis`, `design-taste`, `multi_llm_orchestrator`, `reasoner`, `skill-author`, `web_research` (directory listing 2026-10-23). They are handled by `SkillPackager` (`application/skills/skill_packager.py:47-63`) and the format detector (`application/skills/format_detector.py:44-45`), not by retrieval.
 - An unreadable file returns `None` with no log (`:100-103`); a bad `provenance` mapping falls back to an empty `SkillProvenance` with no log (`:133-140`).
-- No shared instance: `SkillRegistry()` is built and fully scanned at `application/di/_skills.py:31`, `application/di/_factories.py:578` (MCP skill indexer, when semantic retrieval is on), `application/di/_learning.py:173`, `application/services/ponytail_skill_prompt.py:76`, `application/skills/skill_packager.py:40`, `weebot/scheduling/default_jobs.py:110`, `cli/commands/ponytail.py:77` and five times in `cli/commands/skills.py` (`:31, 119, 186, 279, 350`). An `update_skill` on one instance is not seen by the others; the materializer reaches the retriever's instance through `retriever.registry` (`application/di/_learning.py:164-174`).
+- No shared instance: `SkillRegistry()` is built and fully scanned at `application/di/_skills.py:31`, `application/di/_factories.py:578` (MCP skill indexer, when semantic retrieval is on), `application/di/_learning.py:176`, `application/services/ponytail_skill_prompt.py:76`, `application/skills/skill_packager.py:40`, `weebot/scheduling/default_jobs.py:110`, `cli/commands/ponytail.py:77` and five times in `cli/commands/skills.py` (`:31, 119, 186, 279, 350`). An `update_skill` on one instance is not seen by the others; the materializer reaches the retriever's instance through `retriever.registry` (`application/di/_learning.py:167-177`).
 - `_reference_paths` is set with `object.__setattr__` on the pydantic model (`:170`); it is not part of a dump.
 
 ## Connected to
-- **Builds** `Skill` / `SkillMetadata` / `SkillProvenance` (`weebot/domain/models/skill.py`). **Read by** `BM25SkillRetriever`, `SemanticSkillRetriever` (both wrapped by `RerankingSkillRetriever`, built in `application/di/_skills.py:18-70`, registered as `"skill_retriever"`, `di/__init__.py:182`), `MCPToolSkillIndexer` (`di/_factories.py:578-580`), `SkillMaterializer` (`di/_learning.py:164-174`), `SkillPackager`.
+- **Builds** `Skill` / `SkillMetadata` / `SkillProvenance` (`weebot/domain/models/skill.py`). **Read by** `BM25SkillRetriever`, `SemanticSkillRetriever` (both wrapped by `RerankingSkillRetriever`, built in `application/di/_skills.py:18-76`, registered as `"skill_retriever"`, `di/__init__.py:187`), `MCPToolSkillIndexer` (`di/_factories.py:578-580`), `SkillMaterializer` (`di/_learning.py:167-177`), `SkillPackager`.
 - **Data:** `weebot/skills/builtin/*/SKILL.md` (see `map/CONTEXT.md`: loaded by path, not imported).
 - **Looks like but is not:** `RoleBasedToolRegistry` (tools, not skills); `SkillStore` / `SkillStorePort` (versioned skills in SQLite for SkillOpt, `infrastructure/persistence/skill_store.py:23`); personas (`weebot/agents/`).
 

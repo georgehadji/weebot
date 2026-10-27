@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 7d1ce324
+commit: 0034f08b
 consumes:
   - ../objects/application/ExecutorAgent.md
   - ../objects/tools/BaseTool.md
@@ -30,7 +30,7 @@ produces:
 **Output:** a `ToolResult`; `str(result)` goes back to the model, fenced when the tool is not LOCAL; a pending approval becomes `ToolApprovalEvent` + `WaitForUserEvent`.
 
 ## Steps
-1. **Batch.** The step loop hands the response's tool calls to `ToolBatchRunner.run` (`weebot/application/agents/executor/_base.py:616-622`), which calls `execute_tool_batch` (`weebot/application/agents/executor/_tool_batch.py:117`). That runs each call concurrently and keeps order (`weebot/application/agents/executor/_tool_executor.py:318-331`, `_execute_single_tool_call` `:560-564`).
+1. **Batch.** The step loop hands the response's tool calls to `ToolBatchRunner.run` (`weebot/application/agents/executor/_base.py:623-629`), which calls `execute_tool_batch` (`weebot/application/agents/executor/_tool_batch.py:117`). That runs each call concurrently and keeps order (`weebot/application/agents/executor/_tool_executor.py:318-331`, `_execute_single_tool_call` `:560-564`).
 2. **Parse and time out.** `execute_tool` (`_tool_executor.py:335`) parses JSON arguments, repairing once (`:337-369`), replays the session's persisted flags once (`:373`); timeout is the tool's `default_timeout_seconds`, or the call's `timeout` + 5 s capped at 305 s (`:376-380`); `pre_tool_call` hook (`:383-392`).
 3. **Egress gate (ToolExecutor, not the chain).** `guard = self._get_egress_guard()` (`:397`, resolver `:256-288`). No guard and enforcing: a possibly-outbound tool is refused (`:398-411`, name test `:290-309`). Otherwise `EgressGuard.classify` with the session taint flag (`:415-418`; `weebot/core/egress_guard.py:373-420`). An egress this session already completed is not repeated and never reaches approval (`:422-434`). `requires_approval` and `is_enforcing()` (`egress_guard.py:43-49`, env `WEEBOT_EGRESS_ENFORCE`, default true) sends the call to `_ask_about_egress` (`_tool_executor.py:47-77`, called `:436-442`), which asks `tool_approval.current_approval()`; approval records the call's fingerprint as `approved_call` (`:443-445`). Detect-only mode logs and lets it through (`:446-449`). Non-egress network use in a network-off sandbox asks separately (`_clear_network_use`, `:80-124`, called `:453-458`).
 4. **Dispatch.** Inside `approval_scope(session_id, approved_call)` and an `asyncio.wait_for` (`_tool_executor.py:467-481`), `ToolCollection.execute(_name, **args)` (`weebot/application/models/tool_collection.py:195`): fuzzy name match on a miss (`:196-200`), unhealthy tools refused (`:206-214`), canonicalizer (`:216-226`), result cache (`:232-238`), per-tool semaphore (`:240-247`), retries up to `DEFAULT_MAX_RETRIES` on transient errors (`:86, 253, 303-341`), output truncation (`:275-285`). A tool hidden by per-step scoping still runs (`:167-169`).
@@ -43,7 +43,7 @@ produces:
 11. **Back in the executor.** `result.data` goes to `_facts` (`_tool_batch.py:209-210`); `approval_required` in `data` yields `ToolApprovalEvent` then `WaitForUserEvent` and ends the step (`_tool_batch.py:211-215`; `weebot/application/agents/executor/_step_result_handler.py:16-41`); the model receives `str(result)`, wrapped by `wrap_untrusted` unless the tool is LOCAL (`_tool_batch.py:229`; `_base.py:327-348`; `trust_boundary.py:74-76, 107`). On resume, `FlowRouter` turns the reply into a single-use grant through `record_flow_reply` (`weebot/application/flows/flow_router.py:144-149`; `tool_approval.py:304-327`), which `FlowPauseApproval` consumes on retry (`:124-126`).
 
 Consequences (read from source, not run):
-- The taint flag outlives a step. The executor reads it from a process-wide `SessionScope` keyed by session id (`_tool_executor.py:176, 184-193`; `weebot/application/agents/executor/_session_scope.py:31-59, 136-138`), the write is also appended as a `session_flag` row and replayed on a new process (`_tool_executor.py:205-217, 224-236`). It is dropped only by `close`, called when a session completes or is deleted (`_session_scope.py:99-111`; `weebot/application/flows/states/completed.py:301`; `weebot/interfaces/web/routers/sessions.py:220`), and the module says never to put a TTL on it (`_session_scope.py:18-21`).
+- The taint flag outlives a step. The executor reads it from a process-wide `SessionScope` keyed by session id (`_tool_executor.py:176, 184-193`; `weebot/application/agents/executor/_session_scope.py:31-59, 136-138`), the write is also appended as a `session_flag` row and replayed on a new process (`_tool_executor.py:205-217, 224-236`). It is dropped only by `close`, called when a session completes or is deleted (`_session_scope.py:99-111`; `weebot/application/flows/states/completed.py:306`; `weebot/interfaces/web/routers/sessions.py:220`), and the module says never to put a TTL on it (`_session_scope.py:18-21`).
 - Taint comes only from a non-error result of an EXTERNAL tool (`trust_boundary.py:79-90`). A `file://` or loopback tab and the session's own written files do not taint (`_tool_executor.py:529-551`); the tab state is tracked from the last navigate, not the real tab (`:522-523`).
 
 ## If you change this

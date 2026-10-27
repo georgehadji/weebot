@@ -229,6 +229,26 @@ graph LR
 
 The flow's `EventPublisher` owns session persistence: it saves after every event it emits. When a flow has its own state repo and session, `TaskRunner` does not save per event; it writes once, at the end, from the flow's copy plus the events and title only the runner saw. A job that works from an old copy of a RUNNING session (memory compaction) writes with `save_session_if_unchanged`, which refuses when the row's `updated_at` has moved. Two whole-session writers from two copies lose each other's events (audit A24, A25).
 
+### How weebot learns
+
+Each loop below carries something from one run into later ones. All of them are on by default, and each has a `WEEBOT_*` flag in `weebot/config/feature_flags.py` that turns it off.
+
+- **Lessons.** After a run, `MetaAnalysisState` writes one lesson to the per-project misalignment journal. Planning reads the recent ones back.
+- **Skills.**
+  - A run whose every step completed is distilled into a quarantined skill. An existing skill of that name is never overwritten.
+  - The review gate promotes it to candidate.
+  - Candidates are injected live, at most one per step, and each step reports the candidates it used (`RecordSkillUseCommand`).
+  - Three successful sessions promote a candidate to trusted. Two failed sessions send it back to quarantined.
+  - Every tier change is written to `.weebot/skills/<name>/SKILL.md`, so the retriever sees it.
+  - Curation moves learned skills that have gone unused for months to `.weebot/skills/_archived/`.
+- **Plans.** A plan whose every step completed is stored as a template, one per task. The planner sees matching templates as notes.
+- **Workflows.** Agent Workflow Memory generalizes a finished plan into abstract steps, stored in `workflow_templates`. The first planner of a similar task gets them as hints.
+- **Failures.** A failed run's trajectory keeps its task and gets a failure signature. Planning adds the two most similar past failures as notes.
+- **Models.** One shared `AdaptiveCapabilityRouter` records each model call's outcome per step category in `acr_posteriors.db`. Those posteriors move its ranking; it adds at most two models to the cascade.
+- **Corrections.** User corrections become behavioral rules in later prompts.
+
+Not automatic: `SkillOptFlow` and `HarnessOptFlow` (manual commands), the `self_harness_weekly` job (it needs held-in and held-out task sets), and self-editing (`WEEBOT_METACOGNITIVE_IMPROVEMENT`, off).
+
 ### Architecture Enforcement
 
 Architecture boundaries are enforced at three levels:

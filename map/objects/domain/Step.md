@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: f36ab8e5
+commit: 0034f08b
 ---
 
 # Step
@@ -17,7 +17,7 @@ One unit of work inside a `Plan`: an id, a description, a status and a result. `
 A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:16, 99-106`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`:38-50`).
 
 ## Shape
-- `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:546`, default at `domain/models/event.py:65`); plans use `RUNNING`.
+- `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:553`, default at `domain/models/event.py:65`); plans use `RUNNING`.
 - `ContextScope` (`:38-50`): `full` (default), `minimal`, `skill`, `creative`.
 - `Step` fields (`:56-75`): `id`, `description`, `status`, `result`, `retry_count` (cap 1), `acceptance_criteria`, `evidence_refs`, `context_scope`.
 - `is_done()` (`:77-78`): COMPLETED **or FAILED**. UNVERIFIED is not done, so `Plan.get_next_step` returns it again.
@@ -29,7 +29,7 @@ Consequences (read from source, not run):
 - `acceptance_criteria` is asked for in the planner prompt (`weebot/config/prompts/planner_system.txt:15, 56`) and parsed (`application/agents/planner.py:339-384`); no Python code reads it afterwards. It reaches a model only if a prompt serialises the whole step.
 - `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`weebot/application/flows/states/_step_outcome.py:102-115`), step validation (`weebot/application/flows/states/_step_outcome.py:173-200`), the evidence audit (`evidence_gate.py:42-49`); review has its own cap on the same field (`application/flows/states/reviewing.py:70, 137`). A step retried by one gate has no retry left for the next.
 - The `minor_fix` retry puts the step back as PENDING through `Plan.replace_step` (`weebot/application/flows/states/_step_outcome.py:109`). The severity is classified from the reconstructed `ErrorEvent` (`weebot/application/flows/states/_step_outcome.py:126-134`); until 2026-10-24 it read raw dicts, so every failure went to UPDATING and the `update_step` call that crashed was never reached (`tests/unit/fixes/test_minor_fix_retry_and_list_projects.py`).
-- `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:656-662`). A new enum member falls back to `full` silently (`_prompt_builder.py:106`).
+- `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:656-662`). A new enum member falls back to `full` silently (`_prompt_builder.py:108`).
 
 ## Connected to
 - **Owned by** `Plan.steps`. **Created by** `PlannerAgent._parse_plan` (`planner.py:329-393`), which also parses `context_scope` with a fallback to FULL (`:340-342`).
