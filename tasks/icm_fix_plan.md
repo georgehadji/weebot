@@ -84,7 +84,7 @@ Severity: H = a security or correctness gap on a live path; M = wrong or mislead
 | F56 | CLI, gateway and webhook flows run with no event bus (no domain events, no skill-gap subscription). **Fixed ce4f82fd, a4c81d54** | CLI | M |
 | F57 | `/api/webhook/run` with a `session_id` runs any stored session with no ownership check. **Fixed be6044c5** | WebAPI | M |
 | F58 | Reads with no tenant filter: `/api/sessions/search`, `/api/events/stream` (every event), `/api/dashboard/metrics`. **Fixed eb646fe3** | WebAPI | M |
-| F59 | Behavior and ponytail mutations need no identity (`watch/start` watches any directory); behavior WebSockets accept any client when no key is set. **Fixed 606e5e0f** | WebAPI | M |
+| F59 | Behavior and ponytail mutations need no identity (`watch/start` watches any directory); behavior WebSockets accept any client when no key is set. **POSTs fixed 606e5e0f; the WebSockets were still open until the 2026-10-27 audit fix A06** | WebAPI | M |
 | F60 | `APIKeyMiddleware` exempts `/api/live` and `/api/prometheus` (real: `/api/health/...`), blocks platform webhooks under `/api/gateway/*`, and rejects store-mode principal keys. **Fixed 22b546e0** | WebAPI | M |
 | F61 | Web UI: calls a missing `/api/behavior/settings`; behavior, `/ops` and `/debug` calls send no API key; event types out of sync (`error` vs `failed`, no `tool_approval`). **Fixed 935aee50** | WebUI | M |
 | F62 | `run_mcp.py` passes no discovery, skills, routing or products, so every MCP resource is a stub and no dynamic tools register. **Fixed af06f447** | MCPServer | M |

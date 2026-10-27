@@ -31,7 +31,7 @@ Format: name — source — status — card
 - SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-10-25 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
-- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-25 — [card](interfaces/ChatGateways.md)
+- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — stale 2026-10-25 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-10-25 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — stale 2026-10-25 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-27 — [card](interfaces/WebAPI.md)

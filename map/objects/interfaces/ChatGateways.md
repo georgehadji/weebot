@@ -4,9 +4,9 @@ name: Chat gateways
 code: GatewayAdapter and six subclasses
 cluster: interfaces
 universe: live
-status: verified
+status: stale
 verified: 2026-10-25
-commit: 12624041
+commit: 7effa9ba
 ---
 
 # Chat gateways
@@ -24,10 +24,10 @@ One base class holds what every platform needs: a `SafetyChecker` over the inbou
 | `SignalAdapter` | `gateways/signal.py:25` | poll signal-cli REST (`:58-75`) | lifespan when `signal_account_number` is set (`main.py:303-320`) | new per message (`:98-101`) |
 | `EmailAdapter` | `gateways/email.py:53` | IMAP poll (`:96-113, 200-258`) | lifespan when IMAP user and password are set (`main.py:322-346`) | new per message (`:149-150`) |
 | `SlackAdapter` | `gateways/slack.py:24` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:34-69`; acks, then runs the event on `BackgroundTasks`, `:68`), HMAC (`slack.py:48`) | lazily on first callback (`slack_webhook.py:90-121`) | new per message (`slack.py:121-126`) |
-| `DiscordAdapter` | `gateways/discord.py:30` | `POST /api/gateway/discord/interactions` (`routers/discord_webhook.py:28-60`, runs inline), Ed25519 (`discord.py:70-89`) | lazily (`discord_webhook.py:63-96`) | new per message (`discord.py:183-186`) |
+| `DiscordAdapter` | `gateways/discord.py:33` | `POST /api/gateway/discord/interactions` (`routers/discord_webhook.py:28-60`, runs inline), Ed25519 plus a 5-minute timestamp window (`discord.py:73-98`) | lazily (`discord_webhook.py:63-96`) | new per message (`discord.py:192-195`) |
 | `WhatsAppAdapter` | `gateways/whatsapp.py:26` | `GET/POST /api/gateway/whatsapp/webhook` (`routers/whatsapp_webhook.py:36-80`; messages run on `BackgroundTasks`, `:78`), `X-Hub-Signature-256`, fail closed without app secret unless `whatsapp_allow_unsigned_webhooks` (`whatsapp.py:60-87`) | lazily (`whatsapp_webhook.py:98-132`) | new per message (`whatsapp.py:110-113`) |
 
-Every adapter builds the flow the same way: `build_tools(role="admin")` then `create_flow(flow_type="plan_act", session, llm, tools, state_repo, profile_name)` from `weebot/interfaces/factories.py` (`telegram.py:222-230`, `slack.py:128-136`, `discord.py:188-196`, `whatsapp.py:115-123`, `signal.py:103-111`, `email.py:152-160`). The `llm` each adapter gets is the container's bounded `LLMPort` (`infrastructure/LLMAdapters.md`). Email also drops its own address and automated senders (`email.py:122-130`). The allowlist is edited with `python -m cli.main gateway allowlist ...` (`cli/commands/gateway.py:107-172`).
+Every adapter builds the flow the same way: `build_tools(role="admin")` then `create_flow(flow_type="plan_act", session, llm, tools, state_repo, profile_name)` from `weebot/interfaces/factories.py` (`telegram.py:222-230`, `slack.py:128-136`, `discord.py:197-205`, `whatsapp.py:115-123`, `signal.py:103-111`, `email.py:152-160`). The `llm` each adapter gets is the container's bounded `LLMPort` (`infrastructure/LLMAdapters.md`). Email also drops its own address and automated senders (`email.py:122-130`). The allowlist is edited with `python -m cli.main gateway allowlist ...` (`cli/commands/gateway.py:107-172`).
 
 Consequences (read from source, not run):
 - No adapter passes a mediator or event bus to `create_flow`; `build_flow` resolves both from the shared container (`weebot/application/flows/flow_builder.py:80-93`), so a gateway flow can plan (`PlanningState` refuses to run without a mediator, `weebot/application/flows/states/planning.py:95-103`) and its events reach the bus the WebSocket broadcaster listens on (`main.py:215-218`).
