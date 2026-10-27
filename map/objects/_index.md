@@ -28,13 +28,13 @@ Format: name — source — status — card
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-25 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-10-24 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox) — `weebot/infrastructure/sandbox/factory.py` — verified 2026-10-25 — [card](infrastructure/Sandbox.md)
-- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — verified 2026-10-25 — [card](infrastructure/SQLiteStateRepository.md)
+- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-10-25 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
 - Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-25 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-10-25 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — stale 2026-10-25 — [card](interfaces/MCPServer.md)
-- Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-25 — [card](interfaces/WebAPI.md)
+- Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-27 — [card](interfaces/WebAPI.md)
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-24 — [card](interfaces/WebUI.md)
 
 ## core

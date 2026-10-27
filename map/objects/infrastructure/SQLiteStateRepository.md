@@ -4,9 +4,9 @@ name: SQLiteStateRepository
 code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-10-25
-commit: 9ef23ae7
+commit: 591298c1
 ---
 
 # SQLiteStateRepository
@@ -14,12 +14,12 @@ commit: 9ef23ae7
 The default `StateRepositoryPort` adapter: stores sessions and a set of side tables (behavioral rules, corrections, commitments, plan templates, memory metadata, session constraints, opportunities) in one SQLite file. A facade: it owns the pool and schema and delegates per-topic queries to small helper repos.
 
 ## Why this shape
-The port declares 8 methods (`save_session`, `load_session`, `list_sessions`, `count_sessions`, `update_session_status`, `delete_session`, `search_sessions`, `get_low_salience_entries`; `application/ports/state_repo_port.py:10-72`). The class also implements the role Protocols of `state_roles_port.py` and `weebot/domain/ports.py` (behavioral rules, corrections, session constraints, opportunities, memory metadata, plan-template writes and reads, commitments; `weebot/infrastructure/persistence/sqlite_state_repo.py:60-70`, `application/ports/state_roles_port.py:1-13`). Those methods are one-line delegation to `SessionQueries`, `MemoryMetadataRepo`, `CommitmentRepo`, `BehavioralRuleRepo`, `OpportunityRepo`, `PlanTemplateRepo`, `CorrectionRecordRepo`, `SessionConstraintRepo` (`sqlite_state_repo.py:38-49, 92-100`). Everything is lazy: the pool, the schema and the helpers are created on first use (`:104-125`).
+The port declares 9 methods (`save_session`, `create_session`, `load_session`, `list_sessions`, `count_sessions`, `update_session_status`, `delete_session`, `search_sessions`, `get_low_salience_entries`; `application/ports/state_repo_port.py:10-86`). The class also implements the role Protocols of `state_roles_port.py` and `weebot/domain/ports.py` (behavioral rules, corrections, session constraints, opportunities, memory metadata, plan-template writes and reads, commitments; `weebot/infrastructure/persistence/sqlite_state_repo.py:60-70`, `application/ports/state_roles_port.py:1-13`). Those methods are one-line delegation to `SessionQueries`, `MemoryMetadataRepo`, `CommitmentRepo`, `BehavioralRuleRepo`, `OpportunityRepo`, `PlanTemplateRepo`, `CorrectionRecordRepo`, `SessionConstraintRepo` (`sqlite_state_repo.py:38-49, 92-100`). Everything is lazy: the pool, the schema and the helpers are created on first use (`:104-125`).
 
 ## Shape
-- File: `DB_SESSIONS_PATH` by default (`:81`), which is `WEEBOT_SESSIONS_DB` or `./weebot_sessions.db` (`weebot/config/settings.py:22`); the actual path comes from `DatabaseRouterPort.get_db_path("sessions")` (`sqlite_state_repo.py:106`). Pool: `get_or_create_pool(path, max_read_connections=5, enable_wal=True)` (`:107`). `_ensure_schema` creates tables `sessions`, `pending_opportunities`, `behavioral_rules`, `memory_metadata`, `plan_templates`, `commitments`, `correction_records`, `session_constraints`, plus the FTS5 table via `ensure_fts5_table` (`:140-270`).
+- File: `DB_SESSIONS_PATH` by default (`:81`), which is `WEEBOT_SESSIONS_DB` or `./weebot_sessions.db` (`weebot/config/settings.py:22`); the actual path comes from `DatabaseRouterPort.get_db_path("sessions")` (`sqlite_state_repo.py:107`). Pool: `get_or_create_pool(path, max_read_connections=5, enable_wal=True)` (`:107`). `_ensure_schema` creates tables `sessions`, `pending_opportunities`, `behavioral_rules`, `memory_metadata`, `plan_templates`, `commitments`, `correction_records`, `session_constraints`, plus the FTS5 table via `ensure_fts5_table` (`:140-270`).
 - A session is **one row**: `events_json` holds every event as JSON and `context_json` the context (`:144-154`). `SessionQueries.save` drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:35`), never the last `plan` event, and logs one warning (`_session_queries.py:39-75`); the ceiling lives only there.
-- `save_session` (`sqlite_state_repo.py:274`) does three separate write transactions in this order: the session row (`:301`), then commitments extracted from assistant messages (failure is logged, session still saved, `:319-342`), then FTS5 indexing of events (`:344-410`).
+- `save_session` (`sqlite_state_repo.py:281`) does three separate write transactions in this order: the session row (`:301`), then commitments extracted from assistant messages (failure is logged, session still saved, `:319-342`), then FTS5 indexing of events (`:344-410`).
 - FTS5 index: `_fts5_indexed` is a **per-instance, in-memory** watermark of how many events of each session were indexed (`:88-89`). A fresh repository starts from zero and, for a session it has not seen, clears that session's index rows and re-indexes everything (replace, not append, `:365-385`). The watermark advances only as far as indexing succeeded (`:407-410`).
 - `list_sessions(load_events=False)` by default: list views skip event deserialization (`:419-442`). Callers that read `.events` must pass `load_events=True`.
 - `delete_session` deletes the row and then best-effort clears FTS5 rows (`:448-457`); `search_sessions` truncates the query to 500 chars (`:464`).
@@ -51,7 +51,7 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `get_memory_entry` | `agents/executor/_step_setup.py` (user-profile lookup), `agents/executor/_prompt_builder.py` |
 | `save_plan_template` / `increment_template_use` | `flows/states/completed.py` / `cqrs/handlers/create_plan_handler.py` |
 | `find_plan_templates_by_hash`, `list_all_plan_templates` | `domain/services/plan_template_cache.py` (domain layer) |
-| `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:334`) |
+| `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:341`) |
 
 Consequence: `InMemoryStateRepo` and the PostgreSQL repo implement the port but none of the roles (only `sqlite_state_repo.py` defines `save_behavioral_rule`, `get_memory_entry`, `save_commitment`, `save_plan_template`; grep 2026-10-24). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-100`), get `None` on those repositories, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:127-130`.
 

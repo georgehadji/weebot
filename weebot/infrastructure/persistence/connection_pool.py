@@ -187,13 +187,15 @@ class SQLiteConnectionPool:
         async with self._write_lock:
             try:
                 yield self._write_conn
-            except Exception:
+            except BaseException:
                 # Roll back any partial work so the connection is left in a
-                # clean state for the next writer.
+                # clean state for the next writer. BaseException, not Exception:
+                # a cancelled writer would otherwise leave its open transaction
+                # for the next writer to commit.
                 try:
                     await self._write_conn.rollback()
                 except Exception:
-                    pass
+                    logger.warning("Rollback after a failed write also failed", exc_info=True)
                 raise
             else:
                 await self._write_conn.commit()
