@@ -356,6 +356,10 @@ class Container(
             )
             if bus is not None:
                 bus.subscribe_domain(meter.on_domain_event)
+                # Image and video calls are billed too: their tools report through this sink.
+                from weebot.core.media_spend import set_media_spend_sink
+
+                set_media_spend_sink(bus.publish_domain_event)
             return meter
 
         self.register(SESSION_COST_METER, _create_session_cost_meter)

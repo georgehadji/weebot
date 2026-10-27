@@ -138,14 +138,17 @@ class ResilientLLMAdapter(LLMPort):
         self._cache = cache
 
         # Configure retry with exponential backoff
-        if enable_retry:
-            self._retry = RetryWithBackoff(
+        # The template: each call copies its delays into its own RetryWithBackoff, because
+        # the rule "a timeout is retried once" needs a count that lives only for that call.
+        self._retry = (
+            RetryWithBackoff(
                 BackoffConfig(
                     delays=[1, 2, 4, 8, 15, 30], jitter=0.25, retryable=self._is_retryable_error
                 )
             )
-        else:
-            self._retry = None
+            if enable_retry
+            else None
+        )
 
         # Configure circuit breaker
         if enable_circuit_breaker:
@@ -242,7 +245,7 @@ class ResilientLLMAdapter(LLMPort):
 
         try:
             if self._retry:
-                response = await self._retry.call(
+                response = await self._retry_for_one_call().call(
                     self._execute_with_timeout,
                     messages=messages,
                     tools=tools,
@@ -352,6 +355,39 @@ class ResilientLLMAdapter(LLMPort):
                 max_tokens=max_tokens,
             ),
             timeout=self._timeout,
+        )
+
+    def _retry_for_one_call(self) -> RetryWithBackoff:
+        """A retry policy where a timeout is retried at most once.
+
+        A request that timed out may still be running and billing; retrying it up to seven
+        times at the full timeout bought the same slow answer again and again.
+        """
+        template = self._retry._config
+        timeouts = 0
+
+        def retryable(exc: Exception) -> bool:
+            nonlocal timeouts
+            if self._is_timeout(exc):
+                timeouts += 1
+                return timeouts <= 1
+            return template.retryable is None or template.retryable(exc)
+
+        return RetryWithBackoff(
+            BackoffConfig(
+                delays=list(template.delays),
+                max_delay=template.max_delay,
+                jitter=template.jitter,
+                retryable=retryable,
+            )
+        )
+
+    @staticmethod
+    def _is_timeout(exc: Exception) -> bool:
+        from weebot.core.error_classifier import ErrorCategory
+
+        return isinstance(exc, TimeoutError) or ErrorClassifier.classify(exc) == (
+            ErrorCategory.TIMEOUT
         )
 
     def _is_retryable_error(self, exc: Exception) -> bool:

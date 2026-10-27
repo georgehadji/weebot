@@ -1,4 +1,4 @@
-"""A26 repros (strict xfail until each part is fixed): LLM accounting gaps.
+"""A26: LLM accounting gaps.
 
 Each test is one gap named in the audit: cached prompt tokens priced at the full rate,
 cancelled hedge probes billed but unrecorded, timeouts that never trip the cascade breaker,
@@ -91,7 +91,6 @@ class _Llm:
         return LLMResponse(content=f"ok {model}", tool_calls=None, usage=None)
 
 
-@pytest.mark.xfail(strict=True, reason="A26: a cancelled hedge probe is billed but not recorded")
 async def test_a_cancelled_probe_is_recorded_as_spend(monkeypatch):
     seen = []
 
@@ -105,7 +104,6 @@ async def test_a_cancelled_probe_is_recorded_as_spend(monkeypatch):
     assert "slow/probe" in seen
 
 
-@pytest.mark.xfail(strict=True, reason="A26: a timeout never trips the cascade breaker")
 async def test_a_timeout_counts_toward_the_breaker(monkeypatch):
     llm = _Llm({"slow/timeout": (0.0, "timeout")})
     ex = _cascade(llm, ["slow/timeout"], monkeypatch)
@@ -117,7 +115,6 @@ async def test_a_timeout_counts_toward_the_breaker(monkeypatch):
 # ── retry policy ────────────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="A26: a timeout is retried as if it were transient")
 async def test_a_timeout_is_retried_at_most_once(monkeypatch):
     from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
 
@@ -141,7 +138,6 @@ async def test_a_timeout_is_retried_at_most_once(monkeypatch):
 # ── media: a paid 200 is not bought again ───────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="A26: an image call buys again after a paid 200")
 async def test_an_unusable_paid_200_stops_the_image_cascade(monkeypatch, tmp_path):
     import aiohttp
 
@@ -185,7 +181,6 @@ async def test_an_unusable_paid_200_stops_the_image_cascade(monkeypatch, tmp_pat
 # ── hard limit inside a step ────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="A26: the hard limit is checked only between steps")
 async def test_the_hard_limit_stops_the_next_call_inside_a_step(monkeypatch):
     from weebot.application.services.session_cost import SessionCostMeter
     from weebot.core.log_context import log_context
@@ -204,3 +199,52 @@ async def test_the_hard_limit_stops_the_next_call_inside_a_step(monkeypatch):
         with pytest.raises(Exception):
             await ex.call_with_cascade(messages=[{"role": "user", "content": "x"}], description="d")
     assert called == []
+
+
+async def test_a_paid_media_call_reaches_the_meter_sink():
+    from weebot.core import media_spend
+
+    seen = []
+
+    async def sink(event):
+        seen.append((event.model, event.cost, event.estimated))
+
+    media_spend.set_media_spend_sink(sink)
+    try:
+        await media_spend.record_media_call("krea/krea-2-large", "image")
+        await media_spend.record_media_call("some/new-video-model", "video")
+    finally:
+        media_spend.set_media_spend_sink(None)
+    assert seen == [("krea/krea-2-large", 0.06, True), ("some/new-video-model", 0.5, True)]
+
+
+async def test_a_grant_raises_the_limit_the_cascade_stops_at(monkeypatch):
+    from weebot.application.services.session_cost import SessionCostMeter
+    from weebot.core.log_context import log_context
+
+    meter = SessionCostMeter(hard_usd=1.0)
+    meter.add("s1", 1.5)
+    meter.set_allowance("s1", 2.0)  # the flow granted one more increment
+    called = []
+
+    class _Llm2:
+        async def chat(self, **kw):
+            called.append(kw.get("model"))
+            return LLMResponse(content="ok", tool_calls=None, usage=None)
+
+    ex = _cascade(_Llm2(), ["a/b"], monkeypatch, cost_meter=meter)
+    with log_context(session_id="s1"):
+        await ex.call_with_cascade(messages=[{"role": "user", "content": "x"}], description="d")
+    assert called
+    assert meter.hard_exceeded("s1") is False
+    meter.add("s1", 1.0)
+    assert meter.hard_exceeded("s1") is True
+
+
+def test_a_flow_with_the_limit_off_is_never_stopped_by_the_meters_default():
+    from weebot.application.services.session_cost import SessionCostMeter
+
+    meter = SessionCostMeter(hard_usd=1.0)
+    meter.add("s1", 5.0)
+    meter.set_allowance("s1", 0.0)
+    assert meter.hard_exceeded("s1") is False
