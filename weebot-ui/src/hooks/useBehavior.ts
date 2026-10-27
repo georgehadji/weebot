@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ENDPOINTS } from "@/lib/endpoints";
-import { authHeaders, withToken } from "@/lib/api";
+import { authHeaders, openSocket } from "@/lib/api";
 
 
 export interface BehaviorEvent {
@@ -62,7 +62,7 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
         ? `${ENDPOINTS.behaviorWs}/session/${sessionId}`
         : ENDPOINTS.behaviorWs;
 
-      const ws = new WebSocket(withToken(wsUrl));
+      const ws = openSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

@@ -21,7 +21,7 @@ from weebot.core.behavior_tracker import (
     get_tracker,
     stop_tracker,
 )
-from weebot.interfaces.web.auth import require_mutation_identity
+from weebot.interfaces.web.auth import accepted_subprotocol, require_mutation_identity
 from weebot.interfaces.web.websocket import fan_out
 
 logger = logging.getLogger(__name__)
@@ -245,32 +245,11 @@ async def broadcast_event(event: BehaviorEvent):
                     _ws_connections.remove(ws)
 
 
-_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
-
-
 def _ws_authorized(websocket: WebSocket) -> bool:
-    """Same rule as the HTTP routes: a key when one is set, else loopback only.
-
-    The key may arrive as a `bearer.<key>` subprotocol (browsers), an `Authorization:
-    Bearer` header (other clients) or the deprecated `?token=` query parameter.
-    """
-    import hmac
-
     from weebot.config.settings import get_settings
+    from weebot.interfaces.web.auth import websocket_authenticated
 
-    key = get_settings().weebot_api_key
-    if not key:
-        return (websocket.client.host if websocket.client else "") in _LOOPBACK_HOSTS
-    offered = [
-        p.strip()[len("bearer."):]
-        for p in websocket.headers.get("sec-websocket-protocol", "").split(",")
-        if p.strip().startswith("bearer.")
-    ]
-    auth = websocket.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        offered.append(auth[len("Bearer "):])
-    offered.append(websocket.query_params.get("token") or "")
-    return any(hmac.compare_digest(token, key) for token in offered)
+    return websocket_authenticated(websocket, get_settings().weebot_api_key)
 
 
 @router.websocket("/ws")
@@ -280,7 +259,7 @@ async def behavior_websocket(websocket: WebSocket):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=accepted_subprotocol(websocket))
     async with _ws_lock:
         _ws_connections.append(websocket)
 
@@ -361,7 +340,7 @@ async def session_behavior_websocket(websocket: WebSocket, session_id: str):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=accepted_subprotocol(websocket))
 
     logger.info(f"Session behavior WebSocket connected: {session_id}")
 

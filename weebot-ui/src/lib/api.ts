@@ -27,11 +27,13 @@ export function authHeaders(): Record<string, string> {
   return apiKey ? { "X-API-Key": apiKey } : {};
 }
 
-/** A WebSocket URL carrying the API key as ?token= (the backend's socket auth). */
-export function withToken(url: string): string {
-  const apiKey = _getApiKey();
-  if (!apiKey) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(apiKey)}`;
+/**
+ * Open a WebSocket to the backend. The API key travels in the Sec-WebSocket-Protocol header
+ * as `bearer.<key>`, next to the marker `weebot.v1` the server answers with. It used to be
+ * `?token=`, which uvicorn writes to its access log.
+ */
+export function openSocket(url: string, apiKey: string | null = _getApiKey()): WebSocket {
+  return apiKey ? new WebSocket(url, ["weebot.v1", `bearer.${apiKey}`]) : new WebSocket(url);
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {

@@ -8,7 +8,7 @@ import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
 import { LazyPlanVisualizer } from "@/components/plan/LazyPlanVisualizer";
-import { api, ActiveSession, withToken } from "@/lib/api";
+import { api, ActiveSession, openSocket } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ENDPOINTS } from "@/lib/endpoints";
 import type { StepStatus } from "@/types/events";
@@ -66,7 +66,7 @@ export default function OpsPage() {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(withToken(getWsBase()));
+    const ws = openSocket(getWsBase());
     ws.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
