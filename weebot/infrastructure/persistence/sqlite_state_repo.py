@@ -335,7 +335,7 @@ class SQLiteStateRepository(
                             text,
                             context="Session: " + (session.title or "")[:200],
                             source_session_id=session.id,
-                            source_event_id=getattr(event, "event_id", None),
+                            source_event_id=getattr(event, "id", None),
                         )
                         for cmt in commitments:
                             await self.save_commitment(cmt)

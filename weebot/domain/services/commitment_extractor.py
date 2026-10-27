@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timedelta, UTC
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid5
 
 from weebot.domain.models.commitment import Commitment, CommitmentStatus
 
@@ -125,7 +125,9 @@ def extract_commitments(
             due_at = _parse_due_at(assistant_text)
 
             commitment = Commitment(
-                id=str(uuid4()),
+                # Natural key, so extracting the same event again yields the same row id.
+                id=str(uuid5(NAMESPACE_URL, f"weebot:commitment:{source_session_id}:"
+                                            f"{source_event_id or ''}:{promise_text}")),
                 promise_text=promise_text,
                 context=(context or "")[:500],
                 source_session_id=source_session_id,
