@@ -164,20 +164,17 @@ WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").str
 # and CreatePlanHandler seeds the planner with the templates matching a new
 # task, via `build_meta_notes`.
 #
-# Default OFF, and the reason is history rather than caution. Both sides of
-# this feature raised TypeError on every call for its entire existence —
-# `save_plan_template` was passed one argument where four were declared, and
-# the lookup passed a `limit=` the repository does not accept — each swallowed
-# by an `except Exception: logger.debug(...)`. So the table has never held a
-# row and the planner has never been seeded. Repairing the calls turned a
-# feature on that had never run, which is a change to the planner's inputs on
-# every task; the flag makes enabling it a decision instead of a side effect.
+# Default ON since the learning loops were wired (2026-10-27). Both sides used to
+# raise TypeError on every call, so the table never held a row; that is fixed and
+# covered by test_the_plan_template_cache_round_trips.py. Only fully successful plans
+# are kept, one row per task (the id is the task hash), so the table grows with the
+# number of distinct tasks, not runs.
 #
 # One flag covers BOTH sides on purpose. Gating only the read would leave
 # `plan_templates` growing for a feature that is off, and nothing prunes that
 # table. The cost of the pairing is that no history accumulates while the flag
 # is off, so the first tasks after enabling it have nothing to match against.
-PLAN_TEMPLATE_CACHE_ENABLED: bool = _env_bool("WEEBOT_PLAN_TEMPLATE_CACHE", default=False)
+PLAN_TEMPLATE_CACHE_ENABLED: bool = _env_bool("WEEBOT_PLAN_TEMPLATE_CACHE", default=True)
 
 
 def is_enabled(flag_name: str) -> bool:

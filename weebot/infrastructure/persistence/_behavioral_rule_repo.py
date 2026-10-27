@@ -112,7 +112,10 @@ class PlanTemplateRepo:
                      success_score, created_at, last_used_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(template_id) DO UPDATE SET
-                    use_count = use_count + 1,
+                    plan_json = CASE WHEN excluded.success_score >= success_score
+                                     THEN excluded.plan_json ELSE plan_json END,
+                    task_description = excluded.task_description,
+                    success_score = MAX(success_score, excluded.success_score),
                     last_used_at = ?
                 """,
                 (
