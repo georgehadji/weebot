@@ -565,6 +565,16 @@ def create_app() -> FastAPI:
             "Set WEEBOT_API_KEY to enable remote access."
         )
 
+    # Added last, so outermost: an oversize body is refused before auth or any route reads it.
+    from weebot.config.secret_accessor import SecretAccessor
+    from weebot.interfaces.web.body_limit import DEFAULT_MAX_BODY_BYTES, BodyLimitMiddleware
+
+    _max_body = SecretAccessor.get("WEEBOT_MAX_BODY_BYTES") or ""
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=int(_max_body) if _max_body.isdigit() else DEFAULT_MAX_BODY_BYTES,
+    )
+
     # ── Global exception handlers ─────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
