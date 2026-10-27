@@ -1,7 +1,7 @@
 ---
 status: open
 date: 2026-10-27
-note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; draft, nothing in it is started
+note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 fixed; the rest not started
 ---
 
 # Master plan: everything still open
@@ -62,7 +62,8 @@ Order follows section 7 of the audit plan. Each item is one PR-sized change with
 1. **Wave 0, for what is unbuilt.** A strict-xfail repro for A21, A24, A25, A26, A28 and A33, each in
    `tests/unit/fixes/`. A repro that already passes means the finding is dropped and recorded. S each,
    M together.
-2. **A33 gateway safety gate.** Decide from the repro: make `is_critical_operation` use real tool names, or
+2. **A33 gateway safety gate.** Done 2026-10-27: the gate was deleted (see the commit). `SafetyChecker` now has no production caller; add it to wave 6.
+   Original text:  Decide from the repro: make `is_critical_operation` use real tool names, or
    delete the gate if the guard chain already covers gateway runs. S.
 3. **A25 single writer, then A24 compare-and-swap, then A28.** In that order: one writer makes the CAS easier
    to reason about, and A28 is independent. A25 M, A24 S, A28 S.
