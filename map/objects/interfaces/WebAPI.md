@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: stale
 verified: 2026-10-27
-commit: 94ba7bf2
+commit: d7de1a27
 ---
 
 # Web API (FastAPI)
@@ -17,7 +17,7 @@ The HTTP and WebSocket backend, `python -m weebot.interfaces.web.main`. `create_
 The lifespan is the web process's composition root. It takes the process's `shared_container()` and stores it on `app.state.container` (`:184-190`); routers resolve ports from it per request. Events reach browsers because the lifespan subscribes `WebSocketEventBroadcaster.publish` to the bus (`:215-218`); nothing in the application layer knows a socket exists. The Mediator is warmed at boot (`container.warm_up()`, `:235-236`) so the first `/sessions` request does not pay for it. Approvals pause the flow (`FlowPauseApproval`, `:202`). The one API-key store is put on `app.state.api_key_store` (`:205-208`). Shutdown drains `BackgroundTasks` before it closes the MCP toolkit, the key store and the DB pools (`:376-391`).
 
 ## Shape
-Middleware, in `create_app`: correlation id (`:416-427`), `RateLimitMiddleware` unless `WEEBOT_RATE_LIMIT_ENABLED` is off (`:429-442`), CORS for `localhost:3000` plus `WEEBOT_CORS_ORIGIN` (`:475-487`), then either `APIKeyMiddleware` (when `weebot_api_key` is set: `X-API-Key` on every HTTP path except `_public_paths`, `:508-529`) or `FailClosedMiddleware` (when `web_require_auth`: non-loopback gets 503 except `_public_paths`, `:531-566`). `_public_paths` (`:496-506`) is `/`, the health, live and prometheus probes, and the three platform callbacks, which verify their own signature.
+Middleware, in `create_app`, in the order added (the last one added is outermost): correlation id (`:416-427`), CORS for `localhost:3000` plus `WEEBOT_CORS_ORIGIN` (`:471-482`), either `APIKeyMiddleware` (when `weebot_api_key` is set: `X-API-Key` on every HTTP path except `_public_paths`, `:505-524`) or `FailClosedMiddleware` (when `web_require_auth`: non-loopback gets 503 except `_public_paths`, `:528-557`), `BodyLimitMiddleware` (1 MiB, `WEEBOT_MAX_BODY_BYTES`, `:564-570`), and last, outermost, `RateLimitMiddleware` unless `WEEBOT_RATE_LIMIT_ENABLED` is off (`:573-579`); it also counts 401/403 answers per client address and answers 429 after ten in a minute. `_public_paths` (`:491-501`) is `/`, the health, live and prometheus probes, and the three platform callbacks, which verify their own signature.
 
 Per-route auth lives in `weebot/interfaces/web/auth.py`: `get_current_user_id` (legacy key compare, else `"anonymous"`, `:78-133`), `require_mutation_identity` (anonymous and non-loopback is 403, `:205-218`), `verify_session_ownership` (404 on mismatch; skipped when the session has no `user_id` or `WEEBOT_ENFORCE_SESSION_OWNERSHIP` is off, `:168-202, 253-255`). In store mode a presented key resolves through `ApiKeyPort`, the store on `app.state` (`_key_store`, `_principal_from_key`, `:50-75`; hashing in `weebot/core/api_key_crypto.py`; `tests/unit/interfaces/web/test_auth_resolves_through_the_port.py`).
 
