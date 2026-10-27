@@ -5,8 +5,8 @@ code: ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInput
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-27
+commit: 3223b7f2
 ---
 
 # Media tools
@@ -14,7 +14,7 @@ commit: 12624041
 Tools that make or ingest images, video and audio: `image_gen`, `video_gen`, `video_ingest`, `remotion_video`, `voice_input`, `voice_output`, and `youtube_download`.
 
 ## Why this shape
-Each tool owns its backend and writes files under the workspace. Paid generation reads provider keys straight from the environment and falls back to a free path (SVG templates for images, `weebot/tools/image_gen_tool.py:589-622`). Tools whose backend is a port (`ToolRepositoryPort`, `SpeechPort`) refuse to construct without it (`weebot/tools/video_ingest_tool.py:229-236`, `weebot/tools/voice_input_tool.py:42-49`, `weebot/tools/voice_output_tool.py:50-57`), and the registry supplies it from `wiring()["collaborators"]` (`weebot/application/di/_factories.py:503-505`).
+Each tool owns its backend and writes files under the workspace. Paid generation reads provider keys straight from the environment and falls back to a free path (SVG templates for images, `weebot/tools/image_gen_tool.py:589-622`). Tools whose backend is a port (`ToolRepositoryPort`, `SpeechPort`) refuse to construct without it (`weebot/tools/video_ingest_tool.py:229-236`, `weebot/tools/voice_input_tool.py:42-49`, `weebot/tools/voice_output_tool.py:50-57`), and the registry supplies it from `wiring()["collaborators"]` (`weebot/application/di/_factories.py:504-506`).
 
 ## Shape
 
@@ -39,7 +39,7 @@ Consequences (read from source, not run):
 - `video_ingest` and `youtube_download` declare `OutputTrust.EXTERNAL`, so their output is fenced and taints the session (`weebot/tools/video_ingest_tool.py:187`, `weebot/tools/youtube_download_tool.py:89`); the other five tools are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
 
 ## Connected to
-- **Built by** `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`); collaborators from `Container.tool_wiring` (`weebot/application/di/_factories.py:479-521`).
+- **Built by** `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`); collaborators from `Container.tool_wiring` (`weebot/application/di/_factories.py:480-522`).
 - **Feeds** `KnowledgeTool` search (`video_ingest` stores chunks through the same `ToolRepositoryPort`, `weebot/tools/video_ingest_tool.py:173-178`); the `reify_skill` and `remotion-video` built-in skills (card `tools/BuiltinSkills.md`).
 - **Looks like but is not:** `apify_youtube_transcript` (card `tools/IntegrationTools.md`), a cloud actor.
 

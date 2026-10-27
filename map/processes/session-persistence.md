@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 5643d0ac
+commit: 3c00bb4b
 consumes:
   - ../objects/application/PlanActFlow.md
   - ../objects/application/FlowRouter.md
@@ -29,8 +29,8 @@ produces:
 ## Steps
 ### Save
 1. Every state emits through `PlanActFlow._emit`, which syncs the publisher's session and plan and takes the mutated session back (`weebot/application/flows/plan_act_flow.py:241-260`). The publisher is built once per flow with the flow's repo and `persistence_adapter` (`:214-229`, getter `:738-744`).
-2. `EventPublisher.emit`: truth binding, credential sanitization, `session.add_event`, a checkpoint hook on `step` events, bus publish and domain events, then `_persist_session` when a state repo is set (`weebot/application/flows/event_publisher.py:60-80`).
-3. `_persist_session` uses the adapter when present and logs a dead-letter on `False`; without one it calls `state_repo.save_session` and logs a warning on failure (`event_publisher.py:159-170`).
+2. `EventPublisher.emit`: truth binding, credential sanitization, `session.add_event`, a checkpoint hook on `step` events, bus publish and domain events, then `_persist_session` when a state repo is set (`weebot/application/flows/event_publisher.py:63-93`). The save runs under `emit_lock` (`event_publisher.py:88-92`), so two concurrent emits persist in order and an older snapshot cannot overwrite a newer one. An emit that waited behind a save whose snapshot already held its event skips its own save (`_saved_seq`), so a slow write is retried once for the queue.
+3. `_persist_session` uses the adapter when present and logs a dead-letter on `False`; without one it calls `state_repo.save_session` and logs a warning on failure (`event_publisher.py:172-183`).
 4. The adapter comes from DI: `"session_persistence"` (`weebot/application/di/__init__.py:141`) builds `SessionPersistenceAdapter(repo=...)` with its default retry (`:625-633`); `build_flow` passes it to every `PlanActFlow` and `ChatFlow` (`weebot/application/flows/flow_builder.py:156, 171`).
 5. `SessionPersistenceAdapter.save_session` retries `repo.save_session` (delays 0.5, 1, 2 s, permanent errors such as `ValueError` or `IntegrityError` skip the retries); any exception after that writes `{session_id}_{ts}.json` under `~/.weebot/dead_letter`, bumps a Prometheus counter and returns False (`weebot/infrastructure/persistence/session_persistence_adapter.py:37-68, 94-118, 120-155`; `weebot/config/constants.py:42`).
 6. `SQLiteStateRepository.save_session` (`weebot/infrastructure/persistence/sqlite_state_repo.py:274-301`) calls `SessionQueries.save`, which drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:35`) but never the last plan, and upserts one row (`weebot/infrastructure/persistence/_session_queries.py:25-104`). Commitments and the FTS index are written afterwards in separate transactions (`sqlite_state_repo.py:303-410`).
@@ -50,7 +50,7 @@ produces:
 Consequences (read from source, not run):
 - `AgentRunner` keeps COMPLETED, WAITING and FAILED when the flow returns and turns any other status into WAITING (`agent_runner.py:33-39, 253`), so a cancelled turn stays FAILED; a session left mid-loop reads as resumable.
 - Nothing calls `replay_dead_letters` (`session_persistence_adapter.py:157`); the only mention outside the adapter is the `doctor` hint (`weebot/interfaces/cli/support.py:262-273`).
-- Without an adapter a failed save is only a warning (`event_publisher.py:166-170`), which is why `pause_flow_for_user` saves directly and lets a failure surface (`user_pause.py:60-67`).
+- Without an adapter a failed save is only a warning (`event_publisher.py:179-183`), which is why `pause_flow_for_user` saves directly and lets a failure surface (`user_pause.py:60-67`).
 - Truncation trims the stored row, not `session.events` (`_session_queries.py:39-76`; `sqlite_state_repo.py:293-300`): the in-memory session keeps the dropped events, a reload does not.
 
 ## If you change this

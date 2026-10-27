@@ -5,8 +5,8 @@ code: DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, Mixtu
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 12624041
+verified: 2026-10-27
+commit: 3223b7f2
 ---
 
 # Orchestration tools
@@ -38,9 +38,9 @@ A sub-agent tool cannot build a flow itself without importing the composition ro
 Role lists: `weebot/application/services/tool_registry.py:27-185`.
 
 Wiring, read from source:
-- Registry branches (`weebot/application/services/tool_registry.py`): `_llm_port_tools = {"browser_navigator", "mixture_of_agents"}` gets `llm_port=` only when one was passed (`:457, 479-480`); `swarm` gets `llm`, `flow_factory` and the `decompose` / `synthesize` callables of `GoalAgent(llm_port)` / `SynthesizerAgent(llm_port)`, so the tool imports no agent (`:483-493`, plan 3.3); `debate` gets `llm=llm_port, flow_factory=flow_factory`, both possibly None (`:459, 494-495`); `{"dispatch_parallel_tasks", "workflow_orchestrator"}` get `flow_factory, state_repo` (`:461, 496-497`). `persistent_memory` and `audit_session` come from `wiring()["collaborators"]` and are skipped when their collaborator does not resolve (`:473-478, 507-517`; `application/di/_factories.py:479-521`).
+- Registry branches (`weebot/application/services/tool_registry.py`): `_llm_port_tools = {"browser_navigator", "mixture_of_agents"}` gets `llm_port=` only when one was passed (`:457, 479-480`); `swarm` gets `llm`, `flow_factory` and the `decompose` / `synthesize` callables of `GoalAgent(llm_port)` / `SynthesizerAgent(llm_port)`, so the tool imports no agent (`:483-493`, plan 3.3); `debate` gets `llm=llm_port, flow_factory=flow_factory`, both possibly None (`:459, 494-495`); `{"dispatch_parallel_tasks", "workflow_orchestrator"}` get `flow_factory, state_repo` (`:461, 496-497`). `persistent_memory` and `audit_session` come from `wiring()["collaborators"]` and are skipped when their collaborator does not resolve (`:473-478, 507-517`; `application/di/_factories.py:480-522`).
 - Output trust: `swarm`, `dispatch_parallel_tasks`, `workflow_orchestrator` and `debate` are `EXTERNAL` (sub-agents with tools may have browsed; moved from `LOCAL` on 2026-10-24, `weebot/tools/swarm.py:36`, `weebot/tools/dispatch_agents.py:40`, `weebot/tools/workflow_orchestrator.py:44`, `weebot/tools/debate.py:76`); the other ten are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
-- `flow_factory` is never in the registry's `wiring()` (it supplies `state_repo`, `browser_factory`, `rerank`, `tool_config`, `collaborators`, `_factories.py:512-521`; read at `application/services/tool_registry.py:446-452`). Only callers that pass it get working sub-agent tools: `application/di/_agent_tools.py:46-53`, `application/di/__init__.py:514-522` and `:651-661`, and `interfaces/factories.py:306-314` via `_get_flow_factory` (`:225-259`), which returns None when `llm_port` is None (`:230-231`).
+- `flow_factory` is never in the registry's `wiring()` (it supplies `state_repo`, `browser_factory`, `rerank`, `tool_config`, `collaborators`, `_factories.py:513-522`; read at `application/services/tool_registry.py:446-452`). Only callers that pass it get working sub-agent tools: `application/di/_agent_tools.py:46-53`, `application/di/__init__.py:514-522` and `:651-661`, and `interfaces/factories.py:306-314` via `_get_flow_factory` (`:225-259`), which returns None when `llm_port` is None (`:230-231`).
 - `_get_flow_factory` builds sub-flows with `tools=None` and the shared event bus (`factories.py:260-279`); `_agent_tools.py` builds them with the `admin` tool set and `event_bus=None` (`_agent_tools.py:49-64`).
 - `ScheduleTool` refuses inside a cron job (`schedule_tool.py:110-121`). A `command` job is accepted (`:129-145`) but `SchedulingManager` raises `NotImplementedError` when it runs (`weebot/scheduling/scheduler.py:457-462`).
 

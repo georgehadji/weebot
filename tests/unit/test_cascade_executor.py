@@ -91,7 +91,9 @@ class TestCircuitBreaker:
         with caplog.at_level(logging.WARNING):
             for _ in range(3):
                 executor._cascade_record_failure("warn/model")
-        assert "Circuit breaker tripped" in caplog.text
+        # A warning, but not a false "tripped": the breaker trips at 5, not 3.
+        assert "Circuit breaker warning for warn/model: 3 failures in a row" in caplog.text
+        assert "tripped" not in caplog.text
 
 
 # ── Fast-fail detection ───────────────────────────────────────────
@@ -188,10 +190,14 @@ class TestCascadeOrchestration:
     async def test_all_models_fail_raises_error(self, executor: CascadeExecutor, mock_llm) -> None:
         """When every model returns None, AllModelsTrippedError is raised."""
         mock_llm.chat.return_value = None  # empty response
-        with pytest.raises(AllModelsTrippedError):
+        with pytest.raises(AllModelsTrippedError) as raised:
             await executor.call_with_cascade(
                 [{"role": "user", "content": "hello"}], description="failing task"
             )
+        message = str(raised.value)
+        # `ExecutingState` matches this prefix; the rest must not blame credits alone.
+        assert message.startswith("All models in the cascade have tripped")
+        assert "API key" in message and "credits" in message
 
     @pytest.mark.asyncio
     async def test_on_success_callback_invoked(self, executor: CascadeExecutor, mock_llm) -> None:

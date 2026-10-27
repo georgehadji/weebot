@@ -37,6 +37,13 @@ from weebot.core.model_cascade_tracker import (
 
 logger = logging.getLogger(__name__)
 
+# `ExecutingState` matches the first sentence to skip a replan that cannot help.
+ALL_MODELS_TRIPPED_MESSAGE = (
+    "All models in the cascade have tripped their circuit breakers. "
+    "Check the provider API key and the model names, and the account credits "
+    "(https://openrouter.ai/credits for OpenRouter)."
+)
+
 
 class CascadeExecutor:
     """Manages the per-role model cascade: parallel → sequential → rescue.
@@ -57,6 +64,10 @@ class CascadeExecutor:
     _OPENROUTER_MIN_CREDIT_USD: float = 0.10
     # Seconds a Phase 1 probe runs alone before the next one is started.
     _HEDGE_DELAY_S: float = 20.0
+    # Consecutive failures after which a model is skipped for the rest of the session,
+    # and the earlier count at which the log starts warning about it.
+    _BREAKER_TRIP_AT: int = 5
+    _BREAKER_WARN_AT: int = 3
 
     @classmethod
     def _get_credit_threshold(cls) -> float:
@@ -136,14 +147,19 @@ class CascadeExecutor:
 
     def cascade_is_tripped(self, model_id: str) -> bool:
         """Return True if *model_id* has tripped its per-session breaker."""
-        return self._circuit_breaker_failures.get(model_id, 0) >= 5
+        return self._circuit_breaker_failures.get(model_id, 0) >= self._BREAKER_TRIP_AT
 
     def _cascade_record_failure(self, model_id: str) -> None:
         c = self._circuit_breaker_failures[model_id] = (
             self._circuit_breaker_failures.get(model_id, 0) + 1
         )
-        if c >= 3:
-            logger.warning("Circuit breaker tripped for %s", model_id)
+        if c >= self._BREAKER_TRIP_AT:
+            logger.warning("Circuit breaker tripped for %s after %d failures", model_id, c)
+        elif c >= self._BREAKER_WARN_AT:
+            logger.warning(
+                "Circuit breaker warning for %s: %d failures in a row (trips at %d)",
+                model_id, c, self._BREAKER_TRIP_AT,
+            )
 
     def _cascade_reset(self, model_id: str) -> None:
         self._circuit_breaker_failures[model_id] = 0
@@ -479,7 +495,8 @@ class CascadeExecutor:
     ) -> LLMResponse:
         """Per-role cascade: primary → fallback1 → fallback2 → tier3 → tier4.
 
-        Phase 1 — parallel probes (90s timeout, first-completed wins).
+        Phase 1 — hedged probes: one runs (90s timeout); the next starts when it fails or
+        after _HEDGE_DELAY_S without an answer; the first success wins.
         Phase 2 — sequential fallback (60s each).
         Phase 3 — live model rescue (all-404 fallback to OpenRouter free models).
 
@@ -641,10 +658,7 @@ class CascadeExecutor:
         # ── Terminal ────────────────────────────────────────────────
         from weebot.domain.exceptions import AllModelsTrippedError
 
-        raise AllModelsTrippedError(
-            "All models in the cascade have tripped their circuit breakers. "
-            "Check OpenRouter credits at https://openrouter.ai/credits"
-        )
+        raise AllModelsTrippedError(ALL_MODELS_TRIPPED_MESSAGE)
 
     # ── Live model rescue ───────────────────────────────────────────
 

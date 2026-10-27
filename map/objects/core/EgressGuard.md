@@ -4,7 +4,7 @@ name: EgressGuard
 code: EgressGuard, RecipientAllowlist, EgressDecision
 cluster: core
 universe: live
-status: verified
+status: stale
 verified: 2026-10-25
 commit: 12624041
 ---

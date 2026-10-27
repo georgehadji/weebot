@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-25
-commit: 12624041
+commit: 9ef23ae7
 ---
 
 # SQLiteStateRepository

@@ -75,7 +75,7 @@ def test_a_record_with_an_unknown_status_fails_the_generator(monkeypatch, capsys
     import sys
 
     gen = _load("gen_tasks_index")
-    monkeypatch.setattr(gen, "records", lambda: [("wip", "2026-10-26", "x.md", "X", "")])
+    monkeypatch.setattr(gen, "records", lambda: [gen.Record("wip", "2026-10-26", "x.md", "X")])
     monkeypatch.setattr(sys, "argv", ["gen_tasks_index.py"])
     assert gen.main() == 1, "the generator must refuse a status outside the known set"
     assert "x.md" in capsys.readouterr().out
@@ -147,31 +147,108 @@ def test_the_citation_check_covers_process_cards():
     assert any("objects" in p.parts for p in cards)
 
 
-def _index_with(monkeypatch, rows, succ):
+def _rec(status, rel, supersedes=()):
+    return _load("gen_tasks_index").Record(
+        status, "2026-10-27", rel, rel.removesuffix(".md").capitalize(), "", supersedes
+    )
+
+
+def _index_with(monkeypatch, rows):
     import sys
 
     gen = _load("gen_tasks_index")
     monkeypatch.setattr(gen, "records", lambda: rows)
-    monkeypatch.setattr(gen, "successors", lambda: succ)
     monkeypatch.setattr(sys, "argv", ["gen_tasks_index.py"])
     return gen
 
 
 def test_a_superseded_record_must_be_named_by_its_successor(monkeypatch, capsys):
-    rows = [("superseded", "2026-10-27", "old.md", "Old", "")]
-    assert _index_with(monkeypatch, rows, {}).main() == 1
+    rows = [_rec("superseded", "old.md")]
+    assert _index_with(monkeypatch, rows).main() == 1
     assert "old.md" in capsys.readouterr().out
 
 
 def test_supersedes_must_name_a_superseded_record(monkeypatch, capsys):
-    rows = [("done", "2026-10-27", "old.md", "Old", ""),
-            ("done", "2026-10-27", "new.md", "New", "")]
-    assert _index_with(monkeypatch, rows, {"old.md": ["new.md"]}).main() == 1
+    rows = [_rec("done", "old.md"), _rec("done", "new.md", supersedes=("old.md",))]
+    assert _index_with(monkeypatch, rows).main() == 1
     assert "old.md" in capsys.readouterr().out
 
 
 def test_the_index_says_what_superseded_a_record(monkeypatch):
-    rows = [("superseded", "2026-10-27", "old.md", "Old", ""),
-            ("done", "2026-10-27", "new.md", "New", "")]
-    gen = _index_with(monkeypatch, rows, {"old.md": ["new.md"]})
-    assert "superseded by [New](new.md)" in gen.render(rows, {"old.md": ["new.md"]})
+    rows = [_rec("superseded", "old.md"), _rec("done", "new.md", supersedes=("old.md",))]
+    gen = _index_with(monkeypatch, rows)
+    assert "superseded by [New](new.md)" in gen.render(rows)
+
+
+def test_fix_keeps_a_list_followed_by_a_range_intact(tmp_path, monkeypatch):
+    """`a, b-c` lost its `-c` tail or kept it unshifted (`441, 452-449`)."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    lines = [f"line {i}" for i in range(1, 9)]
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(lines) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "eight lines")
+    sha = _git(tmp_path, "rev-parse", "--short", "HEAD")
+    card.write_text(f"---\nstatus: verified\nverified: 2026-01-01\ncommit: {sha}\n---\n"
+                    "`f` is at `weebot/mod.py:2, 5-6`.\n")
+    _git(tmp_path, "commit", "-q", "-am", "card2")
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(["new", *lines]) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift")
+    cm.drifted_citations(fix=True)
+    assert "weebot/mod.py:3, 6-7" in card.read_text()
+
+
+def test_fix_is_idempotent_on_a_card_it_marks_stale(tmp_path, monkeypatch):
+    """Relocated numbers without a restamped commit were shifted again by the next run."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    lines = [f"line {i}" for i in range(1, 9)]
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(lines) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "eight lines")
+    sha = _git(tmp_path, "rev-parse", "--short", "HEAD")
+    card.write_text(f"---\nstatus: verified\nverified: 2026-01-01\ncommit: {sha}\n---\n"
+                    "`a` is at `weebot/mod.py:3`, and `b` is at `weebot/mod.py:6`.\n")
+    _git(tmp_path, "commit", "-q", "-am", "card2")
+    changed = ["new", *lines]
+    changed[6] = "line 6 rewritten"  # line 6 moves to 7 and its text changes
+    (tmp_path / "weebot" / "mod.py").write_text("\n".join(changed) + "\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift and rewrite")
+    cm.drifted_citations(fix=True)
+    once = card.read_text()
+    assert "status: stale" in once and "weebot/mod.py:4" in once
+    # The gone citation keeps its old number inside a marker, so it cannot pass as verified.
+    assert "weebot/mod.py:[stale 6]" in once
+    # A person re-reading the card flips it back to verified; the numbers it kept must not
+    # be shifted a second time.
+    card.write_text(once.replace("status: stale", "status: verified"))
+    cm.drifted_citations(fix=True)
+    assert "weebot/mod.py:4" in card.read_text()
+    assert any("[stale 6]" in p for p in cm.broken_citations()), (
+        "a verified card with an unresolved stale marker must fail the gate"
+    )
+
+
+def test_a_citation_to_a_file_missing_at_the_cards_commit_is_reported(tmp_path, monkeypatch):
+    """The card's commit predates the file, so its line numbers were never checkable."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    (tmp_path / "weebot" / "other.py").write_text("x = 1\n")
+    card.write_text(card.read_text() + "Also `weebot/other.py:1`.\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "later file")
+    problems = cm.drifted_citations()
+    assert any("other.py" in p and "did not exist" in p for p in problems)
+
+
+def test_main_is_checked_for_drift_by_a_run_that_can_fail():
+    """CI only warns on a PR; a run on main and on a schedule is where drift turns red."""
+    import pytest
+
+    yaml = pytest.importorskip("yaml")
+    path = ROOT / ".github" / "workflows" / "map-drift.yml"
+    assert path.exists(), "no workflow reports map drift on main"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    triggers = workflow.get(True, workflow.get("on"))  # PyYAML reads a bare `on:` as True
+    assert "pull_request" not in triggers, "drift must not block unrelated PRs"
+    assert "schedule" in triggers and triggers["push"]["branches"] == ["main"]
+    steps = [s for job in workflow["jobs"].values() for s in job["steps"]]
+    drift = [s for s in steps if s.get("run") == "make lint-map-drift"]
+    assert drift and not drift[0].get("continue-on-error")
+    checkout = next(s for s in steps if "checkout" in s.get("uses", ""))
+    assert checkout["with"]["fetch-depth"] == 0

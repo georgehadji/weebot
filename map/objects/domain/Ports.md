@@ -5,8 +5,8 @@ code: weebot/application/ports/*_port.py
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-26
-commit: 9ef23ae7
+verified: 2026-10-27
+commit: 3223b7f2
 ---
 
 # Ports
@@ -45,7 +45,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
 | LLMPort | llm_port.py:9 | adapters in `infrastructure/adapters/llm/` (LLMAdapters card) | port `di/__init__.py:146` |
 | MainReviewPort | main_review_port.py:12 | MainReviewService `application/services/main_review_service.py:39` | inside `"idea_gate"` (same) |
-| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:377` builds `MCPToolRegistryBridge` instead, `di/_factories.py:543-558`) |
+| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:377` builds `MCPToolRegistryBridge` instead, `di/_factories.py:544-559`) |
 | McpToolRegistrationPort | mcp_tool_registration_port.py:13 | RoleBasedToolRegistryAdapter `infrastructure/adapters/mcp_tool_registry_adapter.py:10` | none |
 | McpToolRetrievalPort | mcp_tool_retrieval_port.py:17 | LocalEmbeddingMcpToolRetrievalAdapter `infrastructure/adapters/mcp_tool_retrieval_adapter.py:26` | none |
 | MemoryPort | memory_port.py:8 | FileSystemMemoryAdapter `infrastructure/persistence/filesystem_memory.py:29` | key `FileSystemMemoryAdapter` `di/__init__.py:167` |

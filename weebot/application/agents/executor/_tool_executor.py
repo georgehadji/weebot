@@ -254,7 +254,7 @@ class ToolExecutor:
     # ── Egress guard ───────────────────────────────────────────────
 
     def _get_egress_guard(self):
-        """Resolve the DI-managed EgressGuard singleton, lazily.
+        """Construct this executor's EgressGuard, lazily.
 
         Only a SUCCESSFUL resolution latches. The previous version set
         `_egress_guard_resolved = True` before the `try`, so if both the DI

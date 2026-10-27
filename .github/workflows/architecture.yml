@@ -65,8 +65,9 @@ jobs:
         # BLOCKING. In `make check` but was missing here (CI-1).
         run: make lint-map
       - name: Map citation drift (advisory)
-        # ADVISORY. `make check` enforces it. A card is stale when the code it cites changed, and
-        # any PR that moves cited code would otherwise fail here (main was red for 5 runs).
+        # ADVISORY here, BLOCKING on main: `make check` and map-drift.yml (push to main and weekly)
+        # enforce it. A card is stale when the code it cites changed, and any PR that moves cited
+        # code would otherwise fail here (main was red for 5 runs).
         # Fix with `python scripts/check_map_citations.py --fix`, then re-read the cards it marks stale.
         continue-on-error: true
         run: make lint-map-drift

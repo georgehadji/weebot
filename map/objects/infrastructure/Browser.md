@@ -44,7 +44,7 @@ The Playwright side of web browsing: `PlaywrightAdapter` owns one browser, one c
 
 ## Lifecycle (who opens and closes the browser)
 - **Open.** A `PlaywrightAdapter` is constructed with no browser in three places.
-  - Per tool collection: `create_tool_collection_from_names` builds one through the `browser_factory` the container wires (`weebot/application/di/_factories.py:514, 503-509`) and shares it between `advanced_browser` and `browser_inspector` (`weebot/application/services/tool_registry.py:498-506`). The variable is local to the call (`:464`), so every collection gets its own adapter. With no factory wired, both tools are skipped (`:503-505`).
+  - Per tool collection: `create_tool_collection_from_names` builds one through the `browser_factory` the container wires (`weebot/application/di/_factories.py:515`) and shares it between `advanced_browser` and `browser_inspector` (`weebot/application/services/tool_registry.py:498-506`). The variable is local to the call (`:464`), so every collection gets its own adapter. With no factory wired, both tools are skipped (`:503-505`).
   - By the tool itself when nothing was injected (`advanced_browser.py:374-377`, `browser_inspector.py:285-288`).
   - In the health check, which only calls `is_available()` (`weebot/infrastructure/observability/health_checks.py:327-330`).
   - The browser process starts on the first `advanced_browser` `launch`/`goto` or `browser_inspector` `navigate` (`advanced_browser.py:176-177, 192-193, 372-383`, `browser_inspector.py:280-291`).
