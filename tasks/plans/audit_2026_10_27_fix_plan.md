@@ -1,7 +1,7 @@
 ---
 status: open
 date: 2026-10-27
-note: nothing built yet; wave 0 (repro tests) first; decisions D1-D4 need the owner
+note: wave 1 built on fix/audit-wave-1 (A01, A02, A19, A31, A32); waves 0 and 2-6 not started; decisions D1-D4 need the owner
 ---
 
 # Plan: fix the findings of the 2026-10-27 whole-repo audit

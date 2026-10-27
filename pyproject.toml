@@ -29,7 +29,7 @@ weebot = "cli.main:_wrap_main"
 version = {file = "VERSION"}
 
 [tool.setuptools.packages.find]
-include = ["weebot*", "cli*"]
+include = ["weebot*", "cli*", "research_modules*", "integrations*"]
 
 [tool.ruff]
 target-version = "py312"

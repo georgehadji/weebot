@@ -694,11 +694,37 @@ class SchedulingManager:
             logger.info("Catch-up complete: %d jobs executed", caught_up)
         return caught_up
 
+    async def reconcile(self) -> None:
+        """Make APScheduler match jobs.db: the table is the truth, the scheduler a projection.
+
+        APScheduler keeps its jobs in memory, so after a restart it holds nothing. Safe to
+        call any time: `_schedule_job` replaces an existing entry.
+        """
+        wanted: set[str] = set()
+        for job in self.list_jobs(enabled_only=True):
+            if job.status == JobStatus.PAUSED.value:
+                continue
+            if job.trigger_type in (TriggerType.DATE.value, TriggerType.ONCE.value) and (
+                job.status == JobStatus.COMPLETED.value
+            ):
+                continue  # a finished one-shot would fire again if re-added
+            try:
+                await self._schedule_job(job)
+            except Exception as exc:
+                logger.warning("Could not schedule job %s: %s", job.job_id, exc, exc_info=True)
+                continue
+            wanted.add(job.job_id)
+        for scheduled in self.scheduler.get_jobs():
+            if scheduled.id not in wanted:
+                self.scheduler.remove_job(scheduled.id)
+        logger.info("Scheduler reconciled: %d job(s) scheduled", len(wanted))
+
     async def start(self) -> None:
-        """Start the scheduler and run catch-up for missed jobs."""
+        """Start the scheduler, re-add persisted jobs, then run catch-up for missed jobs."""
         if not self.scheduler.running:
             self.scheduler.start()
             logger.info("Scheduler started")
+            await self.reconcile()
             # Run catch-up for missed jobs
             await self.run_catch_up()
 
