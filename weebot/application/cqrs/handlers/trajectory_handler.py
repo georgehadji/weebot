@@ -68,6 +68,9 @@ class ScoreTrajectoryHandler(CommandHandler):
 
             # Build a structured TrajectorySummary
             trajectory = await self._builder.build(session, scored_event)
+            task = session.context.original_task or session.title or ""
+            if task and not trajectory.task_text:
+                trajectory = trajectory.model_copy(update={"task_text": task[:500]})
 
             if self._trajectory_repo is not None:
                 await self._trajectory_repo.save(trajectory)

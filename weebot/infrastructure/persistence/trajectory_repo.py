@@ -71,6 +71,12 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                 CREATE INDEX IF NOT EXISTS idx_trajectories_session
                 ON trajectories(session_id)
                 """)
+            # Added for planning from past failures; older databases lack it.
+            cols = await conn.execute_fetchall("PRAGMA table_info(trajectories)")
+            if "task_text" not in {c[1] for c in cols}:
+                await conn.execute(
+                    "ALTER TABLE trajectories ADD COLUMN task_text TEXT NOT NULL DEFAULT ''"
+                )
             logger.debug("Trajectory table schema ensured")
 
         await self._ensure_failure_signatures_schema(pool)
@@ -117,12 +123,12 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     (task_id, session_id, skill_name, skill_version, harness,
                      score, passed, failure_modes, success_patterns,
                      tool_call_count, total_tokens, total_cost,
-                     trajectory_text, answer, expected_answer, created_at)
+                     trajectory_text, answer, expected_answer, created_at, task_text)
                 VALUES
                     (:task_id, :session_id, :skill_name, :skill_version, :harness,
                      :score, :passed, :failure_modes, :success_patterns,
                      :tool_call_count, :total_tokens, :total_cost,
-                     :trajectory_text, :answer, :expected_answer, :created_at)
+                     :trajectory_text, :answer, :expected_answer, :created_at, :task_text)
                 """,
                 {
                     "task_id": trajectory.task_id,
@@ -141,6 +147,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     "answer": trajectory.answer,
                     "expected_answer": trajectory.expected_answer,
                     "created_at": datetime.now(UTC).isoformat(),
+                    "task_text": trajectory.task_text,
                 },
             )
 
@@ -157,6 +164,20 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
             LIMIT ?
             """,
             (skill_name, skill_version, limit),
+        )
+        return [self._row_to_trajectory(r) for r in rows]
+
+    async def recent_failures(self, limit: int = 200) -> list[TrajectorySummary]:
+        """Failed trajectories that recorded their task, newest first."""
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            """
+            SELECT * FROM trajectories
+            WHERE passed = 0 AND task_text != ''
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
         )
         return [self._row_to_trajectory(r) for r in rows]
 
@@ -246,6 +267,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
             trajectory_text=row["trajectory_text"],
             answer=row["answer"],
             expected_answer=row["expected_answer"],
+            task_text=row["task_text"] or "",  # the schema check adds the column
         )
 
     # ── Failure Signature CRUD ───────────────────────────────────────────

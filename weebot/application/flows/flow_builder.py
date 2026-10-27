@@ -160,6 +160,8 @@ def build_flow(
             # Skills distilled from successful runs, then reviewed quarantined -> candidate.
             skill_distiller=resolve("skill_distiller"),
             skill_review_gate=resolve("skill_review_gate"),
+            # Failed runs on similar tasks, turned into planner notes.
+            trajectory_repo=resolve("trajectory_repo"),
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

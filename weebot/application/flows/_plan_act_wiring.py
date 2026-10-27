@@ -79,6 +79,7 @@ LEGACY_KWARG_NAMES: tuple[str, ...] = (
     "misalignment_journal",
     "skill_distiller",
     "skill_review_gate",
+    "trajectory_repo",
 )
 
 
@@ -146,6 +147,7 @@ def wire_ports(flow: Any, cfg: PlanActFlowConfig) -> None:
     flow._checkpoint_port = cfg.checkpoint_port
     flow._hooks = cfg.hooks  # Optional[HookRegistry] -- None = no-op
     flow._misalignment_journal = cfg.misalignment_journal
+    flow._trajectory_repo = cfg.trajectory_repo  # past failures on similar tasks
     flow._correction_tracker = cfg.correction_tracker
     flow._sc_extractor = cfg.session_constraint_extractor
     flow._session_constraints = None  # hydrated lazily in run()
