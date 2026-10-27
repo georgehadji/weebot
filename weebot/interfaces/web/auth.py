@@ -81,6 +81,18 @@ def _auth_mode() -> str:
     return os.environ.get("WEEBOT_AUTH_MODE", "legacy").lower()
 
 
+def _behind_proxy() -> bool:
+    """True when a reverse proxy (the UI's) fronts this API (WEEBOT_BEHIND_PROXY=1).
+
+    Every proxied request then arrives from loopback, so loopback says nothing about who
+    asked and cannot stand in for an identity.
+    """
+    from weebot.config.secret_accessor import SecretAccessor
+
+    value = (SecretAccessor.get("WEEBOT_BEHIND_PROXY") or "").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
 def _is_legacy_mode() -> bool:
     return _auth_mode() == "legacy"
 
@@ -279,7 +291,7 @@ async def require_mutation_identity(request: Request) -> None:
     current_user = await _resolve_user(request)
     if current_user == "anonymous":
         client_host = request.client.host if request.client else ""
-        if client_host not in _LOOPBACK:
+        if client_host not in _LOOPBACK or _behind_proxy():
             raise HTTPException(
                 status_code=403,
                 detail="Mutating requests require authentication",

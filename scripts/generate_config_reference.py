@@ -176,6 +176,11 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce egress guard (block outbound requests not in allowlist)"},
     {"var": "WEEBOT_ENFORCE_SESSION_OWNERSHIP", "type": "bool", "default": "true",
      "desc": "Enforce user_id matching on session access"},
+    {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
+     "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
+             "so they need an API key"},
+    {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
+     "desc": "Largest request body the web API accepts (413 above it)"},
     {"var": "WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS", "type": "bool", "default": "false",
      "desc": "EXPERIMENTAL: enable raw-SQL migration scripts. Do not enable in production."},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
