@@ -44,6 +44,7 @@ from weebot.infrastructure.persistence._behavioral_rule_repo import (
     BehavioralRuleRepo,
     OpportunityRepo,
     PlanTemplateRepo,
+    WorkflowTemplateRepo,
 )
 from weebot.infrastructure.persistence._correction_repo import CorrectionRecordRepo
 from weebot.infrastructure.persistence._session_constraint_repo import SessionConstraintRepo
@@ -97,6 +98,7 @@ class SQLiteStateRepository(
         self._behavioral_rules: BehavioralRuleRepo | None = None
         self._opportunities: OpportunityRepo | None = None
         self._plan_templates: PlanTemplateRepo | None = None
+        self._workflow_templates: WorkflowTemplateRepo | None = None
         self._corrections: CorrectionRecordRepo | None = None
         self._session_constraints: SessionConstraintRepo | None = None
 
@@ -122,6 +124,7 @@ class SQLiteStateRepository(
         self._behavioral_rules = BehavioralRuleRepo(pool)
         self._opportunities = OpportunityRepo(pool)
         self._plan_templates = PlanTemplateRepo(pool)
+        self._workflow_templates = WorkflowTemplateRepo(pool)
         self._corrections = CorrectionRecordRepo(pool)
         self._session_constraints = SessionConstraintRepo(pool)
 
@@ -216,6 +219,13 @@ class SQLiteStateRepository(
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_plan_templates_hash ON plan_templates(task_hash)"
             )
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_templates (
+                    task_summary TEXT PRIMARY KEY,
+                    template_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """)
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS commitments (
                     id TEXT PRIMARY KEY,
@@ -648,6 +658,16 @@ class SQLiteStateRepository(
     async def increment_template_use(self, template_id: str) -> None:
         await self._init_helpers()
         await self._plan_templates.increment_use(template_id)  # type: ignore[union-attr]
+
+    # ── Workflow templates (Agent Workflow Memory) ───────────────
+
+    async def save_workflow_template(self, task_summary: str, template_json: str) -> None:
+        await self._init_helpers()
+        await self._workflow_templates.save(task_summary, template_json)  # type: ignore[union-attr]
+
+    async def list_workflow_templates(self, limit: int = 200) -> list[str]:
+        await self._init_helpers()
+        return await self._workflow_templates.list_all(limit)  # type: ignore[union-attr]
 
     # ── Commitments ──────────────────────────────────────────────
 

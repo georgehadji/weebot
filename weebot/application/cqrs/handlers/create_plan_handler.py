@@ -105,6 +105,8 @@ class CreatePlanHandler(CommandHandler):
                     # DEBUG that was indistinguishable from "no match". (D76.)
                     logger.warning("Template cache lookup failed: %s", exc, exc_info=True)
 
+            if command.awm_hints:
+                planner_cfg["awm_hints"] = list(command.awm_hints)
             planner = PlannerAgent(llm=self._llm, event_bus=self._event_bus, **planner_cfg)
 
             events: list[dict] = []

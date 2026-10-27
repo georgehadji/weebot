@@ -182,7 +182,7 @@ class CompletedState(FlowState):
                 try:
                     awm = context._get_awm()
                     if awm is not None:
-                        template = await awm.induce(context._session)
+                        template = await awm.induce(context._session, plan=context._plan)
                         if template is not None:
                             await awm.store(template)
                             logger.info(

@@ -26,6 +26,9 @@ class CreatePlanCommand(Command):
     meta_notes: list[str] = Field(
         default_factory=list, description="Cross-session avoidance hints from MisalignmentJournal"
     )
+    awm_hints: list[str] = Field(
+        default_factory=list, description="Generalized steps from a similar past workflow (AWM)"
+    )
 
 
 class ExecuteStepCommand(Command):
