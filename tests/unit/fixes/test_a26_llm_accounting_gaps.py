@@ -23,11 +23,35 @@ PRICED = "deepseek/deepseek-chat"
 # ── cached prompt tokens ────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(strict=True, reason="A26: cached prompt tokens are priced at the full rate")
 def test_cached_prompt_tokens_cost_less():
     full = estimate_cost(PRICED, 1_000_000, 0)
     cached = estimate_cost(PRICED, 1_000_000, 0, cached_prompt=900_000)
     assert 0 < cached < full
+    assert cached == pytest.approx(full * 0.19)  # 10% of the prompt uncached, 90% at a tenth
+
+
+def test_cached_tokens_never_exceed_the_prompt_or_go_negative():
+    full = estimate_cost(PRICED, 1000, 0)
+    assert estimate_cost(PRICED, 1000, 0, cached_prompt=10**9) == pytest.approx(full * 0.1)
+    assert estimate_cost(PRICED, 1000, 0, cached_prompt=-5) == pytest.approx(full)
+
+
+async def test_a_completed_call_reports_its_cached_tokens_at_the_cache_rate(monkeypatch):
+    seen = []
+
+    async def on_done(event):
+        seen.append(event.cost)
+
+    class _Cached:
+        async def chat(self, **kw):
+            if kw.get("model") != PRICED:
+                raise RuntimeError("only the priced model answers")
+            usage = {"prompt_tokens": 1000, "completion_tokens": 0, "cached_tokens": 1000}
+            return LLMResponse(content="ok", tool_calls=None, usage=usage)
+
+    ex = _cascade(_Cached(), [PRICED], monkeypatch, on_call_completed=on_done)
+    await ex.call_with_cascade(messages=[{"role": "user", "content": "x"}], description="d")
+    assert seen == [pytest.approx(estimate_cost(PRICED, 1000, 0) * 0.1)]
 
 
 # ── cascade harness (the one used by test_cascade_does_not_bill_orphans) ────

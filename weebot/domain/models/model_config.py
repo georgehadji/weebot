@@ -11,6 +11,9 @@ from enum import Enum
 from weebot.domain.models.task_type import TaskType
 
 
+# Share of the prompt rate that a cache-read token costs.
+CACHE_READ_FRACTION = 0.1
+
 class ModelTier(Enum):
     PREMIUM = "premium"
     STANDARD = "standard"
@@ -103,6 +106,13 @@ class ModelConfig:
             self.cost_per_1k_tokens if completion is None else completion,
         )
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(
+        self, input_tokens: int, output_tokens: int, *, cached_prompt: int = 0
+    ) -> float:
+        """Cost in USD. *cached_prompt* of the input tokens were served from the provider's
+        prompt cache, which bills them at a tenth of the prompt rate (the catalog holds no
+        per-model cache rate)."""
         prompt, completion = self.split_cost_per_1k()
-        return (input_tokens * prompt + output_tokens * completion) / 1000
+        cached = min(max(cached_prompt, 0), input_tokens)
+        billed_prompt = (input_tokens - cached) * prompt + cached * prompt * CACHE_READ_FRACTION
+        return (billed_prompt + output_tokens * completion) / 1000

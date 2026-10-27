@@ -279,7 +279,10 @@ class BoundedLLMAdapter(LLMPort):
                         model=used_model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
-                        cost=estimate_cost(priced, prompt_tokens, completion_tokens),
+                        cost=estimate_cost(
+                            priced, prompt_tokens, completion_tokens,
+                            cached_prompt=int(usage.get("cached_tokens", 0) or 0),
+                        ),
                     )
                 )
         except Exception:

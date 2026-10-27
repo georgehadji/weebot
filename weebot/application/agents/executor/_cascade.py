@@ -243,7 +243,7 @@ class CascadeExecutor:
             self._acr_router.record_cascade_outcome(decision)
 
     async def _call_completed(
-        self, model_id: str, prompt_tokens: int, completion_tokens: int
+        self, model_id: str, prompt_tokens: int, completion_tokens: int, cached_prompt: int = 0
     ) -> None:
         """Report one successful call; the hook must never fail the call."""
         if self._on_call_completed is None:
@@ -256,7 +256,9 @@ class CascadeExecutor:
                     model=model_id,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
-                    cost=_estimate_cost(model_id, prompt_tokens, completion_tokens),
+                    cost=_estimate_cost(
+                        model_id, prompt_tokens, completion_tokens, cached_prompt=cached_prompt
+                    ),
                 )
             )
         except Exception:
@@ -394,6 +396,7 @@ class CascadeExecutor:
                 _usage = getattr(resp, "usage", None) or {}
                 _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
                 _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
+                _cached = int(_usage.get("cached_tokens", 0) or 0)
                 self._record_decision(
                     model_name=model_id,
                     tier=tier,
@@ -405,10 +408,12 @@ class CascadeExecutor:
                     # No caller ever supplied this, so the tracker's
                     # total_cost_estimate was structurally 0.0 -- and
                     # mcp/resources.py:297 publishes that number as cost accounting.
-                    cost_estimate=_estimate_cost(model_id, _prompt_tokens, _completion_tokens),
+                    cost_estimate=_estimate_cost(
+                        model_id, _prompt_tokens, _completion_tokens, cached_prompt=_cached
+                    ),
                     task_category=task_category,
                 )
-                await self._call_completed(model_id, _prompt_tokens, _completion_tokens)
+                await self._call_completed(model_id, _prompt_tokens, _completion_tokens, _cached)
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
