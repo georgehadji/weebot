@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 591298c1
+commit: d10b779f
 consumes:
   - ../objects/application/PlanActFlow.md
   - ../objects/application/FlowRouter.md

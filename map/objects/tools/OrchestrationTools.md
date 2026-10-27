@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 7effa9ba
+commit: d10b779f
 ---
 
 # Orchestration tools
@@ -42,7 +42,7 @@ Wiring, read from source:
 - Output trust: `swarm`, `dispatch_parallel_tasks`, `workflow_orchestrator` and `debate` are `EXTERNAL` (sub-agents with tools may have browsed; moved from `LOCAL` on 2026-10-24, `weebot/tools/swarm.py:36`, `weebot/tools/dispatch_agents.py:40`, `weebot/tools/workflow_orchestrator.py:44`, `weebot/tools/debate.py:76`); the other ten are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
 - `flow_factory` is never in the registry's `wiring()` (it supplies `state_repo`, `browser_factory`, `rerank`, `tool_config`, `collaborators`, `_factories.py:513-522`; read at `application/services/tool_registry.py:446-452`). Only callers that pass it get working sub-agent tools: `application/di/_agent_tools.py:46-53`, `application/di/__init__.py:514-522` and `:651-661`, and `interfaces/factories.py:306-314` via `_get_flow_factory` (`:225-259`), which returns None when `llm_port` is None (`:230-231`).
 - `_get_flow_factory` builds sub-flows with `tools=None` and the shared event bus (`factories.py:260-279`); `_agent_tools.py` builds them with the `admin` tool set and `event_bus=None` (`_agent_tools.py:49-64`).
-- `ScheduleTool` refuses inside a cron job (`schedule_tool.py:110-121`). A `command` job is accepted (`:129-145`) but `SchedulingManager` raises `NotImplementedError` when it runs (`weebot/scheduling/scheduler.py:457-462`).
+- `ScheduleTool` refuses inside a cron job (`schedule_tool.py:110-121`). A `command` job is accepted (`:129-145`) but `SchedulingManager` raises `NotImplementedError` when it runs (`weebot/scheduling/scheduler.py:455-460`).
 
 Consequences (read from source, not run):
 - `build_tools` fills a missing `llm_port` from the shared container (`interfaces/factories.py:299-304`), so the web session router (`interfaces/web/routers/sessions.py:342`), the webhook router (`interfaces/web/routers/webhook.py:128`) and the gateways (e.g. `interfaces/gateways/discord.py:197`), which pass none, still get a flow factory; the CLI runner passes its own (`interfaces/cli/agent_runner.py:93-95`). The sub-agent tools stay dead but listed only when the container resolves no `LLMPort`, `StateRepositoryPort` or `EventBusPort` (`interfaces/factories.py:254-265`). MCP scoping rebuilds the collection with `llm_port` but no `flow_factory` (`application/flows/mcp_scope.py:84-86`), so `dispatch_parallel_tasks` and `workflow_orchestrator` fail and `debate`'s inner dispatcher returns an error after the scoped rebuild.
