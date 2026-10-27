@@ -15,13 +15,6 @@ _TEST_PUBLIC_KEY_HEX = "c12a20a80a7d4600647e751ec5ca00d639c3907dc595f9d619b773c4
 class TestDiscordGatewayAuth:
     """Validates allowlist enforcement in DiscordAdapter.process_interaction."""
 
-    @pytest.fixture(autouse=True)
-    def _mock_safety(self, mocker):
-        """Mock SafetyChecker to avoid ChatOpenAI dependency."""
-        import weebot.interfaces.gateways.base as gw_base
-
-        mocker.patch.object(gw_base, "SafetyChecker")
-
     @pytest.fixture
     def adapter(self):
         from weebot.interfaces.gateways.discord import DiscordAdapter

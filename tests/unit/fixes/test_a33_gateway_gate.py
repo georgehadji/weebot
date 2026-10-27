@@ -23,7 +23,6 @@ def test_the_inert_gate_is_the_proof_of_the_defect():
     assert checker.is_critical_operation("rm -rf /", "gateway") is False
 
 
-@pytest.mark.xfail(strict=True, reason="A33: the gateway still consults an inert gate")
 def test_the_gateway_no_longer_carries_a_gate_that_cannot_fire():
     assert "is_critical_operation" not in inspect.getsource(GatewayAdapter.handle)
     assert "SafetyChecker" not in inspect.getsource(GatewayAdapter.__init__)

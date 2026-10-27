@@ -13,11 +13,9 @@ from weebot.core.bash_guard import BashGuard
 
 
 @pytest.fixture
-def discord(mocker):
-    import weebot.interfaces.gateways.base as gw_base
+def discord():
     from weebot.interfaces.gateways.discord import DiscordAdapter
 
-    mocker.patch.object(gw_base, "SafetyChecker")
     key = SigningKey.generate()
     adapter = DiscordAdapter(
         public_key=key.verify_key.encode().hex(),

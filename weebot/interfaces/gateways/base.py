@@ -9,7 +9,9 @@ the same lifecycle:
 3. send_response(response) → send back to the platform
 4. stop() — clean up connections
 
-All incoming messages pass through the SafetyChecker before execution.
+Inbound text is not scanned for dangerous words: the actions a run can take are gated
+by the guard chain on the tools (a word list refused ordinary sentences and, as written,
+never fired: audit A33).
 """
 
 from __future__ import annotations
@@ -22,7 +24,6 @@ from pathlib import Path
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.gateway_auth import GatewayAuth
-from weebot.core.safety import SafetyChecker
 
 
 @dataclass
@@ -59,9 +60,8 @@ class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
 
     def __init__(self, llm_port: LLMPort) -> None:
-        # Required: every adapter gets `llm` from the entry point's container.
-        # A None here used to build a whole second Container (W5.3, F28).
-        self._safety = SafetyChecker(llm=llm_port)
+        # Every adapter still receives `llm` from the entry point's container; nothing here
+        # uses it since the inert safety gate went (A33), and the call sites stay as they are.
         self._auth = GatewayAuth()
 
     def is_authorized(self, platform: str, chat_id: str, user_id: str = "") -> bool:
@@ -114,12 +114,11 @@ class GatewayAdapter(ABC):
         ...
 
     async def handle(self, message: GatewayMessage) -> str | None:
-        """Route an incoming message through safety checks.
+        """The text to act on for an incoming message.
 
-        Returns the response text, or None if blocked by safety.
+        Returns None only when a subclass refuses a message. Dangerous actions are not
+        judged from the chat text: the tools the run uses are wrapped by the guard chain.
         """
-        if self._safety.is_critical_operation(message.text, "gateway"):
-            return None  # Blocked by safety
         return message.text
 
     async def handle_ponytail_command(self, text: str) -> str | None:

@@ -29,17 +29,6 @@ class TestDiscordAdapter:
 
     # ── fixtures ────────────────────────────────────────────────────
 
-    @pytest.fixture(autouse=True)
-    def _mock_safety(self, mocker):
-        """Mock SafetyChecker to avoid ChatOpenAI dependency.
-
-        Imports the gateway base module first so that ``mocker.patch.object``
-        replaces the reference *after* the module is in ``sys.modules``.
-        """
-        import weebot.interfaces.gateways.base as gw_base
-
-        mocker.patch.object(gw_base, "SafetyChecker")
-
     @pytest.fixture
     def adapter(self):
         from weebot.interfaces.gateways.discord import DiscordAdapter
@@ -247,13 +236,6 @@ class TestDiscordWebhookRouter:
 
 class TestDiscordAdapterLifecycle:
     """Validates start/stop lifecycle."""
-
-    @pytest.fixture(autouse=True)
-    def _mock_safety(self, mocker):
-        """Mock SafetyChecker to avoid ChatOpenAI dependency."""
-        import weebot.interfaces.gateways.base as gw_base
-
-        mocker.patch.object(gw_base, "SafetyChecker")
 
     @pytest.fixture
     def adapter_fixture(self):

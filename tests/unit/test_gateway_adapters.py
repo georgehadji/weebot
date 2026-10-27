@@ -12,15 +12,6 @@ from weebot.interfaces.gateways.email import EmailAdapter
 from weebot.interfaces.gateways.base import GatewayResponse
 
 
-# Patch SafetyChecker to avoid ChatOpenAI init during tests
-@pytest.fixture(autouse=True)
-def _mock_safety():
-    with patch("weebot.interfaces.gateways.base.SafetyChecker") as mock:
-        instance = mock.return_value
-        instance.is_critical_operation.return_value = False
-        yield
-
-
 class TestWhatsAppAdapter:
     """WhatsAppAdapter send_response and message parsing."""
 
