@@ -47,7 +47,7 @@ Consequences (read from source, not run):
 - Store-mode principal keys cannot pass the HTTP middleware: it compares only against `weebot_api_key` (`main.py:521`), and with no key `FailClosedMiddleware` refuses non-loopback (`:547-559`).
 - `/api/costs/summary` has no tenant filter (`routers/ops_router.py:85-102`). Fixed (F58): `/api/sessions/search` keeps only the caller's sessions (`routers/sessions.py:154-161`), `/api/dashboard/metrics` counts only the caller's (`routers/dashboard.py:37-38`), `/api/events/stream` forwards only events of the caller's sessions (`routers/sse.py:52-72`).
 - `watch/start` starts a file watcher on any existing directory the caller names, once `require_mutation_identity` passes (`routers/behavior_router.py:137-159`).
-- The behavior sockets do their own auth: with no API key both accept any client, loopback or not (`behavior_router.py:251-288, 365-377`), unlike `_websocket_auth` (`main.py:704-706`); `/ws/session/{id}` accepts only `?token=` and checks no ownership.
+- The behavior sockets do their own auth through `_ws_authorized` (`behavior_router.py:251-274`): the key (subprotocol, Bearer header or `?token=`) when one is set, else loopback clients only; neither socket checks session ownership. `_websocket_auth` (`main.py:704-706`) is a separate path.
 - Silent swallow: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:255-258`).
 - Slack and WhatsApp callbacks run their work on `BackgroundTasks` (`routers/slack_webhook.py:68`, `routers/whatsapp_webhook.py:78`), which the lifespan drains at shutdown (`main.py:376-378`).
 - `/app` static mount looks for `weebot-ui/dist` (`main.py:683-686`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:12`), so the mount is inert.
