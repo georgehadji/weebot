@@ -35,7 +35,7 @@ Format: name — source — status — card
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-10-25 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — stale 2026-10-25 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — stale 2026-10-27 — [card](interfaces/WebAPI.md)
-- Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-24 — [card](interfaces/WebUI.md)
+- Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-27 — [card](interfaces/WebUI.md)
 
 ## core
 - ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-25 — [card](core/ApprovalManager.md)

@@ -9,7 +9,7 @@ A rename or move of the target breaks the consumer, and no test in the repo catc
 | `docker compose` | builds `Dockerfile.api` (API, 8000) and `weebot-ui/Dockerfile` (UI, 3000); mounts `./Output` at `/data/output` | `docker-compose.yml:52-54, 91, 109-111` | [WebAPI](../objects/interfaces/WebAPI.md), [WebUI](../objects/interfaces/WebUI.md) |
 | GitHub Actions `architecture.yml` | `scripts/lint_*.py`, `scripts/quality_ceilings.py`, `scripts/check_ruleset_consistency.py`, and the test paths it runs (`tests/unit/`, `tests/integration/test_cqrs_handlers.py`, `tests/e2e/`, `tests/stress/`) | `.github/workflows/architecture.yml:60-227` | — |
 | GitHub Actions `protection-drift.yml` | `.github/rulesets/main.json`, `scripts/check_branch_protection.py` | `.github/workflows/protection-drift.yml:23-25` | — |
-| The UI's server-side proxy | the API at `BACKEND_URL`, else the configured endpoint | `weebot-ui/src/app/api/[[...path]]/route.ts:4` | [WebUI](../objects/interfaces/WebUI.md) |
+| The UI's server-side proxy | the API at `BACKEND_URL`, else the configured endpoint | `weebot-ui/src/app/api/[[...path]]/route.ts:5` | [WebUI](../objects/interfaces/WebUI.md) |
 | The operator's `.env` (not committed) | read from the start folder by every CLI command | `cli/main.py:61` | [CLI](../objects/interfaces/CLI.md) |
 | MCP server list (`MCP_SERVERS_CONFIG_PATH`, default `config/mcp_servers.json`) | `uvx`, `npx` and hosted MCP servers outside the repo | `weebot/config/settings.py:252` | [MCPServer](../objects/interfaces/MCPServer.md) |
 

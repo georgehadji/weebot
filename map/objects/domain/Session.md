@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 591298c1
+commit: fd5b0c76
 ---
 
 # Session
@@ -23,7 +23,7 @@ Event-sourced: the plan is not a field, it is the last `PlanEvent` in `events` w
 - Events: `add_event` copies the index forward and indexes the new event (`:245-255`); `replace_events` rebuilds the index (`:257-271`, used by compaction).
 - Plan: `get_last_plan` asks `SessionMemory.find_last_plan` (`domain/services/session_memory.py:23-64`), else scans all events (`weebot/domain/models/session.py:280-311`). Both map StepEvent `started`/`running` to RUNNING, `completed`, `failed`; any other status is ignored.
 - Facts: `set_fact(key, value, source=EXECUTOR, verified_by=None)` (`:354-369`), `get_fact`, `get_fact_source`, `get_facts` (`:376-394`). Max 100 facts; the oldest by insertion order are dropped (`:88-97`), and `set_fact` pops and re-inserts the key so a rewritten key counts as newest (`:363-366`). Pre-provenance bare values are wrapped as EXECUTOR on load (`:99-117`).
-- `SessionContext` fields (`:64-84`): `skill_name`, `skill_content`, `skill_version`, `original_task` (alias `_original_task`), `last_prompt`, `facts`, `archived`, `archived_at`, `archive_ttl_days`, `trace_id`, `detected_language`, `meta_notes` (last 20, `:344-352`), `extra`. `extra` also holds `TaskRunner`'s `retries_remaining` and `failure_reason`, so the retry budget and dead letter survive a restart (`application/services/task_runner.py:36-44`).
+- `SessionContext` fields (`:64-84`): `skill_name`, `skill_content`, `skill_version`, `original_task` (alias `_original_task`), `last_prompt`, `facts`, `archived`, `archived_at`, `archive_ttl_days`, `trace_id`, `detected_language`, `meta_notes` (last 20, `:344-352`), `extra`. `extra` also holds `TaskRunner`'s `retries_remaining` and `failure_reason`, so the retry budget and dead letter survive a restart (`application/services/task_runner.py:37-45`).
 
 Consequences (read from source, not run):
 - Dead: `is_completable`, `completion_summary`, `has_pending_approval`, `get_fact_source` have no caller in `weebot/` or `cli/` (grep 2026-10-24). `has_unresolved_wait_event` (`:313-314`) is called only by `PlanActFlow._has_unresolved_wait_event` (`application/flows/plan_act_flow.py:621`), which nothing calls.
@@ -39,7 +39,7 @@ Consequences (read from source, not run):
 ## Connected to
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
 - **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:488-526`); see that card.
-- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:306, 330, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
+- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:326, 350, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
 - **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:108`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this
