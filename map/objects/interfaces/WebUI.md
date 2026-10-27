@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: stale
 verified: 2026-10-27
-commit: ba26fcfe
+commit: c4773677
 ---
 
 # Web UI
@@ -31,7 +31,7 @@ Pages (`src/app/`): `/` composer (`weebot-ui/src/app/(console)/page.tsx:17-27`),
 Backend calls:
 - `src/lib/api.ts:104-197` (`fetchApi` adds `X-API-Key`): sessions list/create/get/events/delete/cancel/run/resume/input, models list/available, health check/ready/live, dashboard metrics, ops activeSessions/planViz/costSummary. Used: list, create+run on first message, input after that (`weebot-ui/src/hooks/useComposer.ts:68-74`), get+events (`weebot-ui/src/app/(console)/sessions/[id]/page.tsx:38-41`), cancel (`components/conversation/RunControls.tsx:24`), delete, models list, health, dashboard metrics, activeSessions, planViz, costSummary (`components/dock/CostTab.tsx:21`).
 - Proxy (`route.ts`): target `BACKEND_URL` or `ENDPOINTS.api` (`:5`); refuses a non-same-origin POST/PUT/PATCH/DELETE with 403 (`:17-19`, policy in `lib/proxy-guard.ts`); forwards the client's `Content-Type`, `X-API-Key` and `Authorization` (`:25-36`); always answers with `response.json()` (`:45-47`).
-- Live events (`EventStreamProvider.tsx`): one socket per session to `{ws}/sessions/{id}?token=` (`:152-197`), reference-counted; after 5 failed reconnects falls back to `fetch` of `/api/events/stream` filtered by `session_id` client-side (`:106-150`). One global socket to `{ws}` for `session_presence` events only (`:234-267`), consumed by `useSessionPresence` / `useSessionList` (`src/hooks/useSessionPresence.ts`, `src/hooks/useSessionList.ts`).
+- Live events (`EventStreamProvider.tsx`): one socket per session to `{ws}/sessions/{id}`, the key sent as the `bearer.<key>` subprotocol by `openSocket` (`src/lib/api.ts:35-37`), not in the URL (`:153-198`), reference-counted; after 5 failed reconnects falls back to `fetch` of `/api/events/stream` filtered by `session_id` client-side (`:107-151`). One global socket to `{ws}` for `session_presence` events only (`:235-268`), consumed by `useSessionPresence` / `useSessionList` (`src/hooks/useSessionPresence.ts`, `src/hooks/useSessionList.ts`).
 - Behavior: socket `ENDPOINTS.behaviorWs` (`/api/behavior/ws`, or `/session/{id}`) with `withToken` (`weebot-ui/src/hooks/useBehavior.ts:60-65`); REST `trust`, `recent`, `override` direct to `ENDPOINTS.api` with `authHeaders()` (`:167-216`, `weebot-ui/src/components/behavior/RecentActions.tsx:51-59`); `app/behavior/page.tsx` calls only `/api/behavior/self-knowledge` through the proxy (`weebot-ui/src/app/behavior/page.tsx:93`). The settings tab has no settings API; it lists the environment variables (`:90-91`).
 - `/ops` opens a socket to `{ws}` (with `withToken`) for its log view (`weebot-ui/src/app/ops/page.tsx:36-40, 61-77`).
 

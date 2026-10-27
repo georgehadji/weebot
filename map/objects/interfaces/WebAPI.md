@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: stale
 verified: 2026-10-27
-commit: d7de1a27
+commit: c4773677
 ---
 
 # Web API (FastAPI)
@@ -36,7 +36,7 @@ Per-route auth lives in `weebot/interfaces/web/auth.py`: `get_current_user_id` (
 | `/api/ponytail` | `routers/ponytail.py:16` | GET `/mode`, POST `/mode/{mode}` | POST `require_mutation_identity` |
 | root | `main.py:606-617` | GET `/metrics`, GET `/` (test HTML) | |
 
-WebSockets: `/ws` (`main.py:620-642`) and `/ws/sessions/{id}` (`:644-681`), both through `_websocket_auth` (`:691-741`: subprotocol `bearer.<key>`, `Authorization`, then deprecated `?token=`; no key means loopback only). The session socket also checks ownership (`:654-667`). `WebSocketEventBroadcaster` sends an event to its session's sockets, and only events without a `session_id` to `/ws` (`weebot/interfaces/web/event_broadcaster.py:37-43`).
+WebSockets: `/ws` (`main.py:633-655`) and `/ws/sessions/{id}` (`:657-694`), both through `_websocket_auth` (`:704-709`), which calls the one shared rule `websocket_authenticated` (`weebot/interfaces/web/auth.py:51-79`: subprotocol `bearer.<key>`, `Authorization`, then deprecated `?token=` with a warning; no key means loopback only). The handshake is answered with the marker subprotocol `weebot.v1`, never the key (`auth.py:42-49`). The session socket also checks ownership (`:667-680`), and identity is read from the same places (`auth.py:93-111`), so a browser socket is not anonymous. `WebSocketEventBroadcaster` sends an event to its session's sockets, and only events without a `session_id` to `/ws` (`weebot/interfaces/web/event_broadcaster.py:37-43`).
 
 Sessions: `/run` builds tools and a `TaskRunner` plan-act factory with the app's bus and steering (`routers/sessions.py:326-355`); `/input` and `/resume` go through `dispatch_session_input` (`:394-434`).
 
@@ -47,7 +47,7 @@ Consequences (read from source, not run):
 - Store-mode principal keys cannot pass the HTTP middleware: it compares only against `weebot_api_key` (`main.py:521`), and with no key `FailClosedMiddleware` refuses non-loopback (`:547-559`).
 - `/api/costs/summary` has no tenant filter (`routers/ops_router.py:85-102`). Fixed (F58): `/api/sessions/search` keeps only the caller's sessions (`routers/sessions.py:154-161`), `/api/dashboard/metrics` counts only the caller's (`routers/dashboard.py:37-38`), `/api/events/stream` forwards only events of the caller's sessions (`routers/sse.py:52-72`).
 - `watch/start` starts a file watcher on any existing directory the caller names, once `require_mutation_identity` passes (`routers/behavior_router.py:137-159`).
-- The behavior sockets do their own auth through `_ws_authorized` (`behavior_router.py:251-274`): the key (subprotocol, Bearer header or `?token=`) when one is set, else loopback clients only; neither socket checks session ownership. `_websocket_auth` (`main.py:704-706`) is a separate path.
+- The behavior sockets use the same `websocket_authenticated` rule through `_ws_authorized` (`behavior_router.py:248-253`); neither checks session ownership.
 - Silent swallow: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:255-258`).
 - Slack and WhatsApp callbacks run their work on `BackgroundTasks` (`routers/slack_webhook.py:68`, `routers/whatsapp_webhook.py:78`), which the lifespan drains at shutdown (`main.py:376-378`).
 - `/app` static mount looks for `weebot-ui/dist` (`main.py:683-686`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:12`), so the mount is inert.
