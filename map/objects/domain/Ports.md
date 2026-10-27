@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 7d1ce324
+commit: ae284495
 ---
 
 # Ports
@@ -14,7 +14,7 @@ commit: 7d1ce324
 The interfaces (ABCs and a few `Protocol`s) that the application layer depends on and the infrastructure layer implements. One file per port in `weebot/application/ports/`: 68 `.py` files, 73 interface classes counting `EventBusPort` (count 2026-10-24).
 
 ## Why this shape
-Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:132-383`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
+Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:132-386`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
 
 ## Shape
 `ports/__init__.py` re-exports only `LLMPort`, `StateRepositoryPort` and `EventBusPort` (`:3-7`). "DI" says how `Container.configure_defaults` resolves it: **port** = registered under the port class; **key** = registered under a string or concrete class; **none** = no `register` call. Main implementation: the first subclass found by `class X(...Port)`; Protocols match by structure, so there is none to grep.
@@ -45,7 +45,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
 | LLMPort | llm_port.py:9 | adapters in `infrastructure/adapters/llm/` (LLMAdapters card) | port `di/__init__.py:146` |
 | MainReviewPort | main_review_port.py:12 | MainReviewService `application/services/main_review_service.py:39` | inside `"idea_gate"` (same) |
-| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:377` builds `MCPToolRegistryBridge` instead, `di/_factories.py:544-559`) |
+| MCPToolPort | mcp_tool_port.py:16 | MCPToolBridge `infrastructure/mcp/mcp_tool_bridge.py:57` | none (`"mcp_bridge"` `di/__init__.py:381` builds `MCPToolRegistryBridge` instead, `di/_factories.py:544-559`) |
 | McpToolRegistrationPort | mcp_tool_registration_port.py:13 | RoleBasedToolRegistryAdapter `infrastructure/adapters/mcp_tool_registry_adapter.py:10` | none |
 | McpToolRetrievalPort | mcp_tool_retrieval_port.py:17 | LocalEmbeddingMcpToolRetrievalAdapter `infrastructure/adapters/mcp_tool_retrieval_adapter.py:26` | none |
 | MemoryPort | memory_port.py:8 | FileSystemMemoryAdapter `infrastructure/persistence/filesystem_memory.py:29` | key `FileSystemMemoryAdapter` `di/__init__.py:167` |
@@ -56,7 +56,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | OptimizerPort | optimizer_port.py:25 | OptimizerAgent `application/agents/optimizer_agent.py:46` | key `"optimizer_port"` `di/_skillopt.py:23` |
 | PlanCriticPort | plan_critic_port.py:11 | PlanCriticService `application/services/plan_critic.py:39` | none |
 | ProfileStoragePort | profile_storage_port.py:15 | InMemory / FileUserProfileStorage `infrastructure/persistence/profile_storage.py:29, 56` | none |
-| ProviderAccountPort | provider_account_port.py:24 | OpenRouterAccountAdapter `infrastructure/adapters/llm/openrouter_account.py:15` | port `di/__init__.py:372` |
+| ProviderAccountPort | provider_account_port.py:24 | OpenRouterAccountAdapter `infrastructure/adapters/llm/openrouter_account.py:15` | port `di/__init__.py:376` |
 | RagPort | rag_port.py:13 | QmdRagAdapter, NoOpRagAdapter `infrastructure/adapters/qmd_rag_adapter.py:17, 47` | none |
 | RerankPort | rerank_port.py:16 | OpenRouterRerankAdapter `infrastructure/adapters/openrouter_rerank_adapter.py:35` | port `di/__init__.py:181` |
 | RetentionAgentPort | retention_agent_port.py:11 | RetentionAgent `application/agents/retention_agent.py:40` | key `"retention_agent"` `di/__init__.py:186` |
@@ -91,7 +91,7 @@ Dependency inversion: application code types against the port, and an adapter is
 Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
 
 Consequences (read from source, not run):
-- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:301` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
+- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:304` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:223`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).
