@@ -5,8 +5,8 @@ code: FlowState
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 9dca8292
+verified: 2026-10-27
+commit: 0034f08b
 ---
 
 # FlowState
@@ -25,7 +25,7 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 
 | From | To |
 |---|---|
-| Planning | Summarizing (no steps, `planning.py:268`); Critiquing (`:321`); `next_state_after_plan()` (`:324`) |
+| Planning | Summarizing (no steps, `planning.py:278`); Critiquing (`:321`); `next_state_after_plan()` (`:324`) |
 | Critiquing | `next_state_after_plan()` (`critiquing.py:54, 59`); Premortem (`:109,115,123`); Planning (`:133`) |
 | Premortem | `next_state_after_plan()` (`premortem.py:48, 56, 90`) |
 | `next_state_after_plan()` | `ExecutingState` if `settings.plan_review_enabled` is false, else `PlanReviewState` (`base.py:125-135`) |

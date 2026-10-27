@@ -79,6 +79,7 @@ async def build_step_prompts(
         state_repo=executor._state_repo,
         personality=executor._personality,
         profile_name=executor._profile_name,
+        skills_used=executor._skills_used,
     )
 
     # Gated by scope: minimal/skill steps don't need the cached user profile blob

@@ -83,6 +83,14 @@ class MemoryMetadataStore(Protocol):
 
 
 @runtime_checkable
+class WorkflowTemplateStore(Protocol):
+    """Where Agent Workflow Memory keeps its templates between runs."""
+
+    async def save_workflow_template(self, task_summary: str, template_json: str) -> None: ...
+    async def list_workflow_templates(self, limit: int = 200) -> list[str]: ...
+
+
+@runtime_checkable
 class PlanTemplateWriter(Protocol):
     async def save_plan_template(
         self,

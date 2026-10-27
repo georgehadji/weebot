@@ -97,18 +97,49 @@ class WorkflowTemplate:
 class AgentWorkflowMemory:
     """Induces, stores, and retrieves reusable workflow templates.
 
-    This is an in-memory store (T1 implementation).  In a production
-    deployment it would back onto a vector DB or SQLite with embedding
-    search — see T2.
+    Templates live in memory and, when a *store* is given (the state repository,
+    as a ``WorkflowTemplateStore``), are loaded from it on first use and written
+    back on every store or merge, so they outlive the flow and the process.
     """
 
-    def __init__(self, llm: LLMPort) -> None:
+    def __init__(self, llm: LLMPort, store: Any | None = None) -> None:
         self._llm = llm
+        self._store = store
         self._templates: list[WorkflowTemplate] = []
+        self._loaded = store is None
+
+    def _role(self):
+        from weebot.application.ports.state_roles_port import WorkflowTemplateStore, as_role
+
+        return as_role(self._store, WorkflowTemplateStore)
+
+    async def _ensure_loaded(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+        store = self._role()
+        if store is None:
+            return
+        try:
+            for raw in await store.list_workflow_templates():
+                self._templates.append(WorkflowTemplate.from_dict(json.loads(raw)))
+        except Exception as exc:
+            logger.warning("AWM: could not load stored templates: %s", exc)
+
+    async def _persist(self, template: WorkflowTemplate) -> None:
+        store = self._role()
+        if store is None:
+            return
+        try:
+            await store.save_workflow_template(
+                template.task_summary, json.dumps(template.to_dict())
+            )
+        except Exception as exc:
+            logger.warning("AWM: could not save template %r: %s", template.task_summary, exc)
 
     # ── Induction ─────────────────────────────────────────────────────────
 
-    async def induce(self, session: Session) -> WorkflowTemplate | None:
+    async def induce(self, session: Session, plan: Plan | None = None) -> WorkflowTemplate | None:
         """Extract a generalized workflow template from a completed session.
 
         Uses an LLM call to generalize the session's plan + events into
@@ -117,14 +148,16 @@ class AgentWorkflowMemory:
 
         Args:
             session: A completed or failed Session with at least one plan.
+            plan: The finished plan, when the caller has it. CompletedState passes it
+                because it induces before the session's terminal status is set.
 
         Returns:
             WorkflowTemplate or None if induction is not possible.
         """
-        if session.status == SessionStatus.PENDING or session.status == SessionStatus.RUNNING:
-            return None
-
-        plan = session.get_last_plan()
+        if plan is None:
+            if session.status in (SessionStatus.PENDING, SessionStatus.RUNNING):
+                return None
+            plan = session.get_last_plan()
         if plan is None or not plan.steps:
             logger.debug("AWM: no plan in session %s — skipping", session.id)
             return None
@@ -221,13 +254,16 @@ class AgentWorkflowMemory:
         - Incrementing use_count
         - Appending source_session_ids
         """
+        await self._ensure_loaded()
         existing = self._find_similar(template.task_summary, threshold=0.7)
         if existing:
             await self._merge(existing, template)
             logger.debug("AWM: merged into existing template: %s", existing)
+            await self._persist(existing)
         else:
             self._templates.append(template)
             logger.debug("AWM: stored new template: %s", template)
+            await self._persist(template)
 
     async def query(self, task_description: str, max_results: int = 3) -> list[WorkflowTemplate]:
         """Find the most relevant workflow templates for a task description.
@@ -242,6 +278,7 @@ class AgentWorkflowMemory:
         Returns:
             List of WorkflowTemplate, sorted by relevance descending.
         """
+        await self._ensure_loaded()
         if not self._templates:
             return []
 

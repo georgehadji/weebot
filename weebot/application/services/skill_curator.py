@@ -23,6 +23,7 @@ from pathlib import Path
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.skills.skill_registry import SkillRegistry
+from weebot.config.feature_flags import CURATION_ACTIONS_ENABLED
 from weebot.domain.models.skill import EvolutionEntry, Skill
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,10 @@ class SkillCurator:
             logger.warning("LLM review failed for skill %r: %s", skill.name, exc)
             recommendation = f"(review failed: {exc})"
 
+        if classification == "archive-candidate" and _first_word(recommendation) == "ARCHIVE":
+            if self._archive_learned(skill):
+                return
+
         entry = EvolutionEntry(
             epoch=len(skill.evolution_log),
             narrative=(
@@ -174,6 +179,34 @@ class SkillCurator:
             )
         except Exception as exc:
             logger.warning("Failed to update evolution_log for skill %r: %s", skill.name, exc)
+
+    def _archive_learned(self, skill: Skill) -> bool:
+        """Move a learned skill to ``.weebot/skills/_archived/`` (reversible).
+
+        Only skills under the learned-skills directory move; built-in and imported
+        skills are never touched. A PIN or KEEP answer never reaches here.
+        """
+        if not CURATION_ACTIONS_ENABLED or not skill.source_path:
+            return False
+        learned = (Path.cwd() / ".weebot" / "skills").resolve()
+        skill_dir = Path(skill.source_path).resolve().parent
+        if skill_dir.parent != learned:
+            return False
+        dest = learned / "_archived" / skill_dir.name
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                logger.warning("Archive slot for skill %r is taken; leaving it", skill.name)
+                return False
+            skill_dir.rename(dest)
+        except OSError as exc:
+            logger.warning("Could not archive skill %r: %s", skill.name, exc)
+            return False
+        remove = getattr(self._registry, "remove_skill", None)
+        if callable(remove):
+            remove(skill.name)
+        logger.info("Archived unused learned skill %r -> %s", skill.name, dest)
+        return True
 
     # ── Overlap detection for consolidation ────────────────────────
 
@@ -316,3 +349,8 @@ def _keyword_overlap(keywords_a: set[str], keywords_b: set[str]) -> float:
     if not keywords_a or not keywords_b:
         return 0.0
     return len(keywords_a & keywords_b) / len(keywords_a | keywords_b)
+
+
+def _first_word(text: str) -> str:
+    words = (text or "").split()
+    return words[0].strip(".:,").upper() if words else ""

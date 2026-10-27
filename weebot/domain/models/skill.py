@@ -19,9 +19,9 @@ TrustTier = Literal["quarantined", "candidate", "trusted"]
 """Injection-trust tier for a skill (Phase 0 — deployment-time learning).
 
 - ``trusted``     — human-authored or fully promoted; injected live.
-- ``candidate``   — validated self-generated/imported skill accruing positive use.
-- ``quarantined`` — freshly distilled; retrievable for offline optimisation only,
-  never injected live until promoted.
+- ``candidate``   — reviewed self-generated/imported skill accruing positive use;
+  injected live (at most one per step) so its uses can be counted.
+- ``quarantined`` — freshly distilled or demoted; never injected live.
 """
 
 
@@ -46,6 +46,17 @@ class SkillProvenance(BaseModel):
         default=0,
         ge=0,
         description="Count of validated positive uses; drives candidate→trusted promotion.",
+    )
+    negative_uses: int = Field(
+        default=0,
+        ge=0,
+        description="Count of failed live uses; drives candidate→quarantined demotion.",
+    )
+    last_pass_session_id: str | None = Field(
+        default=None, description="Session whose pass was last counted (one per session)."
+    )
+    last_fail_session_id: str | None = Field(
+        default=None, description="Session whose failure was last counted (one per session)."
     )
 
 
@@ -280,15 +291,51 @@ class Skill(BaseModel):
     def is_injectable(self) -> bool:
         """Return True if this skill may be injected into the live prompt.
 
-        Only ``trusted`` skills are injected at inference time. Quarantined
-        and candidate skills remain retrievable for offline optimisation but
-        are withheld from the live executor.
+        ``trusted`` and ``candidate`` skills are injected; a candidate must be
+        used live before its uses can promote it. ``quarantined`` skills are
+        withheld from the live executor.
         """
-        return self.metadata.trust == "trusted"
+        return self.metadata.trust in ("trusted", "candidate")
 
     def with_trust(self, tier: TrustTier) -> Skill:
         """Return a copy with the trust tier set to *tier* (immutable)."""
         new_meta = self.metadata.model_copy(update={"trust": tier})
+        return self.model_copy(update={"metadata": new_meta})
+
+    def record_live_use(
+        self,
+        *,
+        session_id: str,
+        passed: bool,
+        promotion_threshold: int,
+        demotion_threshold: int,
+    ) -> Skill | None:
+        """Count one live use by *session_id*; None when nothing changes.
+
+        Only ``candidate`` skills are counted, and each session counts once per
+        outcome. Passes promote at *promotion_threshold*; failures send the skill
+        back to ``quarantined`` at *demotion_threshold*.
+        """
+        if self.metadata.trust != "candidate":
+            return None
+        prov = self.metadata.provenance
+        if passed:
+            if prov.last_pass_session_id == session_id:
+                return None
+            counted = self.record_positive_use(promotion_threshold=promotion_threshold)
+            new_prov = counted.metadata.provenance.model_copy(
+                update={"last_pass_session_id": session_id}
+            )
+            return counted.model_copy(
+                update={"metadata": counted.metadata.model_copy(update={"provenance": new_prov})}
+            )
+        if prov.last_fail_session_id == session_id:
+            return None
+        new_prov = prov.model_copy(
+            update={"negative_uses": prov.negative_uses + 1, "last_fail_session_id": session_id}
+        )
+        trust = "quarantined" if new_prov.negative_uses >= demotion_threshold else "candidate"
+        new_meta = self.metadata.model_copy(update={"provenance": new_prov, "trust": trust})
         return self.model_copy(update={"metadata": new_meta})
 
     def record_positive_use(self, *, promotion_threshold: int) -> Skill:
@@ -616,3 +663,4 @@ class SkillMatch(BaseModel):
     description: str = Field(default="")
     content_preview: str = Field(default="")
     score: float = Field(default=0.0, ge=0.0, le=1.0)
+    trust: str = Field(default="trusted", description="Trust tier of the matched skill.")

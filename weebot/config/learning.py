@@ -31,6 +31,9 @@ TAU_DEDUP: float = 0.80
 # Validated positive uses required to promote a skill candidate -> trusted.
 CANDIDATE_PROMOTION_USES: int = 3
 
+# Failed live uses (counted once per session) that send a candidate back to quarantined.
+CANDIDATE_DEMOTION_FAILURES: int = 2
+
 # Guardrail against silent drift from fully-automatic promotion (both
 # quarantined->candidate via SkillReviewGate and candidate->trusted via
 # ValidateSkillHandler.record_positive_use): once this many promotions have
@@ -40,6 +43,7 @@ CANDIDATE_PROMOTION_USES: int = 3
 MAX_SKILL_PROMOTIONS_PER_RUN: int = 20
 
 __all__ = [
+    "CANDIDATE_DEMOTION_FAILURES",
     "TAU_INJECT",
     "TAU_CREATE",
     "TAU_DEDUP",

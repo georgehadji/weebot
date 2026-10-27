@@ -753,7 +753,10 @@ class PlanActFlow(BaseFlow):
         if self._awm is None and self._llm is not None:
             from weebot.application.services.workflow_memory import AgentWorkflowMemory
 
-            self._awm = AgentWorkflowMemory(llm=self._llm)
+            # Backed by the state repository so templates outlive the flow and the process.
+            self._awm = AgentWorkflowMemory(
+                llm=self._llm, store=getattr(self, "_state_repo", None)
+            )
         return self._awm
 
     def _end_run_span(self) -> None:

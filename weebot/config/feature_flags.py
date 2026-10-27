@@ -1,8 +1,8 @@
 """Feature flags for weebot — gating experimental or high-risk capabilities.
 
-Flags default to OFF unless their comment says otherwise (in-loop vision is
-on). Toggle them through environment variables, never by editing a default
-here for one deployment.
+Flags default to OFF unless their comment says otherwise (in-loop vision and
+the deployment-time learning loops are on). Toggle them through environment
+variables, never by editing a default here for one deployment.
 
 HyperAgents Enhancement 7: METACOGNITIVE_IMPROVEMENT_ENABLED controls whether
 the SelfImprover can edit its own prompt and allowlist (self-referential
@@ -36,31 +36,32 @@ METACOGNITIVE_IMPROVEMENT_ENABLED: bool = _env_bool(
 
 
 # ── Deployment-time learning (Memento-Skills plan, Phases 1–5) ──────────────
-# Each phase ships behind a default-OFF flag. Phase 0 (foundations) is always
-# active but inert until a downstream phase is enabled.
+# The skill loop is ON by default: distil from successful runs, review, inject as
+# candidate, promote after three successful sessions, quarantine after two failed
+# ones. Each flag still turns its phase off. Online SkillOpt stays OFF (no consumer).
 
 # Phase 1 — distil a new skill from a completed task (quarantined on creation).
-LIVE_SKILL_DISTILLATION_ENABLED: bool = _env_bool("WEEBOT_LIVE_SKILL_DISTILLATION", default=False)
+LIVE_SKILL_DISTILLATION_ENABLED: bool = _env_bool("WEEBOT_LIVE_SKILL_DISTILLATION", default=True)
 # Phase 2 — on a retrieval miss, enqueue a gated skill-creation request.
-SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool("WEEBOT_SKILL_GAP_TRIGGER", default=False)
+SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool("WEEBOT_SKILL_GAP_TRIGGER", default=True)
 # Phase 3 — add a semantic (embedding) first stage to skill retrieval.
-SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool("WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=False)
+SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool("WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=True)
 # Phase 3b — replace keyword task router with embedding-based classification.
 WEEBOT_SEMANTIC_TASK_ROUTER: bool = _env_bool("WEEBOT_SEMANTIC_TASK_ROUTER", default=False)
 # Phase 4 — let the curator act (archive) and validate/dedup imports.
-CURATION_ACTIONS_ENABLED: bool = _env_bool("WEEBOT_CURATION_ACTIONS", default=False)
+CURATION_ACTIONS_ENABLED: bool = _env_bool("WEEBOT_CURATION_ACTIONS", default=True)
 # Phase 5 — attribute live failures to a skill and run online SkillOpt.
 ONLINE_SKILLOPT_ENABLED: bool = _env_bool("WEEBOT_ONLINE_SKILLOPT", default=False)
 # Phase 1b — LLM-judged review that promotes a freshly-distilled skill from
 # quarantined -> candidate (SkillReviewGate). Without this, every skill
 # LIVE_SKILL_DISTILLATION_ENABLED distils sits quarantined forever, since
 # nothing else in production ever moves a skill off that tier.
-SKILL_REVIEW_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_REVIEW_GATE", default=False)
+SKILL_REVIEW_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_REVIEW_GATE", default=True)
 # Phase 1c — materialize a 'trusted' skill to disk as SKILL.md and refresh
 # the live retriever's index (MaterializingSkillStore), so a skill promoted
 # all the way to trusted becomes retrievable in the same process instead of
 # only on the next restart.
-SKILL_MATERIALIZE_ENABLED: bool = _env_bool("WEEBOT_SKILL_MATERIALIZE", default=False)
+SKILL_MATERIALIZE_ENABLED: bool = _env_bool("WEEBOT_SKILL_MATERIALIZE", default=True)
 
 
 # ── Product-Mode (product-led thinking pipeline) ──────────────────────────
@@ -131,11 +132,11 @@ OTEL_TRACING_ENABLED: bool = _env_bool("WEEBOT_OTEL_TRACING", default=False)
 # ── Adaptive Capability Router (ACR) — Phase P1+ ────────────────────────────
 # Master switch: when True, the static task_model_router is replaced by the
 # ACR pipeline: classify → constrain → score → (optional bandit) → ordered list.
-# Default OFF until P4 GA.
-WEEBOT_ENABLE_ACR: bool = _env_bool("WEEBOT_ENABLE_ACR", default=False)
+# Default ON: one shared router learns per step category which models answer.
+WEEBOT_ENABLE_ACR: bool = _env_bool("WEEBOT_ENABLE_ACR", default=True)
 # When True, the bandit stage (Thompson sampling) is enabled inside the ACR.
 # Requires WEEBOT_ENABLE_ACR=True.  When False, ACR uses deterministic scoring.
-WEEBOT_ACR_BANDIT: bool = _env_bool("WEEBOT_ACR_BANDIT", default=False)
+WEEBOT_ACR_BANDIT: bool = _env_bool("WEEBOT_ACR_BANDIT", default=True)
 # Shadow mode: when True, ACR logs its routing decisions but the static router
 # still controls execution.  Useful for offline comparison during rollout.
 WEEBOT_ACR_SHADOW: bool = _env_bool("WEEBOT_ACR_SHADOW", default=False)
@@ -163,20 +164,17 @@ WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").str
 # and CreatePlanHandler seeds the planner with the templates matching a new
 # task, via `build_meta_notes`.
 #
-# Default OFF, and the reason is history rather than caution. Both sides of
-# this feature raised TypeError on every call for its entire existence —
-# `save_plan_template` was passed one argument where four were declared, and
-# the lookup passed a `limit=` the repository does not accept — each swallowed
-# by an `except Exception: logger.debug(...)`. So the table has never held a
-# row and the planner has never been seeded. Repairing the calls turned a
-# feature on that had never run, which is a change to the planner's inputs on
-# every task; the flag makes enabling it a decision instead of a side effect.
+# Default ON since the learning loops were wired (2026-10-27). Both sides used to
+# raise TypeError on every call, so the table never held a row; that is fixed and
+# covered by test_the_plan_template_cache_round_trips.py. Only fully successful plans
+# are kept, one row per task (the id is the task hash), so the table grows with the
+# number of distinct tasks, not runs.
 #
 # One flag covers BOTH sides on purpose. Gating only the read would leave
 # `plan_templates` growing for a feature that is off, and nothing prunes that
 # table. The cost of the pairing is that no history accumulates while the flag
 # is off, so the first tasks after enabling it have nothing to match against.
-PLAN_TEMPLATE_CACHE_ENABLED: bool = _env_bool("WEEBOT_PLAN_TEMPLATE_CACHE", default=False)
+PLAN_TEMPLATE_CACHE_ENABLED: bool = _env_bool("WEEBOT_PLAN_TEMPLATE_CACHE", default=True)
 
 
 def is_enabled(flag_name: str) -> bool:

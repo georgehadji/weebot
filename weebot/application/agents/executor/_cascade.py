@@ -546,6 +546,9 @@ class CascadeExecutor:
                     f"session spend ${self._cost_meter.total(sid):.2f} reached its hard limit"
                 )
 
+        if self._acr_router is not None and hasattr(self._acr_router, "ensure_loaded"):
+            await self._acr_router.ensure_loaded()  # once per router; posteriors for route()
+
         role_cascade = get_model_cascade_for_role(self._agent_role)
         role_primary = role_cascade[0]
         role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL

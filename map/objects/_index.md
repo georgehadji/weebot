@@ -15,8 +15,8 @@ Format: name — source — status — card
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-27 — [card](application/CascadeExecutor.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-10-24 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-25 — [card](application/ExecutorAgent.md)
-- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-25 — [card](application/FlowRouter.md)
-- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-25 — [card](application/FlowState.md)
+- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-27 — [card](application/FlowRouter.md)
+- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-27 — [card](application/FlowState.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — verified 2026-10-27 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-25 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-10-27 — [card](application/PlannerAgent.md)
@@ -24,7 +24,7 @@ Format: name — source — status — card
 
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-25 — [card](infrastructure/Browser.md)
-- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-25 — [card](infrastructure/EventBus.md)
+- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-27 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-27 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-10-24 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-10-25 — [card](infrastructure/Sandbox.md)

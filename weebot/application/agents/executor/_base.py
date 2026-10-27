@@ -183,7 +183,10 @@ class ExecutorAgent:
         # Awaitable returning the persistent-memory snapshot for the system prompt; the
         # composition root supplies it, so the executor imports no tool (plan 3.4).
         memory_snapshot: Callable[[], Awaitable[str]] | None = None,
+        # Shared AdaptiveCapabilityRouter: ranks models per step and learns from outcomes.
+        acr_router: Any | None = None,
     ):
+        self._acr_router = acr_router
         self._memory_snapshot = memory_snapshot
         self._injection_scan = injection_scan
         self._llm = llm
@@ -218,6 +221,7 @@ class ExecutorAgent:
             self._trajectory_monitor = TrajectoryMonitor()
         # Phase 2: skill-gap signals collected during retrieval; processed at session end
         self._skill_gaps: list[dict] = []
+        self._skills_used: list[str] = []  # candidate skills injected into this step
         self._max_context_turns = max_context_turns
         self._system_prompt: str | None = None
         self._conversation_buffer: deque[dict[str, Any]] = deque(maxlen=max_context_turns)
@@ -260,6 +264,7 @@ class ExecutorAgent:
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
             on_call_completed=self._publish_llm_call,
+            acr_router=acr_router,
         )
         self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
@@ -421,8 +426,7 @@ class ExecutorAgent:
             return [MODEL_VISION_PRIMARY]
         return self._model_for_step(description)
 
-    @staticmethod
-    def _model_for_step(description: str) -> str | list[str]:
+    def _model_for_step(self, description: str) -> str | list[str]:
         """Return the best model(s) for *description*.
 
         When ``WEEBOT_ENABLE_ACR`` is True, returns an ordered candidate list
@@ -436,12 +440,15 @@ class ExecutorAgent:
             from weebot.config.feature_flags import WEEBOT_ENABLE_ACR
 
             if WEEBOT_ENABLE_ACR:
-                from weebot.application.services.routing.adaptive_capability_router import (
-                    AdaptiveCapabilityRouter,
-                )
+                router = getattr(self, "_acr_router", None)
+                if router is None:
+                    from weebot.application.services.routing.adaptive_capability_router import (
+                        AdaptiveCapabilityRouter,
+                    )
 
-                router = AdaptiveCapabilityRouter()
-                return router.route(description)
+                    router = AdaptiveCapabilityRouter()
+                # Its top two only: each extra candidate is another paid probe on failure.
+                return router.route(description)[:2]
             from weebot.application.services.task_model_router import model_for_step
 
             return [model_for_step(description)]

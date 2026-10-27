@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-27
-commit: ae284495
+commit: 0034f08b
 consumes:
   - ../objects/core/WeebotSettings.md
   - ../objects/application/DIContainer.md
@@ -23,7 +23,7 @@ produces:
 **Output:** `mcp__<server>__<tool>` tools in the flow's `ToolCollection`, the ones that do not read by name wrapped in `GuardedTool`.
 
 ## Steps
-1. **Gate and path.** `Container._create_mcp_client` (`weebot/application/di/_factories.py:344`) returns an empty manager unless `WEEBOT_ENABLE_X_MCP` is set to something other than empty, `0` or `false` (`:359-360`), then reads `settings.mcp_servers_config_path` (`:364-368`; field `weebot/config/settings.py:285-288`, default None). The DI key is `"mcp_client"` (`weebot/application/di/__init__.py:379`).
+1. **Gate and path.** `Container._create_mcp_client` (`weebot/application/di/_factories.py:344`) returns an empty manager unless `WEEBOT_ENABLE_X_MCP` is set to something other than empty, `0` or `false` (`:359-360`), then reads `settings.mcp_servers_config_path` (`:364-368`; field `weebot/config/settings.py:285-288`, default None). The DI key is `"mcp_client"` (`weebot/application/di/__init__.py:402`).
 2. **Parse and expand.** The file is parsed as YAML or JSON (`_factories.py:374-380`). Each top-level entry goes through `expand_env` on its own (`:380-385`); it walks every string, including a `_comment` value (`weebot/infrastructure/mcp/config_loader.py:36-55`), and raises `ConfigError` for any `${VAR}` / `$VAR` left unset (`:58-77`). A `ConfigError` logs "MCP server ... not loaded" and skips that entry (`_factories.py:387-390`); any other error is logged and gives an empty manager (`:392-395`). A missing file logs a warning (`:391`).
 3. **Manager.** `MCPClientManager(config={"mcpServers": loaded})` (`_factories.py:391`; class `weebot/infrastructure/mcp/mcp_client_manager.py:27-50`). `has_servers` counts dict entries only, so `_comment` strings are skipped (`:52-56`).
 4. **Resolve in the interfaces layer.** `_resolve_mcp_client` gets `"mcp_client"` through `_cached` and, when that returned nothing and a shared container exists, asks the container again so the error is logged as "Configured MCP servers not loaded" (`weebot/interfaces/factories.py:88-100`).

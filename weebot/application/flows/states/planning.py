@@ -208,13 +208,22 @@ class PlanningState(FlowState):
         # ── Lessons MetaAnalysisState stored on this session ────────────────
         # They were written (Session.add_meta_note) but never read back. They go first:
         # the planner keeps only the last 5 notes, and a recorded violation must outlast them.
-        _avoidance_notes = session_lessons(context._session.context.meta_notes) + _avoidance_notes
+        from weebot.application.services.failure_lessons import similar_failure_notes
+
+        _failure_notes = await similar_failure_notes(
+            getattr(context, "_trajectory_repo", None), prompt
+        )
+        _avoidance_notes = (
+            session_lessons(context._session.context.meta_notes) + _failure_notes + _avoidance_notes
+        )
         # ─────────────────────────────────────────────────────────────────────
 
         import time as _time
         from weebot.application.cqrs.commands import CreatePlanCommand
         from weebot.config.model_refs import MODEL_BUDGET
 
+        # Workflow hints from similar past runs go to the FIRST plan, not only the replanner.
+        _awm_hints_used = await _awm_hints(context, prompt)
         _plan_t0 = _time.monotonic()
         cmd_result = await context._mediator.send(
             CreatePlanCommand(
@@ -223,6 +232,7 @@ class PlanningState(FlowState):
                 model=context._model or MODEL_BUDGET,
                 context=context._session.context.model_dump(mode="json"),
                 meta_notes=_avoidance_notes,
+                awm_hints=_awm_hints_used or [],
             )
         )
         _plan_elapsed = _time.monotonic() - _plan_t0
@@ -301,27 +311,7 @@ class PlanningState(FlowState):
                 except Exception as exc:
                     logger.warning("DPPM planning failed, falling back to sequential: %s", exc)
 
-            # --- AWM: retrieve workflow hints from similar past sessions ---
-            awm_hints = None
-            if context._llm is not None:
-                try:
-                    awm = context._get_awm()
-                    if awm is not None:
-                        templates = await awm.query(prompt, max_results=2)
-                        if templates:
-                            # Pick the template with the highest success rate
-                            best = max(templates, key=lambda t: t.success_rate)
-                            if best.generalized_steps:
-                                awm_hints = best.generalized_steps
-                                logger.info(
-                                    "AWM: injected %d workflow hints from '%s' "
-                                    "(%.0f%% success rate)",
-                                    len(awm_hints),
-                                    best.task_summary,
-                                    best.success_rate * 100,
-                                )
-                except Exception as exc:
-                    logger.debug("AWM: workflow query skipped: %s", exc)
+            awm_hints = _awm_hints_used
             # Rehydrate planner with latest facts before executing
             context._planner = PlannerAgent(
                 llm=context._llm,
@@ -338,3 +328,28 @@ class PlanningState(FlowState):
             else:
 
                 context.set_state(next_state_after_plan())
+
+async def _awm_hints(context, prompt: str) -> list[str] | None:
+    """Generalized steps from the most successful similar past workflow, if any."""
+    if context._llm is None:
+        return None
+    try:
+        awm = context._get_awm()
+        if awm is None:
+            return None
+        templates = await awm.query(prompt, max_results=2)
+        if not templates:
+            return None
+        best = max(templates, key=lambda t: t.success_rate)
+        if not best.generalized_steps:
+            return None
+        logger.info(
+            "AWM: injected %d workflow hints from '%s' (%.0f%% success rate)",
+            len(best.generalized_steps),
+            best.task_summary,
+            best.success_rate * 100,
+        )
+        return list(best.generalized_steps)
+    except Exception as exc:
+        logger.debug("AWM: workflow query skipped: %s", exc)
+        return None

@@ -5,8 +5,8 @@ code: FlowRouter
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 9dca8292
+verified: 2026-10-27
+commit: 0034f08b
 ---
 
 # FlowRouter
@@ -35,7 +35,7 @@ Two details that look like bugs and are deliberate:
 - An empty answer approves a plan (`:93`) but does **not** approve a gate (`:135-138`): gates guard untrusted input, silence is not consent.
 - Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`:96-98, 108-113, 188-193`; loop break at `weebot/application/flows/plan_act_flow.py:522`).
 
-Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:429`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:288-290`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
+Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:429`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:298-300`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
 
 Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out` as `{**(extra or {}), ...}` (`:73, 88`), which erases other keys if a caller omits `extra` (`:129-132`). Priority 2 merges onto the session's own extra instead (`:133`). The one production caller passes `extra` (`plan_act_flow.py:422`).
 

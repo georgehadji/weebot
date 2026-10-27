@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 2c6a2a72
+commit: de767398
 ---
 
 # Session
@@ -29,17 +29,17 @@ Consequences (read from source, not run):
 - Dead: `is_completable`, `completion_summary`, `has_pending_approval`, `get_fact_source` have no caller in `weebot/` or `cli/` (grep 2026-10-24). `has_unresolved_wait_event` (`:313-314`) is called only by `PlanActFlow._has_unresolved_wait_event` (`application/flows/plan_act_flow.py:621`), which nothing calls.
 - Fact provenance is written but never used: no code passes `FactSource.AUDIT`, `FactSource.USER` or `verified_by`, and `get_fact_source` has no caller.
 - `archived`, `archived_at`, `archive_ttl_days` and `detected_language` are never read or written outside this file; the language detector's docstring claims it stores into `detected_language` (`application/services/language_detector.py:7`).
-- The 100-fact cap drops by insertion order. Per-step keys accumulate (`correction_original:<step>`, `reviewing.py:131, 180`; `constraint_gate_ack:<step>`, `weebot/application/flows/states/_execution_gates.py:130, 148`). A gate flag rewritten late, such as `atomic_mail_inbound_pending` (`weebot/application/flows/states/_execution_gates.py:98`; `weebot/application/flows/states/_step_run.py:109`), moves to newest on each write and is not the first evicted (F68, `tests/unit/fixes/test_fact_cap_keeps_fresh_flags.py`); a key written once early and never rewritten can still be evicted in a long session, and `get_fact` then returns `None`.
-- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:714`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:42-62`, called from `weebot/application/flows/states/_step_outcome.py:355`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
+- The 100-fact cap drops by insertion order. Per-step keys accumulate (`correction_original:<step>`, `reviewing.py:131, 180`; `constraint_gate_ack:<step>`, `weebot/application/flows/states/_execution_gates.py:130, 148`). A gate flag rewritten late, such as `atomic_mail_inbound_pending` (`weebot/application/flows/states/_execution_gates.py:98`; `weebot/application/flows/states/_step_run.py:110`), moves to newest on each write and is not the first evicted (F68, `tests/unit/fixes/test_fact_cap_keeps_fresh_flags.py`); a key written once early and never rewritten can still be evicted in a long session, and `get_fact` then returns `None`.
+- Resume rebuilds the plan from the last `PlanEvent` plus later `StepEvent`s. The executor yields `COMPLETED` (`application/agents/executor/_base.py:721`); when the evidence audit then re-queues the step or marks it UNVERIFIED, `evidence_gate` emits a new `PlanEvent` with the changed plan (`application/flows/states/evidence_gate.py:42-62`, called from `weebot/application/flows/states/_step_outcome.py:355`), so a resumed `get_last_plan` sees the downgrade (F69, `tests/unit/fixes/test_audit_downgrade_is_persisted.py`).
 - `SessionMemory` keeps at most 100 indices per event type (`session_memory.py:14-17`); with more than 100 `step` events after the last plan, the oldest are not reconciled. `copy()` always rebuilds with the default 100 (`:74`).
 - The comments at `session.py:249-252` and `session_memory.py:69-70` say `model_copy()` drops private attributes. With pydantic in `.venv` (checked 2026-10-24) `set_status()` returns a session that shares the same `_memory_index` object. Harmless today, because only `add_event` and `replace_events` mutate the index and both copy it first.
-- A session built from a DB row has an empty index (`infrastructure/persistence/sqlite_state_repo.py:517`), so `get_last_plan` falls back to the full scan until a new `PlanEvent` is added.
+- A session built from a DB row has an empty index (`infrastructure/persistence/sqlite_state_repo.py:529`), so `get_last_plan` falls back to the full scan until a new `PlanEvent` is added.
 - The StepEvent-to-status map is written twice (`session.py:301-306`, `session_memory.py:54-59`).
 
 ## Connected to
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
-- **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:488-526`); see that card.
-- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:358, 377, 384`; when the flow persists its own session, the runner writes once at the end from the flow's copy, audit A25), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
+- **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:500-538`); see that card.
+- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:358, 377, 384`; when the flow persists its own session, the runner writes once at the end from the flow's copy, audit A25), CQRS handlers (`execute_step_handler.py:83`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
 - **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:108`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this

@@ -84,7 +84,7 @@ def no_background_work(monkeypatch):
     return spawned
 
 
-def _flow(repo) -> PlanActFlow:
+def _flow(repo, last=StepStatus.FAILED) -> PlanActFlow:
     session = Session(id="s1", task=TASK, context=SessionContext(original_task=TASK))
     flow = PlanActFlow(
         PlanActFlowConfig(
@@ -98,7 +98,7 @@ def _flow(repo) -> PlanActFlow:
         steps=[
             Step(id="1", description="scaffold", status=StepStatus.COMPLETED),
             Step(id="2", description="style", status=StepStatus.COMPLETED),
-            Step(id="3", description="deploy", status=StepStatus.FAILED),
+            Step(id="3", description="deploy", status=last),
         ],
     )
     return flow
@@ -107,22 +107,22 @@ def _flow(repo) -> PlanActFlow:
 # ── the default ──────────────────────────────────────────────────────────
 
 
-def test_the_flag_is_off_by_default():
+def test_the_flag_is_on_by_default():
     # Hermetic: a developer's .env may enable it.
     env = {k: v for k, v in __import__("os").environ.items() if k != "WEEBOT_PLAN_TEMPLATE_CACHE"}
     with patch.dict("os.environ", env, clear=True):
         reloaded = importlib.reload(flags)
         try:
-            assert reloaded.PLAN_TEMPLATE_CACHE_ENABLED is False
+            assert reloaded.PLAN_TEMPLATE_CACHE_ENABLED is True
         finally:
             importlib.reload(flags)
 
 
-def test_the_environment_variable_turns_it_on():
-    with patch.dict("os.environ", {"WEEBOT_PLAN_TEMPLATE_CACHE": "true"}):
+def test_the_environment_variable_turns_it_off():
+    with patch.dict("os.environ", {"WEEBOT_PLAN_TEMPLATE_CACHE": "false"}):
         reloaded = importlib.reload(flags)
         try:
-            assert reloaded.PLAN_TEMPLATE_CACHE_ENABLED is True
+            assert reloaded.PLAN_TEMPLATE_CACHE_ENABLED is False
         finally:
             importlib.reload(flags)
 
@@ -144,7 +144,7 @@ async def test_no_template_is_written_while_the_flag_is_off(repo, monkeypatch, n
 async def test_a_template_is_written_once_the_flag_is_on(repo, monkeypatch, no_background_work):
     monkeypatch.setattr(flags, "PLAN_TEMPLATE_CACHE_ENABLED", True)
 
-    async for _ in CompletedState().execute(_flow(repo), ""):
+    async for _ in CompletedState().execute(_flow(repo, last=StepStatus.COMPLETED), ""):
         pass
 
     rows = await repo.list_all_plan_templates()
@@ -152,8 +152,29 @@ async def test_a_template_is_written_once_the_flag_is_on(repo, monkeypatch, no_b
     # D74: keyed on the task, not on the "" the run loop hands this state.
     assert rows[0]["task_hash"] == compute_task_hash(TASK)
     assert rows[0]["task_description"] == TASK
-    # D77: the computed score, not the column default of 1.0.
-    assert rows[0]["success_score"] == 0.67
+    assert rows[0]["success_score"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_a_plan_with_a_failed_step_is_not_kept(repo, monkeypatch, no_background_work):
+    # Reusing it would steer the next similar task into the same failure.
+    monkeypatch.setattr(flags, "PLAN_TEMPLATE_CACHE_ENABLED", True)
+
+    async for _ in CompletedState().execute(_flow(repo), ""):
+        pass
+
+    assert await repo.list_all_plan_templates() == []
+
+
+@pytest.mark.asyncio
+async def test_the_same_task_keeps_one_template(repo, monkeypatch, no_background_work):
+    monkeypatch.setattr(flags, "PLAN_TEMPLATE_CACHE_ENABLED", True)
+
+    for _ in range(2):
+        async for _ in CompletedState().execute(_flow(repo, last=StepStatus.COMPLETED), ""):
+            pass
+
+    assert len(await repo.list_all_plan_templates()) == 1
 
 
 # ── the read side ────────────────────────────────────────────────────────

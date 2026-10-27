@@ -205,7 +205,8 @@ class TestUtilityScorer:
 class TestAdaptiveCapabilityRouter:
     """Router must compose classify→constrain→score correctly."""
 
-    def test_acr_disabled_returns_static(self):
+    def test_acr_disabled_returns_static(self, monkeypatch):
+        monkeypatch.setattr("weebot.application.services.routing.adaptive_capability_router.WEEBOT_ENABLE_ACR", False)  # ACR is on by default
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )

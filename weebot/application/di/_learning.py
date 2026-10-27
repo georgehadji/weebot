@@ -15,6 +15,7 @@ was removed in phase 2.3.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from weebot.application.di.keys import LEARNING_SKILL_STORE
 from weebot.config.constants import DB_SESSIONS_PATH
 
 if TYPE_CHECKING:
@@ -30,6 +31,8 @@ class LearningMixin:
         self.register("skill_materializer", self._create_skill_materializer)
         self.register("misalignment_journal", lambda: self._create_misalignment_journal(db_path))
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
+        # The store live steps count candidate-skill uses against (RecordSkillUseHandler).
+        self.register(LEARNING_SKILL_STORE, lambda: self._get_learning_skill_store(db_path))
         self.register("behavioral_learner", self._create_behavioral_learner)
         self.register("correction_tracker", self._create_correction_tracker)
         self.register("session_constraint_extractor", self._create_session_constraint_extractor)

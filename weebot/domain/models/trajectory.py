@@ -39,6 +39,7 @@ class TrajectorySummary(BaseModel):
     trajectory_text: str = Field(
         default="", description="Compact natural-language trace for the optimizer model"
     )
+    task_text: str = Field(default="", description="The task the run was given")
     answer: str | None = Field(default=None, description="Final answer produced")
     expected_answer: str | None = Field(
         default=None, description="Expected/gold answer for scoring"

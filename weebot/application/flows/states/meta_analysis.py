@@ -131,6 +131,10 @@ async def _maybe_distil_skill(
     distiller = getattr(context, "_skill_distiller", None)
     if distiller is None or not LIVE_SKILL_DISTILLATION_ENABLED:
         return
+    # Learn procedures from successes only; failures feed the lessons journal instead.
+    plan = getattr(context, "_plan", None)
+    if plan is None or not plan.is_successful():
+        return
 
     session = context._session
     try:

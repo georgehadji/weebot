@@ -112,7 +112,10 @@ class PlanTemplateRepo:
                      success_score, created_at, last_used_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(template_id) DO UPDATE SET
-                    use_count = use_count + 1,
+                    plan_json = CASE WHEN excluded.success_score >= success_score
+                                     THEN excluded.plan_json ELSE plan_json END,
+                    task_description = excluded.task_description,
+                    success_score = MAX(success_score, excluded.success_score),
                     last_used_at = ?
                 """,
                 (
@@ -158,3 +161,32 @@ class PlanTemplateRepo:
                 "UPDATE plan_templates SET use_count = use_count + 1, last_used_at = ? WHERE template_id = ?",
                 (now, template_id),
             )
+
+
+class WorkflowTemplateRepo:
+    """Manages the workflow_templates table (Agent Workflow Memory), one row per summary."""
+
+    def __init__(self, pool: SQLiteConnectionPool):
+        self._pool = pool
+
+    async def save(self, task_summary: str, template_json: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        async with self._pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                INSERT INTO workflow_templates (task_summary, template_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(task_summary) DO UPDATE SET
+                    template_json = excluded.template_json,
+                    updated_at = excluded.updated_at
+                """,
+                (task_summary, template_json, now),
+            )
+
+    async def list_all(self, limit: int = 200) -> list[str]:
+        """Template JSON, most recently updated first."""
+        rows = await self._pool.execute_read(
+            "SELECT template_json FROM workflow_templates ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [r["template_json"] for r in rows or []]

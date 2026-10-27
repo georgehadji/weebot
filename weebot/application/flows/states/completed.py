@@ -182,7 +182,7 @@ class CompletedState(FlowState):
                 try:
                     awm = context._get_awm()
                     if awm is not None:
-                        template = await awm.induce(context._session)
+                        template = await awm.induce(context._session, plan=context._plan)
                         if template is not None:
                             await awm.store(template)
                             logger.info(
@@ -209,13 +209,15 @@ class CompletedState(FlowState):
             if (
                 _flag_enabled("PLAN_TEMPLATE_CACHE_ENABLED")
                 and context._plan
+                # Only a plan that worked is worth copying: a template with a failed
+                # step would steer the next similar task into the same failure.
+                and context._plan.is_successful()
                 and getattr(context, "_state_repo", None) is not None
             ):
                 try:
                     from weebot.domain.services.plan_template_cache import compute_task_hash
                     from weebot.domain.models.plan_template import PlanTemplate
                     import json as _json
-                    import uuid as _uuid
 
                     # Compute success score from step completion ratio.
                     #
@@ -236,9 +238,12 @@ class CompletedState(FlowState):
                     # to write on `compute_task_hash("")`, with an empty
                     # description for the Jaccard fallback to match on. (D74.)
                     _task = task_text(context, prompt)
+                    _hash = compute_task_hash(_task)
                     template = PlanTemplate(
-                        template_id=str(_uuid.uuid4()),
-                        task_hash=compute_task_hash(_task),
+                        # One template per task: the id is the task hash, so a re-run
+                        # updates the row instead of adding a duplicate.
+                        template_id=_hash,
+                        task_hash=_hash,
                         task_description=_task[:500],
                         plan_json=_json.dumps(context._plan.model_dump(), default=str),
                         success_score=score,

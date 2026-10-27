@@ -50,6 +50,7 @@ class StepRun:
     should_terminate: bool = False
     result_text: str = ""
     elapsed_s: float = 0.0
+    skills_used: list[str] = field(default_factory=list)  # candidate skills in the prompt
 
 
 async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: str) -> StepRun:
@@ -87,7 +88,7 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
     data = cmd_result.data or {}
     context.record_step_usage(data.get("token_usage"), data.get("skill_gaps"))
 
-    run = StepRun(elapsed_s=elapsed)
+    run = StepRun(elapsed_s=elapsed, skills_used=list(data.get("skills_used") or []))
     for event in _reconstruct(data.get("events", [])):
         run.events.append(event)
         await context._emit(event)
@@ -154,3 +155,24 @@ def _longest_output(events: list[AgentEvent]) -> str:
         if text and len(text) > len(best):
             best = text
     return best
+
+
+async def record_skill_uses(context: PlanActFlow, step, run: StepRun, *, passed: bool) -> None:
+    """Count each candidate skill the step used toward promotion or quarantine.
+
+    Best-effort: counting a use must never fail the step.
+    """
+    names = list(getattr(run, "skills_used", None) or [])
+    if not names or context._mediator is None:
+        return
+    from weebot.application.cqrs.commands.validation_commands import RecordSkillUseCommand
+
+    for name in names:
+        try:
+            await context._mediator.send(
+                RecordSkillUseCommand(
+                    skill_name=name, session_id=context._session.id, step_id=step.id, passed=passed
+                )
+            )
+        except Exception:
+            logger.warning("Could not record a use of skill %s", name, exc_info=True)

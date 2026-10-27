@@ -138,6 +138,6 @@ def test_the_main_container_can_handle_the_command_completed_state_sends():
     assert handler is not None, "no handler: every completed flow's scoring fails"
     assert isinstance(handler._scoring, PlanOutcomeScorer)
     assert handler._trajectory_repo is not None, "scored, then dropped"
-    # No mediator: live sessions must not go on to pay for failure-signature
-    # extraction on every low score.
-    assert handler._mediator is None
+    # A mediator since the learning loops were wired: a failed live run pays one
+    # budget-model call for a failure signature, which planning and clustering use.
+    assert handler._mediator is not None

@@ -80,8 +80,11 @@ class _FakeValidationRunner:
         self._passed = passed
 
     async def validate(self, candidate_content, validation_task_ids, harness):
-        class _Result:
+        class _Result:  # a measured pass: tasks ran and beat a baseline
             passed = self._passed
+            n_tasks = 1
+            candidate_score = 0.8
+            current_score = 0.4
 
         return _Result()
 

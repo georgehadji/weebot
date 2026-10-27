@@ -19,7 +19,10 @@ from weebot.application.cqrs.handlers.summarize_handler import SummarizeHandler
 # ---- Specialized handlers ----
 from weebot.application.cqrs.handlers.skill_edit_handler import ApplySkillEditsHandler
 from weebot.application.cqrs.handlers.harness_edit_handler import ApplyHarnessEditsHandler
-from weebot.application.cqrs.handlers.validation_handler import ValidateSkillHandler
+from weebot.application.cqrs.handlers.validation_handler import (
+    RecordSkillUseHandler,
+    ValidateSkillHandler,
+)
 from weebot.application.cqrs.handlers.transfer_handler import ValidateTransferHandler
 from weebot.application.cqrs.handlers.trajectory_handler import (
     ScoreTrajectoryHandler,
@@ -52,7 +55,10 @@ from weebot.application.cqrs.commands.trajectory_commands import (
     BuildOptimizationBatchCommand,
     ScoreTrajectoryCommand,
 )
-from weebot.application.cqrs.commands.validation_commands import ValidateSkillCommand
+from weebot.application.cqrs.commands.validation_commands import (
+    RecordSkillUseCommand,
+    ValidateSkillCommand,
+)
 from weebot.application.cqrs.commands.transfer_commands import ValidateTransferCommand
 from weebot.application.cqrs.commands.failure_signature_commands import (
     BatchExtractSignaturesCommand,
@@ -90,6 +96,7 @@ def register_default_handlers(
     executor_factory=None,
     trajectory_repo=None,
     event_store=None,
+    skill_store=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -106,6 +113,8 @@ def register_default_handlers(
             When provided, ExecuteStepHandler uses it instead of building a
             bare 4-kwarg ExecutorAgent — see execute_step_handler.py and
             tasks/specs/side_constraint_integrity_plan.md Phase 0.
+        skill_store: Optional SkillStorePort; when given, live steps count their uses
+            of candidate skills (RecordSkillUseCommand) toward promotion.
     """
     from weebot.application.cqrs.mediator import Mediator
 
@@ -142,16 +151,32 @@ def register_default_handlers(
     if llm is not None:
         mediator.register_command_handler(SummarizeCommand, SummarizeHandler(llm, state_repo))
 
-    # --- Optional: trajectory scoring (SkillOpt-aware) ---
-    # No mediator is passed, deliberately: on a low score the SkillOpt handler
-    # goes on to send ExtractFailureSignatureCommand, another paid call. Live
-    # sessions pay for the trajectory summary only.
+    # --- Optional: trajectory scoring ---
+    # With a repository and an LLM, a failed run also gets a failure signature (one
+    # budget-model call, failed runs only), which feeds failure clustering.
     if scoring_port is not None and trajectory_builder is not None:
+        learns_failures = llm is not None and trajectory_repo is not None
+        if learns_failures:
+            mediator.register_command_handler(
+                ExtractFailureSignatureCommand,
+                ExtractFailureSignatureHandler(
+                    llm=llm, trajectory_repo=trajectory_repo, budget_model=None
+                ),
+            )
         mediator.register_command_handler(
             ScoreTrajectoryCommand,
             ScoreTrajectoryHandler(
-                scoring_port, state_repo, trajectory_builder, trajectory_repo=trajectory_repo
+                scoring_port,
+                state_repo,
+                trajectory_builder,
+                mediator=mediator if learns_failures else None,
+                trajectory_repo=trajectory_repo,
             ),
+        )
+
+    if skill_store is not None:
+        mediator.register_command_handler(
+            RecordSkillUseCommand, RecordSkillUseHandler(skill_store=skill_store)
         )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────
@@ -243,6 +268,8 @@ def register_skillopt_handlers(
     _fs_handler = ExtractFailureSignatureHandler(
         llm=llm_port, trajectory_repo=trajectory_repo, budget_model=None  # Use default budget model
     )
+    # Replaces the live one register_default_handlers may have registered.
+    mediator.unregister_command_handler(ExtractFailureSignatureCommand)
     mediator.register_command_handler(ExtractFailureSignatureCommand, _fs_handler)
 
     # ── Self-Harness: batch re-extraction for bootstrapping ───────────────

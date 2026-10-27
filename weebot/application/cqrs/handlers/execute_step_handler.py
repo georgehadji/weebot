@@ -44,6 +44,11 @@ def _gaps_of(executor) -> list:
     gaps = getattr(executor, "_skill_gaps", None)
     return list(gaps) if isinstance(gaps, (list, tuple)) else []
 
+
+def _skills_of(executor) -> list:
+    used = getattr(executor, "_skills_used", None)
+    return list(dict.fromkeys(used)) if isinstance(used, (list, tuple)) else []
+
 class ExecuteStepHandler(CommandHandler):
     """Executes a plan step through ExecutorAgent and returns events.
 
@@ -152,6 +157,7 @@ class ExecuteStepHandler(CommandHandler):
                     # from an executor that never ran a step.
                     "token_usage": _usage_of(executor),
                     "skill_gaps": _gaps_of(executor),
+                    "skills_used": _skills_of(executor),
                 }
             )
         except Exception as exc:

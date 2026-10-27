@@ -157,6 +157,11 @@ def build_flow(
             cost_meter=resolve(SESSION_COST_METER),
             # Lessons and violations that outlive the session, keyed per project.
             misalignment_journal=resolve("misalignment_journal"),
+            # Skills distilled from successful runs, then reviewed quarantined -> candidate.
+            skill_distiller=resolve("skill_distiller"),
+            skill_review_gate=resolve("skill_review_gate"),
+            # Failed runs on similar tasks, turned into planner notes.
+            trajectory_repo=resolve("trajectory_repo"),
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

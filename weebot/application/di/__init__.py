@@ -29,7 +29,12 @@ from weebot.application.cqrs.handlers import register_default_handlers  # noqa: 
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E402
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
-from weebot.application.di.keys import LLM_POOL, SESSION_COST_METER  # noqa: E402
+from weebot.application.di.keys import (  # noqa: E402
+    ACR_ROUTER,
+    LEARNING_SKILL_STORE,
+    LLM_POOL,
+    SESSION_COST_METER,
+)
 from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
@@ -341,6 +346,24 @@ class Container(
 
         self.register(LLM_POOL, _create_llm_pool)
 
+        # One model router for every step executor: it ranks models per step category
+        # and learns from each call's outcome, stored next to the sessions database.
+        def _create_acr_router():
+            from pathlib import Path
+
+            from weebot.application.services.routing.adaptive_capability_router import (
+                AdaptiveCapabilityRouter,
+            )
+            from weebot.core.model_cascade_tracker import ModelCascadeTracker
+            from weebot.infrastructure.persistence.posterior_repository import PosteriorRepository
+
+            return AdaptiveCapabilityRouter(
+                tracker=ModelCascadeTracker(),
+                posterior_repo=PosteriorRepository(Path(db_path).parent / "acr_posteriors.db"),
+            )
+
+        self.register(ACR_ROUTER, _create_acr_router)
+
         # Per-session spend: a running total fed by LLMCallCompleted, a soft limit that
         # degrades and a hard limit that asks (plan 2.4, D6). Subscribed to the bus once.
         def _create_session_cost_meter():
@@ -486,6 +509,7 @@ class Container(
             # Plan 2.4: past the soft cost limit the cascade skips PREMIUM models.
             cost_meter=self._maybe_get(SESSION_COST_METER),
             memory_snapshot=PersistentMemoryTool.load_snapshot,
+            acr_router=self._maybe_get(ACR_ROUTER),
         )
         if context is not None:
             kwargs.update(context.executor_kwargs())
@@ -580,6 +604,7 @@ class Container(
             executor_factory=_executor_factory,
             trajectory_repo=trajectory_repo,
             event_store=self._maybe_get(EventStorePort),
+            skill_store=self._maybe_get(LEARNING_SKILL_STORE),
         )
         return mediator
 

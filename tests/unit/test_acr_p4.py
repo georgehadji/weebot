@@ -127,17 +127,17 @@ class TestRoutingMCPResource:
 
 
 class TestFeatureFlags:
-    """Feature flags must be off by default and toggleable."""
+    """Routing and the bandit are on by default (2026-10-27); shadow mode is off."""
 
-    def test_acr_flag_default_off(self):
+    def test_acr_flag_default_on(self):
         from weebot.config.feature_flags import WEEBOT_ENABLE_ACR
 
-        assert WEEBOT_ENABLE_ACR is False
+        assert WEEBOT_ENABLE_ACR is True
 
-    def test_bandit_flag_default_off(self):
+    def test_bandit_flag_default_on(self):
         from weebot.config.feature_flags import WEEBOT_ACR_BANDIT
 
-        assert WEEBOT_ACR_BANDIT is False
+        assert WEEBOT_ACR_BANDIT is True
 
     def test_shadow_flag_default_off(self):
         from weebot.config.feature_flags import WEEBOT_ACR_SHADOW
@@ -162,7 +162,8 @@ class TestFeatureFlags:
 class TestGAChecklist:
     """GA readiness checklist items from plan §8."""
 
-    def test_flag_off_produces_byte_identical_routing(self):
+    def test_flag_off_produces_byte_identical_routing(self, monkeypatch):
+        monkeypatch.setattr("weebot.application.services.routing.adaptive_capability_router.WEEBOT_ENABLE_ACR", False)  # ACR is on by default
         """Flag-off routing == CATEGORY_MODEL (no behavior change)."""
         from weebot.application.services.task_model_router import model_for_step
 
@@ -196,7 +197,8 @@ class TestGAChecklist:
             assert isinstance(result, list)
             assert all(isinstance(m, str) for m in result)
 
-    def test_router_exception_returns_fallback(self):
+    def test_router_exception_returns_fallback(self, monkeypatch):
+        monkeypatch.setattr("weebot.application.services.routing.adaptive_capability_router.WEEBOT_ENABLE_ACR", False)  # ACR is on by default
         """If anything crashes in route(), fall back to static model."""
         from weebot.application.services.routing.adaptive_capability_router import model_for_step
 

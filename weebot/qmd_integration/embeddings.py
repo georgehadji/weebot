@@ -348,3 +348,15 @@ def get_local_embeddings(**kwargs) -> LocalEmbeddings:
         if _embeddings is None:
             _embeddings = LocalEmbeddings(**kwargs)
         return _embeddings
+
+
+def semantic_embeddings_available() -> bool:
+    """Whether the 384-dim sentence-transformers backend the skill index expects is installed.
+
+    llama-cpp takes precedence inside LocalEmbeddings and yields 256-dim vectors, which the
+    384-dim skill store rejects, so its presence counts as unavailable here. Probes only;
+    loads nothing.
+    """
+    return LocalEmbeddings._is_installed("sentence_transformers") and not (
+        LocalEmbeddings._is_installed("llama_cpp")
+    )
