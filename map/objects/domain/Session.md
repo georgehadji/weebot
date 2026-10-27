@@ -5,8 +5,8 @@ code: Session, SessionStatus, SessionContext, Fact, FactSource
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 9dca8292
+verified: 2026-10-27
+commit: 25a7ca14
 ---
 
 # Session
@@ -40,7 +40,7 @@ Consequences (read from source, not run):
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
 - **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:481-519`); see that card.
 - **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:374, 419`), `FlowRouter` (`flow_router.py:81-89, 159-174`), the flow states, `TaskRunner` (`application/services/task_runner.py:306, 330, 345`), CQRS handlers (`execute_step_handler.py:78`, `update_plan_handler.py:46`, `plan_queries.py:30`, `active_queries.py:40`, `create_plan_handler.py:51`), `MemoryCompactor` (`memory_compactor.py:79, 190, 200`), `MetaAnalysisState` (`meta_analysis.py:82`).
-- **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:107`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
+- **Looks like but is not:** `GatewaySession` (`infrastructure/persistence/gateway_session_store.py:108`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this
 **Hits:** session persistence and every stored row (field names are JSON keys), resume (`get_last_plan`), the gate flags in facts (inbound mail, constraint ack, `plan_pending_approval` and the retry budget in `extra`), compaction, web session responses. Tests: `tests/unit/test_session_replace_events.py`, `tests/unit/test_session_queries.py`, `tests/unit/interfaces/web/test_session_response.py`, `tests/unit/test_executing_inbound_mail_gate.py`, `tests/unit/test_constraint_gate_phase5.py`, `tests/unit/application/flows/test_user_gate_answer_is_honoured.py`, `tests/unit/application/flows/test_a_state_gets_the_value_it_asks_for.py`, `tests/unit/fixes/test_premortem_plan_persisted.py`, `tests/unit/fixes/test_f36_dppm_plan_persisted.py`, `tests/unit/test_plan_template_cache_is_gated.py`, `tests/unit/test_sre_bug_fixes.py`, `tests/e2e/test_gate_pause_survives_the_seam.py`, `tests/integration/test_postgresql_adapter.py`.
