@@ -262,7 +262,9 @@ class ExecutingState(FlowState):
         if run.execution_failed:
             await record_skill_uses(context, step, run, passed=False)
             await error_hooks(context, step)
-            await route_failure(context, step, run)
+            stopped = await route_failure(context, step, run)
+            if stopped is not None:
+                yield stopped
             return
 
         if quality_gate(context, step, run):

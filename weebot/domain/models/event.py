@@ -90,6 +90,9 @@ class TitleEvent(BaseEvent):
 
 class DoneEvent(BaseEvent):
     type: Literal["done"] = "done"
+    # How the run ended, so a failed run is not shown as done. None on events stored
+    # before this field existed, and from flows that do not judge success.
+    status: Literal["completed", "failed"] | None = None
 
 
 class WaitForUserEvent(BaseEvent):

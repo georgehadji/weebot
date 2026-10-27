@@ -27,14 +27,14 @@ export function PlanReviewCard({ event }: PlanReviewCardProps) {
         )}
       </CardHeader>
       <CardContent>
-        <ol className="space-y-1">
-          {steps.map((step, i) => (
-            <li key={step.id} className="flex items-start gap-2 text-sm">
-              <span className="text-muted-foreground mt-0.5 shrink-0 w-5 text-right">
-                {i + 1}.
+        {/* The list numbers the steps; a typed number as well copied as "1. 1.List". */}
+        <ol className="list-decimal space-y-1 pl-6 text-sm marker:text-muted-foreground">
+          {steps.map((step) => (
+            <li key={step.id}>
+              <span className="inline-flex items-start gap-2">
+                <Circle className="h-3 w-3 mt-1 shrink-0 text-blue-400" aria-hidden="true" />
+                <span>{step.description}</span>
               </span>
-              <Circle className="h-3 w-3 mt-1 shrink-0 text-blue-400" />
-              <span>{step.description}</span>
             </li>
           ))}
         </ol>

@@ -117,6 +117,17 @@ def _psutil_memory_monitor(
         pass
 
 
+def _spawn_error(exc: Exception) -> str:
+    """Why a process did not start, never blank (NotImplementedError has no message)."""
+    text = f"Failed to start process: {type(exc).__name__}: {exc}".rstrip(": ")
+    if isinstance(exc, NotImplementedError):
+        text += (
+            " (this event loop cannot start subprocesses; on Windows the backend needs"
+            " the Proactor loop, see uvicorn_loop in weebot/interfaces/web/main.py)"
+        )
+    return text
+
+
 class NativeWindowsSandbox(SandboxPort):
     """Sandbox implementation using native Windows process execution.
 
@@ -234,7 +245,7 @@ class NativeWindowsSandbox(SandboxPort):
         except Exception as e:
             return SandboxResult(
                 stdout="",
-                stderr=f"Failed to start process: {e}",
+                stderr=_spawn_error(e),
                 returncode=-1,
                 elapsed_ms=0.0,
                 sandbox_type=self.sandbox_type,

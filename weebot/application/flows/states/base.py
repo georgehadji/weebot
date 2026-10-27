@@ -75,6 +75,12 @@ class FlowState(ABC):
 # import of a state module populates the registry.
 
 
+# The result of a failed step that a plan update replaced: COMPLETED, but no work done.
+# Here, not in updating.py, because VerifyingState reads it and states never import
+# a sibling.
+HANDLED_BY_PLAN_UPDATE = "Handled by plan update"
+
+
 class StateId(StrEnum):
     PLANNING = "planning"
     CRITIQUING = "critiquing"

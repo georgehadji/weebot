@@ -31,7 +31,7 @@ def _make_ctx(status: SessionStatus, text: str = "hello") -> SessionInputContext
         side_effect=lambda s, f: s.set_status(SessionStatus.RUNNING)
     )
     task_runner.resume_session = AsyncMock(
-        side_effect=lambda sid, answer, f: session.add_user_message(answer).set_status(
+        side_effect=lambda sid, answer, f, **_kw: session.add_user_message(answer).set_status(
             SessionStatus.RUNNING
         )
     )

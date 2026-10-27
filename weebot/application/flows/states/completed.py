@@ -304,7 +304,7 @@ class CompletedState(FlowState):
         # rows in the event store and _hydrate_session_state replays them if the
         # session runs again; a TTL would not be safe, which is why there is none.
         get_session_scope().close(context._session.id)
-        yield DoneEvent()
+        yield DoneEvent(status="failed" if failed else "completed")
 
         # --- CQRS: score the trajectory if mediator is available ---
         if context._mediator:

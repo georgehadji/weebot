@@ -427,7 +427,12 @@ class TaskRunner:
                 logger.debug("Failed to decrement session active metric", exc_info=True)
 
     async def resume_session(
-        self, session_id: str, answer: str, flow_factory: FlowFactory
+        self,
+        session_id: str,
+        answer: str,
+        flow_factory: FlowFactory,
+        *,
+        message_id: str | None = None,
     ) -> Session:
         """Resume a waiting session by injecting a user answer.
 
@@ -445,7 +450,7 @@ class TaskRunner:
                     f"(current status: {session.status.value})"
                 )
 
-            session = session.add_user_message(answer)
+            session = session.add_user_message(answer, message_id=message_id)
             session = session.set_status(SessionStatus.RUNNING)
             await self._state_repo.save_session(session)
             # The answer, not last_prompt: FlowRouter reads it as the reply to the
