@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { isForeignMutation } from "@/lib/proxy-guard";
 
 const API_BASE = process.env.BACKEND_URL || ENDPOINTS.api;
 
@@ -11,17 +12,26 @@ async function handler(
   const path = pathSegments?.join("/") || "";
   const url = new URL(request.url);
   const searchParams = url.search;
-  
+
+  // A page on another origin must not be able to drive the backend through us.
+  if (isForeignMutation(request.method, request.headers, url.host)) {
+    return NextResponse.json({ error: "Cross-origin request refused" }, { status: 403 });
+  }
+
   const targetUrl = `${API_BASE}/${path}${searchParams}`;
   
   try {
     // Forward auth headers from the client request
     const proxyHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
+      "Content-Type": request.headers.get("content-type") || "application/json",
     };
     const apiKey = request.headers.get("x-api-key");
     if (apiKey) {
       proxyHeaders["X-API-Key"] = apiKey;
+    }
+    const authorization = request.headers.get("authorization");
+    if (authorization) {
+      proxyHeaders["Authorization"] = authorization;
     }
 
     const response = await fetch(targetUrl, {

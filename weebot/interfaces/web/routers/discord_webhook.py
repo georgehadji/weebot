@@ -43,8 +43,6 @@ async def discord_interactions(request: Request):
     signature = request.headers.get("X-Signature-Ed25519", "")
     timestamp = request.headers.get("X-Signature-Timestamp", "")
 
-    payload = await request.json()
-
     # Lazy-init adapter singleton on app state
     adapter = _get_or_create_adapter(request)
     if adapter is None:
@@ -56,6 +54,7 @@ async def discord_interactions(request: Request):
     if not adapter.verify_signature(body, signature, timestamp):
         raise HTTPException(status_code=401, detail="Invalid signature")
 
+    payload = await request.json()  # parsed only once the signature is verified
     result = await adapter.process_interaction(payload)
     return result
 

@@ -89,6 +89,7 @@ class SQLiteStateRepository(
         self._fts5_indexed: dict[str, int] = {}
         # Per-session locks to prevent concurrent FTS5 indexing races.
         self._fts5_locks: dict[str, asyncio.Lock] = {}
+        self._create_lock = asyncio.Lock()
         # Sub-repositories (lazily initialized)
         self._session_queries: SessionQueries | None = None
         self._memory_metadata: MemoryMetadataRepo | None = None
@@ -271,6 +272,12 @@ class SQLiteStateRepository(
 
     # ── Session CRUD ────────────────────────────────────────────────
 
+    async def create_session(self, session: Session) -> bool:
+        # shortcut: one lock per process; the API runs as a single replica. Use
+        # INSERT ... ON CONFLICT DO NOTHING before running more than one.
+        async with self._create_lock:
+            return await super().create_session(session)
+
     async def save_session(self, session: Session) -> None:
         await self._init_helpers()
         sq = self._session_queries
@@ -328,7 +335,7 @@ class SQLiteStateRepository(
                             text,
                             context="Session: " + (session.title or "")[:200],
                             source_session_id=session.id,
-                            source_event_id=getattr(event, "event_id", None),
+                            source_event_id=getattr(event, "id", None),
                         )
                         for cmt in commitments:
                             await self.save_commitment(cmt)

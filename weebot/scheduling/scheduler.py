@@ -438,9 +438,7 @@ class SchedulingManager:
         self._running_jobs.add(job_id)
         try:
             # Update status
-            job.status = JobStatus.RUNNING.value
-            job.last_run = datetime.now()
-            await self._save_job(job)
+            await self._record_run_start(job_id, datetime.now())
 
             # Execute payload
             if job.callable_name:
@@ -463,20 +461,45 @@ class SchedulingManager:
             else:
                 raise ValueError(f"Job {job_id} has neither callable_name nor command")
 
-            # Update success
-            job.status = JobStatus.COMPLETED.value
-            job.run_count += 1
-            job.last_error = None
+            outcome: tuple[bool, str | None] = (True, None)
 
         except Exception as exc:
             logger.error("Job execution failed: %s: %s", job_id, exc)
-            job.status = JobStatus.FAILED.value
-            job.error_count += 1
-            job.last_error = str(exc)
+            outcome = (False, str(exc))
 
         finally:
             self._running_jobs.discard(job_id)
-            await self._save_job(job)
+            await self._record_run_end(job_id, *outcome)
+
+    async def _record_run_start(self, job_id: str, started: datetime) -> None:
+        """Mark the row running. Touches only its run columns: a whole-row save of the
+        snapshot read before the run would undo a pause, edit or delete made during it."""
+
+        def _write() -> None:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
+                conn.execute(
+                    "UPDATE jobs SET status = ?, last_run = ? WHERE job_id = ?",
+                    (JobStatus.RUNNING.value, started.isoformat(), job_id),
+                )
+
+        await asyncio.to_thread(_write)
+
+    async def _record_run_end(self, job_id: str, ok: bool, error: str | None) -> None:
+        """Record the outcome on the current row. A job paused while it ran stays paused;
+        a job deleted while it ran stays deleted (the UPDATE matches no row)."""
+        done = JobStatus.COMPLETED.value if ok else JobStatus.FAILED.value
+
+        def _write() -> None:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
+                conn.execute(
+                    "UPDATE jobs SET"
+                    " status = CASE WHEN status = ? THEN status ELSE ? END,"
+                    " run_count = run_count + ?, error_count = error_count + ?, last_error = ?"
+                    " WHERE job_id = ?",
+                    (JobStatus.PAUSED.value, done, int(ok), int(not ok), error, job_id),
+                )
+
+        await asyncio.to_thread(_write)
 
     async def _save_job(self, job: ScheduledJob) -> None:
         """Save job to database (offloaded to thread pool).
@@ -608,12 +631,35 @@ class SchedulingManager:
         return loaded
 
     @staticmethod
+    def _record_cron_agent_run(jobs_path: Path, job_id: str, result: str) -> None:
+        """Stamp one run on *job_id*'s record, from a fresh read and an atomic write.
+
+        The file can change while a run is in flight (``cron-agent create`` or ``delete``),
+        so the copy read before the run must not be written back.
+        """
+        import json
+
+        from weebot.core.durable_state import write_text_atomic
+
+        try:
+            raw = json.loads(jobs_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error("Cron jobs file %s unreadable, run not recorded: %s", jobs_path, exc)
+            return
+        record = raw.get(job_id)
+        if record is None:
+            return  # deleted while it ran
+        record["last_run_at"] = datetime.now(UTC).isoformat()
+        record["last_result"] = result[:500]
+        record["run_count"] = record.get("run_count", 0) + 1
+        write_text_atomic(jobs_path, json.dumps(raw, indent=2))
+
+    @staticmethod
     def _cron_agent_callable(job_id: str, jobs_path: Path, container: Any):
         """An argument-less coroutine function that runs cron agent job *job_id*."""
 
         async def _run() -> None:
             import json
-            from datetime import datetime
 
             from weebot.application.ports.llm_port import LLMPort
             from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -637,11 +683,8 @@ class SchedulingManager:
                 )
                 result = await runner.run(job)
                 await CronDeliveryService().deliver(job, result)
-                raw[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
-                raw[job_id]["last_result"] = result[:500]
-                raw[job_id]["run_count"] = data.get("run_count", 0) + 1
                 await asyncio.to_thread(
-                    jobs_path.write_text, json.dumps(raw, indent=2), encoding="utf-8"
+                    SchedulingManager._record_cron_agent_run, jobs_path, job_id, result
                 )
             except Exception as exc:
                 logger.error("Cron agent job %s failed: %s", job_id, exc)
@@ -694,11 +737,37 @@ class SchedulingManager:
             logger.info("Catch-up complete: %d jobs executed", caught_up)
         return caught_up
 
+    async def reconcile(self) -> None:
+        """Make APScheduler match jobs.db: the table is the truth, the scheduler a projection.
+
+        APScheduler keeps its jobs in memory, so after a restart it holds nothing. Safe to
+        call any time: `_schedule_job` replaces an existing entry.
+        """
+        wanted: set[str] = set()
+        for job in self.list_jobs(enabled_only=True):
+            if job.status == JobStatus.PAUSED.value:
+                continue
+            if job.trigger_type in (TriggerType.DATE.value, TriggerType.ONCE.value) and (
+                job.status == JobStatus.COMPLETED.value
+            ):
+                continue  # a finished one-shot would fire again if re-added
+            try:
+                await self._schedule_job(job)
+            except Exception as exc:
+                logger.warning("Could not schedule job %s: %s", job.job_id, exc, exc_info=True)
+                continue
+            wanted.add(job.job_id)
+        for scheduled in self.scheduler.get_jobs():
+            if scheduled.id not in wanted:
+                self.scheduler.remove_job(scheduled.id)
+        logger.info("Scheduler reconciled: %d job(s) scheduled", len(wanted))
+
     async def start(self) -> None:
-        """Start the scheduler and run catch-up for missed jobs."""
+        """Start the scheduler, re-add persisted jobs, then run catch-up for missed jobs."""
         if not self.scheduler.running:
             self.scheduler.start()
             logger.info("Scheduler started")
+            await self.reconcile()
             # Run catch-up for missed jobs
             await self.run_catch_up()
 

@@ -18,7 +18,8 @@ import hmac
 import logging
 import os
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, WebSocket
+from starlette.requests import HTTPConnection
 
 from weebot.application.ports.api_key_port import ApiKeyPort
 from weebot.core.api_key_crypto import lookup_hash, verify_key
@@ -28,9 +29,68 @@ logger = logging.getLogger(__name__)
 
 _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 
+# Offered by the UI next to `bearer.<key>`; the server echoes this, never the key.
+WS_PROTOCOL = "weebot.v1"
+
+
+def _offered_protocols(websocket: HTTPConnection) -> list[str]:
+    headers = getattr(websocket, "headers", None)
+    header = headers.get("sec-websocket-protocol", "") if headers is not None else ""
+    return [p.strip() for p in header.split(",")] if isinstance(header, str) else []
+
+
+def accepted_subprotocol(websocket: WebSocket) -> str | None:
+    """The subprotocol to answer the handshake with, so a browser that offered some keeps
+    the connection. Prefers the marker over echoing a protocol that carries the key."""
+    offered = _offered_protocols(websocket)
+    if WS_PROTOCOL in offered:
+        return WS_PROTOCOL
+    return next((p for p in offered if p.startswith("bearer.")), None)
+
+
+def websocket_authenticated(websocket: WebSocket, api_key: str | None) -> bool:
+    """The one WebSocket auth rule, used by every socket.
+
+    With no key configured only loopback clients get in (as FailClosedMiddleware does for
+    HTTP). With a key, it may come as a `bearer.<key>` subprotocol (browsers), an
+    `Authorization: Bearer` header (other clients) or the deprecated `?token=` query
+    parameter, which uvicorn logs: it stays for one release.
+    """
+    if not api_key:
+        return (websocket.client.host if websocket.client else "") in _LOOPBACK
+
+    offered = [p[len("bearer."):] for p in _offered_protocols(websocket)
+               if p.startswith("bearer.")]
+    auth = websocket.headers.get("authorization", "")
+    if isinstance(auth, str) and auth.startswith("Bearer "):
+        offered.append(auth[len("Bearer "):])
+    if any(hmac.compare_digest(token, api_key) for token in offered):
+        return True
+
+    token = websocket.query_params.get("token")
+    if token and hmac.compare_digest(token, api_key):
+        logger.warning(
+            "WebSocket authenticated via ?token= (deprecated, the key lands in access logs). "
+            "Offer the subprotocol bearer.<key> instead."
+        )
+        return True
+    return False
+
 
 def _auth_mode() -> str:
     return os.environ.get("WEEBOT_AUTH_MODE", "legacy").lower()
+
+
+def _behind_proxy() -> bool:
+    """True when a reverse proxy (the UI's) fronts this API (WEEBOT_BEHIND_PROXY=1).
+
+    Every proxied request then arrives from loopback, so loopback says nothing about who
+    asked and cannot stand in for an identity.
+    """
+    from weebot.config.secret_accessor import SecretAccessor
+
+    value = (SecretAccessor.get("WEEBOT_BEHIND_PROXY") or "").strip().lower()
+    return value in ("1", "true", "yes", "on")
 
 
 def _is_legacy_mode() -> bool:
@@ -40,6 +100,27 @@ def _is_legacy_mode() -> bool:
 def _get_legacy_api_key() -> str | None:
     """Return the single shared API key, or None."""
     return os.environ.get("WEEBOT_API_KEY", "") or None
+
+
+def _presented_key(conn: HTTPConnection) -> str:
+    """The API key a caller presented, from wherever its transport can carry one.
+
+    HTTP: the X-API-Key header. WebSocket: that header, an Authorization Bearer, a
+    `bearer.<key>` subprotocol (what a browser can send), or the deprecated ?token=.
+    Browsers cannot set headers on a WebSocket, so reading only X-API-Key made every
+    browser socket anonymous.
+    """
+    key = conn.headers.get("X-API-Key", "")
+    scope = getattr(conn, "scope", None)
+    if key or not isinstance(scope, dict) or scope.get("type") != "websocket":
+        return key
+    auth = conn.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer "):]
+    for proto in _offered_protocols(conn):
+        if proto.startswith("bearer."):
+            return proto[len("bearer."):]
+    return conn.query_params.get("token") or ""
 
 
 def _derived_principal(api_key: str) -> str:
@@ -109,7 +190,7 @@ def get_current_user_id(request: Request) -> str:
         # installed somewhere else is one new call site away from being wrong:
         # any endpoint on an exempt path, any new WebSocket handler, anything
         # outside the app. It compares now.
-        api_key = request.headers.get("X-API-Key", "")
+        api_key = _presented_key(request)
         legacy_key = _get_legacy_api_key()
         if not api_key or not legacy_key:
             # No key configured means no principal can be minted. Fail closed:
@@ -123,7 +204,7 @@ def get_current_user_id(request: Request) -> str:
     # In store mode, the sync version falls back to legacy derivation.
     # Callers that need real principal resolution should use the async version.
     legacy_key = _get_legacy_api_key()
-    api_key = request.headers.get("X-API-Key", "")
+    api_key = _presented_key(request)
     if api_key and legacy_key and hmac.compare_digest(api_key, legacy_key):
         logger.warning(
             "Auth via legacy WEEBOT_API_KEY (deprecated). "
@@ -142,7 +223,7 @@ async def get_current_user_id_async(
     multi-principal identity.  Falls back to legacy derivation
     when the port is not wired or auth mode is ``legacy``.
     """
-    api_key = request.headers.get("X-API-Key", "")
+    api_key = _presented_key(request)
     if not api_key:
         return "anonymous"
 
@@ -210,7 +291,7 @@ async def require_mutation_identity(request: Request) -> None:
     current_user = await _resolve_user(request)
     if current_user == "anonymous":
         client_host = request.client.host if request.client else ""
-        if client_host not in _LOOPBACK:
+        if client_host not in _LOOPBACK or _behind_proxy():
             raise HTTPException(
                 status_code=403,
                 detail="Mutating requests require authentication",
@@ -228,7 +309,7 @@ async def _resolve_user(request: Request) -> str:
     if _is_legacy_mode():
         return get_current_user_id(request)
 
-    api_key = request.headers.get("X-API-Key", "")
+    api_key = _presented_key(request)
     if not api_key:
         return "anonymous"
 

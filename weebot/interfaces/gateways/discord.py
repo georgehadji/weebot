@@ -15,6 +15,7 @@ Incoming interactions flow:
 from __future__ import annotations
 
 import logging
+import time
 
 import aiohttp
 from nacl.exceptions import BadSignatureError
@@ -25,6 +26,8 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
+
+_MAX_SIGNATURE_AGE_S = 300  # replay window for signed interactions
 
 
 class DiscordAdapter(GatewayAdapter):
@@ -79,6 +82,12 @@ class DiscordAdapter(GatewayAdapter):
             ``True`` if the signature is valid, ``False`` otherwise.
         """
         try:
+            # A signature proves who sent it, not when: without a freshness check a captured
+            # request can be replayed forever.
+            if abs(time.time() - int(timestamp)) > _MAX_SIGNATURE_AGE_S:
+                logger.warning("Discord interaction timestamp outside the %ss window",
+                               _MAX_SIGNATURE_AGE_S)
+                return False
             # Decode with error tolerance — Discord always sends UTF-8 JSON
             # but malformed requests can carry non-UTF-8 bytes.
             body_str = body.decode("utf-8", errors="surrogateescape")

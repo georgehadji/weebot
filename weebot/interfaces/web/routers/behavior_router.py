@@ -21,7 +21,7 @@ from weebot.core.behavior_tracker import (
     get_tracker,
     stop_tracker,
 )
-from weebot.interfaces.web.auth import require_mutation_identity
+from weebot.interfaces.web.auth import accepted_subprotocol, require_mutation_identity
 from weebot.interfaces.web.websocket import fan_out
 
 logger = logging.getLogger(__name__)
@@ -245,47 +245,21 @@ async def broadcast_event(event: BehaviorEvent):
                     _ws_connections.remove(ws)
 
 
+def _ws_authorized(websocket: WebSocket) -> bool:
+    from weebot.config.settings import get_settings
+    from weebot.interfaces.web.auth import websocket_authenticated
+
+    return websocket_authenticated(websocket, get_settings().weebot_api_key)
+
+
 @router.websocket("/ws")
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
-    # WebSocket authentication check — three-tier: subprotocol → header → query param
-    from weebot.config.settings import get_settings
+    if not _ws_authorized(websocket):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
 
-    _ws_settings = get_settings()
-    if _ws_settings.weebot_api_key:
-        # 1. Subprotocol (preferred — works in browsers)
-        protocols = websocket.headers.get("sec-websocket-protocol", "")
-        matched = False
-        for proto in [p.strip() for p in protocols.split(",")]:
-            if proto.startswith("bearer."):
-                token = proto[len("bearer.") :]
-                import hmac as _hmac
-
-                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
-                    matched = True
-                    break
-        # 2. Authorization header (for non-browser clients)
-        if not matched:
-            auth_header = websocket.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header[len("Bearer ") :]
-                import hmac as _hmac
-
-                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
-                    matched = True
-        # 3. Query parameter (deprecated — kept for compat)
-        if not matched:
-            token = websocket.query_params.get("token")
-            if token:
-                import hmac as _hmac
-
-                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
-                    matched = True
-        if not matched:
-            await websocket.close(code=4001, reason="Unauthorized")
-            return
-
-    await websocket.accept()
+    await websocket.accept(subprotocol=accepted_subprotocol(websocket))
     async with _ws_lock:
         _ws_connections.append(websocket)
 
@@ -362,19 +336,11 @@ async def behavior_websocket(websocket: WebSocket):
 @router.websocket("/ws/session/{session_id}")
 async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
-    # WebSocket authentication check
-    from weebot.config.settings import get_settings
+    if not _ws_authorized(websocket):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
 
-    _ws_settings = get_settings()
-    if _ws_settings.weebot_api_key:
-        token = websocket.query_params.get("token")
-        import hmac as _hmac
-
-        if not _hmac.compare_digest(token or "", _ws_settings.weebot_api_key):
-            await websocket.close(code=4001, reason="Unauthorized")
-            return
-
-    await websocket.accept()
+    await websocket.accept(subprotocol=accepted_subprotocol(websocket))
 
     logger.info(f"Session behavior WebSocket connected: {session_id}")
 

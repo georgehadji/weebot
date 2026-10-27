@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
+from weebot.core.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,10 @@ class DirectOrFallbackAdapter(LLMPort):
     # bypassed, preventing cascading latency.
     _MAX_PRIMARY_FAILURES: int = 3
 
+    # After this long an open circuit lets one probe through (half-open); a success
+    # closes it, a failure reopens it.
+    _COOLDOWN_S: float = 60.0
+
     def __init__(
         self,
         primary: LLMPort,
@@ -59,8 +64,17 @@ class DirectOrFallbackAdapter(LLMPort):
         self._secondary = secondary
         self._label = primary_label
         self._model_prefix = model_prefix  # e.g. "x-ai/" — stripped when forwarding to primary
-        self._fallback_failure_count = 0
-        self._primary_failure_count = 0  # circuit-breaker for primary (direct provider)
+        self._rebuild_breaker()
+
+    def _rebuild_breaker(self) -> None:
+        # Entities "primary" (the direct provider) and "fallback" (OpenRouter). No jitter or
+        # probe stagger: this adapter is one caller, not a herd.
+        self._breaker = CircuitBreaker(
+            failure_threshold=self._MAX_PRIMARY_FAILURES,
+            cooldown_seconds=self._COOLDOWN_S,
+            jitter_percent=0.0,
+            enable_stagger=False,
+        )
 
     def _native_model(self, model: str | None) -> str | None:
         """Map an OpenRouter-prefixed model name to the native provider name.
@@ -138,12 +152,13 @@ class DirectOrFallbackAdapter(LLMPort):
         # Primary circuit breaker: if the direct provider has failed
         # N times consecutively, skip it and go straight to OpenRouter.
         # Prevents cascading latency when a provider is persistently down.
-        if self._primary_failure_count >= self._MAX_PRIMARY_FAILURES:
+        gate = await self._breaker.evaluate("primary")
+        if not gate.allowed:
             logger.warning(
                 "%s: primary circuit open (%d consecutive failures) — "
                 "routing directly to OpenRouter. Check provider health.",
                 self._label,
-                self._primary_failure_count,
+                gate.failure_count,
             )
             return await self._secondary.chat(model=model, **shared)
 
@@ -156,8 +171,10 @@ class DirectOrFallbackAdapter(LLMPort):
             primary_kwargs["model"] = native
         try:
             result = await self._primary.chat(**primary_kwargs)
-            # Success → reset primary circuit breaker
-            self._primary_failure_count = 0
+            await self._breaker.record_success("primary")
+            if model:
+                # The native answer carries a bare id; price and log the id that was asked for.
+                result.model = model
             return result
         except Exception as exc:
             # Surface the actual API error for debugging.
@@ -165,8 +182,7 @@ class DirectOrFallbackAdapter(LLMPort):
             # detector doesn't count adapter fallback as a step error.
             err_msg = str(exc)[:300] if str(exc) else "no detail"
 
-            # Increment primary circuit breaker
-            self._primary_failure_count += 1
+            await self._breaker.record_failure("primary")
 
             # Pre-flight: check if the fallback adapter has a valid key
             # before attempting the call. Avoids masking the primary error
@@ -183,12 +199,13 @@ class DirectOrFallbackAdapter(LLMPort):
 
             # Health-gate: if the fallback has been failing repeatedly,
             # refuse to route further traffic to a dead endpoint.
-            if self._fallback_failure_count >= self._MAX_FALLBACK_FAILURES:
+            fallback_gate = await self._breaker.evaluate("fallback")
+            if not fallback_gate.allowed:
                 logger.error(
                     "%s: fallback (OpenRouter) has failed %d consecutive times. "
                     "Refusing further fallback — re-raising primary error: %s: %s",
                     self._label,
-                    self._fallback_failure_count,
+                    fallback_gate.failure_count,
                     type(exc).__name__,
                     err_msg,
                 )
@@ -204,8 +221,8 @@ class DirectOrFallbackAdapter(LLMPort):
         # Fall back to OpenRouter with the caller's model name
         try:
             result = await self._secondary.chat(model=model, **shared)
-            self._fallback_failure_count = 0  # success → reset counter
+            await self._breaker.record_success("fallback")
             return result
         except Exception:
-            self._fallback_failure_count += 1
+            await self._breaker.record_failure("fallback")
             raise

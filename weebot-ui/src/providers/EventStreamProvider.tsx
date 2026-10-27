@@ -34,6 +34,7 @@ import {
 } from "react";
 import { AgentEvent, SessionPresenceEvent } from "@/types/events";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { openSocket } from "@/lib/api";
 
 type Listener = (event: AgentEvent) => void;
 type ConnectionMode = "connecting" | "websocket" | "sse" | "closed";
@@ -184,8 +185,8 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
       function open() {
         conn.mode = "connecting";
         const token = getWsToken();
-        const url = `${getStreamUrls().ws}/sessions/${sessionId}${token ? `?token=${token}` : ""}`;
-        const ws = new WebSocket(url);
+        const url = `${getStreamUrls().ws}/sessions/${sessionId}`;
+        const ws = openSocket(url, token);
         conn.ws = ws;
 
         ws.onopen = () => {
@@ -263,8 +264,8 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
     // Same shape as connectSessionWs: reconnects re-enter `open`.
     function open() {
       const token = getWsToken();
-      const url = `${getStreamUrls().ws}${token ? `?token=${token}` : ""}`;
-      const ws = new WebSocket(url);
+      const url = getStreamUrls().ws;
+      const ws = openSocket(url, token);
       presenceWsRef.current = ws;
 
       ws.onopen = () => {

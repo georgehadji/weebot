@@ -47,6 +47,7 @@ class SessionCostMeter:
         self._bus = event_bus
         self._totals: dict[str, float] = {}
         self._parent: dict[str, str] = {}
+        self._own: dict[str, float] = {}
         self._seeded: set[str] = set()
         self._soft_announced: set[str] = set()
 
@@ -68,8 +69,13 @@ class SessionCostMeter:
 
     def add(self, session_id: str, usd: float) -> None:
         if session_id and usd > 0:
+            self._own[session_id] = self._own.get(session_id, 0.0) + usd
             root = self._root(session_id)
             self._totals[root] = self._totals.get(root, 0.0) + usd
+
+    def spent(self, session_id: str) -> float:
+        """What *session_id* itself spent, apart from the sessions that roll up to it."""
+        return self._own.get(session_id, 0.0)
 
     def total(self, session_id: str) -> float:
         return self._totals.get(self._root(session_id), 0.0) if session_id else 0.0

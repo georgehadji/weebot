@@ -15,6 +15,18 @@ class StateRepositoryPort(ABC):
         """Persist a session."""
         ...
 
+    async def create_session(self, session: Session) -> bool:
+        """Insert *session* only if its id is free; False when it already exists.
+
+        The default is load-then-save, which another writer can race between the two
+        awaits. SQLiteStateRepository serialises it; a multi-process store needs an
+        atomic insert.
+        """
+        if await self.load_session(session.id) is not None:
+            return False
+        await self.save_session(session)
+        return True
+
     @abstractmethod
     async def load_session(self, session_id: str) -> Session | None:
         """Load a session by ID."""

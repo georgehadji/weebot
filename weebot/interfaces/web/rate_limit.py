@@ -102,6 +102,16 @@ class _TokenBucket:
         timestamps.append(now)
         return True
 
+    def is_full(self, key: str) -> bool:
+        """True when *key* has used its whole budget. Does not spend a token."""
+        timestamps = self._buckets.get(key)
+        if not timestamps:
+            return False
+        cutoff = time.monotonic() - self.window_sec
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.popleft()
+        return self.max_tokens > 0 and len(timestamps) >= self.max_tokens
+
     def retry_after(self, key: str) -> float:
         """Seconds until the oldest request in the window expires."""
         timestamps = self._buckets.get(key)
@@ -112,6 +122,12 @@ class _TokenBucket:
         wait = (oldest + self.window_sec) - now
         return max(0.0, wait)
 
+
+# Rejected requests (401/403) per client address. The tier buckets below are keyed by the
+# X-API-Key header, which an unauthenticated caller controls: every guess would get a fresh
+# bucket. Failures are counted by address instead, which the caller cannot choose.
+AUTH_FAILURES_PER_WINDOW = (10, 60)
+_auth_failures = _TokenBucket(*AUTH_FAILURES_PER_WINDOW)
 
 # Global bucket registry — keyed on (tier, principal)
 _buckets: dict[str, _TokenBucket] = {}
@@ -156,6 +172,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if tier in UNLIMITED_TIERS:
             return await call_next(request)
 
+        client_ip = request.client.host if request.client else "unknown"
+        if _auth_failures.is_full(client_ip):
+            retry_after = int(_auth_failures.retry_after(client_ip)) + 1
+            logger.warning("Too many rejected requests from %s; refusing for %ds", client_ip,
+                           retry_after)
+            return Response(
+                status_code=429,
+                content=f'{{"detail":"Too many rejected requests. Retry after {retry_after}s."}}',
+                media_type="application/json",
+                headers={"Retry-After": str(retry_after)},
+            )
+
         # Resolve principal key
         principal = self._resolve_principal(request)
 
@@ -187,6 +215,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # of a global concurrency counter, avoiding CF-1's cumulative
         # counter problem. The sliding-window bucket handles it correctly.
         response = await call_next(request)
+        if response.status_code in (401, 403):
+            _auth_failures.allow(client_ip)  # spend one token of the failure budget
         return response
 
     @staticmethod

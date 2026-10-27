@@ -679,6 +679,8 @@ class Container(
                 state_repo=self._maybe_get(StateRepositoryPort),
                 skill_prompt=None,
                 max_steps=spec.max_tool_calls,
+                # A child's calls count toward its parent; the factory links the two.
+                cost_meter=self._maybe_get(SESSION_COST_METER),
             )
 
         return SubAgentFactory(
@@ -687,6 +689,7 @@ class Container(
             cost_tracker=self.get(SubAgentCostTrackerPort),
             swarm_bus=self._maybe_get(SwarmEventBusPort),
             flow_factory=_build_sub_flow,
+            cost_meter=self._maybe_get(SESSION_COST_METER),
         )
 
     def build_hyper_agent_flow(self, session, model=None):

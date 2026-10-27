@@ -435,11 +435,6 @@ def create_app() -> FastAPI:
         "no",
         "off",
     )
-    app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
-    if _rate_limit_enabled:
-        logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
-    else:
-        logger.info("Rate limiting disabled (WEEBOT_RATE_LIMIT_ENABLED=false)")
 
     # ── Global exception handlers ──────────────────────────────────
     from weebot.domain.exceptions import WeebotError, ErrorCode
@@ -564,6 +559,24 @@ def create_app() -> FastAPI:
             "No API key configured — remote requests will be refused. "
             "Set WEEBOT_API_KEY to enable remote access."
         )
+
+    # Outside auth: an oversize body is refused before auth or any route reads it.
+    from weebot.config.secret_accessor import SecretAccessor
+    from weebot.interfaces.web.body_limit import DEFAULT_MAX_BODY_BYTES, BodyLimitMiddleware
+
+    _max_body = SecretAccessor.get("WEEBOT_MAX_BODY_BYTES") or ""
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=int(_max_body) if _max_body.isdigit() else DEFAULT_MAX_BODY_BYTES,
+    )
+
+    # Added after everything else, so outermost: a rejected request (bad key, oversize body)
+    # still reaches it, which is what lets it throttle key guessing.
+    app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
+    if _rate_limit_enabled:
+        logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
+    else:
+        logger.info("Rate limiting disabled (WEEBOT_RATE_LIMIT_ENABLED=false)")
 
     # ── Global exception handlers ─────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
@@ -692,56 +705,10 @@ def create_app() -> FastAPI:
 
 
 def _websocket_auth(websocket: WebSocket, settings) -> bool:
-    """Authenticate a WebSocket connection.
+    """Authenticate a WebSocket connection (see ``auth.websocket_authenticated``)."""
+    from weebot.interfaces.web.auth import websocket_authenticated
 
-    Token sources (priority order):
-    1. ``Sec-WebSocket-Protocol`` header: ``bearer.<token>``
-    2. ``Authorization: Bearer <token>`` header
-    3. ``?token=`` query parameter (deprecated — logged once)
-
-    When no API key is configured, only loopback clients are accepted
-    (consistent with FailClosedMiddleware for HTTP).
-
-    Returns True if authenticated, False to close.
-    """
-    if not settings.weebot_api_key:
-        client_host = websocket.client.host if websocket.client else ""
-        return client_host in _LOOPBACK
-
-    # 1. Subprotocol (preferred — works in browsers)
-    protocols = websocket.headers.get("sec-websocket-protocol", "")
-    for proto in [p.strip() for p in protocols.split(",")]:
-        if proto.startswith("bearer."):
-            token = proto[len("bearer.") :]
-            import hmac as _hmac
-
-            if _hmac.compare_digest(token, settings.weebot_api_key):
-                return True
-
-    # 2. Authorization header (for non-browser clients)
-    auth_header = websocket.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer ") :]
-        import hmac as _hmac
-
-        if _hmac.compare_digest(token, settings.weebot_api_key):
-            return True
-
-    # 3. Query parameter (deprecated — kept for Next.js UI compat)
-    token = websocket.query_params.get("token")
-    if token:
-        import logging as _logging
-
-        _logging.getLogger(__name__).warning(
-            "WebSocket authenticated via query parameter (deprecated). "
-            "Use Sec-WebSocket-Protocol: bearer.<token> instead."
-        )
-        import hmac as _hmac
-
-        if _hmac.compare_digest(token, settings.weebot_api_key):
-            return True
-
-    return False
+    return websocket_authenticated(websocket, settings.weebot_api_key)
 
 
 # Create the application instance

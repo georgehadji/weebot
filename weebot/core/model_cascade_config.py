@@ -31,6 +31,9 @@ def select_model_by_tokens(task_type: str, estimated_tokens: int) -> str:
     return TASK_MODEL_CASCADE.get(task_type, TASK_MODEL_CASCADE["coding"])[0]
 
 
+_UNPRICED_LOGGED: set[str] = set()
+
+
 def estimate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Cost in USD from the catalog's split prompt/completion rates.
 
@@ -41,6 +44,8 @@ def estimate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> 
 
     config = get_model_config(model_id)
     if config is None:
-        logger.debug("estimate_cost: %r is not in the model catalog; costing 0.0", model_id)
+        if model_id not in _UNPRICED_LOGGED:  # once per id: a hot path would flood the log
+            _UNPRICED_LOGGED.add(model_id)
+            logger.warning("estimate_cost: %r is not in the model catalog; costing 0.0", model_id)
         return 0.0
     return config.estimate_cost(prompt_tokens, completion_tokens)

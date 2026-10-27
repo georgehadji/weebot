@@ -26,6 +26,9 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 
+from weebot.core.encoded_command import LONG_FORM as ENCODED_LONG_FORM
+from weebot.core.encoded_command import SHORT_FORM as ENCODED_SHORT_FORM
+
 
 class CommandRiskLevel(Enum):
     """Risk classification for commands."""
@@ -147,19 +150,9 @@ LAYER1_RULES: tuple[Rule, ...] = (
     Rule("l1.ps-iwr-iex", r"\bIWR?\s+.*\|.*iex", _D, 1, "PowerShell Invoke-WebRequest pipe to iex"),
     # Caught before W3.6 only because the 1.2x entropy fudge lifted UTF-16LE
     # base64 (~3.8 bits) over the threshold; named explicitly now.
+    Rule("l1.ps-encoded-command", ENCODED_LONG_FORM, _D, 1, "PowerShell encoded command"),
     Rule(
-        "l1.ps-encoded-command",
-        r"(?:^|\s)-(?:encodedcommand|enc|ec)\s+[A-Za-z0-9+/]{8,}",
-        _D,
-        1,
-        "PowerShell encoded command",
-    ),
-    Rule(
-        "l1.ps-encoded-command-short",
-        r"\b(?:powershell|pwsh)(?:\.exe)?\b[^|;&]*\s-e\s+[A-Za-z0-9+/]{8,}",
-        _D,
-        1,
-        "PowerShell encoded command (-e)",
+        "l1.ps-encoded-command-short", ENCODED_SHORT_FORM, _D, 1, "PowerShell encoded command (-e)"
     ),
     Rule("l1.ps-curl-iex", r"curl.*\.ps1.*\|.*iex", _D, 1, "PowerShell curl-to-iex"),
 )

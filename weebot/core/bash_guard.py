@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from weebot.core.encoded_command import LONG_FORM as ENCODED_LONG_FORM
+from weebot.core.encoded_command import SHORT_FORM as ENCODED_SHORT_FORM
+
 _log = logging.getLogger(__name__)
 
 # Optional global hook registry for post_bash_guard events.
@@ -396,9 +399,15 @@ class BashGuard:
             "Formatting a disk destroys all data. Use with extreme caution.",
         ),
         (
-            r"-EncodedCommand\s+",
+            ENCODED_LONG_FORM,
             RiskLevel.BLOCKED,
             "PowerShell encoded command (obfuscated payload)",
+            "Encoded commands can hide malicious code. Decode and review before executing.",
+        ),
+        (
+            ENCODED_SHORT_FORM,
+            RiskLevel.BLOCKED,
+            "PowerShell encoded command (-e / -ec)",
             "Encoded commands can hide malicious code. Decode and review before executing.",
         ),
         (
@@ -567,7 +576,8 @@ class BashGuard:
             try:
                 self._on_security_event(max_risk)
             except Exception:
-                pass  # callback is best-effort — never break security evaluation
+                # best-effort: a broken metrics callback must never break evaluation
+                _log.warning("Security event callback failed", exc_info=True)
 
         return max_risk, checks
 

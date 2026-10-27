@@ -5,8 +5,8 @@ code: CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-24
-commit: 50a5d748
+verified: 2026-10-27
+commit: 7d1ce324
 ---
 
 # CommandSecurityAnalyzer
@@ -32,7 +32,7 @@ How `BashTool` uses it (`weebot/tools/bash_tool.py:250-316`):
 
 Consequences (read from source, not run):
 - SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:288-289`), but `ExecApprovalPolicy.evaluate(command)` is called with the command only, never with this verdict (`:393`).
-- Fixed in W3.6 (F10): the 1.2x entropy multiplier is gone. Layer 3 now refuses a base64 run only if it decodes to a shell command, or if it is a 40-character-plus run that is not pure hex, has a digit or `+/=`, is not a path, and has raw entropy above 4.0 bits/char (`bash_security.py:231-236`, `:296-304`, `:372-394`). Hex digests and CamelCase identifiers pass; `tests/unit/fixes/test_f10_entropy_hex_digest.py` pins `git checkout <40-hex sha>` and `docker pull ...@sha256:<64-hex>`. The false-positive test (`tests/unit/tools/test_bash_security_falsifying.py:229-240`) uses its own command list and does not catch this.
+- Fixed in W3.6 (F10): the 1.2x entropy multiplier is gone. Layer 3 now refuses a base64 run only if it decodes to a shell command, or if it is a 40-character-plus run that is not pure hex, has a digit or `+/=`, is not a path, and has raw entropy above 4.0 bits/char (`bash_security.py:224-229`, `:296-304`, `:372-394`). Hex digests and CamelCase identifiers pass; `tests/unit/fixes/test_f10_entropy_hex_digest.py` pins `git checkout <40-hex sha>` and `docker pull ...@sha256:<64-hex>`. The false-positive test (`tests/unit/tools/test_bash_security_falsifying.py:229-240`) uses its own command list and does not catch this.
 - Layer 2's combination targets `|`, `.` and `+x` can never match, because the token set is built with a word-only regex (`:128-137`, `:305`). The `temp`/`tmp` combination flags any command that contains those words and `chmod` or `execute`.
 - The known-safe PowerShell allowlist is matched with `re.search` anywhere in the command (`:411-413`), so one safe-looking pipeline in a long command skips the chain-length and URL-chain checks for all of it. Layers 1 to 3 still run.
 - Rewritten 2026-10-22 (plan W3.6). The entropy, layer 2 and allowlist notes above describe `f00ea38`.

@@ -19,7 +19,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
-from weebot.core.egress_guard import is_enforcing
+from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
 from weebot.core.background_tasks import get_background_tasks
 from weebot.core.effect_key import effect_key, step_scope
 from weebot.core.log_context import bind_step
@@ -95,7 +95,12 @@ async def _clear_network_use(
     uses_network, host = guard.network_use(name, args)
     if not uses_network:
         return None, False
-    if guard.is_known_recipient(host) or not is_enforcing():
+    # A name can point inside the network, so resolve it (off the event loop) before trusting
+    # an earlier "always": an internal target asks every time and cannot be stored (A22).
+    internal = bool(host) and (
+        await asyncio.to_thread(classify_host, host, True) is not HostClass.PUBLIC
+    )
+    if (not internal and guard.is_known_recipient(host)) or not is_enforcing():
         return None, True
 
     from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
@@ -109,7 +114,7 @@ async def _clear_network_use(
         fingerprint=call_fingerprint(name, args),
         guard="sandbox_network",
         reason=f"network access to {host or 'an unknown host'} (the sandbox network is off)",
-        allow_always=host,
+        allow_always=None if internal else host,
     )
     outcome = await tool_approval.current_approval().resolve(request)
     if outcome is ApprovalOutcome.APPROVED:
@@ -254,7 +259,7 @@ class ToolExecutor:
     # ── Egress guard ───────────────────────────────────────────────
 
     def _get_egress_guard(self):
-        """Resolve the DI-managed EgressGuard singleton, lazily.
+        """Construct this executor's EgressGuard, lazily.
 
         Only a SUCCESSFUL resolution latches. The previous version set
         `_egress_guard_resolved = True` before the `try`, so if both the DI

@@ -132,7 +132,8 @@ async def create_session(
         context=context,
     )
 
-    await state_repo.save_session(session)
+    if not await state_repo.create_session(session):
+        raise HTTPException(status_code=409, detail=f"Session {session.id} already exists")
     logger.info("Created session %s", session.id)
 
     return await _respond(http_request, session)

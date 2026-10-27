@@ -33,6 +33,19 @@ _AUTOMATED_SENDER_MARKERS = ("mailer-daemon", "no-reply", "noreply", "postmaster
 _DKIM_PASS_DOMAIN = re.compile(r"dkim=pass[^;]*?header\.[di]=@?([\w.-]+)")
 
 
+def _sender_address(parsed) -> str:
+    """The one address in ``From``, or "" when there is not exactly one.
+
+    The first ``<...>`` in the header is not the sender: a display name can carry an
+    allowlisted address ahead of the real one. Two ``From`` headers or two addresses
+    are ambiguous, so the message gets no sender and is dropped.
+    """
+    addresses = email.utils.getaddresses(parsed.get_all("From", []))
+    if len(addresses) != 1:
+        return ""
+    return addresses[0][1].strip()
+
+
 def _sender_authenticated(parsed, sender: str) -> bool:
     """True when the receiving server vouched for *sender*'s domain (F76).
 
@@ -226,14 +239,9 @@ class EmailAdapter(GatewayAdapter):
                             if isinstance(response_part, tuple):
                                 raw_email = response_part[1]
                                 parsed = email.message_from_bytes(raw_email)
-                                sender = parsed.get("From", "")
+                                sender = _sender_address(parsed)
                                 subject = parsed.get("Subject", "")
                                 body = self._get_text_body(parsed)
-
-                                # Extract email address from "Name <email>" format
-                                email_match = re.search(r"<([^>]+)>", sender)
-                                if email_match:
-                                    sender = email_match.group(1)
 
                                 if sender and body:
                                     result.append(

@@ -10,6 +10,8 @@ from typing import TypeVar
 
 from starlette.websockets import WebSocket
 
+from weebot.interfaces.web.auth import accepted_subprotocol
+
 logger = logging.getLogger(__name__)
 
 # How long a single send may take before the peer is treated as gone.
@@ -83,7 +85,11 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, session_id: str | None = None) -> None:
         """Accept a new WebSocket connection."""
         try:
-            await websocket.accept()
+            subprotocol = accepted_subprotocol(websocket)
+            if subprotocol:
+                await websocket.accept(subprotocol=subprotocol)
+            else:
+                await websocket.accept()
         except Exception as e:
             logger.error(f"Failed to accept WebSocket connection: {e}")
             raise

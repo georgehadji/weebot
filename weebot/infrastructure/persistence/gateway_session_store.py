@@ -88,8 +88,9 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
             """)
             conn.commit()
 
-    def _row_to_session(self, row: sqlite3.Row) -> GatewaySession:
+    def _row_to_session(self, row: sqlite3.Row | dict[str, Any]) -> GatewaySession:
         """Convert a DB row to a GatewaySession model."""
+        row = dict(row)  # sqlite3.Row has no .get
         key = GatewaySessionKey(
             platform=row["platform"],
             chat_type=row["chat_type"],

@@ -40,8 +40,14 @@ class AgentToolsMixin:
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.config.constants import SUBAGENT_MAX_STEPS
         from weebot.config.harness.schema import HarnessConfig
+        from weebot.application.di.keys import SESSION_COST_METER
+        from weebot.core.log_context import session_id_var
 
         registry = self.get("tool_registry")
+        meter = self._maybe_get(SESSION_COST_METER)
+        if meter is not None:
+            # The calling step's session is the parent: this child's spend counts toward it.
+            meter.link(session.id, session_id_var.get() or "")
 
         def _flow_factory(s):
             return self._build_plan_act_flow_for_session(s)
@@ -63,6 +69,7 @@ class AgentToolsMixin:
             # web UI's global socket -- a product change, not a wiring fix.
             event_bus=None,
             max_steps=SUBAGENT_MAX_STEPS,
+            cost_meter=meter,
             logger=self._maybe_get_str("structured_logger"),
             skill_retriever=self._maybe_get_str("skill_retriever"),
             skill_distiller=self._maybe_get_str("skill_distiller"),

@@ -72,7 +72,10 @@ unit_coverage_floor = 64
 # 113 -> 112 with plan 1.3 (CON-1): bash_tool's `except RuntimeError: pass` around
 # get_running_loop() went with the loop lookup; execute() is a coroutine, so a
 # loop is always running there.
-silent_except_handlers = 112
+# 112 -> 111 with A15 (audit fix plan): connection_pool.acquire_write's rollback
+# failure is logged instead of swallowed.
+# 111 -> 110 with A34: BashGuard's security-event callback logs its failure.
+silent_except_handlers = 110
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -128,7 +131,9 @@ bare_env_reads = 68
 # 56 -> 55: the same handler (F75).
 # 55 -> 54: the same handler (F72).
 # 54 -> 52: the same two web/auth.py handlers as silent_except_handlers 115 -> 113.
-bandit_b110 = 52
+# 52 -> 51 with A15: the same connection_pool handler as silent_except_handlers 112 -> 111.
+# 51 -> 50 with A34: the same BashGuard handler as silent_except_handlers 111 -> 110.
+bandit_b110 = 50
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound

@@ -119,7 +119,7 @@ services:
       - no-new-privileges:true
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://weebot-api:8000
+      - BACKEND_URL=http://weebot-api:8000/api
     depends_on:
       weebot-api:
         condition: service_healthy

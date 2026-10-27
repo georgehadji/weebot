@@ -26,7 +26,7 @@ class CommitmentRepo:
         due_at: str | None = None,
         status: str = "pending",
     ) -> None:
-        """Insert or update a commitment."""
+        """Insert a commitment; an id that already exists is left as it is (idempotent re-saves)."""
         now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
@@ -37,10 +37,7 @@ class CommitmentRepo:
                 VALUES
                     (:id, :promise_text, :context, :source_session_id, :source_event_id,
                      :due_at, :status, :created_at, :updated_at)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    context = excluded.context,
-                    updated_at = excluded.updated_at
+                ON CONFLICT(id) DO NOTHING
                 """,
                 {
                     "id": commitment_id,

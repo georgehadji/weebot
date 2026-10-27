@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import weakref
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from collections.abc import Callable
@@ -85,6 +86,11 @@ class TaskRunner:
         self._event_bus = event_bus
         self._max_session_retries = max_session_retries
         self._tasks: dict[str, asyncio.Task] = {}
+        # One lock per session around load -> check -> save -> start. Weak values: a lock
+        # disappears when nobody holds or awaits it, so idle sessions cost nothing.
+        self._session_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
         self._task_queue: TaskQueuePort | None = task_queue
         # Fallback to asyncio.PriorityQueue when no external queue is provided
         self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending) if task_queue is None else None  # type: ignore[assignment]
@@ -205,9 +211,23 @@ class TaskRunner:
         task.add_done_callback(_cleanup)
         return session
 
+    def _lock_for(self, session_id: str) -> asyncio.Lock:
+        lock = self._session_locks.get(session_id)
+        if lock is None:
+            lock = self._session_locks[session_id] = asyncio.Lock()
+        return lock
+
     async def start_session(self, session: Session, flow_factory: FlowFactory) -> Session:
-        """Start a session immediately as a background task."""
-        return await self._start_direct(session, flow_factory)
+        """Start a session immediately as a background task.
+
+        Refuses while a flow for this session is still running: two callers racing on one
+        PENDING session would otherwise start two flows writing the same session.
+        """
+        async with self._lock_for(session.id):
+            running = self._tasks.get(session.id)
+            if running is not None and not running.done():
+                raise ValueError(f"Session {session.id} is already running")
+            return await self._start_direct(session, flow_factory)
 
     async def enqueue_session(
         self, session: Session, flow_factory: FlowFactory, priority: int = 5
@@ -373,25 +393,31 @@ class TaskRunner:
     async def resume_session(
         self, session_id: str, answer: str, flow_factory: FlowFactory
     ) -> Session:
-        """Resume a waiting session by injecting a user answer."""
-        session = await self._state_repo.load_session(session_id)
-        if session is None:
-            raise ValueError(f"Session {session_id} not found")
+        """Resume a waiting session by injecting a user answer.
 
-        if session.status != SessionStatus.WAITING:
-            raise ValueError(
-                f"Session {session_id} is not waiting for input (current status: {session.status.value})"
-            )
+        Under the session's lock, so a second answer that arrives meanwhile finds the
+        session RUNNING and is refused instead of starting a second flow.
+        """
+        async with self._lock_for(session_id):
+            session = await self._state_repo.load_session(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
 
-        session = session.add_user_message(answer)
-        session = session.set_status(SessionStatus.RUNNING)
-        await self._state_repo.save_session(session)
-        # The answer, not last_prompt: FlowRouter reads it as the reply to the
-        # pending plan review or gate. Running the task text again would be
-        # taken as a plan-change request.
-        await self._start_direct(session, flow_factory, prompt=answer)
+            if session.status != SessionStatus.WAITING:
+                raise ValueError(
+                    f"Session {session_id} is not waiting for input "
+                    f"(current status: {session.status.value})"
+                )
 
-        return session
+            session = session.add_user_message(answer)
+            session = session.set_status(SessionStatus.RUNNING)
+            await self._state_repo.save_session(session)
+            # The answer, not last_prompt: FlowRouter reads it as the reply to the
+            # pending plan review or gate. Running the task text again would be
+            # taken as a plan-change request.
+            await self._start_direct(session, flow_factory, prompt=answer)
+
+            return session
 
     async def cancel_session(self, session_id: str) -> bool:
         """Cancel a running session."""

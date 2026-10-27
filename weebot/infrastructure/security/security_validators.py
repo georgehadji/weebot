@@ -10,6 +10,8 @@ from re import Pattern
 from dataclasses import dataclass
 from enum import Enum, auto
 
+from weebot.core.encoded_command import has_encoded_command
+
 from weebot.config.settings import WORKSPACE_ROOT
 
 
@@ -350,7 +352,6 @@ class CommandValidator:
         re.compile(r"\bStart-Process\b.*-Credential", re.IGNORECASE),
         re.compile(r"\bNew-LocalUser\b|\bSet-LocalUser\b", re.IGNORECASE),
         re.compile(r"\bAdd-WindowsCapability\b|\bRemove-WindowsFeature\b", re.IGNORECASE),
-        re.compile(r"-EncodedCommand", re.IGNORECASE),
         # Narrowed: target explicit execution-policy bypass, not the word 'bypass' anywhere
         re.compile(r"-ExecutionPolicy\s+Bypass", re.IGNORECASE),
         re.compile(r"-ep\s+bypass", re.IGNORECASE),
@@ -388,7 +389,7 @@ class CommandValidator:
     def validate_powershell(self, command: str) -> ValidationReport:
         """Validate PowerShell command for dangerous patterns."""
         # Check for encoded commands
-        if "-enc" in command.lower() or "-encodedcommand" in command.lower():
+        if has_encoded_command(command):
             return ValidationReport(
                 result=ValidationResult.INJECTION_DETECTED,
                 message="Encoded PowerShell commands are not allowed",

@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The map drift check reads each card's `commit`; a shallow clone lacks it.
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -61,6 +64,13 @@ jobs:
       - name: map/ and tasks/ indexes generated, citations resolve
         # BLOCKING. In `make check` but was missing here (CI-1).
         run: make lint-map
+      - name: Map citation drift (advisory)
+        # ADVISORY here, BLOCKING on main: `make check` and map-drift.yml (push to main and weekly)
+        # enforce it. A card is stale when the code it cites changed, and any PR that moves cited
+        # code would otherwise fail here (main was red for 5 runs).
+        # Fix with `python scripts/check_map_citations.py --fix`, then re-read the cards it marks stale.
+        continue-on-error: true
+        run: make lint-map-drift
       - name: Module-cycle ratchet
         # BLOCKING. import-linter checks layers, not loops inside one layer.
         run: make lint-module-cycles

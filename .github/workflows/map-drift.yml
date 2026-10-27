@@ -1,0 +1,49 @@
+# Do the map cards still say what the code says?
+#
+# `make lint-map-drift` compares the lines each verified card cites, at the card's
+# `commit`, with the same lines now. On a pull request it is only advisory (see
+# architecture.yml), because one code move would otherwise turn every PR red.
+#
+# This workflow is where drift is allowed to fail. It runs on main after a change to
+# code or cards, and weekly, so a stale card shows as a red run instead of a warning
+# nobody reads. It deliberately does NOT run on pull_request, for the same reason
+# protection-drift.yml does not: the failure belongs to the repository's state, not
+# to whoever opened the last PR.
+#
+# Fix: `python scripts/check_map_citations.py --fix`, then re-read each card it marks
+# stale and replace its `[stale N]` markers.
+name: Map Drift
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "weebot/**"
+      - "weebot-ui/src/**"
+      - "cli/**"
+      - "map/**"
+      - "scripts/check_map_citations.py"
+      - ".github/workflows/map-drift.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Map citation drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The check reads each card's `commit`; a shallow clone lacks it.
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Cited lines still say what they said
+        # No `continue-on-error` and no `|| echo`: a red run is the report.
+        run: make lint-map-drift

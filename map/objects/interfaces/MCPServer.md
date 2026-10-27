@@ -4,7 +4,7 @@ name: MCP server
 code: WeebotMCPServer, run_mcp.py
 cluster: interfaces
 universe: live
-status: verified
+status: stale
 verified: 2026-10-25
 commit: 12624041
 ---

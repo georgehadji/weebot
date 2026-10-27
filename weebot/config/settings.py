@@ -210,6 +210,14 @@ class WeebotSettings(BaseSettings):
         alias="WEEBOT_SHELL_GUARD_MODE",
         description="Tool guard chain mode: 'observe' (record only) or 'enforce' (refuse).",
     )
+    shell_default_ask: str = Field(
+        default="observe",
+        alias="WEEBOT_SHELL_DEFAULT_ASK",
+        description=(
+            "Shell commands that match no approval rule and are not plain reads: 'off', "
+            "'observe' (log what would ask, then run) or 'enforce' (ask)."
+        ),
+    )
     intent_review_timeout_s: float = Field(
         default=30.0,
         gt=0,
@@ -223,6 +231,14 @@ class WeebotSettings(BaseSettings):
         normalized = str(v).strip().lower()
         if normalized not in {"observe", "enforce"}:
             raise ValueError(f"shell_guard_mode must be 'observe' or 'enforce', got {v!r}")
+        return normalized
+
+    @field_validator("shell_default_ask")
+    @classmethod
+    def validate_shell_default_ask(cls, v: str) -> str:
+        normalized = str(v).strip().lower()
+        if normalized not in {"off", "observe", "enforce"}:
+            raise ValueError(f"shell_default_ask must be off, observe or enforce, got {v!r}")
         return normalized
 
     @field_validator("daily_ai_budget")
