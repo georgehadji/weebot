@@ -80,7 +80,7 @@ Format: date — record — note
 - 2026-06-10 — [Tool Handling Enhancements — Implementation Plan](specs/tool_enhancements_plan.md)
 - 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 
-## reference (79)
+## reference (80)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
@@ -125,6 +125,7 @@ Format: date — record — note
 - 2026-10-22 — [ICM slice 1: reference integrity (read-only, nothing moved)](icm_slice1_references.md)
 - 2026-10-22 — [Integration research: agentic-inbox, Arroxy, Postiz](integrations_research.md)
 - 2026-06-28 — [Self-Evaluation — Architecture Elevation Plan V2](plans/architecture_elevation_v2_evaluation.md)
+- 2026-10-27 — [D4 research: wiring the G8 and G9 code](plans/d4_wiring_research_2026_10_27.md) — research for decision D4 of the audit fix plan; how to wire the G8 and G9 code instead of deleting it; findings come from two read-only agents and were not independently re-checked
 - 2026-06-28 — [Dead-Code Audit — `application/services/` — 26 Files with 0 Production Callers](plans/dead_services_report.md)
 - 2026-06-28 — [C4: Domain-Logic Relocation Candidates — 40 Services](plans/domain_relocation_candidates.md)
 - 2026-09-05 — [ignore_imports Taxonomy — 67 Entries Across 6 Contracts](plans/ignore_imports_taxonomy.md)
