@@ -155,7 +155,7 @@ bandit_b110 = 50
 # 28 -> 27 with W3.6: layer 2 of tools/bash_security.py built an `operators`
 # set it never read (ruff 0.17.1 both before and after).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 27
+unused_locals = 26
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the

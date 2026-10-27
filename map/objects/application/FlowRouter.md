@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-27
-commit: 0034f08b
+commit: 2b5851dd
 ---
 
 # FlowRouter
@@ -17,7 +17,7 @@ Decides which `FlowState` a turn starts in, from the session's pause flags and p
 Extracted from `PlanActFlow.run()` so routing is testable alone (`weebot/application/flows/flow_router.py:1-10`). It returns the state *and* a possibly changed `Session`, so the caller applies flag clearing and status changes in the same step as the transition (`:8-9`, `:49-51`). Resume after a human pause always goes through it, which is why the pause flags live in `session.context.extra`.
 
 ## Shape
-`resolve_initial_state(session, prompt, extra)` at `flow_router.py:49-213`. Priority order, first match wins:
+`resolve_initial_state(session, prompt, extra)` at `flow_router.py:50-223`. Priority order, first match wins:
 
 | # | Condition | Result | Lines |
 |---|---|---|---|
@@ -26,16 +26,16 @@ Extracted from `PlanActFlow.run()` so routing is testable alone (`weebot/applica
 | 2 | `_user_gate_pending` | for `tool_approval`, `record_flow_reply` decides and issues the grant; approved: flag cleared, falls through to 3/4/5; otherwise `PlanningState` (RUNNING), per-step `constraint_gate_ack:*` facts reset, `atomic_mail_inbound_pending` re-armed if the gate was `inbound_mail` | 115-193 |
 | 3 | last plan exists and is incomplete | `ExecutingState` (WAITING becomes RUNNING) | 195-201 |
 | 4 | session WAITING with a plan | `ExecutingState` (RUNNING) | 203-206 |
-| 5 | otherwise | `PlanningState`; a WAITING session with no plan (an intent-review answer) is set RUNNING | 208-212 |
+| 5 | otherwise | `PlanningState`; a WAITING session is set RUNNING. When the events hold an asked question and the prompt is not the task, the prompt is an answer to intent review: it is kept as `_clarification_answer`, and `PlanningState` plans from the task plus the answer (`with_clarification`) | 209-223 |
 
 - `_apply_plan_file(session)`: if the user edited `Output/<session>/01_plan.md`, the edited steps become the plan as a new `PlanEvent(UPDATED)`; unchanged steps keep their ids (ICM B2) (`:25-42`, used at `:95`).
-- `record_misalignment(session, prompt, journal)` (`:214-234`): best-effort, schedules a journal write, swallows only `ImportError` (`:233-234`).
+- `record_misalignment(session, prompt, journal)` (`:226-246`): best-effort, schedules a journal write, swallows only `ImportError` (`:245-246`).
 
 Two details that look like bugs and are deliberate:
 - An empty answer approves a plan (`:93`) but does **not** approve a gate (`:135-138`): gates guard untrusted input, silence is not consent.
 - Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`:96-98, 108-113, 188-193`; loop break at `weebot/application/flows/plan_act_flow.py:522`).
 
-Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:429`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:298-300`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
+Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `plan_act_flow.py:429`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:301-303`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
 
 Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out` as `{**(extra or {}), ...}` (`:73, 88`), which erases other keys if a caller omits `extra` (`:129-132`). Priority 2 merges onto the session's own extra instead (`:133`). The one production caller passes `extra` (`plan_act_flow.py:422`).
 

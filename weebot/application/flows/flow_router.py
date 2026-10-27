@@ -208,8 +208,18 @@ class FlowRouter:
 
         # WAITING with no plan: the answer to a pre-plan question (intent
         # review). Still WAITING, the run loop breaks right after planning.
+        # The answer alone is not the task, so it is kept for PlanningState to
+        # plan together with the original task (with_clarification). TaskRunner sets
+        # RUNNING before the flow starts, so the asked question is read from the
+        # events, not from the status.
         if session.status == SessionStatus.WAITING:
             session = session.set_status(SessionStatus.RUNNING)
+        asked = any(getattr(e, "type", "") == "wait_for_user" for e in session.events)
+        if prompt.strip() and asked and prompt.strip() != (session.context.original_task or ""):
+            extra_out = {**session.context.extra, "_clarification_answer": prompt}
+            session = session.model_copy(
+                update={"context": session.context.model_copy(update={"extra": extra_out})}
+            )
         return PlanningState(), session
 
     @staticmethod

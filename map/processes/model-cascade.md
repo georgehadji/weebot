@@ -5,8 +5,8 @@ code: CascadeExecutor.call_with_cascade
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 0034f08b
+verified: 2026-10-28
+commit: 2b5851dd
 consumes:
   - ../objects/application/ExecutorAgent.md
   - ../objects/application/CascadeExecutor.md
@@ -44,7 +44,7 @@ Consequences (read from source, not run):
 
 ## If you change this
 **Hits:** every executor LLM call (all flows that run steps), `ModelCascadeTracker` / ACR telemetry, cost accounting through `LLMCallCompleted`; `ROLE_MODEL_CONFIG` is shared with DI's per-role LLMs, the context switcher and the role selector (`model_refs.py:72-75`); tests `tests/unit/test_cascade_executor.py`, `tests/unit/test_model_cascade_tracker.py`.
-**Does not hit:** the planner's model choice (`PlannerAgent`, through `CreatePlanCommand.model`, `weebot/application/flows/states/planning.py:232`); `weebot/core/model_cascade_config.py`, which only supplies `estimate_cost` (`_cascade.py:14` imports it as `_estimate_cost`).
+**Does not hit:** the planner's model choice (`PlannerAgent`, through `CreatePlanCommand.model`, `weebot/application/flows/states/planning.py:235`); `weebot/core/model_cascade_config.py`, which only supplies `estimate_cost` (`_cascade.py:14` imports it as `_estimate_cost`).
 
 ## See
 `weebot/application/agents/executor/_cascade.py`, `weebot/config/model_refs.py`, `weebot/application/services/task_model_router.py`
