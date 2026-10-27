@@ -560,7 +560,7 @@ def create_app() -> FastAPI:
             "Set WEEBOT_API_KEY to enable remote access."
         )
 
-    # Added last, so outermost: an oversize body is refused before auth or any route reads it.
+    # Outside auth: an oversize body is refused before auth or any route reads it.
     from weebot.config.secret_accessor import SecretAccessor
     from weebot.interfaces.web.body_limit import DEFAULT_MAX_BODY_BYTES, BodyLimitMiddleware
 
