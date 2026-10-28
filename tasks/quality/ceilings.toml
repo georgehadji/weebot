@@ -75,7 +75,8 @@ unit_coverage_floor = 64
 # 112 -> 111 with A15 (audit fix plan): connection_pool.acquire_write's rollback
 # failure is logged instead of swallowed.
 # 111 -> 110 with A34: BashGuard's security-event callback logs its failure.
-silent_except_handlers = 110
+# 110 -> 102 with wave 6 G1: the unused template engine was deleted.
+silent_except_handlers = 102
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -90,7 +91,8 @@ blocking_io_in_async = 0
 # deleted rather than moved. Dead code does not only cost its own lines; it
 # holds debt the ratchets count, so it also hides how much debt is live.
 # Measured by: the `lint-no-print` target in the Makefile.
-print_in_production = 105
+# 105 -> 100 with wave 6 G1: the unused template engine was deleted.
+print_in_production = 100
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was
@@ -107,7 +109,8 @@ print_in_production = 105
 # `create_llm_adapter` (WB-02), which is deleted -- the container builds ports for a
 # model now (Container.create_llm_for_model).
 # Measured by: the `lint-env-access` target in the Makefile.
-bare_env_reads = 68
+# 68 -> 67 with wave 6 G1: the unused template engine was deleted.
+bare_env_reads = 67
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
@@ -362,7 +365,8 @@ functions_over_150_lines = 25
 # (127 and 112 chars) that are now wrapped. ruff is also pinned in requirements.txt
 # as of the same change, so this number is reproducible instead of depending on what
 # pip resolved.
-ruff_violations = 736
+# 736 -> 687 with wave 6 G1: the unused template engine was deleted.
+ruff_violations = 687
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

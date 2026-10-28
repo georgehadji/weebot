@@ -187,9 +187,7 @@ class PlanActFlowConfig:
     hooks: HookRegistryPort | None = None  # HookRegistryPort
     """Optional hook registry for PlanActFlow lifecycle callbacks.
 
-    Pass any object satisfying ``weebot.application.ports.hook_registry_port.HookRegistryPort``
-    (e.g. ``weebot.templates.hooks.HookRegistry``).  Typed as ``Optional[Any]`` to avoid
-    importing the templates layer into the application models module."""
+    Pass any object satisfying ``weebot.application.ports.hook_registry_port.HookRegistryPort``."""
 
     middleware_chain: MiddlewareChain | None = None  # MiddlewareChain — interceptor pipeline for LLM calls
     """Optional middleware chain wrapping every executor LLM request."""

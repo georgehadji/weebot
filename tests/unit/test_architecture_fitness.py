@@ -513,7 +513,6 @@ def test_core_modules_in_correct_package():
         "agent.py",
         "agent_context.py",
         "agent_profile.py",
-        "tool_agent.py",
         "workflow_orchestrator.py",
         "workflow_tracer.py",
         "dependency_graph.py",
@@ -1788,12 +1787,9 @@ def test_there_is_exactly_one_flow_routing_table():
 # sanitiser are applied. An LLM client built anywhere else has none of them —
 # not a weaker version, none — and nothing about the call site says so.
 #
-# Both entries below are real bypasses, grandfathered at their measured count
-# so that a NEW one fails. Neither is endorsed:
+# The entry below is a real bypass, grandfathered at its measured count so
+# that a NEW one fails. It is not endorsed:
 #
-#   core/tool_agent.py     — constructs AsyncOpenAI directly. The module is
-#                            already deprecated (it raises DeprecationWarning
-#                            in __init__); the fix is deletion, not plumbing.
 #   osworld/agent_adapter.py — constructs OpenAIAdapter directly, so the call
 #                            has no ResilientLLMAdapter above it: no circuit
 #                            breaker, no retry, and its only time bound is the
@@ -1809,7 +1805,6 @@ _CONCRETE_ADAPTERS = {
 }
 _ADAPTER_PACKAGE = ("infrastructure", "adapters", "llm")
 _GRANDFATHERED_BYPASSES = {
-    "core/tool_agent.py": "AsyncOpenAI",
     "osworld/agent_adapter.py": "OpenAIAdapter",
 }
 

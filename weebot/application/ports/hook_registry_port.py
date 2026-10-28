@@ -1,8 +1,8 @@
 """Port interface for hook registries.
 
 Any object that implements ``execute_hooks`` with this signature can be wired
-into ``PlanActFlowConfig.hooks``.  ``weebot.templates.hooks.HookRegistry``
-satisfies this protocol structurally without any import change.
+into ``PlanActFlowConfig.hooks``. No registry is wired today: the template
+engine's ``HookRegistry`` was deleted with the rest of the unused template engine.
 """
 
 from __future__ import annotations

@@ -112,8 +112,6 @@ yt-dlp>=2026.8.19  # YouTube video download
 # Security
 cryptography==50.0.2
 
-# Templating
-jinja2>=3.1.6
 
 # Caching / Message Queue
 valkey==6.2.0  # Drop-in redis replacement (BSD-3-Clause, Linux Foundation)
