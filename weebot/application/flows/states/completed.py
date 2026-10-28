@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.agents.executor._session_scope import get_session_scope
+from weebot.application.flows.states._step_outcome import set_replans
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus, StepStatus
@@ -294,6 +295,9 @@ class CompletedState(FlowState):
                 len(failed),
                 ", ".join(s.id for s in failed[:5]),
             )
+        # The run is over, however it ended: the next task in this session starts its
+        # own count of replans without progress.
+        set_replans(context, 0)
         terminal = SessionStatus.COMPLETED if not failed else SessionStatus.FAILED
         context._session = context._session.set_status(terminal)
         if context._state_repo:

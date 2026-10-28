@@ -146,6 +146,7 @@ def _prune_buckets() -> None:
     keys_to_drop = random.sample(list(_buckets.keys()), k=len(_buckets) // 2)
     for k in keys_to_drop:
         del _buckets[k]
+    _throttled.intersection_update(_buckets)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

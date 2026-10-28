@@ -29,18 +29,16 @@ def build_flow(container: Container, session: Session, tools):
     mediator and state repository itself; building PlanActFlow by hand left out the
     mediator that PlanningState needs.
     """
-    flow = container.get("create_flow")(
+    return container.get("create_flow")(
         flow_type="plan_act",
         session=session,
         llm=container.get(LLMPort),
         tools=tools,
         event_bus=container.get(EventBusPort),
         model=os.environ.get("WEEBOT_MODEL"),
+        max_iterations=MAX_ITERATIONS,
+        max_step_repetitions=MAX_STEP_REPETITIONS,
     )
-    # create_flow takes no limits, so they are set on the built flow.
-    flow._max_iterations = MAX_ITERATIONS
-    flow._max_step_repetitions = MAX_STEP_REPETITIONS
-    return flow
 
 
 def done_message(event: DoneEvent) -> str:

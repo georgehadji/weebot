@@ -66,6 +66,8 @@ def build_flow(
     steering=None,
     task_route: TaskRoute | None = None,
     profile_name: str | None = None,
+    max_iterations: int | None = None,
+    max_step_repetitions: int | None = None,
 ) -> BaseFlow:
     """Factory for creating agent flows.
 
@@ -76,6 +78,9 @@ def build_flow(
     *profile_name* selects the SOUL.md profile under
     ``~/.weebot/profiles/<name>/SOUL.md``.  When provided, the
     corresponding persona is injected as slot #1 of the system prompt.
+
+    *max_iterations* and *max_step_repetitions* override the plan-act run limits;
+    None keeps the flow's defaults.
     """
     if task_route is not None:
         flow_type = task_route.flow_type
@@ -123,7 +128,16 @@ def build_flow(
         _knowledge_graph = (
             resolve("knowledge_graph") if KNOWLEDGE_GRAPH_EXTRACTION_ENABLED else None
         )
+        limits = {
+            name: value
+            for name, value in (
+                ("max_iterations", max_iterations),
+                ("max_step_repetitions", max_step_repetitions),
+            )
+            if value is not None
+        }
         return PlanActFlow(
+            **limits,
             llm=llm,
             tools=tools,
             session=session,

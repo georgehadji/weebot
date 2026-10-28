@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shutil
 import subprocess
@@ -239,9 +240,9 @@ class NativeWindowsSandbox(SandboxPort):
             )
         except NotImplementedError:
             # This event loop cannot start subprocesses (uvicorn --reload builds a
-            # SelectorEventLoop on Windows): run the process from a worker thread.
-            return await asyncio.to_thread(
-                self._execute_blocking, command, timeout, working_dir, merged_env, limit_bytes
+            # SelectorEventLoop on Windows): wait on the process from a worker thread.
+            return await self._execute_in_thread(
+                command, timeout, working_dir, merged_env, limit_bytes
             )
         except Exception as e:
             return SandboxResult(
@@ -270,6 +271,11 @@ class NativeWindowsSandbox(SandboxPort):
             proc.kill()
             await proc.wait()
             return self._timed_out(timeout, t_start)
+        except asyncio.CancelledError:
+            # A cancelled run must not leave its command running until the timeout.
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            raise
         finally:
             stop_event.set()
             if monitor_task is not None:
@@ -280,7 +286,7 @@ class NativeWindowsSandbox(SandboxPort):
 
         return self._finished(stdout_b, stderr_b, proc.returncode, t_start, memory_killed[0])
 
-    def _execute_blocking(
+    async def _execute_in_thread(
         self,
         command: list[str],
         timeout: float,
@@ -288,7 +294,29 @@ class NativeWindowsSandbox(SandboxPort):
         env: dict[str, str] | None,
         limit_bytes: int | None,
     ) -> SandboxResult:
-        """``execute`` for a worker thread, when the event loop cannot spawn processes."""
+        """``execute`` for an event loop that cannot spawn processes."""
+        started: list[subprocess.Popen] = []
+        try:
+            return await asyncio.to_thread(
+                self._execute_blocking, command, timeout, working_dir, env, limit_bytes, started
+            )
+        except asyncio.CancelledError:
+            # The worker thread cannot be cancelled, but its process can be killed. One
+            # not yet started when the cancel came still ends at its timeout.
+            for proc in started:
+                proc.kill()
+            raise
+
+    def _execute_blocking(
+        self,
+        command: list[str],
+        timeout: float,
+        working_dir: str | Path | None,
+        env: dict[str, str] | None,
+        limit_bytes: int | None,
+        started: list[subprocess.Popen],
+    ) -> SandboxResult:
+        """Start and wait on *command* in a worker thread; the process goes in *started*."""
         t_start = time.monotonic()
         try:
             proc = subprocess.Popen(
@@ -306,7 +334,7 @@ class NativeWindowsSandbox(SandboxPort):
                 elapsed_ms=0.0,
                 sandbox_type=self.sandbox_type,
             )
-
+        started.append(proc)
         stop_event = threading.Event()
         memory_killed: list[bool] = [False]
         monitor: threading.Thread | None = None
@@ -321,7 +349,9 @@ class NativeWindowsSandbox(SandboxPort):
             stdout_b, stderr_b = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
-            proc.communicate()
+            # wait(), not communicate(): kill() ends only this process on Windows, and a
+            # child it started can hold the pipes open, so reading them may never end.
+            proc.wait()
             return self._timed_out(timeout, t_start)
         finally:
             stop_event.set()

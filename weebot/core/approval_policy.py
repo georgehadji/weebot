@@ -49,6 +49,9 @@ _OVERWRITE_HINT = (
     "This overwrites a file already at the destination, and that file cannot be "
     "recovered. Check for name clashes first and keep both (add a suffix)."
 )
+# Where a PowerShell alias is the command and not a word in an argument: the start of
+# the segment, or just inside a script block or parentheses.
+_ALIAS_AT = r"(?:^|[{(])\s*"
 
 # Destructive PowerShell commands that always require confirmation
 _DESTRUCTIVE_KEYWORDS: set[str] = {
@@ -191,17 +194,31 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         undo_hint="Copy-Item overwrites an existing destination.",
     ),
     CommandRule(
+        _ALIAS_AT + r"(?:cp|copy|cpi)\b(?!-)",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Copy-Item overwrites an existing destination.",
+    ),
+    CommandRule(
         r"\bmove-item\b",
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint="Note the source path so the move can be reversed.",
     ),
-    # A forced move, copy or rename replaces the destination file: a deletion, not a
-    # reversible move (de5d0990). Longer than the plain rules above, so it wins. The
-    # aliases count too, and so does any prefix of -Force, which PowerShell accepts; the
-    # command must start the segment or follow a pipe, so "notes-copy.txt" is no copy.
     CommandRule(
-        r"(?:^|\|)\s*(?:move-item|copy-item|rename-item|mv|move|mi|cp|copy|cpi)\b.*\s-fo\w*",
+        _ALIAS_AT + r"(?:mv|move|mi)\b(?!-)",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Note the source path so the move can be reversed.",
+    ),
+    # A forced move, copy or rename replaces the destination file: a deletion, not a
+    # reversible move (de5d0990). The aliases count too, and so does any prefix of
+    # -Force, which PowerShell accepts; an alias must be at command position, so
+    # "notes-copy.txt" is no copy. Its hint wins over the plain rules' (_evaluate_segment).
+    CommandRule(
+        r"(?:\b(?:move-item|copy-item|rename-item)\b|"
+        + _ALIAS_AT
+        + r"(?:mv|move|mi|cp|copy|cpi)\b(?!-)).*\s-fo\w*",
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint=_OVERWRITE_HINT,
@@ -394,13 +411,20 @@ class ExecApprovalPolicy:
             return _NO_MATCH
         if denies or matches:
             best = max(denies or matches, key=lambda r: len(r.pattern))
+            # A warning that the command destroys a file outranks a milder hint from a
+            # longer rule of the same mode ("the move can be reversed" for mv -f).
+            hint = next(
+                (r.undo_hint for r in matches
+                 if r.undo_hint == _OVERWRITE_HINT and r.mode is best.mode),
+                best.undo_hint,
+            )
             if best.mode is ApprovalMode.DENY:
                 reason = f"Command denied by policy: {best.pattern}"
             elif best.mode is ApprovalMode.AUTO_APPROVE:
                 reason = ""
             else:
                 reason = "Confirmation required before execution."
-            return _SegmentDecision(_RANK[best.mode], reason, best.undo_hint)
+            return _SegmentDecision(_RANK[best.mode], reason, hint)
         if chained:
             for kw in sorted(_DESTRUCTIVE_KEYWORDS):
                 if re.search(rf"\b{re.escape(kw)}\b", seg_lower):

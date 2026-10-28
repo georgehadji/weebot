@@ -50,3 +50,20 @@ async def test_a_later_yaml_edit_still_applies_and_keeps_the_runtime_edit(tmp_pa
     job = manager.get_job("sweep")
     assert job.trigger_config == {"hours": 2}
     assert not job.enabled
+
+
+async def test_a_yaml_edit_whose_update_failed_is_applied_on_the_next_load(tmp_path, monkeypatch):
+    manager = SchedulingManager(db_path=tmp_path / "jobs.db")
+    cfg = _write(tmp_path / "jobs.yaml", _ON)
+    await manager.load_from_config(cfg)
+    real_update = manager.update_job
+
+    async def broken(*_a, **_k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(manager, "update_job", broken)
+    await manager.load_from_config(_write(cfg, _ON_EVERY_2H))
+    monkeypatch.setattr(manager, "update_job", real_update)
+
+    await manager.load_from_config(cfg)
+    assert manager.get_job("sweep").trigger_config == {"hours": 2}

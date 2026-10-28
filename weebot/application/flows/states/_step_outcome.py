@@ -82,7 +82,7 @@ MAX_REPLANS_WITHOUT_PROGRESS: int = 3
 _REPLANS_KEY = "_replans_without_progress"
 
 
-def _set_replans(context: PlanActFlow, count: int) -> None:
+def set_replans(context: PlanActFlow, count: int) -> None:
     session = context._session
     extra = {**session.context.extra, _REPLANS_KEY: count}
     context._session = session.model_copy(
@@ -131,7 +131,7 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> Error
         return None
 
     replans = int(context._session.context.get(_REPLANS_KEY) or 0) + 1
-    _set_replans(context, replans)
+    set_replans(context, replans)
     if replans > MAX_REPLANS_WITHOUT_PROGRESS:
         logger.warning(
             "Step %s failed after %d replans without progress; stopping", step.id, replans - 1
@@ -141,7 +141,7 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> Error
             f"completed. Last error: {error_msg[:300]}"
         )
         context._plan = context._plan.update_step_status(step.id, StepStatus.FAILED, result=reason)
-        _set_replans(context, 0)  # this run is over; the next one starts its own count
+        set_replans(context, 0)  # this run is over; the next one starts its own count
         context.set_state(new_state(StateId.VERIFYING))
         return ErrorEvent(error=reason)
 
@@ -283,7 +283,7 @@ async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
 
 def complete_step(context: PlanActFlow, step: Step, run: StepRun) -> None:
     """Commit the step as COMPLETED, carrying its result."""
-    _set_replans(context, 0)
+    set_replans(context, 0)
     context._plan = context._plan.update_step_status(
         step.id, StepStatus.COMPLETED, result=run.result_text or None
     )
