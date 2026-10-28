@@ -44,8 +44,11 @@ class TestApprovalPolicyHardening:
         assert result.requires_confirmation is True
 
     def test_chained_output_bypass_blocked(self, policy):
-        result = policy.evaluate("remove-item C:\\Output\\x; remove-item C:\\Windows\\x")
+        result = policy.evaluate("remove-item C:\\Output\\x; remove-item D:\\data\\x")
         assert result.requires_confirmation is True
+        # A system path in the chained segment is denied outright (wave 6 G11).
+        result = policy.evaluate("remove-item C:\\Output\\x; remove-item C:\\Windows\\x")
+        assert result.approved is False
 
     def test_safe_format_table_auto_approved(self, policy):
         result = policy.evaluate("Get-ChildItem | Format-Table")

@@ -28,7 +28,7 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 |---|---|---|
 | `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses; the HMAC override token was retired by ADR-013; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation errors unless `GuardedTool` runs the call as human-approved, fixed 2026-10-23) → sandbox | `tools/bash_tool.py:354-425, 249-306` |
 | `python_execute` | BashGuard on the code string (only BLOCKED refuses) → `ExecApprovalPolicy` → sandbox | `tools/python_tool.py:154-170` |
-| `powershell` | in the tool's own code: `_validate_no_encoded_commands`, `_validate_path_safety`, `ExecApprovalPolicy` → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:177-197` |
+| `powershell` | in the tool's own code: `_validate_no_encoded_commands`, `_validate_path_safety`, `ExecApprovalPolicy` → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:140-158` |
 | `GuardedTool` around the three tools above | `BashGuardAdapter` (BLOCKED to DENY, DANGEROUS to ASK, SUSPICIOUS note only), `AnalyzerAdapter`, `ApprovalPolicyAdapter`, financial and outbound policy, `EgressAdapter` (not in flows); most restrictive verdict wins; DENY refused, ASK goes to the approval channel, then the tool runs as human-approved | `application/services/tool_guards.py:89-115, 352-365, 413-478` |
 | other callers | `latex_compiler.py` (refuses BLOCKED), CLI `guard` command | `infrastructure/document/latex_compiler.py:26,143`, `cli/commands/guard.py` |
 

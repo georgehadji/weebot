@@ -95,6 +95,54 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         is_regex=True,
         undo_hint="Formatting is irreversible. Use Diskpart carefully.",
     ),
+    CommandRule(
+        r"\bClear-Disk\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Clearing a disk is irreversible.",
+    ),
+    # Deleting the OS or installed programs: denied, not asked. These and the
+    # rules below were PowerShellTool's private lists (wave 6 G11); the guard
+    # chain had no counterpart, and the tool itself consults only this policy.
+    CommandRule(
+        _ALIAS_AT
+        + r"(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b.*\b[a-z]:\\(?:Windows|Program Files)\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Deleting Windows or Program Files breaks the system.",
+    ),
+    # Running code from a string or on another machine
+    CommandRule(
+        r"\bInvoke-Expression\b|" + _ALIAS_AT + r"iex\b(?!-)",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Invoke-Expression runs arbitrary code. Run the command directly.",
+    ),
+    CommandRule(
+        r"\bInvoke-Command\b|" + _ALIAS_AT + r"icm\b(?!-)",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Invoke-Command runs code on another machine or session.",
+    ),
+    CommandRule(
+        r"\bStart-Process\b.*\s-Credential\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Starting a process as another user is not allowed.",
+    ),
+    # Accounts and Windows features
+    CommandRule(
+        r"\b(?:New|Set)-LocalUser\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Creating or changing local accounts is not allowed.",
+    ),
+    CommandRule(
+        r"\b(?:Add-WindowsCapability|Remove-WindowsFeature)\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Adding or removing Windows features is not allowed.",
+    ),
     # Registry editing — always ask
     CommandRule(
         r"\breg\s+(delete|add)",
