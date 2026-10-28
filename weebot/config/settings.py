@@ -511,6 +511,3 @@ def ensure_workspace() -> None:
     """Ensure workspace and logs directories exist."""
     WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(exist_ok=True)
-
-
-# OSWorldSettings moved to weebot/config/osworld_settings.py (ICM fix plan W2.4).

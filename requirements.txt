@@ -96,8 +96,6 @@ uuid-utils>=0.0.0
 # ipywidgets>=8.0.0
 # IPython>=8.0.0
 
-# Optional: For Zotero integration
-# pyzotero>=1.5.0
 
 # Filesystem watching (behavior_tracker)
 watchdog==6.0.0

@@ -1,12 +1,12 @@
 ---
 type: object
 name: WeebotSettings
-code: WeebotSettings, OSWorldSettings
+code: WeebotSettings
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-28
-commit: 1e48faff
+verified: 2026-10-29
+commit: c4bf753a
 ---
 
 # WeebotSettings
@@ -22,9 +22,8 @@ A pydantic `BaseSettings` so values are validated once at construction (`weebot/
 - `validate_at_least_one_key()` and `available_providers()` both read one `_PROVIDER_KEYS` table, which includes xai (`:420-444`).
 - There is no `env_prefix` (`:42-47`), so a field is read from its bare upper-case name unless it has an alias; fields documented as `WEEBOT_*` take `validation_alias=AliasChoices("WEEBOT_X", "X")` (for example `:96-114, 282-283, 313-314`). `tests/unit/config/test_weebot_env_names.py` fails on any documented `WEEBOT_*` name without a reader.
 - Not part of the class: module constants `WORKSPACE_ROOT`, `LOGS_DIR`, `SESSIONS_DB`, `MEMORY_DIR`, `PROFILES_DIR`, read with `os.getenv` at import (`:16-27`). They stay import-time constants by decision (plan W2.4b option a), because tools read `WORKSPACE_ROOT` in class bodies. The entry points call `load_dotenv(override=True)` before importing (`run.py:17`, `cli/main.py:59-61`, `run_mcp.py:19-21`); other entry points were not checked.
-- `OSWorldSettings` lives in `weebot/config/osworld_settings.py` (`settings.py:516`); its only reader is `weebot/infrastructure/sandbox/osworld.py:28, 59`.
 
-Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:143`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:295-296`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:500-506`).
+Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:143`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:296-297`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:500-506`).
 
 Consequences (read from source, not run; `pydantic_settings` is not installed here):
 - `run_mcp.py:102` calls `get_settings().validate_at_least_one_key()` on an instance; `tests/unit/fixes/test_f13_run_mcp_key_check.py` covers it.
@@ -36,7 +35,7 @@ Consequences (read from source, not run; `pydantic_settings` is not installed he
 ## Connected to
 - **Built by** `get_settings()` only; resolved from the DI container as `WeebotSettings`.
 - **Related:** `SecretAccessor` (the sanctioned way to read secrets, root `CLAUDE.md` rule 6), `weebot/config/model_refs.py` (model ids), `.env.example` and `docs/CONFIGURATION.md`.
-- **Looks like but is not:** the module constants above (same concerns, read differently); `OSWorldSettings` (other file, other subsystem).
+- **Looks like but is not:** the module constants above (same concerns, read differently).
 
 ## If you change this
 **Hits:** every `get_settings()` reader (32 modules in `weebot/`, `cli/` and the root entry points, grep 2026-10-24); the lint gates `lint-env-access`, `lint-settings-construction` and `scripts/quality_ceilings.py`; the DI binding in `Container.configure_defaults()`; the generated config reference; tests `tests/unit/test_settings.py`, `tests/unit/test_settings_validation.py`, `tests/unit/test_sandbox_config.py`, `tests/unit/config/test_ponytail_settings.py`, `tests/unit/config/test_get_settings.py`, `tests/unit/config/test_weebot_env_names.py`, and the `_no_dotenv_settings` and `_fresh_settings_cache` fixtures (`tests/conftest.py:57, 83`).

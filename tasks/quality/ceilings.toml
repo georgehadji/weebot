@@ -98,7 +98,8 @@ blocking_io_in_async = 0
 # 89 -> 69 with wave 6 G3: the two unused research services were deleted.
 # 69 -> 64 with wave 6 G4: the unwired observability modules were deleted.
 # 64 -> 62 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
-print_in_production = 62
+# 62 -> 60 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
+print_in_production = 60
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was
@@ -381,7 +382,8 @@ functions_over_150_lines = 23
 # 674 -> 671 with wave 6 G3: the two unused research services were deleted.
 # 671 -> 624 with wave 6 G4: the unwired observability modules were deleted.
 # 624 -> 619 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
-ruff_violations = 619
+# 619 -> 618 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
+ruff_violations = 618
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

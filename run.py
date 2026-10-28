@@ -91,9 +91,7 @@ def run_diagnostic() -> bool:
         ("weebot.tools.browser_tool", "Browser Tool"),
         ("research_modules.reproducibility", "Research: Reproducibility"),
         ("research_modules.data_validator", "Research: Data Validator"),
-        ("research_modules.literature", "Research: Literature"),
         ("integrations.obsidian", "Integration: Obsidian"),
-        ("integrations.zotero", "Integration: Zotero"),
         ("cli.main", "CLI"),
     ]
 
