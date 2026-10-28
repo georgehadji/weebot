@@ -174,7 +174,6 @@ def wire_ports(flow: Any, cfg: PlanActFlowConfig) -> None:
     flow._budget_grants = 0  # human approvals past the hard limit, one increment each
     flow._pending_budget_request = None  # the ToolCallApproval a paused flow waits on
     flow._step_execution_counts: dict[str, int] = {}
-    flow._replans_without_progress = 0
     flow._emit_lock = asyncio.Lock()
     flow._event_publisher = None  # Lazy-init via _get_event_publisher()
 

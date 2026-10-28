@@ -76,6 +76,18 @@ MAX_REVIEW_RETRIES_GATE: int = 2
 # new id, so the per-step repetition limit never sees them (de5d0990: six replans of one
 # unexplained error, ended only by the token budget).
 MAX_REPLANS_WITHOUT_PROGRESS: int = 3
+# Kept in the session, not on the flow: a resume (plan approval, a budget grant) builds
+# a new flow, and a count on the flow started again at 0 each time. In context.extra,
+# not the facts, because facts are shown to the planner.
+_REPLANS_KEY = "_replans_without_progress"
+
+
+def _set_replans(context: PlanActFlow, count: int) -> None:
+    session = context._session
+    extra = {**session.context.extra, _REPLANS_KEY: count}
+    context._session = session.model_copy(
+        update={"context": session.context.model_copy(update={"extra": extra})}
+    )
 
 
 def is_code_step(step: Step, events: list[Any] | None = None) -> bool:
@@ -118,8 +130,8 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> Error
         context.set_state(new_state(StateId.EXECUTING))
         return None
 
-    replans = getattr(context, "_replans_without_progress", 0) + 1
-    context._replans_without_progress = replans
+    replans = int(context._session.context.get(_REPLANS_KEY) or 0) + 1
+    _set_replans(context, replans)
     if replans > MAX_REPLANS_WITHOUT_PROGRESS:
         logger.warning(
             "Step %s failed after %d replans without progress; stopping", step.id, replans - 1
@@ -129,6 +141,7 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> Error
             f"completed. Last error: {error_msg[:300]}"
         )
         context._plan = context._plan.update_step_status(step.id, StepStatus.FAILED, result=reason)
+        _set_replans(context, 0)  # this run is over; the next one starts its own count
         context.set_state(new_state(StateId.VERIFYING))
         return ErrorEvent(error=reason)
 
@@ -270,7 +283,7 @@ async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
 
 def complete_step(context: PlanActFlow, step: Step, run: StepRun) -> None:
     """Commit the step as COMPLETED, carrying its result."""
-    context._replans_without_progress = 0
+    _set_replans(context, 0)
     context._plan = context._plan.update_step_status(
         step.id, StepStatus.COMPLETED, result=run.result_text or None
     )

@@ -83,15 +83,7 @@ class VerifyingState(FlowState):
 
         # Collect completed step results as the "summary" to fact-check. A failed step a
         # plan update stood in for is COMPLETED too, but it holds no work to check.
-        from weebot.application.flows.states.base import HANDLED_BY_PLAN_UPDATE
-
-        completed = [
-            s
-            for s in plan.steps
-            if hasattr(s.status, "value")
-            and s.status.value == "completed"
-            and s.result != HANDLED_BY_PLAN_UPDATE
-        ]
+        completed = [s for s in plan.steps if s.did_work()]
         if not completed:
             _log.debug("No completed steps to verify — skipping")
             from weebot.application.flows.states.completed import CompletedState

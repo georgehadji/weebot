@@ -7,6 +7,11 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+# The result UpdatingState gives a failed step that a plan update replaced. The step is
+# COMPLETED so the run moves on past it, but it did no work: see Step.did_work().
+REPLACED_BY_PLAN_UPDATE = "Handled by plan update"
+
+
 class StepStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -76,6 +81,10 @@ class Step(BaseModel):
 
     def is_done(self) -> bool:
         return self.status in (StepStatus.COMPLETED, StepStatus.FAILED)
+
+    def did_work(self) -> bool:
+        """COMPLETED by its own work, not a failure a plan update stood in for."""
+        return self.status == StepStatus.COMPLETED and self.result != REPLACED_BY_PLAN_UPDATE
 
     def mark_running(self) -> Step:
         return self.model_copy(update={"status": StepStatus.RUNNING})
@@ -240,7 +249,7 @@ class Plan(BaseModel):
         failure was not merely reported as a success, it was learned from as
         one.
         """
-        return len(self.steps) > 0 and all(s.status == StepStatus.COMPLETED for s in self.steps)
+        return len(self.steps) > 0 and all(s.did_work() for s in self.steps)
 
     def failed_steps(self) -> list[Step]:
         """Steps that reached FAILED. Empty when the plan succeeded."""

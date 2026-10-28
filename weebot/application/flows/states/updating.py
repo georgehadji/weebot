@@ -9,7 +9,6 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import (
-    HANDLED_BY_PLAN_UPDATE,
     AgentStatus,
     FlowState,
     StateId,
@@ -18,7 +17,7 @@ from weebot.application.flows.states.base import (
     task_text,
 )
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanEvent
-from weebot.domain.models.plan import Plan, PlanStatus, StepStatus
+from weebot.domain.models.plan import REPLACED_BY_PLAN_UPDATE, Plan, PlanStatus, StepStatus
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +212,7 @@ class UpdatingState(FlowState):
         if update_success:
             if last_step and last_step.status in (StepStatus.FAILED, StepStatus.RUNNING):
                 context._plan = context._plan.update_step_status(
-                    last_step.id, StepStatus.COMPLETED, result=HANDLED_BY_PLAN_UPDATE
+                    last_step.id, StepStatus.COMPLETED, result=REPLACED_BY_PLAN_UPDATE
                 )
         else:
             logger.warning("Plan update did not produce a revised plan; step stays failed")

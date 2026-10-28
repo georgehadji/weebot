@@ -47,6 +47,8 @@ def _format_event(event: AgentEvent) -> str:
     if isinstance(event, ErrorEvent):
         return f"\n[bold red]⚠️ Error: {event.error}[/bold red]"
     if isinstance(event, DoneEvent):
+        if event.status == "failed":
+            return "\n[bold red]✗ Finished with failed steps[/bold red]"
         return "\n[bold green]✨ Done[/bold green]"
     if isinstance(event, VerificationEvent):
         if (event.answer or "").strip().lower().startswith("unknown"):

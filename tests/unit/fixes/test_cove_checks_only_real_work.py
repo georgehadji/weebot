@@ -10,8 +10,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from weebot.application.flows.states.completed import CompletedState
-from weebot.application.flows.states.base import HANDLED_BY_PLAN_UPDATE
 from weebot.application.flows.states.verifying import VerifyingState
+from weebot.domain.models.plan import REPLACED_BY_PLAN_UPDATE as HANDLED_BY_PLAN_UPDATE
 from weebot.domain.models.plan import Plan, Step, StepStatus
 
 
