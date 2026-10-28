@@ -205,8 +205,12 @@ class SkillOptMixin:
 
         return ValidationGateBehavior(validation_runner=self._maybe_get_str("validation_runner"))
 
-    def _create_target_flow_factory(self, db_path: str):
-        """Return a callable that builds a PlanActFlow for SkillOpt rollouts."""
+    def _create_target_flow_factory(self, db_path: str | None = None):
+        """Return a callable that builds a PlanActFlow for SkillOpt rollouts.
+
+        ``db_path`` is unused and optional: three `harness` commands call this
+        without it, and each raised TypeError before running anything.
+        """
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -224,7 +228,7 @@ class SkillOptMixin:
                     raise RuntimeError("LLMPort not configured in SkillOpt target factory")
                 return getattr(llm, name)
 
-        def factory(session):
+        def factory(session, harness_config=None):
             from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
 
             cfg = PlanActFlowConfig(
@@ -240,7 +244,7 @@ class SkillOptMixin:
                 skill_distiller=self._maybe_get_str("skill_distiller"),
                 skill_review_gate=self._maybe_get_str("skill_review_gate"),
                 code_reviewer=self._maybe_get_str("code_reviewer"),
-                harness_config=self._maybe_get(HarnessConfig),
+                harness_config=harness_config or self._maybe_get(HarnessConfig),
             )
             return PlanActFlow(cfg)
 

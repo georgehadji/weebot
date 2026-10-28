@@ -22,7 +22,8 @@ def _llm(content: str):
 async def test_a_fenced_reply_is_scored_not_failed_open():
     llm = _llm('```json\n{"score": 0.1, "regression_detected": false, "reasoning": "no"}\n```')
     step = Step(id="s1", description="d")
-    result = await LLMStepEvaluator(llm=llm).evaluate(step, "out", Plan(title="p", steps=[step]), [])
+    plan = Plan(title="p", steps=[step])
+    result = await LLMStepEvaluator(llm=llm).evaluate(step, "out", plan, [])
     assert not result.evaluator_failed
     assert result.score == 0.1 and not result.passed
 

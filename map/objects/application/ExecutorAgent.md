@@ -5,8 +5,8 @@ code: ExecutorAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-25
-commit: 0034f08b
+verified: 2026-10-29
+commit: 340794f3
 ---
 
 # ExecutorAgent
@@ -31,7 +31,7 @@ Model choice per call: `_resolve_model_for_step` (`:476-491`) returns `MODEL_VIS
 ## Connected to
 - **Owns:** `CascadeExecutor` (see its card), `ToolExecutor`, `ContextCompressor`, `IterationGuard`, `TrajectoryMonitor` (`:276-287`), `StepBudget` (`:299`). Outbound-action ledger and session taint live in `ToolExecutor` (see EgressGuard); the soft cost limit lives in `CascadeExecutor`.
 - **Invoked through the Mediator, not directly:** `ExecutingState` sends `ExecuteStepCommand` with the flow's `step_execution_context()` (`weebot/application/flows/states/_step_run.py:56-96`) and adds the reported token usage back to the flow (`record_step_usage`, `:480`). `ExecuteStepHandler` builds the executor from the container's executor factory, else `ExecutorAgent(...)`, and iterates `execute_step` (`weebot/application/cqrs/handlers/execute_step_handler.py:102-116, 140`). The factory is `Container.step_executor`, which overlays the flow's settings (tools, skill prompt, role, learner, harness block, middleware, trajectory config, pinned model) on container singletons (ADR-015, F25; see the DI Container card). `SummarizeHandler` builds a bare one (`weebot/application/cqrs/handlers/summarize_handler.py:45`).
-- **Also built by:** `PlanActFlow.__init__` as `self._summary_executor` (`weebot/application/flows/_plan_act_wiring.py:258`), used for summarizing, tool assembly and the per-step harness re-resolve; it does not run steps.
+- **Also built by:** `PlanActFlow.__init__` as `self._summary_executor` (`weebot/application/flows/_plan_act_wiring.py:259`), used for summarizing, tool assembly and the per-step harness re-resolve; it does not run steps.
 - **Looks like but is not:** `PlannerAgent` (writes plans, no tools); persona agents in `weebot/agents/`.
 
 ## If you change this

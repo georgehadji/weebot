@@ -5,8 +5,8 @@ code: Step, StepStatus, ContextScope
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 6558a12f
+verified: 2026-10-29
+commit: 340794f3
 ---
 
 # Step
@@ -24,7 +24,7 @@ A step is a value, not an entity: the flow replaces it inside the plan (`Plan.re
 - `mark_running`, `mark_completed`, `mark_failed`, `mark_unverified` (`:80-110`), `is_blocked` (`:112-121`).
 
 Consequences (read from source, not run):
-- The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`weebot/application/flows/states/executing.py:234`, `weebot/application/flows/states/_step_outcome.py:186, 287`, `weebot/application/flows/states/evidence_gate.py:42-56`).
+- The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`weebot/application/flows/states/executing.py:234`, `weebot/application/flows/states/_step_outcome.py:186, 291`, `weebot/application/flows/states/evidence_gate.py:42-56`).
 - `evidence_refs` is written only by the dead `mark_completed`/`mark_unverified` and read by nothing.
 - `acceptance_criteria` is asked for in the planner prompt (`weebot/config/prompts/planner_system.txt:15, 56`) and parsed (`application/agents/planner.py:339-384`); no Python code reads it afterwards. It reaches a model only if a prompt serialises the whole step.
 - `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`weebot/application/flows/states/_step_outcome.py:123-131`), step validation (`weebot/application/flows/states/_step_outcome.py:211-238`), the evidence audit (`evidence_gate.py:42-49`); review has its own cap on the same field (`application/flows/states/reviewing.py:70, 137`). A step retried by one gate has no retry left for the next.

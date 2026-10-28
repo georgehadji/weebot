@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from collections.abc import AsyncGenerator, Callable
 
 from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_BALANCED
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.services.harness_optimization_target import HarnessOptimizationTarget
@@ -106,9 +106,14 @@ class HarnessOptFlow(BaseFlow):
         gate: RegressionGate | None = None,
         tools: Any | None = None,
         code_quality_signal: Any | None = None,
+        flow_factory: Callable[..., Any] | None = None,
     ):
         self._llm = llm
         self._tools = tools
+        # ``(session, harness_config=...) -> flow`` from the container, so gate runs
+        # get the mediator and services a live flow has. Without it the runner
+        # builds a bare PlanActFlow, which planning refuses to run.
+        self._flow_factory = flow_factory
         self._target = target
         self._trajectory_repo = trajectory_repo
         self._held_in_tasks = held_in_tasks or []
@@ -270,6 +275,7 @@ class HarnessOptFlow(BaseFlow):
         throwaway flow.
         """
         from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.application.harness.scorer import TaskScorer
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
         from weebot.application.services.harness_metric_scorer import HarnessMetricScorer
         from weebot.config.harness.schema import HarnessConfig
@@ -283,29 +289,36 @@ class HarnessOptFlow(BaseFlow):
                     agent_id="gate-eval",
                     context={"harness_version": config.version},
                 )
-                flow_cfg = PlanActFlowConfig(
-                    llm=self._llm, tools=self._tools, session=session, harness_config=config
-                )
-                flow = PlanActFlow(flow_cfg)
+                if self._flow_factory is not None:
+                    flow = self._flow_factory(session, harness_config=config)
+                else:
+                    flow = PlanActFlow(
+                        PlanActFlowConfig(
+                            llm=self._llm, tools=self._tools, session=session, harness_config=config
+                        )
+                    )
                 try:
                     async for _ in flow.run(task_id):
                         pass
-                    task_passed = True
                     task_error = None
                 except Exception as exc:
                     logger.warning(
                         "Gate eval %s (harness %s) failed: %s", task_id, config.version, exc
                     )
-                    task_passed = False
                     task_error = str(exc)
 
-                # Score with HarnessMetricScorer
-                metrics = HarnessMetricScorer.score(session=session, task_passed=task_passed)
+                # The flow replaces its session as it runs, and reports a failed run
+                # through the status rather than by raising: judge the final one.
+                final = getattr(flow, "_session", session)
+                task_passed = task_error is None and final.status == SessionStatus.COMPLETED
+                metrics = HarnessMetricScorer.score(session=final, task_passed=task_passed)
 
                 result: dict = {
                     "passed": task_passed,
                     "task_id": task_id,
                     "metrics": metrics.model_dump(),
+                    # What RegressionGate's CodeQualitySignal reads for a failed task.
+                    "trace": TaskScorer._extract_answer(final) or "",
                 }
                 if task_error:
                     result["error"] = task_error

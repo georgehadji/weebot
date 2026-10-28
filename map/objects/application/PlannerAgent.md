@@ -5,8 +5,8 @@ code: PlannerAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-28
-commit: 2b5851dd
+verified: 2026-10-29
+commit: 340794f3
 ---
 
 # PlannerAgent
@@ -25,7 +25,7 @@ The model returns JSON; everything after that is defensive, because a malformed 
 
 ## Connected to
 - **Invoked through the Mediator:** `CreatePlanHandler` builds a `PlannerAgent` and iterates `create_plan` (`cqrs/handlers/create_plan_handler.py:110-114`); `PlanningState` sends `CreatePlanCommand` (`states/planning.py:225`). `UpdatePlanHandler` (`update_plan_handler.py:52, 66`) and `UpdatingState` (`states/updating.py:190`, via `context._planner`) call `update_plan`.
-- **Other constructors:** `PlanActFlow` (`weebot/application/flows/_plan_act_wiring.py:222`), `PlanningState` (`states/planning.py:319`), `model_selector.py:42`, `services/context_switcher.py:89`.
+- **Other constructors:** `PlanActFlow` (`weebot/application/flows/_plan_act_wiring.py:223`), `PlanningState` (`states/planning.py:319`), `model_selector.py:42`, `services/context_switcher.py:89`.
 - **Produces:** `Plan` / `Step` (domain models), which `ExecutorAgent` consumes; `Step.context_scope` set here controls the executor's prompt.
 - **Looks like but is not:** `ExecutorAgent` (runs steps); `PlanCriticService` (scores plans, in `CritiquingState`); `ParallelPlanner` (`application/agents/parallel_planner.py`, not covered).
 

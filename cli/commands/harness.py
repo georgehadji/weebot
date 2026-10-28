@@ -218,6 +218,11 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
     help="Number of Self-Harness optimization iterations",
 )
 @click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
+@click.option(
+    "--quality-signal",
+    is_flag=True,
+    help="Score failed gate runs' output with one model call each (billed)",
+)
 def harness_evolve(
     harness_path: str,
     output_dir: str | None,
@@ -226,6 +231,7 @@ def harness_evolve(
     max_proposals: int,
     iterations: int,
     db: str,
+    quality_signal: bool,
 ) -> None:
     """Run the Self-Harness optimization loop to evolve an agent harness.
 
@@ -257,6 +263,11 @@ def harness_evolve(
         container.configure_defaults(db_path=db)
         llm = container.get(LLMPort)
         trajectory_repo = TrajectoryRepository(db_path=db)
+        code_quality_signal = None
+        if quality_signal:
+            from weebot.application.services.code_quality_signal import CodeQualitySignal
+
+            code_quality_signal = CodeQualitySignal(llm=container._create_llm_for_role("verifier"))
 
         # Create optimization target
         target = HarnessOptimizationTarget(harness_path=harness_path, output_dir=output_dir)
@@ -279,6 +290,8 @@ def harness_evolve(
                 held_in_tasks=list(held_in_tasks),
                 held_out_tasks=list(held_out_tasks),
                 max_proposals=max_proposals,
+                code_quality_signal=code_quality_signal,
+                flow_factory=container._create_target_flow_factory(),
             )
 
             try:

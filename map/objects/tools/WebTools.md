@@ -5,8 +5,8 @@ code: WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool,
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-28
-commit: c0cbaa2c
+verified: 2026-10-29
+commit: 340794f3
 ---
 
 # WebTools
@@ -25,10 +25,10 @@ Each tool owns its backend and its fallback, and returns an error `ToolResult` r
 | `vane_search` | `weebot/tools/vane_search.py:8` | `POST {VANE_BASE_URL}/api/search` (`weebot/tools/vane_search.py:41-54`) | `VANE_BASE_URL`, default `https://api.vane.ai` (`weebot/tools/vane_search.py:41`) | none; HTTP and request errors returned (`weebot/tools/vane_search.py:79-91`) | yes (`:10`) |
 | `agent_reach` | `weebot/tools/agent_reach.py:240` | allowlisted `agent-reach`, `curl`, `gh`, `yt-dlp`, `bili`, `mcporter call exa.*` (`weebot/tools/agent_reach.py:57-149`); `action=guide` reads the skill files (`weebot/tools/agent_reach.py:319-331`) | `AGENT_REACH_PATH`, else PATH, else `~/.agent-reach-venv` (`weebot/tools/agent_reach.py:173-185`) | none; child env is an allowlist, so Weebot keys are not inherited (`weebot/tools/agent_reach.py:48-54, 231-237`) | yes (`:243`) |
 | `search_images` | `weebot/tools/image_search.py:37` | `ddgs.DDGS().images`, else `duckduckgo_search` (`weebot/tools/image_search.py:23-34, 133-134`) | package only, no key | error when neither package is installed (`weebot/tools/image_search.py:117-124`) | yes (`:49`) |
-| `knowledge` | `weebot/tools/knowledge_tool.py:22` | `ToolRepositoryPort` notes: add/search/get/list/delete (`weebot/tools/knowledge_tool.py:86-101`) | the repo, from `Container.tool_wiring` (`weebot/application/di/_factories.py:480-522`); no repo raises at construction (`weebot/tools/knowledge_tool.py:73-80`) | registry skips it when the repo does not resolve (`weebot/application/di/_factories.py:518-521`, `weebot/application/services/tool_registry.py:508-517`) | no: `LOCAL`, a reviewed decision (`weebot/tools/knowledge_tool.py:37`) |
+| `knowledge` | `weebot/tools/knowledge_tool.py:22` | `ToolRepositoryPort` notes: add/search/get/list/delete (`weebot/tools/knowledge_tool.py:86-101`) | the repo, from `Container.tool_wiring` (`weebot/application/di/_factories.py:498-540`); no repo raises at construction (`weebot/tools/knowledge_tool.py:73-80`) | registry skips it when the repo does not resolve (`weebot/application/di/_factories.py:536-539`, `weebot/application/services/tool_registry.py:508-517`) | no: `LOCAL`, a reviewed decision (`weebot/tools/knowledge_tool.py:37`) |
 | `search_history` | `weebot/tools/search_history.py:19` | FTS5 `search_events` over the sessions DB (`weebot/tools/search_history.py:50-61`) | `DB_SESSIONS_PATH` pool, built lazily (`weebot/tools/search_history.py:53-58`) | error result on search failure (`weebot/tools/search_history.py:62-63`) | yes (`:22`) |
 | `weather` | `weebot/tools/weather_tool.py:16` | `https://wttr.in/<location>?format=j1/j2` (`weebot/tools/weather_tool.py:58-79`; URL `weebot/config/api_endpoints.py:24`) | none | error result on HTTP or parse failure (`weebot/tools/weather_tool.py:73-83`) | yes, fence only: `FIXED_SCHEMA` (`weebot/tools/weather_tool.py:18`) |
-| `ocr` | `weebot/tools/ocr.py:35` | `pytesseract`, decode and OCR in `asyncio.to_thread` (`weebot/tools/ocr.py:87-93`); vision model when pytesseract or the binary is missing (`weebot/tools/ocr.py:94-98, 105-134`) | Tesseract, or `vision_llm` from `tool_wiring` (`weebot/application/di/_factories.py:500`) | vision fallback; error when neither (`weebot/tools/ocr.py:107-108`) | yes (`:38`) |
+| `ocr` | `weebot/tools/ocr.py:35` | `pytesseract`, decode and OCR in `asyncio.to_thread` (`weebot/tools/ocr.py:87-93`); vision model when pytesseract or the binary is missing (`weebot/tools/ocr.py:94-98, 105-134`) | Tesseract, or `vision_llm` from `tool_wiring` (`weebot/application/di/_factories.py:518`) | vision fallback; error when neither (`weebot/tools/ocr.py:107-108`) | yes (`:38`) |
 | `ocr_structured` | `weebot/tools/ocr.py:137` | `pytesseract.image_to_data` in `asyncio.to_thread` (`weebot/tools/ocr.py:176-178`) | Tesseract | error (`weebot/tools/ocr.py:236-239`) | yes (`:140`) |
 
 Roles (from `RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS`, `weebot/application/services/tool_registry.py:26-185`, checked by importing it): `web_search` in 8 roles; `spacescraper` in researcher, analyst, admin; `moli_fetch`, `vane_search`, `agent_reach`, `weather` in researcher, admin, webhook; `search_images` in 6; `knowledge` in 8; `search_history` and `ocr` in admin and webhook only; `ocr_structured` in researcher and admin.
@@ -47,7 +47,7 @@ Consequences (read from source, not run):
 - The MCP server builds `WebSearchTool()` unwrapped (`weebot/mcp/server.py:393`).
 
 ## Connected to
-- **Built by** `RoleBasedToolRegistry`: `set_config` for `spacescraper`, `moli_fetch`, `agent_reach`; `set_rerank` for `web_search`; collaborators for `knowledge` and `ocr` (`weebot/application/services/tool_registry.py:446-525`, `weebot/application/di/_factories.py:480-522`).
+- **Built by** `RoleBasedToolRegistry`: `set_config` for `spacescraper`, `moli_fetch`, `agent_reach`; `set_rerank` for `web_search`; collaborators for `knowledge` and `ocr` (`weebot/application/services/tool_registry.py:446-525`, `weebot/application/di/_factories.py:498-540`).
 - **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `:74`, `must_taint` `:79`, `wrap_untrusted` `:107`) through the executor (`weebot/application/agents/executor/_base.py:332-353`, `weebot/application/agents/executor/_tool_executor.py:548-551`). A tool that declares nothing is `EXTERNAL`.
 - **Related:** the BaseTool card (call path), the EgressGuard card, the Browser card (`advanced_browser`, `camofox_browser`).
 - **Looks like but is not:** `web_scraper`, `screenshot_ocr`, `youtube_download`: other tools, each declaring its own `output_trust` in its module, not covered here.

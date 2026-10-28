@@ -1554,17 +1554,14 @@ def test_browser_tool_has_protocol_bridge():
     assert inspect.iscoroutinefunction(tool.execute), "execute() must be async"
 
 
-def test_harness_opt_flow_no_flow_factory():
-    """HarnessOptFlow must NOT accept a flow_factory parameter (A4)."""
+def test_harness_opt_flow_flow_factory_is_used():
+    """A4 removed a dead ``flow_factory`` parameter. D4 brought one back because the
+    gate's runner built flows with no mediator; it must reach the runner, not sit idle."""
     import inspect
     from weebot.application.flows.harness_opt_flow import HarnessOptFlow
 
-    sig = inspect.signature(HarnessOptFlow.__init__)
-    params = list(sig.parameters.keys())
-    assert "flow_factory" not in params, (
-        f"flow_factory must be removed from HarnessOptFlow.__init__ params. "
-        f"Current params: {params}"
-    )
+    assert "flow_factory" in inspect.signature(HarnessOptFlow.__init__).parameters
+    assert "self._flow_factory(" in inspect.getsource(HarnessOptFlow._make_task_runner)
 
 
 def test_no_b006_violations():
