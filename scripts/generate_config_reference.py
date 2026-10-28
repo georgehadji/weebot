@@ -150,8 +150,6 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Seconds the pre-planning intent review may take; on timeout it fails open"},
 
     # ── Model / LLM ───────────────────────────────────────────────
-    {"var": "WEEBOT_MODEL", "type": "str", "default": "",
-     "desc": "Override the default model ID for all roles"},
     {"var": "DAILY_AI_BUDGET", "type": "float",
      "desc": "Maximum daily AI spend in USD"},
     {"var": "WEEBOT_PONYTAIL_MODE", "type": "str",
@@ -162,8 +160,6 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Log level (DEBUG, INFO, WARNING, ERROR)"},
     {"var": "WEEBOT_LOG_FORMAT", "type": "str", "default": "",
      "desc": "Log format: json|console|dev"},
-    {"var": "WEEBOT_OTEL_ENDPOINT", "type": "str", "default": "",
-     "desc": "OpenTelemetry collector endpoint"},
     {"var": "WEEBOT_ENABLE_ATOMIC_MAIL", "type": "bool", "default": "0",
      "desc": "Enable atomic-mail agent inbox (JMAP)"},
     {"var": "BROWSER_HEADLESS", "type": "bool", "default": "true",
@@ -183,8 +179,6 @@ CONFIG_SCHEMA: list[dict] = [
              "so they need an API key"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
      "desc": "Largest request body the web API accepts (413 above it)"},
-    {"var": "WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS", "type": "bool", "default": "false",
-     "desc": "EXPERIMENTAL: enable raw-SQL migration scripts. Do not enable in production."},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
      "desc": "Allow unsigned WhatsApp webhooks (dev only)"},
     {"var": "STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
