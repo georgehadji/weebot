@@ -77,6 +77,19 @@ def _merge_middleware_result(result: ToolResult, mw: Any) -> ToolResult:
     return dataclasses.replace(result, output=mw.output, error=error, success=error is None)
 
 
+def _called_event(tool_call: dict, event_args: dict, result: ToolResult) -> ToolEvent:
+    tool_name = tool_call["function"]["name"]
+    return ToolEvent(
+        tool_call_id=tool_call["id"],
+        tool_name=tool_name,
+        function_name=tool_name,
+        function_args=event_args,
+        status=ToolStatus.CALLED,
+        result=str(result),
+        is_error=bool(result.is_error),
+    )
+
+
 @dataclass
 class BatchOutcome:
     """The mutable half of a batch: what the caller's loop must react to."""
@@ -119,11 +132,17 @@ class ToolBatchRunner:
             f"Mismatched result count {len(results)} vs tool call count {len(prepared)}"
         )
 
+        hints: list[str] = []
         for tool_call, result in zip(prepared, results, strict=False):
-            await self._process_one(executor, step, tool_call, result, guard, outcome)
+            await self._process_one(executor, step, tool_call, result, guard, outcome, hints)
             if outcome.abort_step:
                 break
 
+        # After the tool messages: nothing may sit between a call and its answer.
+        for hint in hints:
+            executor._conversation_buffer.append(
+                {"role": "system", "content": f"[RECOVERY] {hint}"}
+            )
         return outcome
 
     # ── pre-flight ───────────────────────────────────────────────────────────
@@ -173,6 +192,7 @@ class ToolBatchRunner:
         result: ToolResult,
         guard: Any,
         outcome: BatchOutcome,
+        hints: list[str],
     ) -> None:
         tool_name = tool_call["function"]["name"]
         raw_arguments = tool_call["function"].get("arguments", "{}")
@@ -184,8 +204,11 @@ class ToolBatchRunner:
             self.tool_calls_succeeded += 1
 
         if await self._degenerating(
-            executor, step, signature, result=result, outcome=outcome
+            executor, step, signature, result=result, outcome=outcome, hints=hints
         ):
+            # The step stops here, but the result that stopped it is still shown.
+            called = _called_event(tool_call, event_args, result)
+            outcome.events.insert(len(outcome.events) - 1, called)
             return
         if self._policy_error_loop(step, result, outcome):
             return
@@ -194,17 +217,7 @@ class ToolBatchRunner:
         if result is None:
             return
 
-        outcome.events.append(
-            ToolEvent(
-                tool_call_id=tool_call["id"],
-                tool_name=tool_name,
-                function_name=tool_name,
-                function_args=event_args,
-                status=ToolStatus.CALLED,
-                result=str(result),
-                is_error=bool(result.is_error),
-            )
-        )
+        outcome.events.append(_called_event(tool_call, event_args, result))
 
         if result.data:
             executor._facts[tool_name] = result.data
@@ -243,8 +256,9 @@ class ToolBatchRunner:
         *,
         result: ToolResult,
         outcome: BatchOutcome,
+        hints: list[str],
     ) -> bool:
-        """Tier 1.3 TrajectoryMonitor. True when the batch must stop for this result."""
+        """Tier 1.3 TrajectoryMonitor. True when the step must stop at this result."""
         if executor._trajectory_monitor is None:
             return False
 
@@ -252,15 +266,14 @@ class ToolBatchRunner:
             step_id=step.id,
             tool_signature=signature,
             tool_output=result.output or "",
+            error=result.error if result.is_error else None,
             step_result=outcome.step_result if outcome.step_result else None,
             total_budget=executor._max_steps,
             used_budget=self.tool_calls_attempted,
             available_tools=(list(executor._tools._tools.keys()) if executor._tools else None),
         )
         if diagnosis.recovery_message:
-            executor._conversation_buffer.append(
-                {"role": "system", "content": f"[RECOVERY] {diagnosis.recovery_message}"}
-            )
+            hints.append(diagnosis.recovery_message)
 
         level = logger.debug if diagnosis.health == TrajectoryHealth.HEALTHY else logger.warning
         level(
@@ -281,7 +294,9 @@ class ToolBatchRunner:
                     self._semantic_loop_recoveries,
                     _MAX_SEMANTIC_LOOP_RECOVERIES,
                 )
-                return True  # skip this result, keep going
+                # The model still gets the result; the hint follows it. Skipping the
+                # result here left the model guessing with only the hint (de5d0990).
+                return False
 
         if diagnosis.health not in _AUTO_ABORT_HEALTH and not (
             diagnosis.health == TrajectoryHealth.SEMANTIC_LOOP

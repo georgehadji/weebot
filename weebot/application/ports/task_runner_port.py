@@ -42,9 +42,17 @@ class TaskRunnerPort(Protocol):
         ...
 
     async def resume_session(
-        self, session_id: str, answer: str, flow_factory: FlowFactory
+        self,
+        session_id: str,
+        answer: str,
+        flow_factory: FlowFactory,
+        *,
+        message_id: str | None = None,
     ) -> Session:
-        """Resume a WAITING session: run its flow again with *answer* as the prompt."""
+        """Resume a WAITING session: run its flow again with *answer* as the prompt.
+
+        *message_id* is the id the UI gave the answer, so its echo settles that row.
+        """
         ...
 
     def create_plan_act_factory(

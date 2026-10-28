@@ -29,7 +29,7 @@ def _build_app(monkeypatch, status: SessionStatus):
     task_runner = MagicMock()
     task_runner.create_plan_act_factory = MagicMock(return_value=lambda s: MagicMock())
     task_runner.resume_session = AsyncMock(
-        side_effect=lambda sid, answer, f: session.add_user_message(answer).set_status(
+        side_effect=lambda sid, answer, f, **_kw: session.add_user_message(answer).set_status(
             SessionStatus.RUNNING
         )
     )

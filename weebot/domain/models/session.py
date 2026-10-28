@@ -318,10 +318,17 @@ class Session(BaseModel):
         new_session._memory_index = self._memory_index.copy()  # model_copy resets private attrs
         return new_session
 
-    def add_user_message(self, text: str) -> Session:
+    def add_user_message(self, text: str, message_id: str | None = None) -> Session:
+        """Append the user's message, under *message_id* when the UI already shows it.
+
+        An id already in the session gets a fresh one instead: event ids must stay unique.
+        """
         from .event import MessageEvent
 
-        return self.add_event(MessageEvent(role="user", message=text))
+        event = MessageEvent(role="user", message=text)
+        if message_id and all(e.id != message_id for e in self.events):
+            event = event.model_copy(update={"id": message_id})
+        return self.add_event(event)
 
     def is_completable(self) -> bool:
         """Return True if this session has all data needed for completion."""

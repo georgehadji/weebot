@@ -71,6 +71,8 @@ export interface TitleEvent extends BaseEvent {
 
 export interface DoneEvent extends BaseEvent {
   type: 'done';
+  /** How the run ended. Absent on events stored before the field existed. */
+  status?: 'completed' | 'failed';
 }
 
 export interface WaitForUserEvent extends BaseEvent {

@@ -45,6 +45,11 @@ class ApprovalResult:
     reason: str = ""
 
 
+_OVERWRITE_HINT = (
+    "This overwrites a file already at the destination, and that file cannot be "
+    "recovered. Check for name clashes first and keep both (add a suffix)."
+)
+
 # Destructive PowerShell commands that always require confirmation
 _DESTRUCTIVE_KEYWORDS: set[str] = {
     "remove-item",
@@ -190,6 +195,26 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint="Note the source path so the move can be reversed.",
+    ),
+    # A forced move, copy or rename replaces the destination file: a deletion, not a
+    # reversible move (de5d0990). Longer than the plain rules above, so it wins.
+    CommandRule(
+        r"\b(?:move-item|copy-item|rename-item)\b.*\s-force\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint=_OVERWRITE_HINT,
+    ),
+    CommandRule(
+        r"\b(?:mv|cp)\s+(?:-\w*f\w*|--force)\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint=_OVERWRITE_HINT,
+    ),
+    CommandRule(
+        r"\b(?:move|copy|xcopy)\b.*\s/y\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint=_OVERWRITE_HINT,
     ),
     CommandRule(
         r"\brename-item\b",

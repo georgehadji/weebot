@@ -1,5 +1,6 @@
-import { AlertCircle, CheckCircle2, HelpCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { doneLabel } from "@/lib/announce";
 import { DoneEvent, ErrorEvent, NotificationEvent, WaitForUserEvent } from "@/types/events";
 
 export function ErrorRow({ event }: { event: ErrorEvent }) {
@@ -20,11 +21,13 @@ export function WaitForUserRow({ event }: { event: WaitForUserEvent }) {
   );
 }
 
-export function DoneRow({}: { event: DoneEvent }) {
+export function DoneRow({ event }: { event: DoneEvent }) {
+  const failed = event.status === "failed";
+  const Icon = failed ? XCircle : CheckCircle2;
   return (
     <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground">
-      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-      <Badge variant="secondary">Session completed</Badge>
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      <Badge variant={failed ? "destructive" : "secondary"}>{doneLabel(event)}</Badge>
     </div>
   );
 }

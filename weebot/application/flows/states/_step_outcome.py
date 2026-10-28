@@ -72,6 +72,11 @@ _CODE_KEYWORDS: frozenset[str] = frozenset(
 # Reviewer retries gate — must match _MAX_REVIEW_RETRIES in ReviewingState
 MAX_REVIEW_RETRIES_GATE: int = 2
 
+# Replans in a row with no step completed in between. Each replan swaps in a step with a
+# new id, so the per-step repetition limit never sees them (de5d0990: six replans of one
+# unexplained error, ended only by the token budget).
+MAX_REPLANS_WITHOUT_PROGRESS: int = 3
+
 
 def is_code_step(step: Step, events: list[Any] | None = None) -> bool:
     """Return True if this step likely produced or modified code.
@@ -90,10 +95,13 @@ def is_code_step(step: Step, events: list[Any] | None = None) -> bool:
     return False
 
 
-async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> None:
-    """Three-tier failure routing. Always sets a state; never completes the step."""
+async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> ErrorEvent | None:
+    """Three-tier failure routing. Always sets a state; never completes the step.
+
+    Returns an error for the user when the run stops instead of replanning.
+    """
     if await _all_models_tripped(context, step, run):
-        return
+        return None
 
     error_msg = _error_message(run)
 
@@ -108,7 +116,23 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> None:
         )
         context._plan = context._plan.replace_step(step.id, retried)
         context.set_state(new_state(StateId.EXECUTING))
-    elif severity == "full_replan":
+        return None
+
+    replans = getattr(context, "_replans_without_progress", 0) + 1
+    context._replans_without_progress = replans
+    if replans > MAX_REPLANS_WITHOUT_PROGRESS:
+        logger.warning(
+            "Step %s failed after %d replans without progress; stopping", step.id, replans - 1
+        )
+        reason = (
+            f"Stopped: the plan was replanned {replans - 1} times in a row and no step "
+            f"completed. Last error: {error_msg[:300]}"
+        )
+        context._plan = context._plan.update_step_status(step.id, StepStatus.FAILED, result=reason)
+        context.set_state(new_state(StateId.VERIFYING))
+        return ErrorEvent(error=reason)
+
+    if severity == "full_replan":
         logger.warning(
             "Step %s CRITICAL failure (%s) — restarting planning", step.id, severity
         )
@@ -121,6 +145,7 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> None:
             severity,
         )
         context.set_state(new_state(StateId.UPDATING))
+    return None
 
 
 async def _all_models_tripped(context: PlanActFlow, step: Step, run: StepRun) -> bool:
@@ -245,6 +270,7 @@ async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
 
 def complete_step(context: PlanActFlow, step: Step, run: StepRun) -> None:
     """Commit the step as COMPLETED, carrying its result."""
+    context._replans_without_progress = 0
     context._plan = context._plan.update_step_status(
         step.id, StepStatus.COMPLETED, result=run.result_text or None
     )

@@ -91,6 +91,7 @@ class TrajectoryMonitor:
         total_budget: int = 0,
         used_budget: int = 0,
         available_tools: list[str] | None = None,
+        error: str | None = None,
     ) -> TrajectoryDiagnosis:
         """Analyze the current trajectory and return a diagnosis.
 
@@ -98,6 +99,8 @@ class TrajectoryMonitor:
             step_id: Current step identifier.
             tool_signature: Most recent tool call signature.
             tool_output: Most recent tool output (for semantic-loop detection).
+            error: The tool's error text, if it failed. An error result has an empty
+                output, so without it any two failures hashed as identical output.
             step_result: Most recent step result text.
             total_budget: Total step budget for this executor run.
             used_budget: Steps consumed so far.
@@ -109,7 +112,7 @@ class TrajectoryMonitor:
         if tool_signature:
             self._tool_signatures.append(tool_signature)
         if tool_output is not None:
-            h = hashlib.md5(tool_output.encode()).hexdigest()
+            h = hashlib.md5(f"{tool_output}|{error or ''}".encode()).hexdigest()
             self._output_hashes.append(h)
         if step_result:
             self._step_results.append(step_result)

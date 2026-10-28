@@ -4,7 +4,12 @@
  * The timeline itself is not a live region (every row would be read as it lands); instead only
  * these coarse, meaningful moments are announced through the AnnouncerProvider.
  */
-import { AgentEvent } from "@/types/events";
+import { AgentEvent, DoneEvent } from "@/types/events";
+
+/** A failed run must not read as done; events without a status predate it and say completed. */
+export function doneLabel(event: DoneEvent): string {
+  return event.status === "failed" ? "Session failed" : "Session completed";
+}
 
 export function announcementFor(event: AgentEvent): string | null {
   switch (event.type) {
@@ -17,7 +22,7 @@ export function announcementFor(event: AgentEvent): string | null {
     case "error":
       return `Error: ${event.error}`;
     case "done":
-      return "Session completed";
+      return doneLabel(event);
     case "tool":
       return event.status === "called" && event.is_error ? `Tool ${event.tool_name} failed` : null;
     default:

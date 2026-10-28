@@ -113,7 +113,9 @@ async def _resume(ctx: SessionInputContext) -> SessionInputResult:
             ponytail_mode=ctx.ponytail_mode,
             steering=ctx.steering,
         )
-        session = await ctx.task_runner.resume_session(ctx.session.id, ctx.text, factory)
+        session = await ctx.task_runner.resume_session(
+            ctx.session.id, ctx.text, factory, message_id=ctx.client_msg_id
+        )
     except Exception:
         await tools.teardown()
         raise

@@ -56,6 +56,10 @@ class SessionInputRequest(BaseModel):
         ..., min_length=1, description="User text — prompt, answer, steer message, or chat turn"
     )
     client_msg_id: str | None = Field(
-        default=None, description="Client-generated id for optimistic-UI reconciliation"
+        default=None,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Client-generated id for optimistic-UI reconciliation; stored as the "
+        "id of the user's message event",
     )
     model: str | None = Field(default=None, description="LLM model override (chat/start only)")

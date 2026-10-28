@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -711,6 +712,16 @@ def _websocket_auth(websocket: WebSocket, settings) -> bool:
     return websocket_authenticated(websocket, settings.weebot_api_key)
 
 
+def uvicorn_loop() -> str:
+    """The uvicorn ``loop`` setting for this platform.
+
+    With ``reload=True`` uvicorn builds a SelectorEventLoop on Windows, which cannot
+    start subprocesses: every shell tool then failed with an empty NotImplementedError.
+    ``"none"`` leaves the loop to asyncio, whose Windows default (Proactor) can.
+    """
+    return "none" if sys.platform == "win32" else "auto"
+
+
 # Create the application instance
 app = create_app()
 
@@ -725,5 +736,9 @@ if __name__ == "__main__":
     host = _settings.web_host
 
     uvicorn.run(
-        "weebot.interfaces.web.main:app", host=host, port=port, reload=True, log_level="info"
+        "weebot.interfaces.web.main:app", host=host,
+        port=port,
+        reload=True,
+        loop=uvicorn_loop(),
+        log_level="info",
     )
