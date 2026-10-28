@@ -28,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Run single test: `pytest tests/unit/test_activity_stream.py::TestClass::test_name -v`
   - Default pytest run skips `@pytest.mark.external` tests (`-m "not external"` in addopts, `--strict-markers` on); run them with `WEEBOT_TEST_LIVE=1` (`make test-live`, billed LLM calls)
   - Run with coverage: `pytest tests/ --cov=weebot --cov-report=html`
-  - Full gate (tests + arch + lints): `make check`; architecture only: `make check-arch`; layer contracts: `make lint-imports` (config in `.importlinter`)
+  - Full gate (tests + arch + lints): `make check`, or without make `python scripts/prepush_gates.py` (`--skip test` for the rest); architecture only: `make check-arch`; layer contracts: `make lint-imports` (config in `.importlinter`)
   - Lint: `ruff check .` (line-length 100, py312)
   - Start Web UI Backend: `python -m weebot.interfaces.web.main`
   - Start Web UI Frontend: `cd weebot-ui && npm run dev`

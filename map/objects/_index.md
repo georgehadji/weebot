@@ -7,7 +7,7 @@ Format: name — source — status — card
 ## domain
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-28 — [card](domain/Event.md)
 - Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-28 — [card](domain/Plan.md)
-- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-27 — [card](domain/Ports.md)
+- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-28 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-27 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-27 — [card](domain/Step.md)
 
@@ -24,7 +24,7 @@ Format: name — source — status — card
 
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-25 — [card](infrastructure/Browser.md)
-- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-27 — [card](infrastructure/EventBus.md)
+- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-28 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-27 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-10-24 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-10-25 — [card](infrastructure/Sandbox.md)
@@ -47,7 +47,7 @@ Format: name — source — status — card
 - WeebotSettings (WeebotSettings, OSWorldSettings) — `weebot/config/settings.py` — verified 2026-10-27 — [card](core/WeebotSettings.md)
 
 ## tools
-- BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-27 — [card](tools/BaseTool.md)
+- BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-28 — [card](tools/BaseTool.md)
 - Browser and desktop tools (AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool) — `weebot/tools/advanced_browser.py` — stale 2026-10-24 — [card](tools/BrowserTools.md)
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — verified 2026-10-27 — [card](tools/BuiltinSkills.md)
 - ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — stale 2026-10-27 — [card](tools/ExecTools.md)
@@ -56,4 +56,4 @@ Format: name — source — status — card
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — stale 2026-10-27 — [card](tools/OrchestrationTools.md)
 - Personas (AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter) — `weebot/agents/parser.py` — verified 2026-10-24 — [card](tools/Personas.md)
 - RoleBasedToolRegistry — `weebot/application/services/tool_registry.py` — verified 2026-10-27 — [card](tools/RoleBasedToolRegistry.md)
-- WebTools (WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool, ImageSearchTool, KnowledgeTool, SearchHistoryTool, WeatherTool, OCRTool, StructuredOCRTool) — `weebot/tools/web_search.py` — verified 2026-10-27 — [card](tools/WebTools.md)
+- WebTools (WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool, ImageSearchTool, KnowledgeTool, SearchHistoryTool, WeatherTool, OCRTool, StructuredOCRTool) — `weebot/tools/web_search.py` — verified 2026-10-28 — [card](tools/WebTools.md)

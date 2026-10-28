@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-28
-commit: 2b5851dd
+commit: 6558a12f
 ---
 
 # Mediator
@@ -31,7 +31,7 @@ What exists (2026-10-24):
 
 ## Connected to
 - **Built and owned by** the DI Container (`Container.build_mediator`, `di/__init__.py:518-609`), as a singleton per container.
-- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:231`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:71`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:314`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:141`).
+- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:231`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:71`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:318`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:141`).
 - **Handlers that build agents:** `CreatePlanHandler` builds PlannerAgent, `ExecuteStepHandler` builds ExecutorAgent through the container's executor factory, `UpdatePlanHandler` builds PlannerAgent, `SummarizeHandler` builds ExecutorAgent (see those cards).
 - **Looks like but is not:** the event bus (`EventBusPort`, publishes events, no handler per type); `MiddlewareChain` inside `ExecutorAgent` (wraps LLM requests, not commands).
 
