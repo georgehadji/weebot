@@ -120,7 +120,7 @@ class TestEvalRunner:
         report = await runner.run(target, tasks)
 
         assert "hello" in report.per_criterion
-        assert report.per_criterion["hello"] == 10.0  # both matched
+        assert report.per_criterion["hello"] == 1.0  # both matched, on the 0-1 scale
 
 
 class TestCriterionScore:

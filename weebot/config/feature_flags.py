@@ -159,6 +159,29 @@ MEMORY_SNAPSHOT_CAP_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_CAP", defa
 WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").strip().lower()
 
 
+# ── Step progress evaluator (D4) ────────────────────────────────────────────
+# When True, the main flow gets an LLMStepEvaluator on the verifier tier, and
+# `progress_gate` sends a step whose output does not advance the plan back to
+# UPDATING. Costs one verifier call per completed step; fails open on errors,
+# marked `evaluator_failed`. Default OFF until a live run has measured its
+# false-stop rate.
+STEP_EVALUATOR_ENABLED: bool = _env_bool("WEEBOT_STEP_EVALUATOR", default=False)
+
+
+# ── Desktop toasts (D4) ─────────────────────────────────────────────────────
+# When True, the web backend shows a Windows toast for errors, questions and
+# finished runs. The text is credential-redacted first. Default OFF: a toast
+# for every session's events suits a single-user desktop, not a shared server.
+WINDOWS_TOAST_ENABLED: bool = _env_bool("WEEBOT_WINDOWS_TOAST", default=False)
+
+
+# ── Speech backend (D4) ─────────────────────────────────────────────────────
+# "whisper" (default): local openai-whisper + pyttsx3, which are optional extras.
+# "openrouter": OpenRouter's audio endpoints with OPENROUTER_API_KEY; the audio
+# leaves the machine, and each call is billed.
+SPEECH_BACKEND: str = os.environ.get("WEEBOT_SPEECH_BACKEND", "whisper").strip().lower()
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new

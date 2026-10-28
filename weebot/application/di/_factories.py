@@ -91,6 +91,14 @@ class FactoriesMixin:
 
     @staticmethod
     def _create_speech():
+        from weebot.config import feature_flags
+
+        if feature_flags.SPEECH_BACKEND == "openrouter":
+            from weebot.infrastructure.adapters.speech.openrouter_speech_adapter import (
+                OpenRouterSpeechAdapter,
+            )
+
+            return OpenRouterSpeechAdapter()
         from weebot.infrastructure.adapters.speech.whisper_adapter import WhisperSpeechAdapter
 
         return WhisperSpeechAdapter()
@@ -298,6 +306,16 @@ class FactoriesMixin:
         from weebot.application.ports.file_storage_port import FileStoragePort
 
         return StepEvidenceAuditor(file_storage=self.get(FileStoragePort))
+
+    def _create_step_evaluator(self):
+        """The per-step progress evaluator, or None while WEEBOT_STEP_EVALUATOR is off."""
+        from weebot.config import feature_flags
+
+        if not feature_flags.STEP_EVALUATOR_ENABLED:
+            return None
+        from weebot.application.services.step_evaluator import LLMStepEvaluator
+
+        return LLMStepEvaluator(llm=self._create_llm_for_role("verifier"))
 
     @staticmethod
     def _create_workspace_snapshots():

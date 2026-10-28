@@ -170,6 +170,27 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         is_regex=True,
         undo_hint="Taking ownership changes file access control.",
     ),
+    # The rules below were only in the uncalled CommandValidator and
+    # tools/validation.py (D4); the live chain allowed these commands.
+    CommandRule(
+        r"\bcacls\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="ACL changes may lock out users or expose sensitive files.",
+    ),
+    # PowerShell accepts any prefix of -ExecutionPolicy, so -ex and -exec count too
+    CommandRule(
+        r"\s-(?:ep|ex\w*)\s+['\"]?(?:bypass|unrestricted)\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Bypassing the execution policy runs unsigned scripts. Review the script.",
+    ),
+    CommandRule(
+        r"\bcipher\b[^;|&]*\s/w:",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="cipher /w overwrites all free space on the volume; it cannot be undone.",
+    ),
     # Links make a path lead somewhere else, which defeats every path check after them
     CommandRule(
         r"\bnew-item\b[^;|]*-itemtype\s+['\"]?(symboliclink|symlink|junction|hardlink)\b|\bmklink\b",

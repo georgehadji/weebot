@@ -12,6 +12,9 @@ from abc import ABC, abstractmethod
 class SpeechPort(ABC):
     """Convert between speech and text."""
 
+    #: File suffix for the audio ``synthesize`` returns.
+    audio_suffix: str = ".wav"
+
     @abstractmethod
     async def transcribe(self, audio_path: str, language: str | None = None) -> str:
         """Transcribe an audio file to text.
@@ -37,7 +40,7 @@ class SpeechPort(ABC):
             voice: Optional voice identifier.
 
         Returns:
-            WAV audio bytes.
+            Audio bytes in the format ``audio_suffix`` names.
 
         Raises:
             RuntimeError: If speech dependencies are not installed.

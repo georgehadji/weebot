@@ -230,6 +230,14 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "SIGNAL_CLI_REST_URL", "type": "str",
      "desc": "Signal CLI REST API URL"},
 
+    # ── Optional features, off by default (D4) ────────────────────
+    {"var": "WEEBOT_STEP_EVALUATOR", "type": "bool", "default": "false",
+     "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
+    {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
+     "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
+    {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",
+     "desc": "Voice tools backend: whisper (local extras) or openrouter (billed, audio leaves)"},
+
     # ── PostgreSQL (optional backend) ──────────────────────────────
     {"var": "WEEBOT_DB_BACKEND", "type": "str", "default": "sqlite",
      "desc": "Database backend: sqlite|postgresql"},

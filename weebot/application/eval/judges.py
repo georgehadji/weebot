@@ -13,6 +13,7 @@ import re
 from weebot.application.ports.judge_port import CriterionScore, JudgePort, JudgeVerdict
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+from weebot.models.structured_output import extract_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,8 @@ class ModelJudge(JudgePort):
                 model=self._model,
                 temperature=TEMPERATURE_DETERMINISTIC,
             )
-            data = json.loads(resp.content or "{}")
+            # A ```json fence is the common reply shape; a bare parse scored it 0.
+            data = json.loads(extract_json_text(resp.content or "{}"))
             criterion_scores = data.get("criteria", [])
             parsed_criteria = [
                 CriterionScore(

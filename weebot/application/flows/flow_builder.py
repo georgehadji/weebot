@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from weebot.application.di.keys import SESSION_COST_METER
+from weebot.application.di.keys import SESSION_COST_METER, STEP_EVALUATOR
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -176,6 +176,8 @@ def build_flow(
             skill_review_gate=resolve("skill_review_gate"),
             # Failed runs on similar tasks, turned into planner notes.
             trajectory_repo=resolve("trajectory_repo"),
+            # Per-step progress check; None unless WEEBOT_STEP_EVALUATOR is on.
+            step_evaluator=resolve(STEP_EVALUATOR),
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

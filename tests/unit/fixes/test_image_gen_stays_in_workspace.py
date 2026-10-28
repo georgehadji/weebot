@@ -23,6 +23,7 @@ async def test_voice_output_outside_the_workspace_is_refused(tmp_path):
 
     speech = MagicMock()
     speech.synthesize = AsyncMock(return_value=b"RIFF")
+    speech.audio_suffix = ".wav"
     target = tmp_path / "x.wav"
     result = await VoiceOutputTool(speech=speech).execute(text="hi", output_path=str(target))
     assert result.is_error and not target.exists()

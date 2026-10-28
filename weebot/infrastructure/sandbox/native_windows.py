@@ -12,6 +12,7 @@ import threading
 import time
 from pathlib import Path
 
+from weebot.infrastructure.adapters.platform_encoding import safe_decode
 from weebot.application.ports.sandbox_port import (
     SandboxCapability,
     SandboxConfig,
@@ -385,8 +386,8 @@ class NativeWindowsSandbox(SandboxPort):
         stderr_b = self._truncate(stderr_b)
 
         return SandboxResult(
-            stdout=stdout_b.decode("utf-8", errors="replace"),
-            stderr=stderr_b.decode("utf-8", errors="replace"),
+            stdout=safe_decode(stdout_b),
+            stderr=safe_decode(stderr_b),
             returncode=returncode if returncode is not None else -1,
             elapsed_ms=elapsed_ms,
             memory_killed=memory_killed,

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 import aiohttp
 
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.config.api_endpoints import OPENROUTER_API_BASE
+from weebot.config.secret_accessor import SecretAccessor
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +18,21 @@ logger = logging.getLogger(__name__)
 class OpenRouterSpeechAdapter(SpeechPort):
     """Speech transcription (STT) and speech synthesis (TTS) using OpenRouter's API."""
 
+    audio_suffix = ".mp3"  # synthesize asks for response_format mp3
+
     def __init__(
         self,
         api_key: str | None = None,
         tts_model: str = "elevenlabs/eleven-turbo-v2",
         stt_model: str = "openai/whisper-large-v3",
     ) -> None:
-        self._api_key = api_key or os.getenv("OPENROUTER_API_KEY") or "no-key"
+        self._api_key = api_key or SecretAccessor.get("OPENROUTER_API_KEY")
         self._tts_model = tts_model
         self._stt_model = stt_model
 
     async def transcribe(self, audio_path: str, language: str | None = None) -> str:
         """Transcribe an audio file using OpenRouter's speech-to-text endpoint."""
-        if self._api_key == "no-key":
+        if not self._api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai")
 
         path = Path(audio_path)
@@ -74,7 +76,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
 
     async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Synthesize text into speech audio bytes using OpenRouter's text-to-speech endpoint."""
-        if self._api_key == "no-key":
+        if not self._api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai")
 
         headers = {

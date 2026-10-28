@@ -6,6 +6,7 @@ import asyncio
 import shutil
 from pathlib import Path
 
+from weebot.infrastructure.adapters.platform_encoding import safe_decode
 from weebot.application.ports.sandbox_port import (
     SandboxCapability,
     SandboxConfig,
@@ -182,8 +183,8 @@ class WSL2Sandbox(SandboxPort):
         stderr_b = self._truncate(stderr_b)
 
         return SandboxResult(
-            stdout=stdout_b.decode("utf-8", errors="replace"),
-            stderr=stderr_b.decode("utf-8", errors="replace"),
+            stdout=safe_decode(stdout_b),
+            stderr=safe_decode(stderr_b),
             returncode=proc.returncode if proc.returncode is not None else -1,
             elapsed_ms=elapsed_ms,
             sandbox_type=self.sandbox_type,

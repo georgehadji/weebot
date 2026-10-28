@@ -34,6 +34,7 @@ from weebot.application.di.keys import (  # noqa: E402
     LEARNING_SKILL_STORE,
     LLM_POOL,
     SESSION_COST_METER,
+    STEP_EVALUATOR,
 )
 from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
@@ -197,6 +198,7 @@ class Container(
         # tier instead of the flow's (usually pricier) default model. Falls
         # back to that default automatically if role config is absent.
         self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
+        self.register(STEP_EVALUATOR, self._create_step_evaluator)
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)

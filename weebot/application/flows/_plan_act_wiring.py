@@ -80,6 +80,7 @@ LEGACY_KWARG_NAMES: tuple[str, ...] = (
     "skill_distiller",
     "skill_review_gate",
     "trajectory_repo",
+    "step_evaluator",
 )
 
 

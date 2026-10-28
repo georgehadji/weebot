@@ -118,7 +118,8 @@ print_in_production = 60
 # Measured by: the `lint-env-access` target in the Makefile.
 # 68 -> 67 with wave 6 G1: the unused template engine was deleted.
 # 67 -> 63 with wave 6 G4: the unwired observability modules were deleted.
-bare_env_reads = 63
+# 63 -> 62 with D4 slice 1.
+bare_env_reads = 62
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose

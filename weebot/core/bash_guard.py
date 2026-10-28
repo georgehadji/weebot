@@ -346,6 +346,12 @@ class BashGuard:
             "eval with dynamic import",
             "Dynamic import via eval can load arbitrary code.",
         ),
+        (
+            r"\beval\s+['\"]?\$",
+            RiskLevel.DANGEROUS,
+            "Shell eval of a variable",
+            "eval runs whatever the variable holds. Run the command directly instead.",
+        ),
     ]
 
     # Windows-specific risks
