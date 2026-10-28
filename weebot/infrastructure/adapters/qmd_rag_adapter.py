@@ -1,6 +1,6 @@
 """QmdRagAdapter — RagPort implementation wrapping the QMD RAG engine.
 
-Wraps ``weebot.qmd_integration.rag_engine.QMDRagEngine`` in a hexagonal
+Wraps ``weebot.qmd_integration.rag_engine.RAGEngine`` in a hexagonal
 port/adapter pattern so the application layer can use RAG retrieval
 without importing infrastructure directly.
 """
@@ -21,7 +21,7 @@ class QmdRagAdapter(RagPort):
     smart chunking and citation support.
 
     Args:
-        rag_engine: Optional pre-configured QMDRagEngine instance.
+        rag_engine: Optional pre-configured RAGEngine instance.
             If None, one is created lazily on first search.
     """
 
@@ -34,11 +34,11 @@ class QmdRagAdapter(RagPort):
 
         try:
             if self._engine is None:
-                from weebot.qmd_integration.rag_engine import QMDRagEngine
+                from weebot.qmd_integration.rag_engine import RAGEngine
 
-                self._engine = QMDRagEngine()
-            results = await self._engine.search(query, top_k=top_k)
-            return [r.content for r in results]
+                self._engine = RAGEngine()
+            context = await self._engine.retrieve(query)
+            return [chunk.content for chunk in context.chunks[:top_k]]
         except Exception as exc:
             logger.warning("QmdRagAdapter search failed: %s", exc)
             return []

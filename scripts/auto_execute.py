@@ -3,15 +3,35 @@
 Usage: python scripts/auto_execute.py "task description"
 """
 import asyncio
-import sys
 import os
+import sys
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from weebot.application.di import Container
-from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.domain.models.event import WaitForUserEvent, DoneEvent, ErrorEvent, StepEvent, MessageEvent
+
+
+def build_flow(container: Container, session: Session, tools):
+    """A PlanActFlow from the container, with its mediator and state repository.
+
+    The container keys these services by port type; building PlanActFlow by hand
+    left out the mediator that PlanningState needs.
+    """
+    return container.get("create_flow")(
+        flow_type="plan_act",
+        session=session,
+        llm=container.get(LLMPort),
+        tools=tools,
+        event_bus=container.get(EventBusPort),
+        state_repo=container.get(StateRepositoryPort),
+        model=os.environ.get("WEEBOT_MODEL"),
+    )
 
 
 async def run_until_complete(task: str):
@@ -20,23 +40,10 @@ async def run_until_complete(task: str):
     
     # Build tools + flow config
     from weebot.interfaces.factories import build_tools as _build_tools
-    session = Session.create_new()
+    # Session has no create_new(); the id must be set here.
+    session = Session(id=str(uuid.uuid4()), task=task)
     tools = await _build_tools(role="admin")
-    flow_cfg = PlanActFlowConfig(
-        llm=container.get("llm"),
-        tools=tools,
-        session=session,
-        event_bus=container.get("event_bus"),
-        state_repo=container.get("state_repo"),
-        skill_retriever=container.get("skill_retriever"),
-        model=os.environ.get("WEEBOT_MODEL"),
-        max_step_repetitions=5,
-        max_iterations=80,
-    )
-    
-    from weebot.application.flows.plan_act_flow import PlanActFlow
-    
-    flow = PlanActFlow(flow_cfg)
+    flow = build_flow(container, session, tools)
     session_id = session.id
     current_answer = task
     
@@ -52,9 +59,7 @@ async def run_until_complete(task: str):
                 elif isinstance(event, WaitForUserEvent):
                     print(f"\n[AUTO-APPROVE] Plan ready — auto-approving...")
                     # Save the session so it's in WAITING state
-                    state_repo = container.get("state_repo")
-                    if state_repo:
-                        await state_repo.save_session(flow._session)
+                    await container.get(StateRepositoryPort).save_session(flow._session)
                     
                     # Create a new flow for resume with "approve" as answer
                     await flow.teardown()
@@ -63,18 +68,7 @@ async def run_until_complete(task: str):
                     flow_session = flow._session
                     flow_session = flow_session.set_status(SessionStatus.WAITING)
                     
-                    resume_cfg = PlanActFlowConfig(
-                        llm=container.get("llm"),
-                        tools=tools,
-                        session=flow_session,
-                        event_bus=container.get("event_bus"),
-                        state_repo=container.get("state_repo"),
-                        skill_retriever=container.get("skill_retriever"),
-                        model=os.environ.get("WEEBOT_MODEL"),
-                        max_step_repetitions=5,
-                        max_iterations=80,
-                    )
-                    flow = PlanActFlow(resume_cfg)
+                    flow = build_flow(container, flow_session, tools)
                     current_answer = "approve"
                     break  # break inner loop, resume with new flow
                 elif isinstance(event, StepEvent):
