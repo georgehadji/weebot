@@ -67,7 +67,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_regis
 - **Built by** `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`).
 - **Backend** `infrastructure/Browser.md`.
 - `BrowserSessionManager` stores `advanced_browser` sessions (`weebot/tools/advanced_browser.py:12, 180, 331, 386`).
-- **Mentioned by** the browser audit in `weebot/application/flows/states/executing.py:144-199`, the per-step model router regex (`weebot/application/services/task_model_router.py:82-83`), and `MultiSourceResearchEngine.browser_tool`, which is stored and never read (`weebot/application/services/multi_source_research.py:313-319`).
+- **Mentioned by** the browser audit in `weebot/application/flows/states/executing.py:144-199` and the per-step model router regex (`weebot/application/services/task_model_router.py:82-83`).
 - **Looks like but is not:** `moli_fetch`, `agent_reach`, `spacescraper` (other fetchers in the same role lists); the MCP server's own tool list.
 
 ## If you change this

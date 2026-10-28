@@ -319,8 +319,6 @@ forbidden_modules =
     aiohttp
     requests
 ignore_imports =
-    # Pre-existing, and not provider traffic: webhook delivery and two web
-    # research fetchers. Each wants a port the way the cascade got one.
+    # Pre-existing, and not provider traffic: webhook delivery. It wants a port
+    # the way the cascade got one.
     weebot.application.services.cron_delivery_service -> aiohttp
-    weebot.application.services.multi_source_research -> aiohttp
-    weebot.application.services.source_credibility_assessment -> aiohttp

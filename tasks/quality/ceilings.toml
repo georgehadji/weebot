@@ -76,7 +76,8 @@ unit_coverage_floor = 64
 # failure is logged instead of swallowed.
 # 111 -> 110 with A34: BashGuard's security-event callback logs its failure.
 # 110 -> 102 with wave 6 G1: the unused template engine was deleted.
-silent_except_handlers = 102
+# 102 -> 101 with wave 6 G3: the two unused research services were deleted.
+silent_except_handlers = 101
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -93,7 +94,8 @@ blocking_io_in_async = 0
 # Measured by: the `lint-no-print` target in the Makefile.
 # 105 -> 100 with wave 6 G1: the unused template engine was deleted.
 # 100 -> 89 with wave 6 G2: interface customization and the profile island were deleted.
-print_in_production = 89
+# 89 -> 69 with wave 6 G3: the two unused research services were deleted.
+print_in_production = 69
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was
@@ -271,7 +273,8 @@ unregistered_di_keys = 0
 # tool_registry exemptions are gone; interfaces/factories gains flow_builder and the
 # registry (its hidden dynamic imports became visible).
 # 62 -> 61 with wave 6 G2: interface customization and the profile island were deleted.
-import_exemptions = 61
+# 61 -> 59 with wave 6 G3: the two unused research services were deleted.
+import_exemptions = 59
 
 # Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
 # (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
@@ -370,7 +373,8 @@ functions_over_150_lines = 24
 # pip resolved.
 # 736 -> 687 with wave 6 G1: the unused template engine was deleted.
 # 687 -> 674 with wave 6 G2: interface customization and the profile island were deleted.
-ruff_violations = 674
+# 674 -> 671 with wave 6 G3: the two unused research services were deleted.
+ruff_violations = 671
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

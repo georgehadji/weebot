@@ -518,7 +518,7 @@ class RoleBasedToolRegistry:
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)
-                # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine).
+                # Inject RerankPort if tool supports it (WebSearchTool).
                 # None: no reranker configured, results keep engine order.
                 if rerank is not None and hasattr(tool, "set_rerank"):
                     tool.set_rerank(rerank)
