@@ -7,7 +7,7 @@ the candidate skill against the current best skill.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
 from weebot.application.cqrs.commands.validation_commands import (
@@ -133,7 +133,10 @@ class RecordSkillUseHandler(CommandHandler):
     """
 
     def __init__(
-        self, skill_store: SkillStorePort, max_promotions_per_run: int | None = None
+        self,
+        skill_store: SkillStorePort,
+        max_promotions_per_run: int | None = None,
+        promotion_gate: Any | None = None,
     ) -> None:
         from weebot.config.learning import MAX_SKILL_PROMOTIONS_PER_RUN
 
@@ -142,6 +145,28 @@ class RecordSkillUseHandler(CommandHandler):
             max_promotions_per_run = MAX_SKILL_PROMOTIONS_PER_RUN
         self._max_promotions = max_promotions_per_run
         self._promotions = 0
+        # Optional veto (SkillPromotionGate, WEEBOT_SKILL_PROMOTION_GATE). A vetoed
+        # skill keeps its count, so every later use would re-ask; the verdict is
+        # cached per skill content instead.
+        self._promotion_gate = promotion_gate
+        self._verdicts: dict[tuple[str, int], bool] = {}
+
+    async def _gate_allows(self, skill) -> bool:
+        if self._promotion_gate is None:
+            return True
+        key = (skill.name, hash(skill.content))
+        if key not in self._verdicts:
+            try:
+                verdict = await self._promotion_gate.evaluate(skill)
+                allowed = bool(verdict.passed)
+                if not allowed:
+                    logger.info("Skill '%s' promotion vetoed: %s", skill.name, verdict.detail)
+            except Exception:
+                # Fail closed, and do not cache: the next use retries the check.
+                logger.warning("Skill promotion gate failed for '%s'", skill.name, exc_info=True)
+                return False
+            self._verdicts[key] = allowed
+        return self._verdicts[key]
 
     async def handle(self, command: RecordSkillUseCommand) -> CommandResult:
         from weebot.config.learning import CANDIDATE_DEMOTION_FAILURES, CANDIDATE_PROMOTION_USES
@@ -165,6 +190,8 @@ class RecordSkillUseHandler(CommandHandler):
                         self._max_promotions,
                         skill.name,
                     )
+                    updated = updated.with_trust("candidate")
+                elif not await self._gate_allows(updated):
                     updated = updated.with_trust("candidate")
                 else:
                     self._promotions += 1

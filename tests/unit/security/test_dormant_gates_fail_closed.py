@@ -279,7 +279,11 @@ def test_none_of_these_gates_has_a_production_caller():
         # Re-triaged then: it is a signal that escalates trust and names the
         # pattern, never a block, so an unavailable scanner cannot fail open;
         # that path is pinned in tests/unit/agents/test_tool_output_presentation.py.
-        "chain_of_verification": "ChainOfVerificationService",
+        # "chain_of_verification": "ChainOfVerificationService" left on 2026-10-29
+        # (D4): it backs the skill promotion veto. Re-triaged then: an unparseable
+        # cross-check and a failed question plan are now unverified, not clean, and
+        # the veto fails closed on both; pinned in
+        # tests/unit/fixes/test_d4_skill_promotion_veto.py.
     }
 
     importers: dict[str, list[str]] = {symbol: [] for symbol in homes.values()}

@@ -135,10 +135,18 @@ def _extract_json_object(text: str) -> dict:
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
     text = text.strip()
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return {"inconsistencies": [], "corrected_response": text}
+    # Unparseable is an error, not "no inconsistencies": the old fallback made
+    # verify() report a clean pass with the garbage as the corrected text.
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("cross-check reply is not a JSON object")
+    return data
+
+
+# The reason verify() gives when the response holds nothing to check. A caller may
+# treat it as "nothing contradicted"; every other unverified reason means the check
+# did not run.
+NO_CLAIMS_REASON = "no questions generated"
 
 
 @dataclass(frozen=True)
@@ -161,6 +169,14 @@ class CoVeResult:
     inconsistencies: list[dict]
     verified: bool
     reason: str = ""
+    questions: int = 0
+
+    @property
+    def score(self) -> float:
+        """Share of verification questions whose answer matched; 0.0 when unverified."""
+        if not self.verified or self.questions <= 0:
+            return 0.0
+        return max(0.0, 1.0 - len(self.inconsistencies) / self.questions)
 
     def __iter__(self):
         yield self.corrected_response
@@ -196,29 +212,35 @@ class ChainOfVerificationService:
         """
         # ── Step 2: Plan verifications ──
         questions = await self._plan_verifications(query, response)
+        if questions is None:
+            return CoVeResult(response, [], verified=False, reason="question planning failed")
         questions = questions[:max_questions]
         if not questions:
             logger.warning(
                 "CoVe: no verification questions were generated — the response is "
                 "UNVERIFIED, not clean"
             )
-            return CoVeResult(response, [], verified=False, reason="no questions generated")
+            return CoVeResult(response, [], verified=False, reason=NO_CLAIMS_REASON)
 
         # ── Step 3: Execute verifications (factored) ──
         qa_pairs = await self._execute_verifications(questions)
 
         # ── Step 4: Cross-check and final verified response ──
-        corrected, inconsistencies, checked = await self._cross_check(query, response, qa_pairs)
-        if not checked:
-            return CoVeResult(response, [], verified=False, reason="cross-check failed")
+        corrected, inconsistencies, failure = await self._cross_check(query, response, qa_pairs)
+        if failure:
+            return CoVeResult(response, [], verified=False, reason=failure)
 
         logger.info(
             "CoVe: %d questions, %d inconsistencies found", len(questions), len(inconsistencies)
         )
-        return CoVeResult(corrected, inconsistencies, verified=True)
+        return CoVeResult(corrected, inconsistencies, verified=True, questions=len(questions))
 
-    async def _plan_verifications(self, query: str, response: str) -> list[str]:
-        """Step 2: Generate verification questions from query + baseline."""
+    async def _plan_verifications(self, query: str, response: str) -> list[str] | None:
+        """Step 2: Generate verification questions from query + baseline.
+
+        None when the call failed, so a provider outage is not mistaken for a
+        response with nothing to check.
+        """
         prompt = _fmt(_PLAN_VERIFICATIONS_PROMPT, query=query, response=response)
         try:
             llm_response = await self._llm.chat(
@@ -229,7 +251,7 @@ class ChainOfVerificationService:
             return _extract_json_array(llm_response.content)
         except Exception as exc:
             logger.warning("CoVe plan-verifications failed: %s", exc)
-            return []
+            return None
 
     async def _execute_verifications(self, questions: list[str]) -> list[dict]:
         """Step 3: Answer each question independently (factored).
@@ -257,12 +279,13 @@ class ChainOfVerificationService:
 
     async def _cross_check(
         self, query: str, response: str, qa_pairs: list[dict]
-    ) -> tuple[str, list[dict], bool]:
+    ) -> tuple[str, list[dict], str]:
         """Step 4: Cross-check answers against baseline, produce corrected response.
 
-        The third element says whether the cross-check actually ran. Without it
-        the caller could not distinguish a failed call, which returns the
-        baseline and no inconsistencies, from a successful one that found none.
+        The third element is why the cross-check did not produce a verdict, or ""
+        when it did. Without it the caller could not distinguish a failed call,
+        which returns the baseline and no inconsistencies, from a successful one
+        that found none.
         """
         qa_text = "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in qa_pairs)
         prompt = _fmt(_CROSS_CHECK_PROMPT, query=query, response=response, verification_qa=qa_text)
@@ -272,10 +295,16 @@ class ChainOfVerificationService:
                 max_tokens=MAX_TOKENS_STANDARD,
                 temperature=TEMPERATURE_PRECISE,
             )
-            data = _extract_json_object(llm_response.content)
-            corrected = data.get("corrected_response", response)
-            inconsistencies = data.get("inconsistencies", [])
-            return corrected, inconsistencies, True
         except Exception as exc:
             logger.warning("CoVe cross-check failed: %s", exc)
-            return response, [], False
+            return response, [], "cross-check failed"
+        try:
+            data = _extract_json_object(llm_response.content)
+        except (ValueError, TypeError) as exc:
+            logger.warning("CoVe cross-check reply was unparseable: %s", exc)
+            return response, [], "cross-check reply unparseable"
+        corrected = data.get("corrected_response", response)
+        inconsistencies = data.get("inconsistencies", [])
+        if not isinstance(inconsistencies, list):
+            inconsistencies = []
+        return corrected, inconsistencies, ""

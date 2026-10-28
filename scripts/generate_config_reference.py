@@ -233,6 +233,8 @@ CONFIG_SCHEMA: list[dict] = [
     # ── Optional features, off by default (D4) ────────────────────
     {"var": "WEEBOT_STEP_EVALUATOR", "type": "bool", "default": "false",
      "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
+    {"var": "WEEBOT_SKILL_PROMOTION_GATE", "type": "bool", "default": "false",
+     "desc": "Chain-of-verification veto before a learned skill is promoted to trusted"},
     {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
      "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
     {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",

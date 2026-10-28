@@ -228,7 +228,7 @@ class SkillOptMixin:
                     raise RuntimeError("LLMPort not configured in SkillOpt target factory")
                 return getattr(llm, name)
 
-        def factory(session, harness_config=None):
+        def factory(session, harness_config=None, skill_prompt=None, skill_retrieval=True):
             from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
 
             cfg = PlanActFlowConfig(
@@ -240,7 +240,11 @@ class SkillOptMixin:
                 mediator=self._maybe_get(Mediator),
                 max_steps=5,
                 logger=self._maybe_get_str("structured_logger"),
-                skill_retriever=self._maybe_get_str("skill_retriever"),
+                # `skill compare` turns retrieval off so only its chosen skill is in play.
+                skill_retriever=(
+                    self._maybe_get_str("skill_retriever") if skill_retrieval else None
+                ),
+                skill_prompt=skill_prompt,
                 skill_distiller=self._maybe_get_str("skill_distiller"),
                 skill_review_gate=self._maybe_get_str("skill_review_gate"),
                 code_reviewer=self._maybe_get_str("code_reviewer"),

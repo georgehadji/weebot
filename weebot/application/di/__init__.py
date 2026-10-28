@@ -34,6 +34,7 @@ from weebot.application.di.keys import (  # noqa: E402
     LEARNING_SKILL_STORE,
     LLM_POOL,
     SESSION_COST_METER,
+    SKILL_PROMOTION_GATE,
     STEP_EVALUATOR,
 )
 from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
@@ -607,6 +608,7 @@ class Container(
             trajectory_repo=trajectory_repo,
             event_store=self._maybe_get(EventStorePort),
             skill_store=self._maybe_get(LEARNING_SKILL_STORE),
+            skill_promotion_gate=self._maybe_get(SKILL_PROMOTION_GATE),
         )
         return mediator
 

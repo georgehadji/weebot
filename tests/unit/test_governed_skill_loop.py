@@ -80,7 +80,6 @@ class TestSkillModels:
         result = SkillPromotionResult(skill_name="test")
         assert result.passed is False
         assert result.verify_score == 0.0
-        assert result.harness_score == 0.0
 
 
 # ── Skill curator consolidation helpers ─────────────────────────────────────

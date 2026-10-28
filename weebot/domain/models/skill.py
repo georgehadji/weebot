@@ -632,7 +632,6 @@ class SkillPromotionResult(BaseModel):
     skill_name: str
     passed: bool = False
     verify_score: float = 0.0
-    harness_score: float = 0.0
     detail: str = ""
 
 

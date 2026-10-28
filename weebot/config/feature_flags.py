@@ -182,6 +182,13 @@ WINDOWS_TOAST_ENABLED: bool = _env_bool("WEEBOT_WINDOWS_TOAST", default=False)
 SPEECH_BACKEND: str = os.environ.get("WEEBOT_SPEECH_BACKEND", "whisper").strip().lower()
 
 
+# ── Skill promotion veto (D4) ───────────────────────────────────────────────
+# When True, a candidate skill that live use would promote to trusted is first
+# checked by chain of verification; contradicted claims keep it a candidate.
+# Up to seven verifier calls per promotion, once per skill version. Default OFF.
+SKILL_PROMOTION_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_PROMOTION_GATE", default=False)
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new
