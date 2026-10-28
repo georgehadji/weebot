@@ -130,7 +130,7 @@ class TestTimingSafeComparison:
 
         from weebot.interfaces.web import auth
 
-        source = inspect.getsource(auth.authenticate)
+        source = inspect.getsource(auth._authenticate)
         assert "hmac.compare_digest" in source, "API key comparison must use hmac.compare_digest"
 
     def test_the_api_middleware_goes_through_the_authenticator(self):
