@@ -2,7 +2,7 @@
 type: effects
 status: verified
 verified: 2026-10-28
-commit: c41f28e0
+commit: a7e27282
 ---
 # effects/ — if you are changing X, open these cards
 
@@ -23,6 +23,6 @@ One row per high-traffic X. Open the cards; they hold the detail and the test li
 | PlanActFlow states (`weebot/application/flows/states/base.py:55`) | [FlowState](../objects/application/FlowState.md), [PlanActFlow](../objects/application/PlanActFlow.md), [FlowRouter](../objects/application/FlowRouter.md), [Mediator](../objects/application/Mediator.md), [Plan](../objects/domain/Plan.md); [flow-run-turn](../processes/flow-run-turn.md), [session-persistence](../processes/session-persistence.md) | Transitions, pauses and resume routing; what each state emits and so persists. |
 | `WeebotSettings` / `get_settings` (`weebot/config/settings.py:37, 499`) | [WeebotSettings](../objects/core/WeebotSettings.md); [tool-call-guard-chain](../processes/tool-call-guard-chain.md), [flow-run-turn](../processes/flow-run-turn.md), [mcp-tool-loading](../processes/mcp-tool-loading.md) | Guard mode, outbound and financial patterns, plan review, CoVe, sandbox network, MCP config path. |
 | `SQLiteStateRepository` (`weebot/infrastructure/persistence/sqlite_state_repo.py:66`) | [SQLiteStateRepository](../objects/infrastructure/SQLiteStateRepository.md), [Session](../objects/domain/Session.md), [Ports](../objects/domain/Ports.md); [session-persistence](../processes/session-persistence.md) | The session row every emit writes and every resume and step reads back. |
-| Web auth (`weebot/interfaces/web/auth.py:159, 249, 286`) | [WebAPI](../objects/interfaces/WebAPI.md), [WebUI](../objects/interfaces/WebUI.md), [ChatGateways](../objects/interfaces/ChatGateways.md) | Identity and ownership on every router, mutation gating off loopback, WebSocket and webhook access. |
+| Web auth (`weebot/interfaces/web/auth.py:233, 274, 311`) | [WebAPI](../objects/interfaces/WebAPI.md), [WebUI](../objects/interfaces/WebUI.md), [ChatGateways](../objects/interfaces/ChatGateways.md) | Identity and ownership on every router, mutation gating off loopback, WebSocket and webhook access. |
 
 What outside the repo points in (Claude Desktop, Docker, CI, the UI proxy): [inbound.md](inbound.md).
