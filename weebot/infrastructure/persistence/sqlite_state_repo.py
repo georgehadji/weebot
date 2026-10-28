@@ -38,7 +38,11 @@ from weebot.infrastructure.persistence.fts5_search import (
 )
 from weebot.infrastructure.persistence._session_queries import SessionQueries
 from weebot.infrastructure.persistence._memory_metadata_repo import MemoryMetadataRepo
-from weebot.infrastructure.persistence._commitment_repo import CommitmentRepo
+from weebot.infrastructure.persistence._commitment_repo import (
+    DEDUP_SQL,
+    UNIQUE_INDEX_SQL,
+    CommitmentRepo,
+)
 from weebot.application.ports.database_router_port import DatabaseRouterPort
 from weebot.infrastructure.persistence.default_database_router import DefaultDatabaseRouter
 from weebot.infrastructure.persistence._behavioral_rule_repo import (
@@ -90,6 +94,9 @@ class SQLiteStateRepository(
         self._initialized = False
         # Per-instance FTS5 index tracker (session_id → event count indexed).
         self._fts5_indexed: dict[str, int] = {}
+        # Events already scanned for commitments, per session: like `_fts5_indexed`, it
+        # lives in memory, so a fresh repository rescans once, which the ids make harmless.
+        self._commitments_scanned: dict[str, int] = {}
         # Per-session locks to prevent concurrent FTS5 indexing races.
         self._fts5_locks: dict[str, asyncio.Lock] = {}
         self._create_lock = asyncio.Lock()
@@ -248,6 +255,8 @@ class SQLiteStateRepository(
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_commitments_due_at ON commitments(due_at)"
             )
+            await conn.execute(DEDUP_SQL)
+            await conn.execute(UNIQUE_INDEX_SQL)
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS correction_records (
                     id TEXT PRIMARY KEY,
@@ -354,7 +363,10 @@ class SQLiteStateRepository(
             from weebot.domain.services.commitment_extractor import extract_commitments
             from weebot.domain.models.event import MessageEvent
 
-            for event in session.events:
+            start = self._commitments_scanned.get(session.id, 0)
+            if len(session.events) < start:
+                start = 0  # compacted: the positions moved, and a rescan is harmless
+            for event in session.events[start:]:
                 if isinstance(event, MessageEvent) and getattr(event, "role", "") == "assistant":
                     text = getattr(event, "message", "") or ""
                     if text:
@@ -366,6 +378,7 @@ class SQLiteStateRepository(
                         )
                         for cmt in commitments:
                             await self.save_commitment(cmt)
+            self._commitments_scanned[session.id] = len(session.events)
         except Exception as exc:
             logger.warning(
                 "Commitment extraction failed for session %s — the session is saved, "
