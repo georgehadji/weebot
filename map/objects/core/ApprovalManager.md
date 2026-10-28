@@ -5,8 +5,8 @@ code: ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callb
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 7d1ce324
+verified: 2026-10-29
+commit: 1d9bfa57
 ---
 
 # ApprovalManager

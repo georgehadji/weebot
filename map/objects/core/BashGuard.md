@@ -5,8 +5,8 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: stale
-verified: 2026-10-25
-commit: 7d1ce324
+verified: 2026-10-29
+commit: 1d9bfa57
 ---
 
 # BashGuard

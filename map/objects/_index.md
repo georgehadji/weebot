@@ -38,11 +38,11 @@ Format: name — source — status — card
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-27 — [card](interfaces/WebUI.md)
 
 ## core
-- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-27 — [card](core/ApprovalManager.md)
-- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — stale 2026-10-25 — [card](core/BashGuard.md)
+- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-29 — [card](core/ApprovalManager.md)
+- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — stale 2026-10-29 — [card](core/BashGuard.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-10-27 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-10-25 — [card](core/EgressGuard.md)
-- ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — verified 2026-10-27 — [card](core/ExecApprovalPolicy.md)
+- ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — verified 2026-10-29 — [card](core/ExecApprovalPolicy.md)
 - Model cascade config (model_cascade_config.py) (select_model_by_tokens, estimate_cost, LONG_CONTEXT_TOKENS) — `weebot/core/model_cascade_config.py` — verified 2026-10-23 — [card](core/ModelCascadeConfig.md)
 - WeebotSettings — `weebot/config/settings.py` — verified 2026-10-29 — [card](core/WeebotSettings.md)
 
@@ -50,7 +50,7 @@ Format: name — source — status — card
 - BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-28 — [card](tools/BaseTool.md)
 - Browser and desktop tools (AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool) — `weebot/tools/advanced_browser.py` — stale 2026-10-24 — [card](tools/BrowserTools.md)
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — verified 2026-10-27 — [card](tools/BuiltinSkills.md)
-- ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — stale 2026-10-27 — [card](tools/ExecTools.md)
+- ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — stale 2026-10-29 — [card](tools/ExecTools.md)
 - Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — stale 2026-10-24 — [card](tools/IntegrationTools.md)
 - Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — verified 2026-10-27 — [card](tools/MediaTools.md)
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — stale 2026-10-27 — [card](tools/OrchestrationTools.md)

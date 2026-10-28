@@ -5,8 +5,8 @@ code: ToolExecutor.execute_tool -> ToolCollection.execute -> GuardedTool.execute
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-28
-commit: 6558a12f
+verified: 2026-10-29
+commit: 1d9bfa57
 consumes:
   - ../objects/application/ExecutorAgent.md
   - ../objects/tools/BaseTool.md

@@ -5,8 +5,8 @@ code: ExecApprovalPolicy, ApprovalMode, CommandRule
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 2c6a2a72
+verified: 2026-10-29
+commit: 1d9bfa57
 ---
 
 # ExecApprovalPolicy
