@@ -229,6 +229,10 @@ graph LR
 
 The flow's `EventPublisher` owns session persistence: it saves after every event it emits. When a flow has its own state repo and session, `TaskRunner` does not save per event; it writes once, at the end, from the flow's copy plus the events and title only the runner saw. A job that works from an old copy of a RUNNING session (memory compaction) writes with `save_session_if_unchanged`, which refuses when the row's `updated_at` has moved. Two whole-session writers from two copies lose each other's events (audit A24, A25).
 
+### Network off in the native sandboxes
+
+With `allow_network` off, `NativeWindowsSandbox` only points the proxy variables at a dead port (`infrastructure/sandbox/native_windows.py`, `_build_child_env`), and the WSL2 sandbox does nothing. A tool that ignores proxies, or opens a raw socket, still reaches the network. This is advisory by decision (master plan D9): enforcing it would take a per-process firewall rule. The sandbox factory logs this once per sandbox type (`_warn_if_network_off_is_best_effort`). For real isolation use `SANDBOX_MODE=docker` (audit A22).
+
 ### How weebot learns
 
 Each loop below carries something from one run into later ones. All of them are on by default, and each has a `WEEBOT_*` flag in `weebot/config/feature_flags.py` that turns it off.
