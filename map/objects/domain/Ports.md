@@ -55,7 +55,6 @@ Dependency inversion: application code types against the port, and an adapter is
 | OptimizationTarget | optimization_target_port.py:20 | HarnessOptimizationTarget `application/services/harness_optimization_target.py:30` | key `"harness_optimization_target"` `di/_skillopt.py:30` |
 | OptimizerPort | optimizer_port.py:25 | OptimizerAgent `application/agents/optimizer_agent.py:46` | key `"optimizer_port"` `di/_skillopt.py:23` |
 | PlanCriticPort | plan_critic_port.py:11 | PlanCriticService `application/services/plan_critic.py:39` | none |
-| ProfileStoragePort | profile_storage_port.py:15 | InMemory / FileUserProfileStorage `infrastructure/persistence/profile_storage.py:29, 56` | none |
 | ProviderAccountPort | provider_account_port.py:24 | OpenRouterAccountAdapter `infrastructure/adapters/llm/openrouter_account.py:15` | port `di/__init__.py:399` |
 | RagPort | rag_port.py:13 | QmdRagAdapter, NoOpRagAdapter `infrastructure/adapters/qmd_rag_adapter.py:17, 47` | none |
 | RerankPort | rerank_port.py:16 | OpenRouterRerankAdapter `infrastructure/adapters/openrouter_rerank_adapter.py:35` | port `di/__init__.py:186` |

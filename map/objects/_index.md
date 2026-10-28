@@ -44,7 +44,7 @@ Format: name — source — status — card
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-10-25 — [card](core/EgressGuard.md)
 - ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — verified 2026-10-27 — [card](core/ExecApprovalPolicy.md)
 - Model cascade config (model_cascade_config.py) (select_model_by_tokens, estimate_cost, LONG_CONTEXT_TOKENS) — `weebot/core/model_cascade_config.py` — verified 2026-10-23 — [card](core/ModelCascadeConfig.md)
-- WeebotSettings (WeebotSettings, OSWorldSettings) — `weebot/config/settings.py` — verified 2026-10-27 — [card](core/WeebotSettings.md)
+- WeebotSettings (WeebotSettings, OSWorldSettings) — `weebot/config/settings.py` — verified 2026-10-28 — [card](core/WeebotSettings.md)
 
 ## tools
 - BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-28 — [card](tools/BaseTool.md)
