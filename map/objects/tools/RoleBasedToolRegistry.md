@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 340794f3
+commit: 78bcc65f
 ---
 
 # RoleBasedToolRegistry
@@ -26,7 +26,7 @@ A name table is the simplest whitelist: a role gets exactly the listed tools. Na
 Consequences (read from source, not run):
 - A tool with no `name` default is instantiated with no arguments during discovery (`:361-364`); a tool that fails to import or construct drops out with only a debug log or silently (`:367-370`). Duplicate names: first one wins (`:365-366`). Discovery still walks `weebot.tools` (`:341-345`), so application keeps one edge into the tools package.
 - A tool in `collaborators` whose collaborator does not resolve is left out of the wiring (`weebot/application/di/_factories.py:536-539`) and then built with no arguments (`weebot/application/services/tool_registry.py:507-517`); if that fails it is skipped with a debug log.
-- The DI container calls its registry the "single source of truth" (`weebot/application/di/_factories.py:486`), yet registries are also built at `weebot/application/di/__init__.py:542, 680` (wired) and unwired at `cli/commands/agents.py:175`, `weebot/application/services/mcp_tool_registry_bridge.py:87`, `weebot/application/di/_factories.py:206` (handed to `ToolDiscoveryAdapter`, which takes the registry by constructor, `weebot/infrastructure/adapters/tool_discovery.py:188`) and the fallback in `weebot/interfaces/factories.py:297`.
+- The DI container calls its registry the "single source of truth" (`weebot/application/di/_factories.py:486`), yet registries are also built at `weebot/application/di/__init__.py:543, 682` (wired) and unwired at `cli/commands/agents.py:175`, `weebot/application/services/mcp_tool_registry_bridge.py:87`, `weebot/application/di/_factories.py:206` (handed to `ToolDiscoveryAdapter`, which takes the registry by constructor, `weebot/infrastructure/adapters/tool_discovery.py:188`) and the fallback in `weebot/interfaces/factories.py:297`.
 
 ## Connected to
 - **Built by** `FactoriesMixin._create_tool_registry` (above) and the direct sites. **Used by** `ToolAssembler` (`weebot/application/flows/collaborators/tool_assembler.py:12, 24-31`), the MCP scope logic via `scope_config.registry` (`weebot/application/flows/mcp_scope.py:37`), `weebot/application/di/_agent_tools.py:46`, `weebot/application/services/cron_agent_runner.py:78-90`, and the MCP bridge adapter (`weebot/application/di/_factories.py:443`).

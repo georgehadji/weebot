@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 340794f3
+commit: 78bcc65f
 ---
 
 # BaseTool
@@ -42,7 +42,7 @@ Consequences (read from source, not run):
 - `error_result(error, data=...)` puts `data` into `metadata["data"]`, not `data`, because `data` is not a parameter (`weebot/domain/models/tool_result.py:95-108`).
 
 ## Connected to
-- **Built by** `RoleBasedToolRegistry.create_tool_collection*`, which wraps with `guard_tools(..., include_egress=False)` (`weebot/application/services/tool_registry.py:532-534`); `interfaces/factories.py:352-362`, which wraps again after MCP/Apify tools join and fails closed without the guard (`:333-334`); the DI `guard_tools` registration (`weebot/application/di/__init__.py:302-307`); the MCP server, with egress included (`weebot/mcp/server.py:271-274, 388-392`). Empty collections: `cqrs/handlers/execute_step_handler.py:26, 69`, `di/__init__.py:494`.
+- **Built by** `RoleBasedToolRegistry.create_tool_collection*`, which wraps with `guard_tools(..., include_egress=False)` (`weebot/application/services/tool_registry.py:532-534`); `interfaces/factories.py:352-362`, which wraps again after MCP/Apify tools join and fails closed without the guard (`:333-334`); the DI `guard_tools` registration (`weebot/application/di/__init__.py:303-308`); the MCP server, with egress included (`weebot/mcp/server.py:271-274, 388-392`). Empty collections: `cqrs/handlers/execute_step_handler.py:26, 69`, `di/__init__.py:495`.
 - **Used by** `ToolExecutor` (above); teardown from `plan_act_flow.py:291`, `agent_session_manager.py:45`, `dispatch_session_input.py:95, 120`.
 - **Related:** the ExecTools and WebTools cards (concrete tools), the RoleBasedToolRegistry card, the BashGuard / ExecApprovalPolicy / EgressGuard / ApprovalManager cards, `call_fingerprint` (`weebot/core/approval.py:126`).
 - **Looks like but is not:** `weebot/tools/validation.py` (a second, unused validation pipeline; see ExecTools); `ApprovalManager` itself, which only stores grants (`tool_approval.py:93`).

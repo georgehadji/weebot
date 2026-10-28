@@ -273,10 +273,18 @@ class SkillOptMixin:
             task = WeebotTask(task_id=session.id, description="", samples=())
             return await TaskScorer.score(session, task)
 
+        from weebot.config import feature_flags
+
+        staged = None
+        if feature_flags.STAGED_VALIDATION_ENABLED:
+            from weebot.application.services.staged_evaluator import StagedEvaluator
+
+            staged = StagedEvaluator()
         return ValidationRunner(
             task_runner=self.get(TaskRunner),
             flow_factory=self._create_target_flow_factory(db_path),
             scoring_fn=scoring_fn,
+            staged=staged,
         )
 
     def _create_transfer_flow_factory(self, db_path: str):

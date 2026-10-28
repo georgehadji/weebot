@@ -235,6 +235,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
     {"var": "WEEBOT_SKILL_PROMOTION_GATE", "type": "bool", "default": "false",
      "desc": "Chain-of-verification veto before a learned skill is promoted to trusted"},
+    {"var": "WEEBOT_STAGED_VALIDATION", "type": "bool", "default": "false",
+     "desc": "SkillOpt validates a candidate on a 10-task probe first and stops if it scores low"},
     {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
      "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
     {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",

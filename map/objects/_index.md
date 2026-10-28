@@ -17,7 +17,7 @@ Format: name — source — status — card
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-29 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-27 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-29 — [card](application/FlowState.md)
-- Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — verified 2026-10-29 — [card](application/Mediator.md)
+- Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-10-29 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-25 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-10-29 — [card](application/PlannerAgent.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — verified 2026-10-29 — [card](application/SkillRegistry.md)

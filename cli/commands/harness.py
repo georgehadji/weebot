@@ -14,6 +14,43 @@ def benchmark() -> None:
     """Run weebot agents against SIA-compatible benchmark tasks."""
 
 
+@benchmark.command("model")
+@click.argument("model_id")
+@click.option(
+    "--max-cost", default=0.50, type=float, show_default=True, help="Abort above this estimate"
+)
+def benchmark_model(model_id: str, max_cost: float) -> None:
+    """Measure MODEL_ID on the capability suites and save its quality profile.
+
+    About 60 billed calls. The model router reads the saved profile, merged axis
+    by axis over the seeded one.
+    """
+    import asyncio
+
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.config import capability_profiles
+    from weebot.infrastructure.benchmark.runner import BenchmarkRunner, CostGuardError
+    from weebot.interfaces.factories import shared_container
+
+    llm = shared_container().get(LLMPort)
+
+    async def call_llm(model, messages):
+        return await llm.chat(messages=messages, model=model)
+
+    try:
+        profile = asyncio.run(
+            BenchmarkRunner(call_llm=call_llm, cost_ceiling=max_cost).run(model_id)
+        )
+    except CostGuardError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if profile is None:
+        raise click.ClickException(f"every benchmark call failed for {model_id}")
+    capability_profiles.save_benchmark_profile(profile)
+    for axis, score in sorted(profile.axes.items(), key=lambda kv: kv[0].value):
+        console.print(f"  {axis.value:12} {score:.1f}")
+    console.print(f"[green]Saved the benchmark profile for {model_id}.[/green]")
+
+
 @benchmark.command("list")
 @click.argument("tasks_dir", type=click.Path(exists=True))
 def benchmark_list(tasks_dir: str) -> None:

@@ -189,6 +189,13 @@ SPEECH_BACKEND: str = os.environ.get("WEEBOT_SPEECH_BACKEND", "whisper").strip()
 SKILL_PROMOTION_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_PROMOTION_GATE", default=False)
 
 
+# ── Staged SkillOpt validation (D4) ─────────────────────────────────────────
+# When True, a candidate skill is first run on a probe of 10 held-out tasks; one
+# scoring below 0.3 stops there instead of running the whole set. Saves billed
+# runs; a candidate that would have recovered on later tasks is rejected early.
+STAGED_VALIDATION_ENABLED: bool = _env_bool("WEEBOT_STAGED_VALIDATION", default=False)
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new
