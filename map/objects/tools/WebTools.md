@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-28
-commit: 6558a12f
+commit: c0cbaa2c
 ---
 
 # WebTools

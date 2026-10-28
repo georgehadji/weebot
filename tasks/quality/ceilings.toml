@@ -77,7 +77,8 @@ unit_coverage_floor = 64
 # 111 -> 110 with A34: BashGuard's security-event callback logs its failure.
 # 110 -> 102 with wave 6 G1: the unused template engine was deleted.
 # 102 -> 101 with wave 6 G3: the two unused research services were deleted.
-silent_except_handlers = 101
+# 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
+silent_except_handlers = 96
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -95,7 +96,8 @@ blocking_io_in_async = 0
 # 105 -> 100 with wave 6 G1: the unused template engine was deleted.
 # 100 -> 89 with wave 6 G2: interface customization and the profile island were deleted.
 # 89 -> 69 with wave 6 G3: the two unused research services were deleted.
-print_in_production = 69
+# 69 -> 64 with wave 6 G4: the unwired observability modules were deleted.
+print_in_production = 64
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was
@@ -113,7 +115,8 @@ print_in_production = 69
 # model now (Container.create_llm_for_model).
 # Measured by: the `lint-env-access` target in the Makefile.
 # 68 -> 67 with wave 6 G1: the unused template engine was deleted.
-bare_env_reads = 67
+# 67 -> 63 with wave 6 G4: the unwired observability modules were deleted.
+bare_env_reads = 63
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
@@ -355,7 +358,8 @@ dynamic_weebot_imports = 15
 # _step_setup/_turn/_tool_batch/_tool_pairing.
 # Measured by: scripts/lint_long_functions.py
 # 25 -> 24 with wave 6 G2: interface customization and the profile island were deleted.
-functions_over_150_lines = 24
+# 24 -> 23 with wave 6 G4: the unwired observability modules were deleted.
+functions_over_150_lines = 23
 
 # Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
 # CI's blocking selector is F821,E9 only; this catches growth in the rest.
@@ -374,7 +378,8 @@ functions_over_150_lines = 24
 # 736 -> 687 with wave 6 G1: the unused template engine was deleted.
 # 687 -> 674 with wave 6 G2: interface customization and the profile island were deleted.
 # 674 -> 671 with wave 6 G3: the two unused research services were deleted.
-ruff_violations = 671
+# 671 -> 624 with wave 6 G4: the unwired observability modules were deleted.
+ruff_violations = 624
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

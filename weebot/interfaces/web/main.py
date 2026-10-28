@@ -356,8 +356,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await signal_adapter.stop()
     if email_adapter is not None:
         await email_adapter.stop()
-    if hasattr(app.state, "heartbeat"):
-        await app.state.heartbeat.stop()
     # Persist circuit breaker state before shutdown
     try:
         import importlib as _il

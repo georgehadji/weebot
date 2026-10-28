@@ -5,8 +5,8 @@ code: CascadeExecutor
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-27
-commit: f36ab8e5
+verified: 2026-10-28
+commit: c0cbaa2c
 ---
 
 # CascadeExecutor
@@ -34,13 +34,13 @@ Billing rules: cached prompt tokens are priced at the cache rate; a timed-out pr
 Pool: `_cascade_try_chat` takes a pool slot *before* the latency clock and outside `wait_for`; `LLMCapacityExhaustedError` propagates and stops the cascade (`:227-266`).
 
 ## Connected to
-- **Owned by** `ExecutorAgent` (`_base.py:287-301`), which passes `model_provider=self._resolve_model_for_step`, `llm_pool`, `provider_account`, and `on_success` = the context compressor's token tracker.
-- **Telemetry:** `ModelCascadeTracker` and optional ACR router record every `CascadeDecision` (`:182-206`). The tracker is an in-memory ring buffer owned by each `ExecutorAgent` (`_base.py:300`); the DI `"cascade_tracker"` binding is not passed to executors, and the Mediator path builds an executor per step, so nothing aggregates decisions across steps (see Event store card, cost views); the cost estimate feeds the number `mcp/resources.py` publishes (comment at `:332-335`).
+- **Owned by** `ExecutorAgent` (`_base.py:249-268`), which passes `model_provider=self._resolve_model_for_step`, `llm_pool`, `provider_account`, and `on_success` = the context compressor's token tracker.
+- **Telemetry:** `ModelCascadeTracker` and optional ACR router record every `CascadeDecision` (`:182-206`). The tracker is an in-memory ring buffer owned by each `ExecutorAgent` (`_base.py:265`); the DI `"cascade_tracker"` binding is not passed to executors, and the Mediator path builds an executor per step, so nothing aggregates decisions across steps (see Event store card, cost views); the cost estimate feeds the number `mcp/resources.py` publishes (comment at `:332-335`).
 - **Config:** tier constants and the one role table (`ROLE_MODEL_CONFIG`, read through `get_model_cascade_for_role`) come from `weebot/config/model_refs.py` (`_cascade.py:25, 55-58, 438`). `weebot/core/model_cascade_config.py` supplies only `estimate_cost` (`_cascade.py:14`), read from the catalog (see its card).
 - **Looks like but is not:** the adapter-level resilience in `weebot/infrastructure/adapters/llm/` (retries, its own breakers); this cascade sits above it.
 
 ## If you change this
-**Hits:** `ExecutorAgent` (only caller of `call_with_cascade` in `weebot/` and `cli/`: `_base.py:643, 679`); LLM spend and latency (Phase 1 bills all probes); the exceptions `ExecutorAgent` catches (`AllModelsTrippedError`, `LLMCapacityExhaustedError`); the tracker and any cost report built on it; tests `tests/integration/test_cascade_integration.py`, `tests/unit/agents/test_cascade_does_not_bill_orphans.py`, `tests/unit/agents/test_w5_cascade_accounting.py`, `tests/unit/application/test_bulkheads.py`, `tests/unit/adapters/test_retry_amplification.py`, `tests/unit/test_architecture_fitness.py`.
+**Hits:** `ExecutorAgent` (only caller of `call_with_cascade` in `weebot/` and `cli/`: `_base.py:665`, `weebot/application/agents/executor/_turn.py:54`); LLM spend and latency (Phase 1 bills all probes); the exceptions `ExecutorAgent` catches (`AllModelsTrippedError`, `LLMCapacityExhaustedError`); the tracker and any cost report built on it; tests `tests/integration/test_cascade_integration.py`, `tests/unit/agents/test_cascade_does_not_bill_orphans.py`, `tests/unit/agents/test_w5_cascade_accounting.py`, `tests/unit/application/test_bulkheads.py`, `tests/unit/adapters/test_retry_amplification.py`, `tests/unit/test_architecture_fitness.py`.
 **Does not hit:** plan creation (`PlannerAgent` calls the LLM directly, no cascade); tool execution; the flow state machine.
 
 ## Surfaces

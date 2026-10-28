@@ -33,7 +33,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Owned by** `Plan.steps`. **Created by** `PlannerAgent._parse_plan` (`planner.py:329-393`), which also parses `context_scope` with a fallback to FULL (`:340-342`).
-- **Run by** `ExecutorAgent`, which yields `StepEvent` STARTED / FAILED / COMPLETED (`_base.py:625, 1170, 1173`).
+- **Run by** `ExecutorAgent`, which yields `StepEvent` STARTED / FAILED / COMPLETED (`_base.py:553, 718, 721`).
 - **Status mirrored in** `StepEvent.status` and rebuilt on resume from those events (Session card).
 - **Looks like but is not:** `TodoEvent` (agent self-reported checklist, free-string status, `domain/models/event.py:177-185`). The UI's `StepStatus` (`weebot-ui/src/types/events.ts:7-14`) mirrors the six backend values plus a legacy `error`.
 

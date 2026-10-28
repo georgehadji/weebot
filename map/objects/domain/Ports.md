@@ -21,7 +21,6 @@ Dependency inversion: application code types against the port, and an adapter is
 
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
-| AnalyticsSinkPort | analytics_port.py:20 | ParquetActivitySink `infrastructure/analytics/parquet_sink.py:35`, OtelActivitySink | none |
 | ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:180` (factory `di/_factories.py:223`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:115-121`) |
 | ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:103-135` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:169` |
@@ -94,7 +93,6 @@ Consequences (read from source, not run):
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:228`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).
-- `weebot/core/activity_stream.py` names `AnalyticsSinkPort` only in its docstring (`weebot/core/activity_stream.py:7`); core does not import the port.
 
 ## Connected to
 - **Registered in** the DI Container (DIContainer card). **Implemented in** `weebot/infrastructure/` and, for service-shaped ports, in `weebot/application/services/` and `application/agents/`.

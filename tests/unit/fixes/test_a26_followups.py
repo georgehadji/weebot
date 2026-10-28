@@ -297,15 +297,6 @@ def _sessions(completed: int, running: int) -> list:
     return done + stuck  # newest first, as the repository orders them
 
 
-async def test_the_staleness_monitor_sees_stuck_sessions_past_the_first_hundred():
-    from weebot.infrastructure.monitors.session_staleness_monitor import (
-        SessionStalenessMonitor,
-    )
-
-    report = await SessionStalenessMonitor(_PagedRepo(_sessions(150, 5))).check()
-    assert len(report.metadata.get("stale_ids", [])) == 5, report
-
-
 def test_the_mcp_state_resource_counts_every_session():
     import json
 
