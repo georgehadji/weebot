@@ -48,35 +48,6 @@ def accepted_subprotocol(websocket: WebSocket) -> str | None:
     return next((p for p in offered if p.startswith("bearer.")), None)
 
 
-def websocket_authenticated(websocket: WebSocket, api_key: str | None) -> bool:
-    """The one WebSocket auth rule, used by every socket.
-
-    With no key configured only loopback clients get in (as FailClosedMiddleware does for
-    HTTP). With a key, it may come as a `bearer.<key>` subprotocol (browsers), an
-    `Authorization: Bearer` header (other clients) or the deprecated `?token=` query
-    parameter, which uvicorn logs: it stays for one release.
-    """
-    if not api_key:
-        return (websocket.client.host if websocket.client else "") in _LOOPBACK
-
-    offered = [p[len("bearer."):] for p in _offered_protocols(websocket)
-               if p.startswith("bearer.")]
-    auth = websocket.headers.get("authorization", "")
-    if isinstance(auth, str) and auth.startswith("Bearer "):
-        offered.append(auth[len("Bearer "):])
-    if any(hmac.compare_digest(token, api_key) for token in offered):
-        return True
-
-    token = websocket.query_params.get("token")
-    if token and hmac.compare_digest(token, api_key):
-        logger.warning(
-            "WebSocket authenticated via ?token= (deprecated, the key lands in access logs). "
-            "Offer the subprotocol bearer.<key> instead."
-        )
-        return True
-    return False
-
-
 def _auth_mode() -> str:
     return os.environ.get("WEEBOT_AUTH_MODE", "legacy").lower()
 
@@ -105,22 +76,30 @@ def _get_legacy_api_key() -> str | None:
 def _presented_key(conn: HTTPConnection) -> str:
     """The API key a caller presented, from wherever its transport can carry one.
 
-    HTTP: the X-API-Key header. WebSocket: that header, an Authorization Bearer, a
+    Any connection: the X-API-Key header, else an Authorization Bearer. WebSocket also: a
     `bearer.<key>` subprotocol (what a browser can send), or the deprecated ?token=.
     Browsers cannot set headers on a WebSocket, so reading only X-API-Key made every
     browser socket anonymous.
     """
     key = conn.headers.get("X-API-Key", "")
-    scope = getattr(conn, "scope", None)
-    if key or not isinstance(scope, dict) or scope.get("type") != "websocket":
+    if key:
         return key
     auth = conn.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
+    if isinstance(auth, str) and auth.startswith("Bearer "):
         return auth[len("Bearer "):]
+    scope = getattr(conn, "scope", None)
+    if not isinstance(scope, dict) or scope.get("type") != "websocket":
+        return ""
     for proto in _offered_protocols(conn):
         if proto.startswith("bearer."):
             return proto[len("bearer."):]
-    return conn.query_params.get("token") or ""
+    token = conn.query_params.get("token") or ""
+    if token:
+        logger.warning(
+            "WebSocket key sent as ?token= (deprecated, the key lands in access logs). "
+            "Offer the subprotocol bearer.<key> instead."
+        )
+    return token
 
 
 def _derived_principal(api_key: str) -> str:
@@ -128,7 +107,12 @@ def _derived_principal(api_key: str) -> str:
     return f"key-{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
 
 
-def _key_store(request: Request) -> ApiKeyPort | None:
+def _client_host(conn: HTTPConnection) -> str:
+    client = getattr(conn, "client", None)
+    return client.host if client else ""
+
+
+def _key_store(request: HTTPConnection) -> ApiKeyPort | None:
     """The key store the app's lifespan put on ``app.state`` (None when not wired).
 
     One store per process, built by the composition root. Before, each
@@ -246,6 +230,47 @@ async def get_current_user_id_async(
     return "anonymous"
 
 
+async def authenticate(conn: HTTPConnection, legacy_key: str | None = None) -> str | None:
+    """Who is calling, by the one rule every HTTP route, the middleware and every socket use.
+
+    Returns the caller's principal; "anonymous" for a local caller when no legacy key is
+    configured (what FailClosedMiddleware and the sockets always allowed); or None when
+    the caller must be refused. A presented key resolves through the key store in store
+    mode, else against the legacy key (*legacy_key*, default ``WEEBOT_API_KEY``). A key
+    that matches nothing is refused, unless there is nothing to match it against.
+    """
+    legacy_key = legacy_key if legacy_key is not None else _get_legacy_api_key()
+    key = _presented_key(conn)
+    # The middleware and then the route dependency ask for the same request: one scrypt
+    # check, not two. The answer lives on the request scope, so it dies with the request.
+    scope = getattr(conn, "scope", None)
+    cache = scope.setdefault("weebot.auth", {}) if isinstance(scope, dict) else {}
+    if (key, legacy_key) not in cache:
+        cache[(key, legacy_key)] = await _authenticate(conn, key, legacy_key)
+    return cache[(key, legacy_key)]
+
+
+async def _authenticate(conn: HTTPConnection, key: str, legacy_key: str | None) -> str | None:
+    store_mode = not _is_legacy_mode()
+    if key:
+        if store_mode and (keys := _key_store(conn)) is not None:
+            principal = await _principal_from_key(key, keys)
+            if principal is not None:
+                return principal
+        if legacy_key and hmac.compare_digest(key, legacy_key):
+            if store_mode:
+                logger.warning(
+                    "Auth via legacy WEEBOT_API_KEY (deprecated). "
+                    "Set WEEBOT_AUTH_MODE=store and issue per-principal keys."
+                )
+            return _derived_principal(key)
+        if legacy_key or store_mode:
+            return None
+    elif legacy_key:
+        return None
+    return "anonymous" if _client_host(conn) in _LOOPBACK else None
+
+
 async def verify_session_ownership(request: Request, session_user_id: str | None) -> None:
     """Raise ``HTTPException(404)`` if the current user does not own the session.
 
@@ -300,35 +325,8 @@ async def require_mutation_identity(request: Request) -> None:
 
 
 async def _resolve_user(request: Request) -> str:
-    """Resolve the authenticated user ID, using the port in store mode.
-
-    In legacy mode, uses SHA-256 derivation (sync, fast).
-    In store mode, hashes the key and looks up the principal_id
-    via ``ApiKeyPort``.
-    """
-    if _is_legacy_mode():
-        return get_current_user_id(request)
-
-    api_key = _presented_key(request)
-    if not api_key:
-        return "anonymous"
-
-    keys = _key_store(request)
-    if keys is not None:
-        principal = await _principal_from_key(api_key, keys)
-        if principal is not None:
-            return principal
-
-    # Fall back to legacy check for backward compat during migration
-    legacy_key = _get_legacy_api_key()
-    if legacy_key and hmac.compare_digest(api_key, legacy_key):
-        logger.warning(
-            "Auth via legacy WEEBOT_API_KEY (deprecated). "
-            "Set WEEBOT_AUTH_MODE=store and issue per-principal keys."
-        )
-        return get_current_user_id(request)
-
-    return "anonymous"
+    """The caller's user ID for ownership and mutation checks ("anonymous" when none)."""
+    return (await authenticate(request)) or "anonymous"
 
 
 def _enforce_ownership() -> bool:

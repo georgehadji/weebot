@@ -245,17 +245,17 @@ async def broadcast_event(event: BehaviorEvent):
                     _ws_connections.remove(ws)
 
 
-def _ws_authorized(websocket: WebSocket) -> bool:
+async def _ws_authorized(websocket: WebSocket) -> bool:
     from weebot.config.settings import get_settings
-    from weebot.interfaces.web.auth import websocket_authenticated
+    from weebot.interfaces.web.auth import authenticate
 
-    return websocket_authenticated(websocket, get_settings().weebot_api_key)
+    return await authenticate(websocket, get_settings().weebot_api_key) is not None
 
 
 @router.websocket("/ws")
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
-    if not _ws_authorized(websocket):
+    if not await _ws_authorized(websocket):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
@@ -336,7 +336,7 @@ async def behavior_websocket(websocket: WebSocket):
 @router.websocket("/ws/session/{session_id}")
 async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
-    if not _ws_authorized(websocket):
+    if not await _ws_authorized(websocket):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
