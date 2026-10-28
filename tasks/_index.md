@@ -33,11 +33,12 @@ Format: date — record — note
 - 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 - 2026-06-30 — [WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted](specs/weebot_unified_implementation_plan.md) — P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
 
-## superseded (6)
+## superseded (7)
 
 - 2026-06-28 — [Architecture Elevation Plan — 7/10 → 9.5+/10](plans/architecture_elevation_plan.md) — superseded by [Architecture Elevation Plan — 8/10 → 9.5+/10 (V2)](plans/architecture_elevation_v2.md)
 - 2026-06-28 — [Architecture Elevation Plan — 8/10 → 9.5+/10 (V2)](plans/architecture_elevation_v2.md) — superseded by [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md)
 - 2026-06-28 — [Weebot Architecture Improvement Plan — Target Score >9/10](plans/architecture_score_9_plan.md) — superseded by [Architecture Elevation Plan — 7/10 → 9.5+/10](plans/architecture_elevation_plan.md)
+- 2026-10-27 — [D4 research: wiring the G8 and G9 code](plans/d4_wiring_research_2026_10_27.md) — superseded by [D4 research: what it takes to wire up all of G8 and G9](plans/d4_wiring_research_2026_10_29.md) — research for decision D4 of the audit fix plan; how to wire the G8 and G9 code instead of deleting it; findings come from two read-only agents and were not independently re-checked
 - 2026-08-13 — [AgeMem (Agentic Memory) vs weebot — analysis and proposed changes](specs/agentic_memory_agemem_weebot_analysis.md) — superseded by [Memory subsystem repair plan (AgeMem-derived)](specs/agentic_memory_fix_plan.md)
 - 2026-08-10 — [LongHorizon-Harness → weebot: analysis and enhancement plan](specs/longhorizon_harness_weebot_analysis.md) — superseded by [LongHorizon-Harness → weebot: implementation plan](specs/longhorizon_harness_implementation_plan.md)
 - 2026-06-30 — [Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers](specs/ssot_constants_remediation_plan.md) — superseded by [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — folded into phase 3.2 of its successor
@@ -126,7 +127,7 @@ Format: date — record — note
 - 2026-10-22 — [ICM slice 1: reference integrity (read-only, nothing moved)](icm_slice1_references.md)
 - 2026-10-22 — [Integration research: agentic-inbox, Arroxy, Postiz](integrations_research.md)
 - 2026-06-28 — [Self-Evaluation — Architecture Elevation Plan V2](plans/architecture_elevation_v2_evaluation.md)
-- 2026-10-27 — [D4 research: wiring the G8 and G9 code](plans/d4_wiring_research_2026_10_27.md) — research for decision D4 of the audit fix plan; how to wire the G8 and G9 code instead of deleting it; findings come from two read-only agents and were not independently re-checked
+- 2026-10-29 — [D4 research: what it takes to wire up all of G8 and G9](plans/d4_wiring_research_2026_10_29.md) — what wiring every G8 and G9 module would take, re-checked at dc16cf13 after the learning loops landed; three read-only agents, five claims spot-checked
 - 2026-06-28 — [Dead-Code Audit — `application/services/` — 26 Files with 0 Production Callers](plans/dead_services_report.md)
 - 2026-06-28 — [C4: Domain-Logic Relocation Candidates — 40 Services](plans/domain_relocation_candidates.md)
 - 2026-09-05 — [ignore_imports Taxonomy — 67 Entries Across 6 Contracts](plans/ignore_imports_taxonomy.md)

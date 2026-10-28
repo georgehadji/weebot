@@ -7,7 +7,7 @@ note: master plan for everything still open after the 2026-10-27 audit work; tra
 # Master plan: everything still open
 
 This plan sits above `tasks/plans/audit_2026_10_27_fix_plan.md` (the audit plan, waves 0 to 6) and
-`tasks/plans/d4_wiring_research_2026_10_27.md`. It does not repeat their detail. It says what is left, in
+`tasks/plans/d4_wiring_research_2026_10_29.md`. It does not repeat their detail. It says what is left, in
 what order, who decides what, and how each piece is proven done. Sizes: S under half a day, M about a day,
 L more. Sizes are estimates from the audit plan, not measurements.
 
@@ -46,7 +46,7 @@ These are the standing rules, written once so the tracks need not repeat them.
 | Id | Question | Recommended | Blocks |
 | --- | --- | --- | --- |
 | D3a | Turn the shell default-ASK from observe to enforce? | Yes if one normal 12-task batch adds 2 or fewer asks | A20 enforce |
-| D4 | What happens to G8 and G9? | Keep the summary repository and Valkey trio reserved; wire the step evaluator and an eval command; delete the rest after tagging | wave 6 G8, G9 |
+| D4 | What happens to G8 and G9? | Keep the summary repository and Valkey trio reserved; wire the step evaluator and an eval command; delete the rest after tagging. What wiring all of it would take: `d4_wiring_research_2026_10_29.md` | wave 6 G8, G9 |
 | D5 | Take A11, the untrusted-content guard? | Needs a product call: it makes every non-read-only tool ask after any web or mail fetch | A11 and A21 shell half |
 | D6 | Apply `.github/rulesets/main.json` so `main` is protected? | Yes; today direct pushes to `main` succeed | Track B |
 | D7 | Draft PR #54 (LuaLaTeX): rebase or close? | Close or park; it is 422 commits behind | Track C |
