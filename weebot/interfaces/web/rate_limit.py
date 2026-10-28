@@ -131,6 +131,9 @@ _auth_failures = _TokenBucket(*AUTH_FAILURES_PER_WINDOW)
 
 # Global bucket registry — keyed on (tier, principal)
 _buckets: dict[str, _TokenBucket] = {}
+# "tier:principal" keys refused since their last allowed request. A throttled spell is
+# audited once, on its first refusal: in a flood every refusal paid for the audit log.
+_throttled: set[str] = set()
 _buckets_lock = asyncio.Lock()
 
 
@@ -189,23 +192,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Check rate limit
         bucket = await self._get_bucket(tier, principal)
+        spell = f"{tier}:{principal}"
         if not bucket.allow(principal):
             retry_after = int(bucket.retry_after(principal))
             _metrics.mcp_rate_limits_hit_total.labels(tool=tier).inc()
-            from weebot.infrastructure.security.audit_logger import (
-                AuditEventType,
-                get_security_logger,
-            )
+            if spell not in _throttled:
+                _throttled.add(spell)
+                from weebot.infrastructure.security.audit_logger import (
+                    AuditEventType,
+                    get_security_logger,
+                )
 
-            get_security_logger().log_event(
-                AuditEventType.RATE_LIMIT_EXCEEDED,
-                agent_id=principal,
-                action=f"rate_limit {path}",
-                result="denied",
-                ip_address=client_ip,
-                metadata={"tier": tier, "retry_after": retry_after},
-            )
-            logger.warning("Rate limit hit: tier=%s principal=%s path=%s", tier, principal, path)
+                get_security_logger().log_event(
+                    AuditEventType.RATE_LIMIT_EXCEEDED,
+                    agent_id=principal,
+                    action=f"rate_limit {path}",
+                    result="denied",
+                    ip_address=client_ip,
+                    metadata={"tier": tier, "retry_after": retry_after},
+                )
+                logger.warning(
+                    "Rate limit hit: tier=%s principal=%s path=%s", tier, principal, path
+                )
             return Response(
                 status_code=429,
                 content=f'{{"detail":"Rate limit exceeded. Retry after {retry_after}s."}}',
@@ -217,6 +225,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "X-RateLimit-Reset": str(int(time.time() + retry_after)),
                 },
             )
+
+        _throttled.discard(spell)
 
         # The expensive tier uses a stricter per-key rate (10/min) instead
         # of a global concurrency counter, avoiding CF-1's cumulative

@@ -531,8 +531,9 @@ class SchedulingManager:
     async def load_from_config(self, config_path: Path | None = None) -> int:
         """Sync job definitions from a YAML config file into the jobs table.
 
-        New entries are created, changed entries are updated in place, and ids listed
-        under ``retired_jobs`` are deleted.
+        New entries are created, and ids listed under ``retired_jobs`` are deleted. An
+        existing entry gets only the fields the yaml changed since it was last applied,
+        so an edit made at runtime (``schedule_tool`` update_job) survives a restart.
 
         Args:
             config_path: Path to jobs.yaml. Defaults to project config/jobs.yaml.
@@ -552,6 +553,8 @@ class SchedulingManager:
             text = await asyncio.to_thread(config_path.read_text)
             data = yaml.safe_load(text)
 
+            applied = await asyncio.to_thread(self._applied_yaml_defs)
+            record: dict[str, dict[str, Any] | None] = {}
             loaded = 0
             for job_def in data.get("jobs") or []:
                 fields = {
@@ -562,17 +565,24 @@ class SchedulingManager:
                     "callable_name": job_def.get("callable_name"),
                     "enabled": bool(job_def.get("enabled", True)),
                 }
-                existing = self.get_job(job_def["job_id"])
+                job_id = job_def["job_id"]
+                record[job_id] = fields
+                existing = self.get_job(job_id)
                 if existing is None:
-                    await self.create_job(job_id=job_def["job_id"], **fields)
+                    await self.create_job(job_id=job_id, **fields)
                     loaded += 1
                     continue
-                # The yaml owns its jobs: an edit there (enabled, interval) must reach
-                # the stored row, which used to keep its first values forever.
+                # An edit in the yaml (enabled, interval) must reach the stored row, which
+                # used to keep its first values forever; a field the yaml did not change
+                # keeps whatever it was set to at runtime. A row with no applied record
+                # (stored before records were kept) takes the yaml as it stands.
+                last = applied.get(job_id)
+                stored = {k: getattr(existing, k) for k in fields}
+                stored["enabled"] = bool(stored["enabled"])
                 changed = {
                     k: v
                     for k, v in fields.items()
-                    if (bool(getattr(existing, k)) if k == "enabled" else getattr(existing, k)) != v
+                    if (last is None or last.get(k) != v) and stored[k] != v
                 }
                 if changed:
                     await self.update_job(job_def["job_id"], **changed)
@@ -580,13 +590,37 @@ class SchedulingManager:
             # Jobs removed from the yaml are named here; the table also holds jobs made
             # in code and by users, so absence from the yaml alone is not a reason to delete.
             for job_id in data.get("retired_jobs") or []:
+                record[job_id] = None
                 if await self.delete_job(job_id):
                     loaded += 1
+            await asyncio.to_thread(self._record_yaml_defs, record)
             logger.info("Loaded %d job changes from %s", loaded, config_path)
             return loaded
         except Exception as exc:
             logger.error("Failed to load jobs from config: %s", exc)
             return 0
+
+    def _applied_yaml_defs(self) -> dict[str, dict[str, Any]]:
+        """The jobs.yaml fields last applied to each job, by job id."""
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS yaml_job_defs "
+                "(job_id TEXT PRIMARY KEY, fields_json TEXT NOT NULL)"
+            )
+            rows = conn.execute("SELECT job_id, fields_json FROM yaml_job_defs").fetchall()
+        return {job_id: json.loads(fields) for job_id, fields in rows}
+
+    def _record_yaml_defs(self, record: dict[str, dict[str, Any] | None]) -> None:
+        """Store the yaml fields just applied; None forgets a retired job."""
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
+            for job_id, fields in record.items():
+                if fields is None:
+                    conn.execute("DELETE FROM yaml_job_defs WHERE job_id = ?", (job_id,))
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO yaml_job_defs (job_id, fields_json) VALUES (?, ?)",
+                        (job_id, json.dumps(fields)),
+                    )
 
     async def load_cron_agent_jobs(
         self, jobs_path: Path | None = None, container: Any = None

@@ -197,9 +197,11 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         undo_hint="Note the source path so the move can be reversed.",
     ),
     # A forced move, copy or rename replaces the destination file: a deletion, not a
-    # reversible move (de5d0990). Longer than the plain rules above, so it wins.
+    # reversible move (de5d0990). Longer than the plain rules above, so it wins. The
+    # aliases count too, and so does any prefix of -Force, which PowerShell accepts; the
+    # command must start the segment or follow a pipe, so "notes-copy.txt" is no copy.
     CommandRule(
-        r"\b(?:move-item|copy-item|rename-item)\b.*\s-force\b",
+        r"(?:^|\|)\s*(?:move-item|copy-item|rename-item|mv|move|mi|cp|copy|cpi)\b.*\s-fo\w*",
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint=_OVERWRITE_HINT,

@@ -19,13 +19,14 @@ from weebot.application.flows.states.updating import UpdatingState
 from weebot.application.flows.states.verifying import VerifyingState
 from weebot.domain.models.event import ErrorEvent
 from weebot.domain.models.plan import Plan, Step, StepStatus
+from weebot.domain.models.session import Session
 
 ERROR = "Trajectory semantic_loop for step 'x': Different tool calls producing identical output."
 
 
 def _context(n):
     steps = [Step(id=f"s{i}", description=f"try {i}") for i in range(n)]
-    ctx = SimpleNamespace(_plan=Plan(title="t", steps=steps), states=[])
+    ctx = SimpleNamespace(_plan=Plan(title="t", steps=steps), _session=Session(id="s"), states=[])
     ctx.set_state = ctx.states.append
     return ctx
 

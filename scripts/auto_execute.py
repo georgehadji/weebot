@@ -17,21 +17,37 @@ from weebot.domain.models.session import Session, SessionStatus
 from weebot.domain.models.event import WaitForUserEvent, DoneEvent, ErrorEvent, StepEvent, MessageEvent
 
 
-def build_flow(container: Container, session: Session, tools):
-    """A PlanActFlow from the container, with its mediator and state repository.
+# An unattended run gets more room than the defaults (50 iterations, 3 repetitions).
+MAX_ITERATIONS = 80
+MAX_STEP_REPETITIONS = 5
 
-    The container keys these services by port type; building PlanActFlow by hand
-    left out the mediator that PlanningState needs.
+
+def build_flow(container: Container, session: Session, tools):
+    """A PlanActFlow from the container, with the script's own run limits.
+
+    The container keys its services by port type, and ``create_flow`` adds the
+    mediator and state repository itself; building PlanActFlow by hand left out the
+    mediator that PlanningState needs.
     """
-    return container.get("create_flow")(
+    flow = container.get("create_flow")(
         flow_type="plan_act",
         session=session,
         llm=container.get(LLMPort),
         tools=tools,
         event_bus=container.get(EventBusPort),
-        state_repo=container.get(StateRepositoryPort),
         model=os.environ.get("WEEBOT_MODEL"),
     )
+    # create_flow takes no limits, so they are set on the built flow.
+    flow._max_iterations = MAX_ITERATIONS
+    flow._max_step_repetitions = MAX_STEP_REPETITIONS
+    return flow
+
+
+def done_message(event: DoneEvent) -> str:
+    """The closing line for *event*: a run with failed steps is not a success."""
+    if event.status == "failed":
+        return "[DONE] Flow finished with failed steps"
+    return "[DONE] Flow completed successfully"
 
 
 async def run_until_complete(task: str):
@@ -51,7 +67,7 @@ async def run_until_complete(task: str):
         try:
             async for event in flow.run(current_answer):
                 if isinstance(event, DoneEvent):
-                    print(f"\n[DONE] Flow completed successfully")
+                    print(f"\n{done_message(event)}")
                     await flow.teardown()
                     return
                 elif isinstance(event, ErrorEvent):

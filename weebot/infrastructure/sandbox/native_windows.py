@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -118,14 +119,8 @@ def _psutil_memory_monitor(
 
 
 def _spawn_error(exc: Exception) -> str:
-    """Why a process did not start, never blank (NotImplementedError has no message)."""
-    text = f"Failed to start process: {type(exc).__name__}: {exc}".rstrip(": ")
-    if isinstance(exc, NotImplementedError):
-        text += (
-            " (this event loop cannot start subprocesses; on Windows the backend needs"
-            " the Proactor loop, see uvicorn_loop in weebot/interfaces/web/main.py)"
-        )
-    return text
+    """Why a process did not start, never blank (some exceptions have no message)."""
+    return f"Failed to start process: {type(exc).__name__}: {exc}".rstrip(": ")
 
 
 class NativeWindowsSandbox(SandboxPort):
@@ -242,6 +237,12 @@ class NativeWindowsSandbox(SandboxPort):
                 cwd=str(working_dir) if working_dir is not None else None,
                 env=merged_env if merged_env else None,
             )
+        except NotImplementedError:
+            # This event loop cannot start subprocesses (uvicorn --reload builds a
+            # SelectorEventLoop on Windows): run the process from a worker thread.
+            return await asyncio.to_thread(
+                self._execute_blocking, command, timeout, working_dir, merged_env, limit_bytes
+            )
         except Exception as e:
             return SandboxResult(
                 stdout="",
@@ -268,15 +269,7 @@ class NativeWindowsSandbox(SandboxPort):
         except TimeoutError:
             proc.kill()
             await proc.wait()
-            elapsed_ms = (time.monotonic() - t_start) * 1000
-            return SandboxResult(
-                stdout="",
-                stderr=f"Process killed after {timeout:.0f}s timeout.",
-                returncode=-1,
-                elapsed_ms=elapsed_ms,
-                timed_out=True,
-                sandbox_type=self.sandbox_type,
-            )
+            return self._timed_out(timeout, t_start)
         finally:
             stop_event.set()
             if monitor_task is not None:
@@ -285,6 +278,76 @@ class NativeWindowsSandbox(SandboxPort):
                 except Exception:
                     pass
 
+        return self._finished(stdout_b, stderr_b, proc.returncode, t_start, memory_killed[0])
+
+    def _execute_blocking(
+        self,
+        command: list[str],
+        timeout: float,
+        working_dir: str | Path | None,
+        env: dict[str, str] | None,
+        limit_bytes: int | None,
+    ) -> SandboxResult:
+        """``execute`` for a worker thread, when the event loop cannot spawn processes."""
+        t_start = time.monotonic()
+        try:
+            proc = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(working_dir) if working_dir is not None else None,
+                env=env if env else None,
+            )
+        except Exception as e:
+            return SandboxResult(
+                stdout="",
+                stderr=_spawn_error(e),
+                returncode=-1,
+                elapsed_ms=0.0,
+                sandbox_type=self.sandbox_type,
+            )
+
+        stop_event = threading.Event()
+        memory_killed: list[bool] = [False]
+        monitor: threading.Thread | None = None
+        if limit_bytes is not None:
+            monitor = threading.Thread(
+                target=_psutil_memory_monitor,
+                args=(proc.pid, limit_bytes, stop_event, memory_killed),
+                daemon=True,
+            )
+            monitor.start()
+        try:
+            stdout_b, stderr_b = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return self._timed_out(timeout, t_start)
+        finally:
+            stop_event.set()
+            if monitor is not None:
+                monitor.join()
+
+        return self._finished(stdout_b, stderr_b, proc.returncode, t_start, memory_killed[0])
+
+    def _timed_out(self, timeout: float, t_start: float) -> SandboxResult:
+        return SandboxResult(
+            stdout="",
+            stderr=f"Process killed after {timeout:.0f}s timeout.",
+            returncode=-1,
+            elapsed_ms=(time.monotonic() - t_start) * 1000,
+            timed_out=True,
+            sandbox_type=self.sandbox_type,
+        )
+
+    def _finished(
+        self,
+        stdout_b: bytes,
+        stderr_b: bytes,
+        returncode: int | None,
+        t_start: float,
+        memory_killed: bool,
+    ) -> SandboxResult:
         elapsed_ms = (time.monotonic() - t_start) * 1000
 
         # Truncate output
@@ -294,9 +357,9 @@ class NativeWindowsSandbox(SandboxPort):
         return SandboxResult(
             stdout=stdout_b.decode("utf-8", errors="replace"),
             stderr=stderr_b.decode("utf-8", errors="replace"),
-            returncode=proc.returncode if proc.returncode is not None else -1,
+            returncode=returncode if returncode is not None else -1,
             elapsed_ms=elapsed_ms,
-            memory_killed=memory_killed[0],
+            memory_killed=memory_killed,
             sandbox_type=self.sandbox_type,
         )
 

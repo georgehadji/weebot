@@ -87,4 +87,5 @@ class SSEEventSubscriber:
             base["question"] = event.question
         elif isinstance(event, DoneEvent):
             base["done"] = True
+            base["status"] = event.status
         return json.dumps(base)

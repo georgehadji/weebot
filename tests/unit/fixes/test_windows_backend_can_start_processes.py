@@ -41,10 +41,10 @@ def test_linux_and_mac_keep_uvicorns_own_loop_choice(monkeypatch):
 
 
 async def test_a_spawn_failure_names_the_exception(monkeypatch):
+    # An exception with an empty message must still say what went wrong.
     async def refuse(*_a, **_k):
-        raise NotImplementedError
+        raise PermissionError
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", refuse)
     result = await NativeWindowsSandbox(SandboxConfig()).execute([sys.executable, "-c", "pass"])
-    assert "NotImplementedError" in result.stderr
-    assert "event loop" in result.stderr  # the likely cause, for whoever reads it
+    assert result.stderr == "Failed to start process: PermissionError"

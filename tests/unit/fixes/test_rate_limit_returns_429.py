@@ -21,6 +21,7 @@ from weebot.interfaces.web.rate_limit import RateLimitMiddleware
 def _fresh(monkeypatch):
     rate_limit._buckets.clear()
     rate_limit._auth_failures._buckets.clear()
+    rate_limit._throttled.clear()
     log = SecurityAuditLogger(enable_anomaly_detection=False, enable_file_persistence=False)
     monkeypatch.setattr(audit_logger, "_logger", log)
     yield log

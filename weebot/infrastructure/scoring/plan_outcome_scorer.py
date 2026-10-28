@@ -49,11 +49,13 @@ class PlanOutcomeScorer(ScoringPort):
             )
 
         total = len(plan.steps)
-        completed = [s for s in plan.steps if s.status == StepStatus.COMPLETED]
+        completed = [s for s in plan.steps if s.did_work()]
         failure_modes: list[str] = []
         for step in plan.steps:
             if step.status == StepStatus.FAILED:
                 failure_modes.append(f"step_failed: {step.description[:80]}")
+            elif step.status == StepStatus.COMPLETED and not step.did_work():
+                failure_modes.append(f"step_replaced: {step.description[:80]}")
             elif step.status == StepStatus.UNVERIFIED:
                 failure_modes.append(f"step_unverified: {step.description[:80]}")
             elif step.status != StepStatus.COMPLETED:

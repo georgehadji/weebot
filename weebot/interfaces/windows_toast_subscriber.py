@@ -62,6 +62,14 @@ class WindowsToastSubscriber:
                 timestamp=datetime.now(),
                 category="urgent",
             )
+        elif isinstance(event, DoneEvent) and event.status == "failed":
+            notification = Notification(
+                title="Weebot Finished With Failures",
+                message="The task ended with failed steps.",
+                level=NotificationLevel.ERROR,
+                timestamp=datetime.now(),
+                category="error",
+            )
         elif isinstance(event, DoneEvent):
             notification = Notification(
                 title="Weebot Done",
