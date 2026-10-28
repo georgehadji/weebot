@@ -55,7 +55,6 @@ Dependency inversion: application code types against the port, and an adapter is
 | OptimizerPort | optimizer_port.py:25 | OptimizerAgent `application/agents/optimizer_agent.py:46` | key `"optimizer_port"` `di/_skillopt.py:23` |
 | PlanCriticPort | plan_critic_port.py:11 | PlanCriticService `application/services/plan_critic.py:39` | none |
 | ProviderAccountPort | provider_account_port.py:24 | OpenRouterAccountAdapter `infrastructure/adapters/llm/openrouter_account.py:15` | port `di/__init__.py:399` |
-| RagPort | rag_port.py:13 | QmdRagAdapter, NoOpRagAdapter `infrastructure/adapters/qmd_rag_adapter.py:17, 47` | none |
 | RerankPort | rerank_port.py:16 | OpenRouterRerankAdapter `infrastructure/adapters/openrouter_rerank_adapter.py:35` | port `di/__init__.py:186` |
 | RetentionAgentPort | retention_agent_port.py:11 | RetentionAgent `application/agents/retention_agent.py:40` | key `"retention_agent"` `di/__init__.py:191` |
 | SandboxPort | sandbox_port.py:137 | backends in `infrastructure/sandbox/` (Sandbox card) | port `di/__init__.py:152` |
@@ -89,7 +88,7 @@ Dependency inversion: application code types against the port, and an adapter is
 Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
 
 Consequences (read from source, not run):
-- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `RagPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:304` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
+- Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-24): `CanonicalizerPort`, `DesktopPort`, `MCPToolPort`, `OptimizationTarget`, `PlanCriticPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:304` names it in a comment), `SummaryRepositoryPort`. They document a seam nobody depends on.
 - Many ports are resolved under a string or a concrete class (rows marked **key**), so `container.get(SomePort)` does not find them; the caller must know the key.
 - `"trajectory_repo"` is registered twice with the same factory (`di/__init__.py:228`, `di/_skillopt.py:25`); the second registration replaces the first.
 - Two event-publisher interfaces: `EventPublisherPort` (ABC, here) and `EventPublisher` (Protocol, `weebot/domain/ports.py:60`, used by `weebot/core/agent_context.py:43`).
