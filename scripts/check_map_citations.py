@@ -1,6 +1,6 @@
 """Fail when a verified map card cites a file or line that is not there (ICM A3).
 
-Cards under map/objects/ and map/processes/ cite source as `path` or `path:line[-line]`. A
+Cards under map/objects/, map/processes/ and map/effects/ cite source as `path` or `path:line[-line]`. A
 verified card that is silently wrong costs more than a missing one, so this
 checks every citation in every `status: verified` card:
 
@@ -40,7 +40,9 @@ def _tracked() -> list[str]:
 
 
 def _resolve(path: str, tracked: list[str], tracked_set: set[str]) -> str | None:
-    path = path.replace("\\", "/").lstrip("./")
+    path = path.replace("\\", "/")
+    while path.startswith("./"):  # not lstrip("./"): that also ate the dot of .github
+        path = path[2:]
     for candidate in (path, f"weebot/{path}"):
         if candidate in tracked_set:
             return candidate
@@ -49,8 +51,10 @@ def _resolve(path: str, tracked: list[str], tracked_set: set[str]) -> str | None
 
 
 def _cards() -> list[Path]:
-    """Object and process cards: the files with a `status` and a `commit` to check."""
-    return sorted(p for sub in ("objects", "processes") for p in (ROOT / "map" / sub).rglob("*.md"))
+    """Object, process and effects cards: the files with a `status` and a `commit` to check."""
+    return sorted(
+        p for sub in ("objects", "processes", "effects") for p in (ROOT / "map" / sub).rglob("*.md")
+    )
 
 
 def broken_citations() -> list[str]:
