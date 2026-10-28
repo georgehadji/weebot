@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-28
-commit: 2b5851dd
+commit: 6558a12f
 consumes:
   - ../objects/application/ExecutorAgent.md
   - ../objects/application/CascadeExecutor.md
@@ -37,7 +37,7 @@ produces:
 
 Consequences (read from source, not run):
 - The `model` the flow sends with `ExecuteStepCommand` (`--model` or `MODEL_BUDGET`, `_step_run.py:75`) is stored on the executor (`_base.py:192`) and used by the context compressor. The cascade sees only the flow's own model, and only when set: `pinned_model=self._model or None` (`plan_act_flow.py:728`), tried first (`_cascade.py:600`).
-- On the `flow run` path no profile is set (`weebot/interfaces/factories.py:226`; `weebot/application/flows/flow_builder.py:138`), so `agent_role` is None and `ExecutorAgent` substitutes `"executor"` (`_base.py:249`): steps use `ROLE_MODEL_CONFIG["executor"]` (`model_refs.py:112`), not `_DEFAULT_ROLE_CASCADE`.
+- On the `flow run` path no profile is set (`weebot/interfaces/factories.py:226`; `weebot/application/flows/flow_builder.py:152`), so `agent_role` is None and `ExecutorAgent` substitutes `"executor"` (`_base.py:249`): steps use `ROLE_MODEL_CONFIG["executor"]` (`model_refs.py:112`), not `_DEFAULT_ROLE_CASCADE`.
 - Fast-fail errors are written to the tracker as FAILED even though they skip the breaker (`_cascade.py:474, 485-493`).
 - Probe and fallback tiers are labelled per model by `_tier_of`: `:free` is FREE, `PREMIUM_MODELS` is PREMIUM, else BUDGET (`:452-459, 551, 620`). Telemetry only.
 - The `fast_fail` flag never comes from the fail-fast branch, which skips `first_error` (`:421-434, 519-521`), so an auth failure alone does not shorten later timeouts.

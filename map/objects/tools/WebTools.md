@@ -5,8 +5,8 @@ code: WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool,
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 0034f08b
+verified: 2026-10-28
+commit: 6558a12f
 ---
 
 # WebTools
@@ -43,7 +43,7 @@ Consequences (read from source, not run):
 - `search_history` searches every past session (`weebot/tools/search_history.py:25-30, 61`); its output is fenced and taints egress; it is in the `webhook` role.
 - `agent_reach`'s `curl` accepts any http(s) URL (`weebot/tools/agent_reach.py:81-82`); unlike `moli_fetch` nothing blocks private or loopback hosts.
 - `weather` puts `location` into the URL path unescaped (`weebot/tools/weather_tool.py:60`).
-- `web_search` and `vane_search` read keys with `os.getenv` / `os.environ.get` (`weebot/tools/web_search.py:131, 229`, `weebot/tools/vane_search.py:41`), as `resolve_setting` does (`weebot/config/tool_config.py:76-89`). Every entry point runs `load_dotenv(override=True)` first (`cli/main.py:58-61`, `run.py:17`, `run_mcp.py:21`, `weebot/interfaces/web/main.py:28-30`), so a key in `.env` is seen. `BING_API_KEY`, `VANE_BASE_URL` and the `SCRAPER_*` keys are not in `.env.example`; `MOLI_PATH` and `AGENT_REACH_PATH` are, commented (`.env.example:123, 126`).
+- `web_search` and `vane_search` read keys with `os.getenv` / `os.environ.get` (`weebot/tools/web_search.py:131, 229`, `weebot/tools/vane_search.py:41`), as `resolve_setting` does (`weebot/config/tool_config.py:76-89`). Every entry point runs `load_dotenv(override=True)` first (`cli/main.py:58-61`, `run.py:17`, `run_mcp.py:21`, `weebot/interfaces/web/main.py:29-31`), so a key in `.env` is seen. `BING_API_KEY`, `VANE_BASE_URL` and the `SCRAPER_*` keys are not in `.env.example`; `MOLI_PATH` and `AGENT_REACH_PATH` are, commented (`.env.example:123, 126`).
 - The MCP server builds `WebSearchTool()` unwrapped (`weebot/mcp/server.py:393`).
 
 ## Connected to

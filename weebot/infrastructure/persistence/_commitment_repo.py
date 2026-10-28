@@ -9,6 +9,24 @@ from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPo
 
 logger = logging.getLogger(__name__)
 
+# One row per promise (audit A12). Rows saved while ids were a fresh uuid4 per save can
+# repeat a natural key: keep the one whose status moved past pending, else the oldest.
+# The alembic revision f2c0mm1t0001 runs the same two statements.
+DEDUP_SQL = """
+DELETE FROM commitments WHERE rowid NOT IN (
+    SELECT rowid FROM (
+        SELECT rowid, ROW_NUMBER() OVER (
+            PARTITION BY source_session_id, COALESCE(source_event_id, ''), promise_text
+            ORDER BY status = 'pending', created_at, rowid
+        ) AS rank FROM commitments
+    ) WHERE rank = 1
+)
+"""
+UNIQUE_INDEX_SQL = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_commitments_natural_key "
+    "ON commitments(source_session_id, source_event_id, promise_text)"
+)
+
 
 class CommitmentRepo:
     """Manages the commitments table."""
@@ -26,7 +44,7 @@ class CommitmentRepo:
         due_at: str | None = None,
         status: str = "pending",
     ) -> None:
-        """Insert a commitment; an id that already exists is left as it is (idempotent re-saves)."""
+        """Insert a commitment; one already stored, by id or by natural key, is left as it is."""
         now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
@@ -37,7 +55,7 @@ class CommitmentRepo:
                 VALUES
                     (:id, :promise_text, :context, :source_session_id, :source_event_id,
                      :due_at, :status, :created_at, :updated_at)
-                ON CONFLICT(id) DO NOTHING
+                ON CONFLICT DO NOTHING
                 """,
                 {
                     "id": commitment_id,

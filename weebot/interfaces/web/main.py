@@ -398,10 +398,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down Weebot Web Server...")
 
 
-# ── Loopback addresses for fail-closed access control ─────────────────
-from weebot.interfaces.web.auth import _LOOPBACK  # noqa: E402 -- one loopback set
-
-
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     _configure_weebot_logging()
@@ -501,61 +497,48 @@ def create_app() -> FastAPI:
         }
     )
 
-    if _ws.weebot_api_key:
+    from weebot.interfaces.web.auth import _is_legacy_mode, _presented_key, authenticate
 
-        class APIKeyMiddleware(BaseHTTPMiddleware):
-            """Require X-API-Key header for all /api/* routes."""
+    if _ws.weebot_api_key or _ws.web_require_auth:
 
-            async def dispatch(self, request: Request, call_next):
-                # Skip auth for health endpoint and WebSocket test UI
-                if request.url.path in _public_paths:
-                    return await call_next(request)
+        class AuthMiddleware(BaseHTTPMiddleware):
+            """Refuse /api/* callers ``auth.authenticate`` does not admit (W2.1).
 
-                api_key = request.headers.get("X-API-Key")
-                import hmac as _hmac
-
-                if not _hmac.compare_digest(api_key or "", _ws.weebot_api_key or ""):
-                    return JSONResponse(
-                        status_code=401,
-                        content={"detail": "Unauthorized — provide valid X-API-Key header"},
-                        headers={"X-Error-Code": "UNAUTHORIZED"},
-                    )
-                return await call_next(request)
-
-        app.add_middleware(APIKeyMiddleware)
-        logger.info("API key authentication enabled")
-    elif _ws.web_require_auth:
-
-        class FailClosedMiddleware(BaseHTTPMiddleware):
-            """Refuse non-loopback requests when no API key is configured.
-
-            Loopback (127.0.0.1, ::1) is always allowed so local dev and the
-            Next.js dev proxy keep working without a key.  Remote requests
-            receive a 503 with a remediation hint.
+            A key the caller presented, or one the deployment expects (the legacy key, or
+            per-principal keys in store mode), makes a refusal a 401. Otherwise no key is
+            configured at all, loopback (local dev, the Next.js dev proxy) is admitted, and
+            a remote caller gets a 503 with a remediation hint.
             """
 
             async def dispatch(self, request: Request, call_next):
-                # Always allow health/liveness probes and WebSocket test UI
+                # Always allow health/liveness probes, gateway webhooks and the test UI
                 if request.url.path in _public_paths:
                     return await call_next(request)
-
-                client_host = request.client.host if request.client else ""
-                if client_host not in _LOOPBACK:
+                if await authenticate(request, _ws.weebot_api_key) is not None:
+                    return await call_next(request)
+                if _ws.weebot_api_key or not _is_legacy_mode() or _presented_key(request):
                     return JSONResponse(
-                        status_code=503,
-                        content={
-                            "detail": (
-                                "Service unavailable for remote requests: no API key configured. "
-                                "Set WEEBOT_API_KEY to enable remote access, or "
-                                "set WEEBOT_WEB_REQUIRE_AUTH=false to disable this check "
-                                "(not recommended for production deployments)."
-                            )
-                        },
-                        headers={"X-Error-Code": "AUTH_REQUIRED"},
+                        status_code=401,
+                        content={"detail": "Unauthorized — provide a valid API key"},
+                        headers={"X-Error-Code": "UNAUTHORIZED"},
                     )
-                return await call_next(request)
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "detail": (
+                            "Service unavailable for remote requests: no API key configured. "
+                            "Set WEEBOT_API_KEY to enable remote access, or "
+                            "set WEEBOT_WEB_REQUIRE_AUTH=false to disable this check "
+                            "(not recommended for production deployments)."
+                        )
+                    },
+                    headers={"X-Error-Code": "AUTH_REQUIRED"},
+                )
 
-        app.add_middleware(FailClosedMiddleware)
+        app.add_middleware(AuthMiddleware)
+    if _ws.weebot_api_key:
+        logger.info("API key authentication enabled")
+    elif _ws.web_require_auth:
         logger.warning(
             "No API key configured — remote requests will be refused. "
             "Set WEEBOT_API_KEY to enable remote access."
@@ -640,7 +623,7 @@ def create_app() -> FastAPI:
         client_host = websocket.client.host if websocket.client else "unknown"
 
         # WebSocket authentication check
-        if not _websocket_auth(websocket, _ws):
+        if not await _websocket_auth(websocket, _ws):
             await websocket.close(code=4001, reason="Unauthorized")
             return
 
@@ -664,7 +647,7 @@ def create_app() -> FastAPI:
         client_host = websocket.client.host if websocket.client else "unknown"
 
         # WebSocket authentication check
-        if not _websocket_auth(websocket, _ws):
+        if not await _websocket_auth(websocket, _ws):
             await websocket.close(code=4001, reason="Unauthorized")
             return
 
@@ -705,11 +688,11 @@ def create_app() -> FastAPI:
     return app
 
 
-def _websocket_auth(websocket: WebSocket, settings) -> bool:
-    """Authenticate a WebSocket connection (see ``auth.websocket_authenticated``)."""
-    from weebot.interfaces.web.auth import websocket_authenticated
+async def _websocket_auth(websocket: WebSocket, settings) -> bool:
+    """Authenticate a WebSocket connection by the one rule (``auth.authenticate``)."""
+    from weebot.interfaces.web.auth import authenticate
 
-    return websocket_authenticated(websocket, settings.weebot_api_key)
+    return await authenticate(websocket, settings.weebot_api_key) is not None
 
 
 def uvicorn_loop() -> str:

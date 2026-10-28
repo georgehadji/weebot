@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from weebot.interfaces.web.main import _LOOPBACK, _websocket_auth
+from weebot.interfaces.web.auth import _LOOPBACK
+from weebot.interfaces.web.main import _websocket_auth
 
 
 def _make_ws(host: str | None):
@@ -41,29 +42,29 @@ def _no_key_settings():
 class TestWebSocketFailClosed:
     """D1 — WebSocket auth must match the HTTP fail-closed policy."""
 
-    def test_remote_peer_is_rejected_when_no_api_key(self):
+    async def test_remote_peer_is_rejected_when_no_api_key(self):
         """A non-loopback peer must be refused when no API key is configured."""
-        assert _websocket_auth(_make_ws("10.0.0.5"), _no_key_settings()) is False
+        assert await _websocket_auth(_make_ws("10.0.0.5"), _no_key_settings()) is False
 
-    def test_loopback_peer_is_allowed_when_no_api_key(self):
+    async def test_loopback_peer_is_allowed_when_no_api_key(self):
         """Loopback keeps working without a key — the single-user desktop case."""
         for host in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
             assert host in _LOOPBACK, f"{host} should be a recognised loopback address"
-            assert _websocket_auth(_make_ws(host), _no_key_settings()) is True, host
+            assert await _websocket_auth(_make_ws(host), _no_key_settings()) is True, host
 
-    def test_unknown_peer_is_rejected_when_no_api_key(self):
+    async def test_unknown_peer_is_rejected_when_no_api_key(self):
         """A connection with no resolvable client address is refused, not allowed."""
-        assert _websocket_auth(_make_ws(None), _no_key_settings()) is False
+        assert await _websocket_auth(_make_ws(None), _no_key_settings()) is False
 
-    def test_policy_matches_http_failclosed_middleware(self):
+    async def test_policy_matches_http_failclosed_middleware(self):
         """WebSocket and HTTP must agree: loopback allowed, remote refused.
 
         The original defect was precisely this inconsistency — HTTP returned
         503 for remote callers while WebSocket accepted them.
         """
         settings = _no_key_settings()
-        remote_allowed = _websocket_auth(_make_ws("203.0.113.9"), settings)
-        loopback_allowed = _websocket_auth(_make_ws("127.0.0.1"), settings)
+        remote_allowed = await _websocket_auth(_make_ws("203.0.113.9"), settings)
+        loopback_allowed = await _websocket_auth(_make_ws("127.0.0.1"), settings)
 
         assert loopback_allowed is True
         assert remote_allowed is False

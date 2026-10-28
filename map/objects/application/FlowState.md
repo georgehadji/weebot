@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-28
-commit: 2b5851dd
+commit: 6558a12f
 ---
 
 # FlowState
@@ -31,12 +31,12 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 | `next_state_after_plan()` | `ExecutingState` if `settings.plan_review_enabled` is false, else `PlanReviewState` (`base.py:125-135`) |
 | PlanReview | Executing (`plan_review.py:68,80`); otherwise sets WAITING and `plan_pending_approval` and pauses (`:94,106`) |
 | ProductGate | Planning (`product_gate.py:102,108,215`) |
-| Executing | Verifying, Updating, Executing, Planning (`executing.py:104`; the evidence gate, `evidence_gate.py:51,57`, sends Executing or Updating); Reviewing when `_code_reviewer` is set, the step is a code step and `retry_count < _MAX_REVIEW_RETRIES_GATE` (`weebot/application/flows/states/_step_outcome.py:340-360`) |
+| Executing | Verifying, Updating, Executing, Planning (`executing.py:104`; the evidence gate, `evidence_gate.py:51,57`, sends Executing or Updating); Reviewing when `_code_reviewer` is set, the step is a code step and `retry_count < _MAX_REVIEW_RETRIES_GATE` (`weebot/application/flows/states/_step_outcome.py:379-399`) |
 | Reviewing | Executing, Updating (`reviewing.py:66-164`) |
 | Updating | Executing (`updating.py:138,252`) |
 | Summarizing | MetaAnalysis (`summarizing.py:55`) |
 | MetaAnalysis | Verifying (`meta_analysis.py:96`) |
-| Verifying | Completed (`verifying.py:70-228`) |
+| Verifying | Completed (`verifying.py:70-227`) |
 
 `IdleState` → `ChatMessageState` (`idle.py:36`) are used by `ChatFlow` (`chat_flow.py:89,113,118`), not by `PlanActFlow`.
 

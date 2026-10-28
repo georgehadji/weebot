@@ -252,3 +252,18 @@ def test_main_is_checked_for_drift_by_a_run_that_can_fail():
     assert drift and not drift[0].get("continue-on-error")
     checkout = next(s for s in steps if "checkout" in s.get("uses", ""))
     assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_a_dot_directory_citation_resolves():
+    """`lstrip("./")` also stripped the dot of `.github`, so its citations never resolved."""
+    cm = _load("check_map_citations")
+    tracked = cm._tracked()
+    path = ".github/workflows/architecture.yml"
+    assert cm._resolve(path, tracked, set(tracked)) == path
+    assert cm._resolve("./" + path, tracked, set(tracked)) == path
+
+
+def test_the_citation_check_covers_effects_cards():
+    """The effects cards cite lines too, and the drift check never opened them."""
+    cards = _load("check_map_citations")._cards()
+    assert any(p.parent.name == "effects" for p in cards)

@@ -22,4 +22,6 @@ commit: <short hash>     # only with status: verified
 ---
 ```
 
+Effects cards (`effects/`) carry only `type: effects`, `status`, `verified` and `commit`, and the citation and drift checks read them like the others.
+
 `verified` is allowed only with a date, a commit and `path:line` citations on every claim.

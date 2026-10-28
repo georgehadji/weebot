@@ -124,21 +124,24 @@ class TestCorsConfiguration:
 class TestTimingSafeComparison:
     """Validates hmac.compare_digest is used for sensitive comparisons."""
 
-    def test_web_main_imports_hmac(self):
-        """web/main.py must import hmac for timing-safe comparisons."""
+    def test_the_authenticator_compares_keys_timing_safely(self):
+        """The one authenticator, which the middleware and sockets call, uses compare_digest."""
         import inspect
-        import weebot.interfaces.web.main as web_main
 
-        source = inspect.getsource(web_main)
+        from weebot.interfaces.web import auth
+
+        source = inspect.getsource(auth._authenticate)
         assert "hmac.compare_digest" in source, "API key comparison must use hmac.compare_digest"
 
-    def test_api_key_middleware_uses_compare_digest(self):
-        """The APIKeyMiddleware dispatch must use compare_digest."""
+    def test_the_api_middleware_goes_through_the_authenticator(self):
+        """The middleware has no key comparison of its own to get wrong."""
         import inspect
+
         import weebot.interfaces.web.main as web_main
 
         source = inspect.getsource(web_main)
-        assert "hmac.compare_digest" in source, "APIKeyMiddleware must use timing-safe comparison"
+        assert "await authenticate(request" in source
+        assert "compare_digest" not in source
 
 
 # ═══════════════════════════════════════════════════════════════════════════

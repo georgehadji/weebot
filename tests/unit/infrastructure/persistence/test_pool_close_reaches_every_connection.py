@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import threading
 
+import aiosqlite
 import pytest
 from aiosqlite.core import _connection_worker_thread
 
@@ -37,10 +38,14 @@ def _worker_threads() -> list[threading.Thread]:
 
 @pytest.mark.asyncio
 async def test_a_checked_out_connection_is_closed_too(tmp_path):
+    # Another connection, closing at the same time as the pool, stands in for other
+    # tests' threads: counting every worker thread in the process made this flaky in CI.
+    other = await aiosqlite.connect(tmp_path / "other.db")
+    existing = set(_worker_threads())
     pool = SQLiteConnectionPool(tmp_path / "d.db", max_read_connections=3, close_drain_timeout=0.2)
     await pool.initialize()
-    before = len(_worker_threads())
-    assert before >= 4, "1 write + 3 read connections expected"
+    own = [t for t in _worker_threads() if t not in existing]
+    assert len(own) == 4, "1 write + 3 read connections expected"
 
     entered, release = asyncio.Event(), asyncio.Event()
     held: list = []
@@ -55,9 +60,9 @@ async def test_a_checked_out_connection_is_closed_too(tmp_path):
     await entered.wait()
     assert pool._read_pool.qsize() == 2, "the held connection is not in the idle queue"
 
-    await pool.close()
+    await asyncio.gather(pool.close(), other.close())
     try:
-        assert len(_worker_threads()) == before - 4, (
+        assert not [t for t in own if t.is_alive()], (
             "close() left a worker thread alive: the connection a reader held was "
             "never closed, and that thread is non-daemon, so the interpreter will "
             "block on it at exit"
@@ -162,9 +167,11 @@ async def test_a_closing_pool_admits_no_new_users(tmp_path):
 
 @pytest.mark.asyncio
 async def test_close_is_idempotent_and_still_works_with_no_readers(tmp_path):
+    existing = set(_worker_threads())
     pool = SQLiteConnectionPool(tmp_path / "d.db", max_read_connections=2, close_drain_timeout=0.2)
     await pool.initialize()
-    before = len(_worker_threads())
+    own = [t for t in _worker_threads() if t not in existing]
+    assert len(own) == 3
     await pool.close()
     await pool.close()
-    assert len(_worker_threads()) == before - 3
+    assert not [t for t in own if t.is_alive()]
