@@ -105,3 +105,25 @@ async def test_the_graph_deletes_what_a_session_found(monkeypatch):
     sql, args = pool.log[-1]
     assert "source_session_id = $1" in sql and args == ("s1",)
     assert any("CREATE TABLE IF NOT EXISTS kg_nodes" in s for s, _ in pool.log)
+
+
+def test_a_new_event_loop_gets_a_new_pool(monkeypatch):
+    """A pool belongs to the loop that built it; a second asyncio.run must not reuse it."""
+    import asyncio
+
+    import asyncpg
+
+    monkeypatch.setattr(SecretAccessor, "get", staticmethod(lambda *a, **k: "postgresql://h/db"))
+    monkeypatch.setattr(connection, "_pools", {})
+    monkeypatch.setattr(connection, "_pool_lock", None)
+    built = []
+
+    async def fake_create_pool(**_k):
+        built.append(object())
+        return built[-1]
+
+    monkeypatch.setattr(asyncpg, "create_pool", fake_create_pool)
+    first = asyncio.run(connection.get_pool("sessions"))
+    second = asyncio.run(connection.get_pool("sessions"))
+    assert first is not second
+    assert len(built) == 2

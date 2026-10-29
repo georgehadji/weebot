@@ -10,6 +10,9 @@ the journal still sees every event this process publishes).
   (no echo), rebuilds the event (``event_codec``) and delivers it locally. Remote
   events are not journaled again: the process that published them already did.
 - The reader reconnects with exponential backoff, capped at ``max_delay``.
+- Subscribing starts the reader when a loop is running, so a process that only
+  listens still hears the others. Subscribed before any loop runs? ``start()``
+  or the first ``publish()`` starts it.
 """
 
 from __future__ import annotations
@@ -69,9 +72,16 @@ class ValkeyEventBus(EventBusPort):
 
     async def start(self) -> None:
         """Start the reader. Idempotent; publish() calls it too."""
+        self._start_reader()
+        await asyncio.sleep(0)  # let it subscribe before the first publish
+
+    def _start_reader(self) -> None:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no loop yet: start() or the first publish() starts it
         if self._reader is None or self._reader.done():
             self._reader = asyncio.create_task(self._read_forever(), name="valkey-event-reader")
-            await asyncio.sleep(0)  # let it subscribe before the first publish
 
     async def close(self) -> None:
         if self._reader is not None:
@@ -152,9 +162,11 @@ class ValkeyEventBus(EventBusPort):
 
     def subscribe(self, handler: EventHandler) -> None:
         self._local.subscribe(handler)
+        self._start_reader()
 
     def subscribe_domain(self, handler: DomainEventHandler) -> None:
         self._local.subscribe_domain(handler)
+        self._start_reader()
 
     def unsubscribe(self, handler: EventHandler) -> None:
         self._local.unsubscribe(handler)

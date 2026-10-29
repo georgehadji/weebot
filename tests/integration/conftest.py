@@ -12,7 +12,11 @@ def pytest_configure(config) -> None:
     This runs before the test module's _load_dotenv(), so real-API
     tests can access keys via os.getenv() without race conditions.
     """
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    load_env_file(Path(__file__).resolve().parent.parent.parent / ".env")
+
+
+def load_env_file(env_path: Path) -> None:
+    """Copy *env_path* into os.environ; a variable already set in the shell wins."""
     if not env_path.exists():
         return
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -24,4 +28,4 @@ def pytest_configure(config) -> None:
         if value.startswith('"') and value.endswith('"'):
             value = value[1:-1]
         if key:
-            os.environ[key] = value
+            os.environ.setdefault(key, value)

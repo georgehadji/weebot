@@ -148,6 +148,29 @@ async def test_two_processes_share_events_without_echo():
         await b.close()
 
 
+async def test_a_process_that_only_listens_still_hears_others():
+    """Subscribing starts the reader: a listener never publishes, so nothing else would.
+
+    Found by the live two-process run: a listen-only process got no events.
+    """
+    broker = _Broker()
+    a = ValkeyEventBus("valkey://x", client_factory=broker.client, reconnect_delay=0.01)
+    b = ValkeyEventBus("valkey://x", client_factory=broker.client, reconnect_delay=0.01)
+    got_b = []
+
+    async def on_b(e):
+        got_b.append(e)
+
+    b.subscribe(on_b)
+    try:
+        await _wait_for(lambda: len(broker.queues) >= 1)
+        await a.publish(events.MessageEvent(session_id="s1", role="assistant", message="hi"))
+        await _wait_for(lambda: got_b)
+    finally:
+        await a.close()
+        await b.close()
+
+
 async def test_the_reader_reconnects_after_a_dropped_connection():
     broker = _Broker()
     a = ValkeyEventBus("valkey://x", client_factory=broker.client, reconnect_delay=0.01)

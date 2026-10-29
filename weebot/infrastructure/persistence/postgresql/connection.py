@@ -25,9 +25,12 @@ _DOMAIN_DATABASES = {
     "cache": "weebot_cache",
 }
 
-# Global pool cache, and one lock so two first callers cannot build two pools.
-_pools: dict[str, Any] = {}
+# Global pool cache: domain -> (event loop, pool). A pool only works on the loop that
+# built it, so a second asyncio.run in the same process builds a fresh one. One lock
+# per loop so two first callers cannot build two pools.
+_pools: dict[str, tuple[Any, Any]] = {}
 _pool_lock: asyncio.Lock | None = None
+_lock_loop: Any = None
 
 
 def _base_dsn() -> str:
@@ -59,29 +62,33 @@ async def get_pool(domain: str = "sessions", min_size: int = 2, max_size: int = 
 
     Pools are cached globally so repeated calls return the same pool.
     """
-    global _pool_lock
+    global _pool_lock, _lock_loop
     import asyncpg
 
     if domain not in _DOMAIN_DATABASES:
         raise ValueError(f"Unknown domain {domain!r}. Choose from {list(_DOMAIN_DATABASES)}")
-    if domain in _pools:
-        return _pools[domain]
-    if _pool_lock is None:
-        _pool_lock = asyncio.Lock()
+    loop = asyncio.get_running_loop()
+    cached = _pools.get(domain)
+    if cached is not None and cached[0] is loop:
+        return cached[1]
+    if _pool_lock is None or _lock_loop is not loop:
+        _pool_lock, _lock_loop = asyncio.Lock(), loop
     async with _pool_lock:
-        if domain not in _pools:
-            _pools[domain] = await asyncpg.create_pool(
+        cached = _pools.get(domain)
+        if cached is None or cached[0] is not loop:
+            pool = await asyncpg.create_pool(
                 dsn=_build_dsn(_base_dsn(), _DOMAIN_DATABASES[domain]),
                 min_size=min_size,
                 max_size=max_size,
                 command_timeout=30,
                 init=_init_connection,
             )
-    return _pools[domain]
+            _pools[domain] = (loop, pool)
+    return _pools[domain][1]
 
 
 async def close_all() -> None:
     """Close all connection pools (call on shutdown)."""
-    for pool in _pools.values():
+    for _loop, pool in _pools.values():
         await pool.close()
     _pools.clear()
