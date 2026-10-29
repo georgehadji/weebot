@@ -11,6 +11,7 @@ from collections.abc import AsyncGenerator
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC, MAX_TOKENS_PLANNING
+from weebot.config.model_refs import role_primary_model
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -94,7 +95,9 @@ class PlannerAgent:
     ):
         self._llm = llm
         self._event_bus = event_bus
-        self._model = model
+        # No override: the planner role's model (D-R2, audit R17). Every planner used to run
+        # on the adapter's default model, whatever ROLE_MODEL_CONFIG["planner"] said.
+        self._model = model or role_primary_model("planner")
         self._prompt_variant_id = prompt_variant_id
         system_prompt = self._get_system_prompt()
         # Only inject the spec-file rule for complex multi-section UI tasks
@@ -200,6 +203,7 @@ class PlannerAgent:
             return await self._llm.chat(
                 messages=messages,
                 response_format={"type": "json_object"},
+                model=self._model,
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_PLANNING,
             )

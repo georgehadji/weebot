@@ -272,14 +272,12 @@ class FactoriesMixin:
 
         Falls back to the default model if the role is not configured.
         """
-        from weebot.config.model_refs import ROLE_MODEL_CONFIG, get_model_cascade_for_role
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG, role_primary_model
 
         # The role cascade, so OLLAMA_ROLES applies here too; a role with no entry keeps
         # falling back to the default model, as before. Free-tier models are skipped: this
         # LLM has no fallback, so a free tier's daily limit would fail the role outright.
-        cascade = get_model_cascade_for_role(role) if role in ROLE_MODEL_CONFIG else []
-        models = [m for m in cascade if not m.startswith("free/")]
-        model = models[0] if models else None
+        model = role_primary_model(role) if role in ROLE_MODEL_CONFIG else None
         return self._create_llm(model)
 
     # _create_intent_review_service() and _create_main_review_service() used to

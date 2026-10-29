@@ -160,6 +160,15 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
     return [chosen, *(m for m in cascade if m != chosen)] if chosen else cascade
 
 
+def role_primary_model(role: str) -> str | None:
+    """The model a single-model caller uses for *role*: its cascade's first non-free entry.
+
+    A caller with one model has no fallback, so a free tier's daily limit would fail the
+    role outright; free-tier models are skipped here.
+    """
+    return next((m for m in get_model_cascade_for_role(role) if not m.startswith("free/")), None)
+
+
 def _local_model_for_role(role: str | None) -> str | None:
     """``ollama/<tag>`` when Ollama is on and *role* is listed in OLLAMA_ROLES, else None.
 
