@@ -194,6 +194,53 @@ async def test_the_reader_reconnects_after_a_dropped_connection():
         await b.close()
 
 
+class _LoopBoundClient(_Client):
+    """Like the real client: it only works on the event loop that built it."""
+
+    def __init__(self, broker):
+        super().__init__(broker)
+        self._loop = asyncio.get_running_loop()
+
+    def _check(self):
+        if asyncio.get_running_loop() is not self._loop:
+            raise RuntimeError("attached to a different loop")
+
+    async def ping(self):
+        self._check()
+        return True
+
+    async def publish(self, channel, payload):
+        self._check()
+        await super().publish(channel, payload)
+
+
+def test_a_second_event_loop_gets_a_fresh_client():
+    """A second asyncio.run in one process must not publish through the dead loop's client."""
+    broker = _Broker()
+    a = ValkeyEventBus(
+        "valkey://x", client_factory=lambda: _LoopBoundClient(broker), reconnect_delay=0.01
+    )
+
+    async def run_once(text):
+        got = []
+        b = ValkeyEventBus("valkey://x", client_factory=broker.client, reconnect_delay=0.01)
+
+        async def on_b(e):
+            got.append(e)
+
+        b.subscribe(on_b)
+        try:
+            await _wait_for(lambda: len(broker.queues) >= 1)
+            await a.publish(events.MessageEvent(session_id="s1", message=text))
+            await _wait_for(lambda: got)
+        finally:
+            await b.close()
+        return got[0].message
+
+    assert asyncio.run(run_once("one")) == "one"
+    assert asyncio.run(run_once("two")) == "two"
+
+
 async def test_without_valkey_the_bus_still_delivers_locally():
     def unreachable():
         raise ConnectionError("no valkey")

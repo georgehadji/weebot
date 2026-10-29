@@ -61,6 +61,7 @@ class ValkeyEventBus(EventBusPort):
         self._origin = uuid.uuid4().hex
         self._local = AsyncEventBus()
         self._client: Any = None
+        self._client_loop: Any = None
         self._reader: asyncio.Task | None = None
 
     def _default_client(self) -> Any:
@@ -77,10 +78,10 @@ class ValkeyEventBus(EventBusPort):
 
     def _start_reader(self) -> None:
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return  # no loop yet: start() or the first publish() starts it
-        if self._reader is None or self._reader.done():
+        if self._reader is None or self._reader.done() or self._reader.get_loop() is not loop:
             self._reader = asyncio.create_task(self._read_forever(), name="valkey-event-reader")
 
     async def close(self) -> None:
@@ -99,10 +100,12 @@ class ValkeyEventBus(EventBusPort):
             self._client = None
 
     async def _connected(self) -> Any:
-        if self._client is None:
+        # A client only works on the loop that built it; a second asyncio.run gets a new one.
+        loop = asyncio.get_running_loop()
+        if self._client is None or self._client_loop is not loop:
             client = self._client_factory()
             await client.ping()
-            self._client = client
+            self._client, self._client_loop = client, loop
         return self._client
 
     async def _read_forever(self) -> None:
