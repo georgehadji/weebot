@@ -7,7 +7,9 @@ classification and recovery routing from step orchestration.
 from __future__ import annotations
 
 import logging
+import re
 from collections import deque
+from enum import Enum
 from typing import Any
 from dataclasses import dataclass, field
 
@@ -49,21 +51,37 @@ def tool_signature(tool_name: str, raw_arguments: str) -> str:
     return f"{tool_name}({stable})"
 
 
-def follow_up_like(text: str) -> bool:
-    """Detect non-answer assistant text — empty, confirmation, or meta-responses."""
-    t = text.strip().lower()
-    if not t:
-        return True
-    if any(t.startswith(p) for p in ("i don", "i do not", "i cannot", "i'm not", "i am not")):
-        return True
-    if any(
-        t.startswith(p)
-        for p in ("ok", "okay", "sure", "got it", "understood", "let me", "i'll", "i will")
-    ):
-        return True
-    if len(t) < 20:
-        return True
-    return False
+class ReplyKind(Enum):
+    """What a tool-less assistant reply means for its step (audit R07)."""
+
+    FILLER = "filler"  # no content: an acknowledgement or a promise to act
+    REFUSAL = "refusal"  # the model says it cannot do the step
+    ANSWER = "answer"
+
+
+def _prefix(*words: str) -> re.Pattern[str]:
+    # Whole words only, so "ok" does not match "Okta".
+    return re.compile(r"(?:%s)\b" % "|".join(re.escape(w) for w in words))
+
+
+_REFUSAL = _prefix(
+    "i cannot", "i can't", "i can not", "i'm unable", "i am unable", "i'm not able",
+    "i am not able", "i don't have access", "i do not have access",
+)
+_FILLER = _prefix(
+    "ok", "okay", "sure", "got it", "understood", "let me", "i'll", "i will",
+    "i don't", "i do not", "i'm not", "i am not",
+)
+
+
+def classify_reply(text: str) -> ReplyKind:
+    """Tell a refusal from filler: a refusal fails the step, filler does not."""
+    t = text.strip().lower().replace("\u2019", "'")
+    if _REFUSAL.match(t):
+        return ReplyKind.REFUSAL
+    if not t or _FILLER.match(t) or len(t) < 20:
+        return ReplyKind.FILLER
+    return ReplyKind.ANSWER
 
 
 def parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
