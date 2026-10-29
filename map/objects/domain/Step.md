@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 83c1f712
+commit: e102c98e
 ---
 
 # Step
@@ -14,7 +14,7 @@ commit: 83c1f712
 One unit of work inside a `Plan`: an id, a description, a status and a result. `StepStatus` is its lifecycle; `ContextScope` says which prompt sources the executor loads for it.
 
 ## Why this shape
-A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:21, 108-115`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`:38-50`).
+A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:21, 116-123`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`:38-50`).
 
 ## Shape
 - `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:554`, default at `domain/models/event.py:65`); plans use `RUNNING`.

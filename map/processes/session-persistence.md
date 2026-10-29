@@ -4,9 +4,9 @@ name: session persistence
 code: EventPublisher._persist_session, SessionPersistenceAdapter, SQLiteStateRepository, cancel_requests
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-10-29
-commit: bc2fe74e
+commit: e102c98e
 consumes:
   - ../objects/application/PlanActFlow.md
   - ../objects/application/FlowRouter.md
@@ -34,7 +34,7 @@ produces:
 4. The adapter comes from DI: `"session_persistence"` (`weebot/application/di/__init__.py:148`) builds `SessionPersistenceAdapter(repo=...)` with its default retry (`:625-633`); `build_flow` passes it to every `PlanActFlow` and `ChatFlow` (`weebot/application/flows/flow_builder.py:197, 197`).
 5. `SessionPersistenceAdapter.save_session` retries `repo.save_session` (delays 0.5, 1, 2 s, permanent errors such as `ValueError` or `IntegrityError` skip the retries); any exception after that writes `{session_id}_{ts}.json` under `~/.weebot/dead_letter`, bumps a Prometheus counter and returns False (`weebot/infrastructure/persistence/session_persistence_adapter.py:37-68, 94-118, 120-155`; `weebot/config/constants.py:42`).
 6. `SQLiteStateRepository.save_session` (`weebot/infrastructure/persistence/sqlite_state_repo.py:302-329`) calls `SessionQueries.save`, which drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:35`) but never the last plan (`_events_json`, `weebot/infrastructure/persistence/_session_queries.py:97-138`), and upserts one row (`save`, `:25-57`). `save_session_if_unchanged` writes the row only if its `updated_at` still matches (`save_if_unchanged`, `:59-81`), so a stale copy never overwrites a newer one (audit A24). Commitments and the FTS index are written afterwards in separate transactions (`sqlite_state_repo.py:346-457`).
-7. Direct saves outside the publisher: routing saves before resuming into `ExecutingState` (`plan_act_flow.py:429-430`); `PlanReviewState` saves the WAITING session, then emits the question (`weebot/application/flows/states/plan_review.py:131-143`); other pauses emit, then save authoritatively (`weebot/application/flows/collaborators/user_pause.py:32-74`); `CompletedState` saves the terminal status (`weebot/application/flows/states/completed.py:301-304`); `ChatFlow._emit` saves through the adapter itself (`weebot/application/flows/chat_flow.py:71-80`); `AgentRunner` saves a new session, the session after the turn and, on resume, the session with the user's answer and the session after the resumed turn (`weebot/interfaces/cli/agent_runner.py:168, 255, 294, 326`).
+7. Direct saves outside the publisher: routing saves before resuming into `ExecutingState` (`plan_act_flow.py:429-430`); `PlanReviewState` saves the WAITING session, then emits the question (`weebot/application/flows/states/plan_review.py:131-143`); other pauses emit, then save authoritatively (`weebot/application/flows/collaborators/user_pause.py:32-74`); `CompletedState` saves the terminal status (`weebot/application/flows/states/completed.py:318-320`); `ChatFlow._emit` saves through the adapter itself (`weebot/application/flows/chat_flow.py:71-80`); `AgentRunner` saves a new session, the session after the turn and, on resume, the session with the user's answer and the session after the resumed turn (`weebot/interfaces/cli/agent_runner.py:168, 255, 294, 326`).
 
 ### Restore
 8. `flow resume <id> <answer>` (`cli/commands/flow.py:181-209`) and the interactive loop in `flow run` (`:153-173`) call `AgentRunner.resume_session`: `load_session`, require WAITING, sanitize and append the answer, save, build a new flow (`agent_runner.py:264-308`).

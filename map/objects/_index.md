@@ -6,7 +6,7 @@ Format: name — source — status — card
 
 ## domain
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-29 — [card](domain/Event.md)
-- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-29 — [card](domain/Plan.md)
+- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — stale 2026-10-29 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — stale 2026-10-28 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-10-28 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-29 — [card](domain/Step.md)
