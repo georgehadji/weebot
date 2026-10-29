@@ -6,15 +6,15 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-10-29
-commit: bc2fe74e
+commit: d0fa4540
 ---
 
 # PlannerAgent
 
-Turns a user task into a `Plan` (title, message, steps) with one JSON-mode LLM call, and revises a plan after a step completes. It has no tools and does not use the model cascade. `create_plan` and `update_plan` are async generators that yield `PlanEvent`s.
+Turns a user task into a `Plan` (title, message, steps) with one JSON-mode LLM call, and revises a plan after a step completes. It has no tools and does not use the model cascade: it sends one model, the caller's override or else the planner role's first non-free model (`role_primary_model`, `weebot/application/agents/planner.py:100`; audit R17). `create_plan` and `update_plan` are async generators that yield `PlanEvent`s.
 
 ## Why this shape
-The model returns JSON; everything after that is defensive, because a malformed plan must never stop the flow: parse, retry once, then fall back to a fixed two-step plan (`weebot/application/agents/planner.py:267-275`). Heuristics in `_parse_plan` keep plans executable: at most one step that writes spec files, and steps naming more than 5 discrete items are split into batches (`:314-355, 357-377`), because long steps made the executor loop.
+The model returns JSON; everything after that is defensive, because a malformed plan must never stop the flow: parse, retry once, then fall back to a fixed two-step plan (`weebot/application/agents/planner.py:271-279`). Heuristics in `_parse_plan` keep plans executable: at most one step that writes spec files, and steps naming more than 5 discrete items are split into batches (`:314-355, 357-377`), because long steps made the executor loop.
 
 ## Shape
 - Constructor builds the system prompt: base prompt file or a `PromptRegistry` variant, plus spec-file rule (only for multi-section UI skills, `:103-106`), skill prompt, known facts, skill catalog and workflow hints (`:99-124`). Stored as `_memory[0]`.
