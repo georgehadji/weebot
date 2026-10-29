@@ -144,6 +144,7 @@ class DiscordAdapter(GatewayAdapter):
                 "guild_id": guild_id,
                 "interaction_token": payload.get("token", ""),
                 "interaction_id": payload.get("id", ""),
+                "application_id": payload.get("application_id", ""),
             },
         )
 
@@ -184,7 +185,29 @@ class DiscordAdapter(GatewayAdapter):
         if text is None:
             return {"type": 4, "data": {"content": "Message blocked by safety check."}}
 
-        # Build a session and run through PlanActFlow
+        # Discord drops an interaction not answered within 3 s, and a run takes longer:
+        # answer "deferred" now and edit the reply when the run ends (audit R09).
+        from weebot.core.background_tasks import get_background_tasks
+
+        get_background_tasks().spawn(
+            self._answer_later(msg, text), name=f"discord-{msg.metadata.get('interaction_id')}"
+        )
+        return {"type": 5}
+
+    async def _answer_later(self, msg: GatewayMessage, text: str) -> None:
+        """Run the flow, then put its last message (or a short error) in the deferred reply."""
+        try:
+            content = await self._run(msg, text)
+        except Exception:
+            logger.exception("Discord command failed in channel %s", msg.external_id)
+            content = "Sorry, that command failed. Please try again."
+        application_id = msg.metadata.get("application_id") or self._application_id
+        # Discord message content limit is 2000 characters
+        await self._edit_original(
+            application_id, msg.metadata.get("interaction_token", ""), content[:2000]
+        )
+
+    async def _run(self, msg: GatewayMessage, text: str) -> str:
         import uuid
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope
@@ -201,10 +224,26 @@ class DiscordAdapter(GatewayAdapter):
             async for event in flow.run(text):
                 if getattr(event, "type", "") == "message":
                     response_text = getattr(event, "message", "") or response_text
+        return response_text or "(no response produced)"
 
-        final = response_text or "(no response produced)"
-        # Discord message content limit is 2000 characters
-        return {"type": 4, "data": {"content": final[:2000]}}
+    async def _edit_original(self, application_id: str, token: str, content: str) -> bool:
+        """Edit the deferred reply; the interaction token in the URL is the credential."""
+        url = (
+            f"https://discord.com/api/v10/webhooks/{application_id}/{token}/messages/@original"
+        )
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.patch(url, json={"content": content}) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Discord reply edit failed (HTTP %d): %s",
+                            resp.status,
+                            (await resp.text())[:200],
+                        )
+                    return resp.status == 200
+        except Exception as exc:
+            logger.warning("Discord reply edit failed: %s", exc)
+            return False
 
     # ── response sending (follow-up messages) ───────────────────────
 
