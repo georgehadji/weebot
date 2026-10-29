@@ -80,7 +80,7 @@ unit_coverage_floor = 64
 # 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
 # 96 -> 95 with D4 slice 7.
 # 95 -> 94 with D4 slice 10 deletions.
-silent_except_handlers = 94
+silent_except_handlers = 93
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -148,7 +148,7 @@ bare_env_reads = 60
 # 54 -> 52: the same two web/auth.py handlers as silent_except_handlers 115 -> 113.
 # 52 -> 51 with A15: the same connection_pool handler as silent_except_handlers 112 -> 111.
 # 51 -> 50 with A34: the same BashGuard handler as silent_except_handlers 111 -> 110.
-bandit_b110 = 48
+bandit_b110 = 47
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound

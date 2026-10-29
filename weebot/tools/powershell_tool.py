@@ -5,6 +5,7 @@ Routes execution through SandboxPort.  No direct subprocess or langchain calls.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import ClassVar
 from weebot.domain.models.output_trust import OutputTrust
@@ -19,6 +20,8 @@ from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.encoded_command import has_encoded_command
 from weebot.tools._results import to_tool_result
 from weebot.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 
 class PowerShellTool(BaseTool):
@@ -124,7 +127,13 @@ class PowerShellTool(BaseTool):
                             "Use plain text commands only."
                         )
                 except Exception:
-                    pass
+                    # An undecodable blob is the payload worth refusing, as in bash_tool's
+                    # check: this used to pass it as clean (plan S4).
+                    logger.warning("refused an undecodable base64 blob (%d chars)", len(match))
+                    return False, (
+                        "Security Error: a long base64-like string that could not decode. "
+                        "Use plain text commands only."
+                    )
 
         return True, ""
 
