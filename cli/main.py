@@ -114,6 +114,7 @@ from cli.commands.flow import flow as flow_group
 from cli.commands.skills import skill as skill_group
 from cli.commands.agents import agents as agents_group
 from cli.commands.harness import benchmark, harness  # type: ignore[attr-defined]
+from cli.commands.improve import improve as improve_group  # noqa: E402 - like its neighbours
 from cli.commands.profile import profile as profile_group
 from cli.commands.scheduling import cron, companion  # type: ignore[attr-defined]
 from cli.commands.guard import guard as guard_group
@@ -716,6 +717,7 @@ cli.add_command(skill_group)
 cli.add_command(agents_group)
 cli.add_command(benchmark)
 cli.add_command(harness)
+cli.add_command(improve_group)
 cli.add_command(profile_group)
 cli.add_command(cron)
 cli.add_command(companion)

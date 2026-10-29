@@ -248,6 +248,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Offer approaches that worked on other kinds of task when planning"},
     {"var": "WEEBOT_EVENT_BUS", "type": "str", "default": "local",
      "desc": "Event bus: local, or valkey to share events between processes (WEEBOT_VALKEY_URL)"},
+    {"var": "WEEBOT_SELF_EDIT_CONFIG", "type": "bool", "default": "false",
+     "desc": "`improve` CLI: model-proposed edits to rule/contract files, applied by a human"},
     {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
      "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
     {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",

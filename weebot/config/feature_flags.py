@@ -233,6 +233,15 @@ STRATEGY_TRANSFER_ENABLED: bool = _env_bool("WEEBOT_STRATEGY_TRANSFER", default=
 EVENT_BUS: str = os.environ.get("WEEBOT_EVENT_BUS", "local").strip().lower()
 
 
+# ── Self-editing of rule and contract files (D4) ────────────────────────────
+# When True, `improve propose` asks a model for an edit to a file under
+# weebot/config/contracts, weebot/config/prompts/rules or weebot/skills/builtin,
+# held as pending; `improve apply ID` writes it. Nothing is applied without that
+# human step. Separate from METACOGNITIVE_IMPROVEMENT, which only widens the
+# targets to the self-improver itself. Default OFF.
+SELF_EDIT_CONFIG_ENABLED: bool = _env_bool("WEEBOT_SELF_EDIT_CONFIG", default=False)
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new

@@ -27,6 +27,8 @@ class SelfImprovementPatch(BaseModel):
         default="skill", description="'skill' | 'contract' | 'rule' | 'harness'"
     )
     diff: str = Field(default="", description="Unified diff of the change")
+    original_content: str = Field(default="", description="The file before the patch")
+    new_content: str = Field(default="", description="The file after the patch")
     validation_score: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Score from validation against test tasks"
     )
