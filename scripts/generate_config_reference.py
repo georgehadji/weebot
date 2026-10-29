@@ -59,6 +59,15 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Context the model really has (num_ctx); Ollama's /v1 ignores a per-request value"},
     {"var": "OLLAMA_ROLES", "type": "str", "default": "summarizer,documentation",
      "desc": "Roles that try an Ollama model first: `role` or `role=tag` (e.g. verifier=gemma4:31b-cloud)"},
+    {"var": "WEEBOT_FREE_ROLES", "type": "str", "default": "",
+     "desc": "Roles that try a free-tier model first, `role=provider/model` (e.g. "
+             "executor=groq/openai/gpt-oss-120b); the paid cascade stays behind it. Gemini's "
+             "free tier may train on prompts, so it is skipped once a session reads untrusted "
+             "content"},
+    {"var": "GROQ_API_KEY", "type": "str", "default": "", "sensitive": True,
+     "desc": "Groq API key, for `groq/...` entries in WEEBOT_FREE_ROLES"},
+    {"var": "GEMINI_API_KEY", "type": "str", "default": "", "sensitive": True,
+     "desc": "Google AI Studio API key, for `gemini/...` entries in WEEBOT_FREE_ROLES"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,

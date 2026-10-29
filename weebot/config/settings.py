@@ -93,6 +93,13 @@ class WeebotSettings(BaseSettings):
     # "summarizer,documentation,verifier=gemma4:31b-cloud".
     ollama_roles: str = "summarizer,documentation"  # env: OLLAMA_ROLES
 
+    # Free-tier providers (weebot/config/free_models.py). Off by default: a role tries one
+    # only when WEEBOT_FREE_ROLES lists it and that provider's key is set.
+    groq_api_key: str | None = None  # env: GROQ_API_KEY
+    gemini_api_key: str | None = None  # env: GEMINI_API_KEY
+    # Comma separated `role=provider/model`, e.g. "executor=groq/openai/gpt-oss-120b".
+    free_roles: str = Field(default="", alias="WEEBOT_FREE_ROLES")
+
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
     reasoner_api_key: str | None = None  # env: REASONER_API_KEY

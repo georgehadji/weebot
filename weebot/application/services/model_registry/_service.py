@@ -21,9 +21,10 @@ class ModelSelectionService:
 
     def _usable(self) -> list[tuple[str, ModelConfig]]:
         """Catalog models that can be called now: a key is set, or none is needed (local)."""
+        from weebot.config.free_models import free_models
         from weebot.config.local_models import local_models
 
-        catalog = {**self.MODELS, **local_models()}
+        catalog = {**self.MODELS, **local_models(), **free_models()}
         return [
             (model_id, cfg)
             for model_id, cfg in catalog.items()
