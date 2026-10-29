@@ -61,7 +61,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Uses** the DI container (`application/DIContainer.md`), `PlanActFlow` (`application/PlanActFlow.md`), `RoleBasedToolRegistry` via `build_tools`, `SQLiteStateRepository` and the event store (`infrastructure/`).
-- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:339, 453`, `routers/webhook.py:128-129`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:259-278`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:636`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
+- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:339, 453`, `routers/webhook.py:135`, through `run_scope`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:259-278`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:636`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
 - **Looks like but is not:** `run.py` (legacy REPL, also on `shared_container`, `run.py:151-153`); the MCP server (`MCPServer.md`); `cli mcp`, which edits the MCP client's server list.
 
 ## If you change this
