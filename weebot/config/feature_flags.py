@@ -226,6 +226,13 @@ FLOW_CHECKPOINTS_ENABLED: bool = _env_bool("WEEBOT_FLOW_CHECKPOINTS", default=Fa
 STRATEGY_TRANSFER_ENABLED: bool = _env_bool("WEEBOT_STRATEGY_TRANSFER", default=False)
 
 
+# ── Event bus backend (D4) ──────────────────────────────────────────────────
+# "local" (default): in-process fan-out only.
+# "valkey": also share events with other weebot processes over Valkey pub/sub
+# (WEEBOT_VALKEY_URL). Only worth it once more than one process serves the UI.
+EVENT_BUS: str = os.environ.get("WEEBOT_EVENT_BUS", "local").strip().lower()
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new

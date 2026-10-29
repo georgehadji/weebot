@@ -245,6 +245,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Save the plan after each step so `flow recover` can resume an interrupted run"},
     {"var": "WEEBOT_STRATEGY_TRANSFER", "type": "bool", "default": "false",
      "desc": "Offer approaches that worked on other kinds of task when planning"},
+    {"var": "WEEBOT_EVENT_BUS", "type": "str", "default": "local",
+     "desc": "Event bus: local, or valkey to share events between processes (WEEBOT_VALKEY_URL)"},
     {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
      "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
     {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",

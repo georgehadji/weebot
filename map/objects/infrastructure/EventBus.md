@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 340794f3
+commit: bc2fe74e
 ---
 
 # Event bus
@@ -19,18 +19,18 @@ Publishers must never be slowed or broken by listeners. Each subscriber call is 
 ## Shape
 - **AsyncEventBus** (`event_bus.py:43`): in-process. `publish` increments a Prometheus counter, copies the handler list under a lock and runs all handlers with `asyncio.gather`, each with `handler_timeout` (default 30 s); a timed-out handler drops that event for that subscriber only (`:58-91`). `subscribe_by_type(type, handler)` wraps a handler with an exact-match filter and records the original so `unsubscribe` can find it (`:96-132`). `publish_domain_event` is the same for domain handlers (`:135-178`).
 - **DurableEventBus** (`:180`): `publish` first writes the event to `EventStorePort.log_event(session_id, event_type, data)`, then to the inner bus. A journal failure is logged and delivery continues (`:201-209, 227-281`). Agent events carry no cost columns; a `LLMCallCompleted` domain event fills `cost`, `model` and `tokens_used` (`:261-274`; see Event store card). Subscriber calls are delegated to the inner bus (`:213-223`).
-- **ValkeyEventBus** (`infrastructure/events/redis_event_bus.py:32`): on first publish it connects with a 3 s timeout and `ping`; on any failure or missing URL it switches to an in-memory `AsyncEventBus` for the life of the object (`:55-103`). When connected, `publish` and `publish_domain_event` raise `RuntimeError` instead of sending, because nothing delivers Valkey channels back to local subscribers (F24, `:26-29, 114-128`).
-- **Selection** in `FactoriesMixin._create_event_bus`: `WEEBOT_VALKEY_URL` or `WEEBOT_REDIS_URL` set → `RuntimeError` (W4.3, F24); else `DurableEventBus(inner=AsyncEventBus())` (`application/di/_factories.py:45-60`).
+- **ValkeyEventBus** (`infrastructure/events/redis_event_bus.py:32`): delivers to its own in-process `AsyncEventBus` first, then publishes on `weebot:events` tagged with an origin id (`:145-151`); a Valkey failure costs only the cross-process copy. A reader task reconnects with backoff, drops its own origin, rebuilds the event with `event_codec` and delivers it locally without re-journaling (`:98-133`).
+- **Selection** in `FactoriesMixin._create_event_bus`: `WEEBOT_EVENT_BUS=valkey` (needs `WEEBOT_VALKEY_URL`) wraps `ValkeyEventBus` in `DurableEventBus`; the default `local` wraps `AsyncEventBus`. A URL alone changes nothing (`application/di/_factories.py:45-68`).
 
-**Valkey is off by design (read from source, not run):** `ValkeyEventBus.subscribe` only stores the handler and forwards it to the in-memory fallback if that exists (`redis_event_bus.py:130-138`), and no code reads the Valkey channels back. Rather than drop events silently, the DI factory refuses a configured URL and a connected bus refuses to publish. `docker-compose.yml` sets only `VALKEY_PASSWORD`, not `WEEBOT_VALKEY_URL` (`docker-compose.yml:78`). Pinned by `tests/unit/fixes/test_f24_valkey_drops_local_events.py` and `tests/unit/fixes/test_w43_valkey_fail_fast.py`.
+**Valkey is opt-in (D4, tested with a fake broker, not a live Valkey):** `docker-compose.yml` sets `WEEBOT_VALKEY_URL` for the api service and leaves `WEEBOT_EVENT_BUS=local` (`docker-compose.yml:79-81`). Pinned by `tests/unit/fixes/test_d4_valkey_bridge.py`.
 
 ## Connected to
-- **Subscribers (real code):** `WebSocketEventBroadcaster.publish` at app start (`interfaces/web/main.py:218`); SSE route handler per connection (`interfaces/web/routers/sse.py:85`); `interfaces/cli/event_logger.py:88` (CLI printer); `interfaces/sse_event_subscriber.py:36`; `infrastructure/notifications/windows_toast.py:261` and `interfaces/windows_toast_subscriber.py:97`; `SessionScopedEventBus` wraps another bus, stamps `session_id` on publish and delegates subscriptions (`application/services/session_scoped_event_bus.py:28-32, 37-41`); `PlanActFlow` subscribes a domain handler for `SkillGapDetected` when a misalignment journal is wired (`weebot/application/flows/_plan_act_wiring.py:278`, in the flow composition step).
+- **Subscribers (real code):** `WebSocketEventBroadcaster.publish` at app start (`interfaces/web/main.py:218`); SSE route handler per connection (`interfaces/web/routers/sse.py:85`); `interfaces/cli/event_logger.py:88` (CLI printer); `interfaces/sse_event_subscriber.py:36`; `infrastructure/notifications/windows_toast.py:261` and `interfaces/windows_toast_subscriber.py:97`; `SessionScopedEventBus` wraps another bus, stamps `session_id` on publish and delegates subscriptions (`application/services/session_scoped_event_bus.py:28-32, 37-41`); `PlanActFlow` subscribes a domain handler for `SkillGapDetected` when a misalignment journal is wired (`weebot/application/flows/_plan_act_wiring.py:288`, in the flow composition step).
 - **Publishers:** `PlanActFlow._emit` and the executor (`ExecutorAgent._emit`), plus anything given an `EventBusPort`/`EventPublisherPort`.
 - **Looks like but is not:** the Mediator (commands to one handler); the event store (history, not live fan-out); `swarm_event_bus.py` (a separate topic bus for sub-agents); `EventBrokerAdapter` (`events/broker_adapter.py`, kept for old `EventBroker` callers, not covered).
 
 ## If you change this
-**Hits:** every UI and CLI live view (WebSocket, SSE, toast, CLI printer); the event store journal; `PlanActFlow` event emission; the DI selection logic; `SessionScopedEventBus`. Tests: `tests/unit/infrastructure/test_durable_event_bus_journal.py`, `tests/unit/fixes/test_w41_llm_call_completed.py`, `tests/unit/fixes/test_w43_valkey_fail_fast.py`, `tests/unit/fixes/test_f24_valkey_drops_local_events.py`; `AsyncEventBus` behaviour is exercised through flow tests (not enumerated).
+**Hits:** every UI and CLI live view (WebSocket, SSE, toast, CLI printer); the event store journal; `PlanActFlow` event emission; the DI selection logic; `SessionScopedEventBus`. Tests: `tests/unit/infrastructure/test_durable_event_bus_journal.py`, `tests/unit/fixes/test_w41_llm_call_completed.py`, `tests/unit/fixes/test_d4_valkey_bridge.py`; `AsyncEventBus` behaviour is exercised through flow tests (not enumerated).
 **Does not hit:** state persistence; the Mediator; LLM adapters.
 
 ## Surfaces

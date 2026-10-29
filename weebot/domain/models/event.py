@@ -350,6 +350,12 @@ AgentEvent = Union[
     ProductGateReviewEvent,
     ProductDecisionEvent,
     SessionPresenceEvent,
+    # Published on the bus by scheduled jobs and health checks; without them here
+    # a journaled or bridged copy could not be rebuilt (D4).
+    SessionStalenessEvent,
+    MemoryPressureEvent,
+    ScheduledJobEvent,
+    LLMHealthEvent,
 ]
 
 

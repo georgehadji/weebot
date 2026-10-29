@@ -45,19 +45,27 @@ class FactoriesMixin:
     def _create_event_bus(self) -> EventBusPort:
         from weebot.infrastructure.event_bus import AsyncEventBus, DurableEventBus
         from weebot.application.ports.event_store_port import EventStorePort
-        from weebot.config.secret_accessor import SecretAccessor
+        from weebot.config import feature_flags
 
-        # Decision 4 (W4.3, F24): ValkeyEventBus publishes to channels that
-        # nothing reads back, so every in-process subscriber (WebSocket fan-out,
-        # journal, approvals) would get nothing. Refuse until a bridge exists.
-        for var in ("WEEBOT_VALKEY_URL", "WEEBOT_REDIS_URL"):
-            if SecretAccessor.get(var):
+        # WEEBOT_EVENT_BUS chooses, not a URL being set: a Valkey URL in the
+        # environment for something else must not change where events go (D4).
+        if feature_flags.EVENT_BUS == "valkey":
+            from weebot.config.secret_accessor import SecretAccessor
+            from weebot.infrastructure.events.redis_event_bus import ValkeyEventBus
+
+            url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get(
+                "WEEBOT_REDIS_URL"
+            )
+            if not url:
                 raise RuntimeError(
-                    f"{var} is set, but the Valkey event bus does not deliver events to "
-                    "this process's subscribers yet (F24). Unset it to use the local bus."
+                    "WEEBOT_EVENT_BUS=valkey needs WEEBOT_VALKEY_URL (redis://host:6379/0)"
                 )
-        event_store = self.get(EventStorePort)
-        return DurableEventBus(inner=AsyncEventBus(), event_store=event_store)
+            inner: EventBusPort = ValkeyEventBus(url)
+        elif feature_flags.EVENT_BUS == "local":
+            inner = AsyncEventBus()
+        else:
+            raise RuntimeError(f"WEEBOT_EVENT_BUS={feature_flags.EVENT_BUS!r}: use local or valkey")
+        return DurableEventBus(inner=inner, event_store=self.get(EventStorePort))
 
     @staticmethod
     def _create_tracing():

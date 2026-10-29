@@ -5,8 +5,8 @@ code: BaseEvent, AgentEvent, DomainEvent (and subclasses)
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-28
-commit: c41f28e0
+verified: 2026-10-29
+commit: bc2fe74e
 ---
 
 # Event
@@ -34,7 +34,7 @@ Consequences (read from source, not run):
 ## Connected to
 - **Stored in** `Session.events` (Session card). **Published on** `EventBusPort` (`application/ports/event_bus_port.py:15`); domain events through `publish_domain_event` (`:24`). **Journaled by** the event store (EventStore card); `LLMCallCompleted` feeds its cost columns (`:467-479`).
 - **Yielded by** `PlannerAgent` (`PlanEvent`, `application/agents/planner.py:279, 309`), `ExecutorAgent` (`StepEvent`, `ToolEvent`, `weebot/application/agents/executor/_base.py:553, 718, 714`; `weebot/application/agents/executor/_tool_batch.py:82, 174`; `weebot/application/agents/executor/_turn.py:63, 79`), flow states (`WaitForUserEvent`, `PlanReviewEvent`, `ToolApprovalEvent`).
-- **Rebuilt by** `reconstruct_events` (CQRS results back into events, `planning.py:254`) and `SQLiteStateRepository._row_to_session`.
+- **Rebuilt by** `reconstruct_events` (CQRS results back into events, `planning.py:266`) and `SQLiteStateRepository._row_to_session`.
 - **Looks like but is not:** `EventPublisher` Protocol in `weebot/domain/ports.py:60` vs `EventPublisherPort` ABC in `application/ports/event_publisher_port.py:16`; legacy `Message`/`Checkpoint` (`domain/legacy_models.py:105, 206`).
 
 ## If you change this
