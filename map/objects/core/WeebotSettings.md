@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 37e3643d
+commit: 9e524c75
 ---
 
 # WeebotSettings
@@ -23,7 +23,7 @@ A pydantic `BaseSettings` so values are validated once at construction (`weebot/
 - There is no `env_prefix` (`:42-47`), so a field is read from its bare upper-case name unless it has an alias; fields documented as `WEEBOT_*` take `validation_alias=AliasChoices("WEEBOT_X", "X")` (for example `:96-114, 282-283, 313-314`). `tests/unit/config/test_weebot_env_names.py` fails on any documented `WEEBOT_*` name without a reader.
 - Not part of the class: module constants `WORKSPACE_ROOT`, `LOGS_DIR`, `SESSIONS_DB`, `MEMORY_DIR`, `PROFILES_DIR`, read with `os.getenv` at import (`:16-27`). They stay import-time constants by decision (plan W2.4b option a), because tools read `WORKSPACE_ROOT` in class bodies. The entry points call `load_dotenv(override=True)` before importing (`run.py:17`, `cli/main.py:59-61`, `run_mcp.py:19-21`); other entry points were not checked.
 
-Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:145`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:298-299`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:500-506`).
+Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI container registers `get_settings` itself, `di/__init__.py:145`). `scripts/lint_settings_construction.py` holds it at 0 (`tasks/quality/ceilings.toml:299-300`, run from `Makefile:124`). Read it with `get_settings()` or `Container.get(WeebotSettings)`; a changed `.env` takes effect on restart (`settings.py:500-506`).
 
 Consequences (read from source, not run; `pydantic_settings` is not installed here):
 - `run_mcp.py:102` calls `get_settings().validate_at_least_one_key()` on an instance; `tests/unit/fixes/test_f13_run_mcp_key_check.py` covers it.
