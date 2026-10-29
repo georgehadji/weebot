@@ -332,13 +332,13 @@ async def run_session(
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.application.ports.steering_port import SteeringPort
+        from weebot.application.use_cases.dispatch_session_input import RunOptions
 
         task_runner: TaskRunnerPort = container.get(TaskRunnerPort)
         llm = container.get(LLMPort)
         event_bus = container.get(EventBusPort)
         steering = container.get(SteeringPort)
-        model = session.context.get("model") or None
-        ponytail_mode = session.context.get("ponytail_mode") or None
+        opts = RunOptions.from_session(session)
 
         from weebot.interfaces.factories import build_tools
 
@@ -348,8 +348,8 @@ async def run_session(
                 llm=llm,
                 tools=tools,
                 event_bus=event_bus,
-                model=model,
-                ponytail_mode=ponytail_mode,
+                model=opts.model,
+                ponytail_mode=opts.ponytail_mode,
                 steering=steering,
             )
             session = await task_runner.start_session(session, factory)
