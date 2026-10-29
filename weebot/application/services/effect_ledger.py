@@ -86,13 +86,17 @@ class EffectLedger:
     async def note_flag(self, session_id: str, kind: str, **data: Any) -> None:
         await self._log(session_id, FLAG, {"kind": kind, **data})
 
-    async def flags(self, session_id: str) -> list[dict[str, Any]]:
-        """Every flag row for the session, oldest first ([] when the store is unreadable)."""
+    async def flags(self, session_id: str) -> list[dict[str, Any]] | None:
+        """Every flag row for the session, oldest first; None when the store is unreadable.
+
+        None, not ``[]``: an empty list reads as "this session is clean", and a store
+        outage must not clear a session's taint (plan S1).
+        """
         try:
             rows = await self._store.get_session_events(session_id, FLAG)
         except Exception:
             logger.warning("session flags unreadable for %s", session_id, exc_info=True)
-            return []
+            return None
         return [row.get("data", row) for row in rows]
 
     async def _log(self, session_id: str, event_type: str, data: dict[str, Any]) -> None:

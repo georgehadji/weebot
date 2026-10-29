@@ -229,9 +229,20 @@ class ToolExecutor:
     async def _hydrate_session_state(self) -> None:
         """Replay this session's persisted taint, local-tab and written-file state once."""
         sid = self._current_session_id
-        if self._effect_ledger is None or not sid or not self._scope.claim_hydration(sid):
+        if self._effect_ledger is None or not sid:
             return
-        for row in await self._effect_ledger.flags(sid):
+        if not await self._scope.hydrate(sid, self._replay_flags):
+            # The store could not be read, so the taint is unknown: assume it for this
+            # executor's step (fail closed) and read the store again on the next one.
+            self._tainted_here = True
+
+    async def _replay_flags(self) -> bool:
+        """Apply the session's flag rows to the scope; False when the store is unreadable."""
+        sid = self._current_session_id
+        rows = await self._effect_ledger.flags(sid)  # type: ignore[union-attr]
+        if rows is None:
+            return False
+        for row in rows:
             kind = row.get("kind")
             if kind == "tainted":
                 self._scope.mark_tainted(sid)
@@ -239,6 +250,7 @@ class ToolExecutor:
                 self._scope.set_local_tab(sid, bool(row.get("local")))
             elif kind == "file_written" and row.get("path"):
                 self._scope.note_written_file(sid, str(row["path"]))
+        return True
 
     def _effect_id(self, name: str, args: dict[str, Any]) -> str:
         """The ledger key of this call: session, step, tool and canonical arguments."""
