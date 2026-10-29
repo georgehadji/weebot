@@ -192,16 +192,22 @@ class ToolCollection:
             params.append(spec)
         return params
 
+    def resolve_name(self, name: str) -> str | None:
+        """The registered tool *name* means: itself, or its fuzzy match (typos, casing).
+
+        Callers resolve once, before any guard, so every check sees the tool that will run
+        (R24: execute() used to fuzzy-match after the egress check had judged the raw name).
+        """
+        if name in self._tools:
+            return name
+        return fuzzy_match_tool_name(name, list(self._tools.keys()))
+
     async def execute(self, _name: str, **kwargs: Any) -> ToolResult:
         if _name not in self._tools:
-            # Try fuzzy name match before giving up (handles typos, casing)
-            fuzzy_name = fuzzy_match_tool_name(_name, list(self._tools.keys()))
-            if fuzzy_name is not None:
-                _name = fuzzy_name
-            else:
-                return ToolResult.error_result(
-                    error=f"Unknown tool: {_name!r}", execution_time_ms=0.0, retry_count=0
-                )
+            # Canonical names only: resolve_name() runs first, ahead of the guards.
+            return ToolResult.error_result(
+                error=f"Unknown tool: {_name!r}", execution_time_ms=0.0, retry_count=0
+            )
 
         # Phase 3: Block execution of unhealthy tools (if health check has run)
         if self._healthy is not None and not self._healthy.get(_name, True):

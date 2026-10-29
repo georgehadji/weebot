@@ -375,6 +375,12 @@ class ToolExecutor:
         else:
             args = arguments or {}
 
+        # One canonical name for every check and for dispatch (R24): a fuzzy match used to
+        # run under a name the egress check had never seen.
+        resolve = getattr(self._tools, "resolve_name", None)
+        if resolve is not None:
+            name = resolve(name) or name
+
         await self._hydrate_session_state()
 
         # Determine effective timeout

@@ -42,7 +42,7 @@ Format: name — source — status — card
 - BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — stale 2026-10-29 — [card](core/BashGuard.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-10-27 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-10-25 — [card](core/EgressGuard.md)
-- ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — verified 2026-10-29 — [card](core/ExecApprovalPolicy.md)
+- ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — stale 2026-10-29 — [card](core/ExecApprovalPolicy.md)
 - Model cascade config (model_cascade_config.py) (select_model_by_tokens, estimate_cost, LONG_CONTEXT_TOKENS) — `weebot/core/model_cascade_config.py` — verified 2026-10-23 — [card](core/ModelCascadeConfig.md)
 - WeebotSettings — `weebot/config/settings.py` — verified 2026-10-29 — [card](core/WeebotSettings.md)
 

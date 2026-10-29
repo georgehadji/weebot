@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 9078f3c2
+commit: e7779ea6
 ---
 
 # WeebotSettings
@@ -27,7 +27,7 @@ Construction sites: none outside `config/settings.py` (grep 2026-10-24; the DI c
 
 Consequences (read from source, not run; `pydantic_settings` is not installed here):
 - `run_mcp.py:102` calls `get_settings().validate_at_least_one_key()` on an instance; `tests/unit/fixes/test_f13_run_mcp_key_check.py` covers it.
-- `financial_tools_always_ask` (`settings.py:444-446`) is read by the tool guard chain (`weebot/application/services/tool_guards.py:247`).
+- `financial_tools_always_ask` (`settings.py:444-446`) is read by the tool guard chain (`weebot/application/services/tool_guards.py:254`).
 - `reasoner_dir`, `berb_dir` and `scraper_dir` default to None (`settings.py:106, 111, 92`); the tools refuse their CLI path by name when unset (`weebot/config/tool_config.py:92`, `require_setting`).
 - The comment at `settings.py:379-381` says both `WEEBOT_PLAN_REVIEW_ENABLED` and `PLAN_REVIEW_ENABLED` are accepted for `plan_review_enabled`, which has only `alias="WEEBOT_PLAN_REVIEW_ENABLED"` (`:342-346`). Whether the bare name is read was not run.
 - `.env.example` and `docs/CONFIGURATION.md` take field defaults from this class (`scripts/generate_config_reference.py:394`, `resolved_schema`). The `ToolConfig` the DI container binds is built from it (`weebot/config/tool_config.py:59`, `di/__init__.py:146`).
@@ -38,7 +38,7 @@ Consequences (read from source, not run; `pydantic_settings` is not installed he
 - **Looks like but is not:** the module constants above (same concerns, read differently).
 
 ## If you change this
-**Hits:** every `get_settings()` reader (32 modules in `weebot/`, `cli/` and the root entry points, grep 2026-10-24); the lint gates `lint-env-access`, `lint-settings-construction` and `scripts/quality_ceilings.py`; the DI binding in `Container.configure_defaults()`; the generated config reference; tests `tests/unit/test_settings.py`, `tests/unit/test_settings_validation.py`, `tests/unit/test_sandbox_config.py`, `tests/unit/config/test_ponytail_settings.py`, `tests/unit/config/test_get_settings.py`, `tests/unit/config/test_weebot_env_names.py`, and the `_no_dotenv_settings` and `_fresh_settings_cache` fixtures (`tests/conftest.py:57, 83`).
+**Hits:** every `get_settings()` reader (32 modules in `weebot/`, `cli/` and the root entry points, grep 2026-10-24); the lint gates `lint-env-access`, `lint-settings-construction` and `scripts/quality_ceilings.py`; the DI binding in `Container.configure_defaults()`; the generated config reference; tests `tests/unit/test_settings.py`, `tests/unit/test_settings_validation.py`, `tests/unit/test_sandbox_config.py`, `tests/unit/config/test_ponytail_settings.py`, `tests/unit/config/test_get_settings.py`, `tests/unit/config/test_weebot_env_names.py`, and the `_no_dotenv_settings` and `_fresh_settings_cache` fixtures (`tests/conftest.py:74, 100`).
 **Does not hit:** the model catalog.
 
 ## Surfaces
