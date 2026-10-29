@@ -19,7 +19,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
-from weebot.config.model_refs import SUBAGENT_TIER_MODEL, get_model_cascade_for_role
+from weebot.config.model_refs import SUBAGENT_TIER_MODEL, role_primary_model
 from weebot.domain.models.agent_capability import AGENT_CAPABILITIES
 from weebot.domain.models.sub_agent import (
     AgentTier,
@@ -122,7 +122,8 @@ class HyperAgent:
                     tier=cap.tier,
                     strategy=effective,
                     tools=goal.tools or cap.default_tools,
-                    model=get_model_cascade_for_role(role.value)[0],
+                    # One model, no fallback: never a free tier (plan S3).
+                    model=role_primary_model(role.value) or SUBAGENT_TIER_MODEL[cap.tier],
                     max_tool_calls=cap.max_tool_calls,
                 )
             )
