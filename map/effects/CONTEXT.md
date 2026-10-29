@@ -2,7 +2,7 @@
 type: effects
 status: verified
 verified: 2026-10-29
-commit: 5b57564e
+commit: 265af724
 ---
 # effects/ — if you are changing X, open these cards
 
@@ -21,7 +21,7 @@ One row per high-traffic X. Open the cards; they hold the detail and the test li
 | `SkillRegistry` (`weebot/application/skills/skill_registry.py:27`) | [SkillRegistry](../objects/application/SkillRegistry.md), [BuiltinSkills](../objects/tools/BuiltinSkills.md), [ExecutorAgent](../objects/application/ExecutorAgent.md) | Which `SKILL.md` files load, their trust tier, and what the skill retrievers inject into executor prompts. |
 | `model_refs` (`weebot/config/model_refs.py:102, 143`) | [CascadeExecutor](../objects/application/CascadeExecutor.md), [ModelCascadeConfig](../objects/core/ModelCascadeConfig.md), [LLMAdapters](../objects/infrastructure/LLMAdapters.md), [PlannerAgent](../objects/application/PlannerAgent.md); [model-cascade](../processes/model-cascade.md) | Role cascades, the per-category step model, defaults like `MODEL_BUDGET` used by CLI and states. |
 | PlanActFlow states (`weebot/application/flows/states/base.py:55`) | [FlowState](../objects/application/FlowState.md), [PlanActFlow](../objects/application/PlanActFlow.md), [FlowRouter](../objects/application/FlowRouter.md), [Mediator](../objects/application/Mediator.md), [Plan](../objects/domain/Plan.md); [flow-run-turn](../processes/flow-run-turn.md), [session-persistence](../processes/session-persistence.md) | Transitions, pauses and resume routing; what each state emits and so persists. |
-| `WeebotSettings` / `get_settings` (`weebot/config/settings.py:37, 506`) | [WeebotSettings](../objects/core/WeebotSettings.md); [tool-call-guard-chain](../processes/tool-call-guard-chain.md), [flow-run-turn](../processes/flow-run-turn.md), [mcp-tool-loading](../processes/mcp-tool-loading.md) | Guard mode, outbound and financial patterns, plan review, CoVe, sandbox network, MCP config path. |
+| `WeebotSettings` / `get_settings` (`weebot/config/settings.py:37, 507`) | [WeebotSettings](../objects/core/WeebotSettings.md); [tool-call-guard-chain](../processes/tool-call-guard-chain.md), [flow-run-turn](../processes/flow-run-turn.md), [mcp-tool-loading](../processes/mcp-tool-loading.md) | Guard mode, outbound and financial patterns, plan review, CoVe, sandbox network, MCP config path. |
 | `SQLiteStateRepository` (`weebot/infrastructure/persistence/sqlite_state_repo.py:67`) | [SQLiteStateRepository](../objects/infrastructure/SQLiteStateRepository.md), [Session](../objects/domain/Session.md), [Ports](../objects/domain/Ports.md); [session-persistence](../processes/session-persistence.md) | The session row every emit writes and every resume and step reads back. |
 | Web auth (`weebot/interfaces/web/auth.py:201, 242, 311`) | [WebAPI](../objects/interfaces/WebAPI.md), [WebUI](../objects/interfaces/WebUI.md), [ChatGateways](../objects/interfaces/ChatGateways.md) | Identity and ownership on every router, mutation gating off loopback, WebSocket and webhook access. |
 
