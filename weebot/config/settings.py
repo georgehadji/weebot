@@ -181,6 +181,7 @@ class WeebotSettings(BaseSettings):
     email_smtp_port: int = 587  # env: EMAIL_SMTP_PORT
     email_from_address: str | None = None  # env: EMAIL_FROM_ADDRESS
     email_poll_interval_seconds: float = 30.0  # env: EMAIL_POLL_INTERVAL_SECONDS
+    email_trusted_authserv_ids: str | None = None  # env: EMAIL_TRUSTED_AUTHSERV_IDS
 
     # Budget
     daily_ai_budget: float = 10.0

@@ -187,3 +187,21 @@ def test_an_encoded_shell_command_is_still_caught():
     allowed, message = BashTool()._legacy_validate_no_encoded_commands("echo " + payload)
     assert not allowed
     assert "Suspicious encoded shell command" in message
+
+
+def test_powershell_refuses_an_undecodable_blob_too():
+    """The PowerShell copy of the check kept the same fall-through (plan S4): a blob it
+    could not decode was reported clean."""
+    from weebot.tools.powershell_tool import PowerShellTool
+
+    allowed, message = PowerShellTool()._validate_no_encoded_commands("echo " + "A" * 101)
+    assert not allowed
+    assert "could not decode" in message
+
+
+def test_powershell_still_passes_harmless_long_base64():
+    from weebot.tools.powershell_tool import PowerShellTool
+
+    blob = base64.b64encode("x".encode("utf-16-le") * 80).decode()
+    allowed, _ = PowerShellTool()._validate_no_encoded_commands("echo " + blob)
+    assert allowed

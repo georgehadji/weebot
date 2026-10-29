@@ -743,10 +743,10 @@ class CascadeExecutor:
             if not m.supports_tools or not claude_model_allowed(m.id):
                 continue
             entry = {"id": m.id, "ctx": m.context_length}
-            if ":free" in m.id:
-                free_models.append(entry)
-            else:
+            if ":free" not in m.id:
                 paid_models.append(entry)
+            elif keep_private([m.id]):  # a tainted session gets no free tier (plan S2)
+                free_models.append(entry)
 
         # Prefer paid models; fall back to free only as absolute last resort
         candidates = paid_models if paid_models else free_models

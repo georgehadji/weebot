@@ -23,7 +23,9 @@ a session that has already read untrusted content.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,8 @@ class SessionScope:
         self._local_tab: dict[str, bool] = {}
         self._written_files: dict[str, set[str]] = {}
         self._hydrated: set[str] = set()
+        # The replay in flight per session; later callers wait on it (plan S1).
+        self._hydrating: dict[str, asyncio.Future[None]] = {}
 
     # ── Taint ────────────────────────────────────────────────────────────────
 
@@ -87,12 +91,34 @@ class SessionScope:
 
     # ── Hydration marker ─────────────────────────────────────────────────────
 
-    def claim_hydration(self, session_id: str) -> bool:
-        """Return True the first time this process replays *session_id*'s flags."""
-        if not session_id or session_id in self._hydrated:
-            return False
-        self._hydrated.add(session_id)
-        return True
+    async def hydrate(self, session_id: str, replay: Callable[[], Awaitable[bool]]) -> bool:
+        """Replay *session_id*'s persisted flags once per process; True once they are in.
+
+        A caller that arrives while another call's *replay* is running waits for it: the
+        session used to count as replayed before its flags were read, so a parallel tool
+        call ran its checks without the persisted taint (plan S1). *replay* returns False
+        when the store could not be read; the session then stays unreplayed, so the next
+        call reads it again, and the caller decides what an unknown state means.
+        """
+        if not session_id:
+            return True
+        while session_id not in self._hydrated:
+            pending = self._hydrating.get(session_id)
+            if pending is None:
+                break
+            await asyncio.shield(pending)
+        else:
+            return True
+        done = asyncio.get_running_loop().create_future()
+        self._hydrating[session_id] = done
+        try:
+            replayed = await replay()
+            if replayed:
+                self._hydrated.add(session_id)
+            return replayed
+        finally:
+            self._hydrating.pop(session_id, None)
+            done.set_result(None)
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 

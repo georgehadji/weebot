@@ -65,6 +65,13 @@ def provider_key(provider: str) -> str | None:
 
 
 def trains_on_prompts(model_id: str) -> bool:
+    """True for a free tier that may log or train on prompts.
+
+    OpenRouter ``:free`` variants count too (plan S2): their providers may keep prompts,
+    and ``keep_private`` used to let them through because only ``free/`` ids were known.
+    """
+    if ":free" in model_id:
+        return True
     parts = split_free_id(model_id)
     spec = PROVIDERS.get(parts[0]) if parts else None
     return bool(spec and spec.trains_on_prompts)

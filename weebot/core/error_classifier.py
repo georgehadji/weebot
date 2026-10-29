@@ -49,6 +49,12 @@ class RecoveryAction(Enum):
 
 
 # ── Taxonomy: category → recovery action ────────────────────────────────────
+
+
+def _code(digits: str) -> str:
+    """An HTTP status that stands alone: ``req_4012ab`` is an id, not a 401 (plan S7)."""
+    return rf"(?<![\w-])(?:{digits})(?![\w-])"
+
 # First-match-wins. Order matters: more specific patterns before generic ones.
 _PATTERNS: list[tuple[str, ErrorCategory]] = [
     # Context length — must be before generic model errors
@@ -56,7 +62,7 @@ _PATTERNS: list[tuple[str, ErrorCategory]] = [
     (r"maximum.{0,20}token", ErrorCategory.CONTEXT_LENGTH),
     (r"prompt.{0,20}too.{0,10}long", ErrorCategory.CONTEXT_LENGTH),
     # Rate limit
-    (r"rate.?limit|too.many.request|429|quota.exceed", ErrorCategory.RATE_LIMIT),
+    (r"rate.?limit|too.many.request|quota.exceed|" + _code("429"), ErrorCategory.RATE_LIMIT),
     # Content filter — policy violations (won't succeed on retry)
     (
         r"content.?policy|safety.?policy|inappropriate|harmful.?content|"
@@ -65,22 +71,23 @@ _PATTERNS: list[tuple[str, ErrorCategory]] = [
     ),
     # Auth / billing — fail fast, no point retrying
     (
-        r"api.?key|unauthorized|authentication|40[123]|invalid.?key|payment.?required",
+        r"api.?key|unauthorized|authentication|invalid.?key|payment.?required|"
+        + _code("40[123]"),
         ErrorCategory.AUTH,
     ),
     # Bad request — malformed payload (won't succeed on retry)
-    (r"bad.request|invalid.request|invalid.parameter|400", ErrorCategory.BAD_REQUEST),
+    (r"bad.request|invalid.request|invalid.parameter|" + _code("400"), ErrorCategory.BAD_REQUEST),
     # Timeout — distinct from general network
     (r"(gateway|request|connection|read|write).?timeout|timed.?out", ErrorCategory.TIMEOUT),
     # Model unavailable
     (
-        r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|503",
+        r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|" + _code("503"),
         ErrorCategory.MODEL_UNAVAILABLE,
     ),
     # Server error — provider-side 5xx (distinct from network flakiness)
-    (r"50[0-2]|50[4-9]|internal.server.error|server.error", ErrorCategory.SERVER_ERROR),
+    (r"internal.server.error|server.error|" + _code("50[0-2]|50[4-9]"), ErrorCategory.SERVER_ERROR),
     # Network / transient (catch-all for remaining network issues)
-    (r"connection|network|unreachable|502|504", ErrorCategory.NETWORK),
+    (r"connection|network|unreachable|" + _code("502|504"), ErrorCategory.NETWORK),
 ]
 
 

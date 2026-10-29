@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import email
 
-from weebot.interfaces.gateways.email import _sender_authenticated
+from weebot.interfaces.gateways.email import _sender_authenticated as _check
+
+_TRUSTED = frozenset({"mx", "mx.google.com"})
+
+
+def _sender_authenticated(m, sender):
+    return _check(m, sender, _TRUSTED)
 
 
 def _msg(*auth_results: str):

@@ -151,7 +151,12 @@ async def test_an_unreadable_store_does_not_stop_a_call():
 # ── WB-03: the scope is owned and bounded ────────────────────────────────────
 
 
-def test_many_sessions_leave_nothing_behind():
+async def _replayed() -> bool:
+    return True
+
+
+@pytest.mark.asyncio
+async def test_many_sessions_leave_nothing_behind():
     """Ten thousand sessions must not leave ten thousand entries (WB-03).
 
     The four caches used to be module-level and only ever grew: production code had no
@@ -165,7 +170,7 @@ def test_many_sessions_leave_nothing_behind():
         scope.mark_tainted(sid)
         scope.set_local_tab(sid, i % 2 == 0)
         scope.note_written_file(sid, f"/tmp/f{i}.html")
-        scope.claim_hydration(sid)
+        await scope.hydrate(sid, _replayed)
         scope.close(sid)
     assert len(scope) == 0
 
@@ -174,8 +179,6 @@ def test_marking_is_idempotent_so_the_store_is_written_once():
     scope = SessionScope()
     assert scope.mark_tainted("s") is True
     assert scope.mark_tainted("s") is False, "a second taint must not append a second row"
-    assert scope.claim_hydration("s") is True
-    assert scope.claim_hydration("s") is False
     assert scope.set_local_tab("s", True) is True
     assert scope.set_local_tab("s", True) is False
     assert scope.note_written_file("s", "a") is True
