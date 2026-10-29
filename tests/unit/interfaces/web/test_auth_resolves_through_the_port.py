@@ -115,12 +115,6 @@ class TestResolveUser:
         monkeypatch.delenv("WEEBOT_API_KEY", raising=False)
         assert await auth._resolve_user(_request(FakeKeys(), api_key="wb_nope")) == "anonymous"
 
-    @pytest.mark.asyncio
-    async def test_the_async_dependency_prefers_an_explicit_port(self, monkeypatch):
-        monkeypatch.setenv("WEEBOT_AUTH_MODE", "store")
-        user = await auth.get_current_user_id_async(_request(None), api_key_port=FakeKeys())
-        assert user == "alice"
-
 
 def test_auth_imports_nothing_from_infrastructure():
     """The point of SEC-2: the interface layer does not reach into an adapter."""

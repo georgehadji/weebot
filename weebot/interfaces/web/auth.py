@@ -198,38 +198,6 @@ def get_current_user_id(request: Request) -> str:
     return "anonymous"
 
 
-async def get_current_user_id_async(
-    request: Request, api_key_port: ApiKeyPort | None = None
-) -> str:
-    """Async version that resolves through the ``ApiKeyPort``.
-
-    FastAPI Dependency: use this on endpoints that need real
-    multi-principal identity.  Falls back to legacy derivation
-    when the port is not wired or auth mode is ``legacy``.
-    """
-    api_key = _presented_key(request)
-    if not api_key:
-        return "anonymous"
-
-    keys = api_key_port if api_key_port is not None else _key_store(request)
-    if _is_legacy_mode() or keys is None:
-        return get_current_user_id(request)
-
-    principal = await _principal_from_key(api_key, keys)
-    if principal is not None:
-        return principal
-
-    # Fall back to legacy check for backward compat during migration
-    legacy_key = _get_legacy_api_key()
-    if legacy_key and hmac.compare_digest(api_key, legacy_key):
-        logger.warning(
-            "Auth via legacy WEEBOT_API_KEY (deprecated) — store mode without matching key."
-        )
-        return get_current_user_id(request)
-
-    return "anonymous"
-
-
 async def authenticate(conn: HTTPConnection, legacy_key: str | None = None) -> str | None:
     """Who is calling, by the one rule every HTTP route, the middleware and every socket use.
 
@@ -327,6 +295,16 @@ async def require_mutation_identity(request: Request) -> None:
 async def _resolve_user(request: Request) -> str:
     """The caller's user ID for ownership and mutation checks ("anonymous" when none)."""
     return (await authenticate(request)) or "anonymous"
+
+
+async def current_principal(request: Request) -> str:
+    """The caller's principal, by the one rule the ownership checks use (R03).
+
+    Routers stamp and filter sessions with it. The sync ``get_current_user_id`` knows only
+    the legacy key, so in store mode it named every per-principal caller "anonymous": a
+    new session was stamped anonymous and its owner then got 404 on it.
+    """
+    return await _resolve_user(request)
 
 
 def _enforce_ownership() -> bool:

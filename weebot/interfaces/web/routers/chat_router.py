@@ -20,7 +20,7 @@ from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
 from weebot.interfaces.web.auth import (
-    get_current_user_id,
+    current_principal,
     require_mutation_identity,
     verify_session_ownership,
 )
@@ -53,7 +53,7 @@ async def _resolve_session(
     Shared by both the blocking and streaming endpoints so ownership
     verification and session creation cannot drift between the two.
     """
-    current_user = get_current_user_id(request)
+    current_user = await current_principal(request)
     if body.session_id:
         session = await state_repo.load_session(body.session_id)
         if session is None:
@@ -154,7 +154,7 @@ async def list_chat_sessions(
     offset: int = 0,
 ) -> ChatSessionList:
     """List recent chat sessions for the current user."""
-    current_user = get_current_user_id(request)
+    current_user = await current_principal(request)
     sessions = await state_repo.list_sessions(user_id=current_user, limit=limit, offset=offset)
     summaries = [
         ChatSessionSummary(

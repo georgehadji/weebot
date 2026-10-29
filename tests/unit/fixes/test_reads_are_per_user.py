@@ -41,6 +41,6 @@ async def test_search_returns_only_the_callers_sessions(monkeypatch):
 async def test_dashboard_counts_only_the_callers_sessions(monkeypatch):
     from weebot.interfaces.web.routers import dashboard
 
-    with patch.object(dashboard, "get_current_user_id", return_value="alice", create=True):
+    with patch.object(dashboard, "current_principal", AsyncMock(return_value="alice")):
         out = await dashboard.get_dashboard_metrics(http_request=MagicMock(), state_repo=_repo())
     assert out.total_sessions == 1

@@ -19,7 +19,7 @@ from weebot.application.cqrs.queries import (
     GetPlanVisualizationQuery,
 )
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
+from weebot.interfaces.web.auth import current_principal, verify_session_ownership
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def list_active_sessions(
     mediator: Mediator = Depends(get_mediator),
 ) -> dict:
     """List currently running sessions owned by the current user."""
-    current_user = get_current_user_id(http_request)
+    current_user = await current_principal(http_request)
     try:
         result = await mediator.query(GetActiveSessionsQuery(user_id=current_user, limit=limit))
         if result.success:

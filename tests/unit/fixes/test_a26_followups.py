@@ -310,7 +310,10 @@ def test_the_mcp_state_resource_counts_every_session():
 async def test_the_dashboard_counts_every_session(monkeypatch):
     from weebot.interfaces.web.routers import dashboard
 
-    monkeypatch.setattr(dashboard, "get_current_user_id", lambda _req: "u")
+    async def _u(_req):
+        return "u"
+
+    monkeypatch.setattr(dashboard, "current_principal", _u)
     resp = await dashboard.get_dashboard_metrics(
         SimpleNamespace(), state_repo=_PagedRepo(_sessions(150, 5))
     )

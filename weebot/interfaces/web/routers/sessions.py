@@ -12,7 +12,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.domain.services.session_title import derive_session_title
 from weebot.interfaces.web.auth import (
-    get_current_user_id,
+    current_principal,
     require_mutation_identity,
     verify_session_ownership,
 )
@@ -94,7 +94,7 @@ async def list_sessions(
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionListResponse:
     """List all sessions for the current user."""
-    effective_user = get_current_user_id(http_request)
+    effective_user = await current_principal(http_request)
     sessions = await state_repo.list_sessions(
         user_id=effective_user, status=status, limit=limit, offset=offset
     )
@@ -122,7 +122,7 @@ async def create_session(
         context["ponytail_mode"] = body.ponytail_mode
 
     # Override user_id with the authenticated identity
-    current_user = get_current_user_id(http_request)
+    current_user = await current_principal(http_request)
 
     session = Session(
         id=body.session_id or str(uuid.uuid4()),
