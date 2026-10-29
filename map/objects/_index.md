@@ -47,7 +47,7 @@ Format: name — source — status — card
 - WeebotSettings — `weebot/config/settings.py` — verified 2026-10-29 — [card](core/WeebotSettings.md)
 
 ## tools
-- BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-29 — [card](tools/BaseTool.md)
+- BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — stale 2026-10-29 — [card](tools/BaseTool.md)
 - Browser and desktop tools (AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool) — `weebot/tools/advanced_browser.py` — stale 2026-10-24 — [card](tools/BrowserTools.md)
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — verified 2026-10-29 — [card](tools/BuiltinSkills.md)
 - ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — stale 2026-10-29 — [card](tools/ExecTools.md)

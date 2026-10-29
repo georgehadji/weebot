@@ -4,9 +4,9 @@ name: BaseTool
 code: BaseTool, ToolResult, ToolCollection
 cluster: tools
 universe: live
-status: verified
+status: stale
 verified: 2026-10-29
-commit: 1ddb8f84
+commit: 6c9c50f3
 ---
 
 # BaseTool
@@ -34,7 +34,7 @@ The tool contract. `BaseTool` is what every agent tool subclasses, `ToolResult` 
 3. `ToolCollection.execute` dispatches to the tool, which for `bash`, `powershell`, `python_execute` and any financial or outbound tool is a `GuardedTool` (`weebot/application/services/tool_guards.py:43, 514-535`).
 4. `GuardedTool.execute` (`:413`) runs `GuardChain.evaluate`: every guard is asked, the most restrictive verdict wins, a guard that raises yields DENY (`:324-349`). The full chain is BashGuard, CommandSecurityAnalyzer, ExecApprovalPolicy, financial, outbound and (optionally) egress adapters (`:352-365`); the first three only look at `command` of `bash`/`powershell` (`:41, 79-83`).
 5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:215-219`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:461-465`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`:313-318`), goes to `_resolve_ask` (`:433-437`).
-6. `_resolve_ask` skips the question if the executor already approved this exact call (`:452-454`, `weebot/application/services/tool_approval.py:192-194`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:499`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:103-111, 172`), `ConsoleApproval` (TTY prompt, `:135-159`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `:114-127`). PENDING returns `pending_result` with `data["approval_required"]` (`:246-263`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-40`, called at `weebot/application/agents/executor/_tool_batch.py:224`).
+6. `_resolve_ask` skips the question if the executor already approved this exact call (`:452-454`, `weebot/application/services/tool_approval.py:193-195`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:499`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:104-112, 172`), `ConsoleApproval` (TTY prompt, `:135-159`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `:114-127`). PENDING returns `pending_result` with `data["approval_required"]` (`:246-263`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-40`, called at `weebot/application/agents/executor/_tool_batch.py:224`).
 7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:332-353`, called at `weebot/application/agents/executor/_tool_batch.py:242`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:554-557`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:223`).
 
 Consequences (read from source, not run):
@@ -46,14 +46,14 @@ Consequences (read from source, not run):
 - **Built by** `RoleBasedToolRegistry.create_tool_collection*`, which wraps with `guard_tools(..., include_egress=False)` (`weebot/application/services/tool_registry.py:539-541`); `interfaces/factories.py:352-362`, which wraps again after MCP/Apify tools join and fails closed without the guard (`:333-334`); the DI `guard_tools` registration (`weebot/application/di/__init__.py:298-303`); the MCP server, with egress included (`weebot/mcp/server.py:271-274, 388-392`). Empty collections: `cqrs/handlers/execute_step_handler.py:26, 69`, `di/__init__.py:490`.
 - **Used by** `ToolExecutor` (above); teardown from `plan_act_flow.py:293`, `agent_session_manager.py:45`, `dispatch_session_input.py:95, 120`.
 - **Related:** the ExecTools and WebTools cards (concrete tools), the RoleBasedToolRegistry card, the BashGuard / ExecApprovalPolicy / EgressGuard / ApprovalManager cards, `call_fingerprint` (`weebot/core/approval.py:126`).
-- **Looks like but is not:** `ApprovalManager` itself, which only stores grants (`tool_approval.py:93`).
+- **Looks like but is not:** `ApprovalManager` itself, which only stores grants (`tool_approval.py:94`).
 
 ## If you change this
 **Hits:** every tool (field defaults, `to_param`), every flow's tool dispatch, the guard decorator, MCP server tools. Tests: `tests/unit/tools/test_base_tool.py`, `tests/unit/tools/test_tool_result_enhanced.py`, `tests/unit/test_tool_collection_retry.py`, `tests/unit/test_tool_health.py`, `tests/unit/test_tool_truncation.py`, `tests/unit/test_parallel_tool_execution.py`, `tests/unit/application/services/test_tool_guards.py`, `tests/unit/application/services/test_tool_approval.py`, `tests/unit/test_executor_tool_approval_pause.py`, `tests/unit/fixes/test_f01_powershell_skips_bash_guard.py`, `tests/unit/fixes/test_f06_financial_tools_ask.py`, `tests/unit/fixes/test_outbound_tools_ask.py`, `tests/unit/mcp/test_mcp_tool_guards.py`, `tests/unit/tools/test_tool_registry.py`; 51 test files name `ToolCollection`.
 **Does not hit:** which role sees a tool (registry table); the rules inside BashGuard / ExecApprovalPolicy.
 
 ## Surfaces
-Every agent tool call; the approval prompt in the CLI and the web UI pause (`tool_approval.py:227-243`); MCP clients via `run_mcp.py`.
+Every agent tool call; the approval prompt in the CLI and the web UI pause, which shows every argument, redacted, with both ends of anything long (`tool_approval.py:243-277`, audit R15); MCP clients via `run_mcp.py`.
 
 ## See
 `weebot/domain/models/base_tool.py`, `weebot/application/models/tool_collection.py`, `weebot/application/services/tool_guards.py`
