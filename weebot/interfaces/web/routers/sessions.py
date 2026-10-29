@@ -209,15 +209,18 @@ async def delete_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    # Use orchestrator to cascade delete across all stores
+    # Stop the run first, then cascade across all stores (R04): a flow still running
+    # would save the session back.
+    from weebot.application.ports.task_runner_port import TaskRunnerPort
+    from weebot.application.use_cases.delete_session import DeleteSession
+
+    try:
+        task_runner = http_request.app.state.container.get(TaskRunnerPort)
+    except Exception:
+        logger.warning("No TaskRunner to stop session %s before deleting it", session_id)
+        task_runner = None
     orch = build_deletion_orchestrator(http_request, state_repo)
-    results = await orch.delete_session(session_id)
-
-    # The per-session security caches are not a store, but they are keyed by this
-    # session id and would otherwise outlive it in this process (WB-03).
-    from weebot.application.agents.executor._session_scope import get_session_scope
-
-    get_session_scope().close(session_id)
+    results = await DeleteSession(task_runner, orch).execute(session_id)
 
     logger.info("Deleted session %s (results: %s)", session_id, results)
 
