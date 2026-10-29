@@ -12,6 +12,8 @@ under ``~/.weebot/profiles/<name>/SOUL.md``.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from weebot.application.flows.flow_builder import build_flow
@@ -244,6 +246,40 @@ def create_flow(
         task_route=task_route,
         profile_name=profile_name,
     )
+
+
+@asynccontextmanager
+async def run_scope(
+    session: Session,
+    *,
+    llm: LLMPort | None,
+    state_repo: StateRepositoryPort | None = None,
+    role: str = "admin",
+    profile_name: str | None = None,
+    model: str | None = None,
+) -> AsyncIterator[BaseFlow]:
+    """A plan-act flow for one run whose tools are always torn down after it (audit R05).
+
+    The one-shot callers (gateways, the webhook) built tools per message and never closed
+    them, so each message left a browser and its clients behind. TaskRunner gives its runs
+    the same guarantee in its own ``finally``.
+    """
+    tools = await build_tools(role=role)
+    try:
+        yield create_flow(
+            flow_type="plan_act",
+            session=session,
+            llm=llm,
+            tools=tools,
+            state_repo=state_repo,
+            model=model,
+            profile_name=profile_name,
+        )
+    finally:
+        try:
+            await tools.teardown()
+        except Exception as exc:
+            _log.warning("Tool teardown failed for session %s: %s", session.id, exc)
 
 
 def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:

@@ -187,27 +187,20 @@ class DiscordAdapter(GatewayAdapter):
         # Build a session and run through PlanActFlow
         import uuid
         from weebot.domain.models.session import Session
-        from weebot.interfaces.factories import build_tools, create_flow
+        from weebot.interfaces.factories import run_scope
 
         user_id = msg.metadata.get("user_id", "unknown")
         session_id = f"discord-{user_id}-{uuid.uuid4().hex[:6]}"
 
         session = Session(id=session_id, user_id=f"discord-{user_id}", agent_id="discord-agent")
 
-        tools = await build_tools(role="admin")
-        flow = create_flow(
-            flow_type="plan_act",
-            session=session,
-            llm=self._llm,
-            tools=tools,
-            state_repo=self._state_repo,
-            profile_name=self._profile_name,
-        )
-
         response_text = ""
-        async for event in flow.run(text):
-            if getattr(event, "type", "") == "message":
-                response_text = getattr(event, "message", "") or response_text
+        async with run_scope(
+            session, llm=self._llm, state_repo=self._state_repo, profile_name=self._profile_name
+        ) as flow:
+            async for event in flow.run(text):
+                if getattr(event, "type", "") == "message":
+                    response_text = getattr(event, "message", "") or response_text
 
         final = response_text or "(no response produced)"
         # Discord message content limit is 2000 characters

@@ -17,7 +17,7 @@ from weebot.application.di import Container
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
-from weebot.interfaces.factories import build_tools, create_flow
+from weebot.interfaces.factories import run_scope
 
 # Lazy import: ToolCollection imported inside handler functions
 
@@ -125,16 +125,6 @@ async def webhook_run(
     # Determine tool role based on exec-tools setting
     _settings = get_settings()
     tool_role = "admin" if _settings.webhook_allow_exec_tools else "webhook"
-    tools = await build_tools(role=tool_role)
-    flow = create_flow(
-        flow_type="plan_act",
-        session=session,
-        llm=llm,
-        tools=tools,
-        state_repo=state_repo,
-        model=body.model,
-    )
-
     # Run and collect response
     response_text = ""
     tool_count = 0
@@ -142,9 +132,13 @@ async def webhook_run(
 
     from weebot.application.services.tool_approval import DenyApproval, approval_scope
 
-    # A webhook caller cannot answer an approval prompt (ADR-013): Deny.
-    with approval_scope(approval=DenyApproval()):
-        events = [event async for event in flow.run(body.text)]
+    async with run_scope(
+        session, llm=llm, state_repo=state_repo, role=tool_role, model=body.model
+    ) as flow:
+        # A webhook caller cannot answer an approval prompt (ADR-013): Deny.
+        with approval_scope(approval=DenyApproval()):
+            events = [event async for event in flow.run(body.text)]
+        done = flow.is_done()
     for event in events:
         event_count += 1
         if getattr(event, "type", "") == "message":
@@ -154,7 +148,7 @@ async def webhook_run(
         if getattr(event, "type", "") == "tool":
             tool_count += 1
 
-    if flow.is_done():
+    if done:
         status = "completed"
     else:
         status = "pending"
