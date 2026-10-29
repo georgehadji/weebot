@@ -12,7 +12,7 @@ from weebot.tools.image_gen_tool import ImageGenTool
 async def test_an_svg_kind_outside_the_workspace_is_refused(tmp_path):
     target = tmp_path / "outside.svg"  # pytest's tmp dir is outside the repo
     result = await ImageGenTool().execute(kind="hero", output_path=str(target), title="t")
-    assert result.is_error and "workspace" in (result.error or "")
+    assert result.is_error and "escapes" in (result.error or "")  # write_target (R14)
     assert not target.exists()
 
 

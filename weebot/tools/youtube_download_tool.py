@@ -37,7 +37,10 @@ _HTTPS_URL_RE = re.compile(r"^https?://")
 _MAX_VIDEO_DURATION_SEC: int = 600  # 10 min — no long-form content
 _MAX_VIDEO_SIZE_MB: int = 500  # 500 MiB ceiling
 _DOWNLOAD_TIMEOUT_SEC: int = 300  # 5 min max download time
-_SAFE_BASE: Path = Path.cwd().resolve()
+# What output_path may name (R14): a media file inside the project, never .env or source.
+_MEDIA_SUFFIXES: frozenset[str] = frozenset(
+    {".mp4", ".m4a", ".mp3", ".webm", ".mkv", ".opus", ".wav"}
+)
 
 
 class YouTubeDownloadParams(BaseModel):
@@ -274,17 +277,10 @@ class YouTubeDownloadTool(BaseTool):
 
     @staticmethod
     def _sanitize_output_path(output_path: str) -> Path:
-        """Resolve and validate *output_path* — reject paths escaping the workspace."""
-        if ".." in output_path.split("/"):
-            raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
-        resolved = Path(output_path).resolve()
-        # str.startswith is a string prefix test, not path containment: a
-        # sibling directory whose name merely extends the base (".../weebot"
-        # vs ".../weebot-evil") passed it, giving an arbitrary write outside
-        # the workspace with no ".." anywhere in the path.
-        if not resolved.is_relative_to(_SAFE_BASE):
-            raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
-        return resolved
+        """The absolute path *output_path* may be written to (``write_target``, R14)."""
+        from weebot.core.output_path import write_target
+
+        return Path(write_target(output_path, suffixes=_MEDIA_SUFFIXES))
 
     async def _get_metadata(self, url: str) -> dict[str, Any] | None:
         """Fetch video metadata via yt-dlp --dump-json.

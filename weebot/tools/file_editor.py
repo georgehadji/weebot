@@ -93,8 +93,10 @@ class StrReplaceEditorTool(BaseTool):
                 output="", error="Security error: Path contains invalid characters (null bytes)."
             )
 
-        # Validate path is within workspace
-        allow_create = command == "create"
+        # Validate path is within workspace. A whole-file write (create, write_large) follows
+        # the create rules whether or not the file exists: rewriting a script wholesale is
+        # creating one (R13). str_replace and insert edit, so scripts stay editable.
+        allow_create = command in ("create", "write_large")
         validation_report = self._path_validator.validate(path, allow_create=allow_create)
 
         if validation_report.result != ValidationResult.VALID:
@@ -252,6 +254,9 @@ class StrReplaceEditorTool(BaseTool):
         return ToolResult(output=f"Created {path} ({len(text)} chars)")
 
     def _str_replace(self, path: Path, old_str: str, new_str: str) -> ToolResult:
+        if not old_str:
+            # "" is in every string, so the new text was prepended and reported "Replaced".
+            return ToolResult(output="", error="str_replace needs a non-empty old_str.")
         if not path.exists():
             return ToolResult(output="", error=f"File not found: {path}")
         if not path.is_file():

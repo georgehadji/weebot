@@ -2066,3 +2066,29 @@ def test_every_application_subpackage_is_under_the_inward_contract():
         "nothing forbids them importing infrastructure. Add each to "
         "`app-no-infrastructure` in .importlinter:\n  " + "\n  ".join(ungoverned)
     )
+
+
+# Tool modules that write files from a model-chosen path must go through the one write rule
+# (weebot/core/output_path.write_target) or file_editor's PathValidator. screen_capture,
+# image_gen and video_gen each wrote any path; .env was overwritten by a screenshot (R08,
+# R14). A module listed here writes no model-chosen path, for the reason given.
+_WRITES_WITHOUT_A_CHOSEN_PATH = {
+    "python_tool.py": "inspects code for open(..., 'w'); writes nothing itself",
+    "remotion_video.py": "writes fixed scaffold names under output_path()",
+}
+_FILE_WRITE = re.compile(r"write_text\(|write_bytes\(|open\([^)]*['\"](?:w|wb|a|ab)['\"]")
+
+
+def test_tool_file_writes_go_through_the_write_rule():
+    offenders = []
+    for path in sorted((ROOT / "tools").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if not _FILE_WRITE.search(source) or path.name in _WRITES_WITHOUT_A_CHOSEN_PATH:
+            continue
+        if "write_target(" not in source and "PathValidator" not in source:
+            offenders.append(str(path.relative_to(ROOT)))
+    assert offenders == [], (
+        "these tools write files without write_target() or PathValidator: "
+        + ", ".join(offenders)
+    )
+

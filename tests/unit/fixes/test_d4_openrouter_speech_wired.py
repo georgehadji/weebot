@@ -92,7 +92,8 @@ async def test_mp3_audio_is_saved_as_mp3(monkeypatch, tmp_path):
             return b"ID3audio"
 
     monkeypatch.setattr(tool_module, "WORKSPACE_ROOT", tmp_path)
-    monkeypatch.setattr("weebot.core.output_path.output_path", lambda p: p)
+    # The tool writes through write_target (R14); stub it so tmp_path stands in for the project.
+    monkeypatch.setattr("weebot.core.output_path.write_target", lambda p, suffixes=None: p)
     result = await VoiceOutputTool(speech=_Speech()).execute(text="hi")
     path = result.data["path"]
     assert path.endswith(".mp3")

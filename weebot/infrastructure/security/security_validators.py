@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from weebot.config.settings import WORKSPACE_ROOT
+from weebot.core.output_path import PROTECTED_BASENAMES
 
 
 class ValidationResult(Enum):
@@ -55,34 +56,8 @@ class PathValidator:
 
     # Denied basenames — checked for ALL operations (read and write),
     # regardless of suffix rules.  Basename match beats extension allowlist.
-    DENIED_BASENAMES: set[str] = {
-        ".env",
-        ".env.local",
-        ".env.production",
-        ".env.development",
-        ".env.staging",
-        ".env.test",
-        "id_rsa",
-        "id_ed25519",
-        "id_dsa",
-        "id_ecdsa",
-    }
-
-    # Executable extensions — blocked for file creation (must use bash tool instead)
-    EXECUTABLE_EXTENSIONS: set[str] = {
-        ".ps1",
-        ".bat",
-        ".cmd",
-        ".sh",
-        ".exe",
-        ".dll",
-        ".com",
-        ".msi",
-        ".scr",
-        ".vbs",
-        ".js",
-        ".wsf",
-    }
+    # One list with the write rule for tools (weebot/core/output_path.py).
+    DENIED_BASENAMES: set[str] = set(PROTECTED_BASENAMES)
 
     # Extensions allowed for file CREATION (read-operations still use ALLOWED_EXTENSIONS)
     ALLOWED_CREATE_EXTENSIONS: set[str] = {

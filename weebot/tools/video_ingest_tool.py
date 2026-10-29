@@ -333,9 +333,12 @@ class VideoIngestTool(BaseTool):
         if not output_path:
             return ToolResult(output="", error="'output_path' is required for export_jsonl")
         try:
-            from weebot.core.output_path import output_path as _in_project
+            from weebot.core.output_path import write_target
 
-            output_path = _in_project(output_path)  # writes stay in the project (F50)
+            # In the project (F50), and a JSON Lines file, never .env or source (R14).
+            output_path = write_target(
+                output_path, suffixes=frozenset({".jsonl", ".ndjson", ".json"})
+            )
         except ValueError as exc:
             return ToolResult(output="", error=str(exc))
 
