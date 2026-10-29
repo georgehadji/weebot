@@ -8,6 +8,7 @@ import json
 import logging
 from concurrent.futures import Future
 from datetime import UTC, datetime
+from datetime import date as _date
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -89,10 +90,10 @@ async def get_today_report():
 
 
 @router.get("/report/{date}", response_model=DateReportResponse)
-async def get_date_report(date: str):
-    """Get report for a specific date (YYYY-MM-DD)."""
+async def get_date_report(date: _date):
+    """Get report for a specific date (YYYY-MM-DD; anything else is 422, R22)."""
     try:
-        return reporter.get_date_report(date)
+        return reporter.get_date_report(date.isoformat())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
 
