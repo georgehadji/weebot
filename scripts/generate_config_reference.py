@@ -223,6 +223,10 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "From address for outgoing email gateway messages"},
     {"var": "EMAIL_POLL_INTERVAL_SECONDS", "type": "int",
      "desc": "Email gateway IMAP poll interval"},
+    {"var": "EMAIL_TRUSTED_AUTHSERV_IDS", "type": "str", "default": "",
+     "desc": "Comma-separated Authentication-Results ids of your receiving mail server; "
+             "only their verdicts authenticate a sender (default: the IMAP host, "
+             "plus mx.google.com for Gmail)"},
 
     # ── MCP ───────────────────────────────────────────────────────
     {"var": "WEEBOT_MCP_COMPOSITE_TOOLS_ENABLED", "type": "bool",

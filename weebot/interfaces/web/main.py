@@ -340,6 +340,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 smtp_port=_settings.email_smtp_port,
                 from_address=_settings.email_from_address,
                 poll_interval_seconds=_settings.email_poll_interval_seconds,
+                trusted_authserv_ids=_settings.email_trusted_authserv_ids,
             )
             await email_adapter.start()
             app.state.email_adapter = email_adapter

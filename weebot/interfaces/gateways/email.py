@@ -36,6 +36,26 @@ logger = logging.getLogger(__name__)
 # infinite autoresponder loop between weebot and another automated system.
 _AUTOMATED_SENDER_MARKERS = ("mailer-daemon", "no-reply", "noreply", "postmaster")
 _DKIM_PASS_DOMAIN = re.compile(r"dkim=pass[^;]*?header\.[di]=@?([\w.-]+)")
+# Receiving servers whose Authentication-Results id is not their IMAP host.
+_KNOWN_AUTHSERV_IDS: dict[str, tuple[str, ...]] = {"imap.gmail.com": ("mx.google.com",)}
+
+
+def _trusted_ids_for(imap_server: str, configured: str | None) -> frozenset[str]:
+    """The authserv-ids (RFC 8601) whose verdicts count: the setting, else the IMAP host's.
+
+    ``EMAIL_TRUSTED_AUTHSERV_IDS`` (comma separated) wins. Without it: the IMAP host and
+    any id its provider is known to stamp, such as Gmail's ``mx.google.com``.
+    """
+    if configured and configured.strip():
+        return frozenset(i.strip().lower() for i in configured.split(",") if i.strip())
+    host = imap_server.strip().lower()
+    return frozenset({host, *_KNOWN_AUTHSERV_IDS.get(host, ())})
+
+
+def _authserv_id(header: object) -> str:
+    """The id before the first ``;`` (an optional version after it is ignored)."""
+    head = str(header).split(";", 1)[0].split()
+    return head[0].lower() if head else ""
 
 
 def _sender_address(parsed) -> str:
@@ -51,18 +71,27 @@ def _sender_address(parsed) -> str:
     return addresses[0][1].strip()
 
 
-def _sender_authenticated(parsed, sender: str) -> bool:
+def _sender_authenticated(parsed, sender: str, trusted_ids: frozenset[str]) -> bool:
     """True when the receiving server vouched for *sender*'s domain (F76).
 
-    ``From`` alone is forgeable. Only the topmost ``Authentication-Results``
-    counts (our own mail server adds it; a sender can append fake ones below):
-    DMARC pass for the domain, or a DKIM pass whose signing domain aligns.
+    ``From`` alone is forgeable, and so is an ``Authentication-Results`` header: a
+    sender can write its own, which is the topmost one when the receiving server adds
+    none. Only the topmost header whose authserv-id is in *trusted_ids* counts (plan
+    S5): DMARC pass for the domain, or a DKIM pass whose signing domain aligns.
     """
     domain = sender.rsplit("@", 1)[-1].strip().lower()
     results = parsed.get_all("Authentication-Results") or []
-    if not domain or not results:
+    ours = [str(h).lower() for h in results if _authserv_id(h) in trusted_ids]
+    if results and not ours:
+        logger.warning(
+            "Authentication-Results from %s, none from a trusted server %s; "
+            "set EMAIL_TRUSTED_AUTHSERV_IDS if this is your mail server",
+            sorted({_authserv_id(h) for h in results}),
+            sorted(trusted_ids),
+        )
+    if not domain or not ours:
         return False
-    top = str(results[0]).lower()
+    top = ours[0]
     if re.search(rf"dmarc=pass[^;]*header\.from={re.escape(domain)}\b", top):
         return True
     return any(d == domain or d.endswith("." + domain) for d in _DKIM_PASS_DOMAIN.findall(top))
@@ -83,9 +112,11 @@ class EmailAdapter(GatewayAdapter):
         from_address: str | None = None,
         poll_interval_seconds: float = 30.0,
         profile_name: str | None = None,
+        trusted_authserv_ids: str | None = None,
     ) -> None:
         super().__init__(llm_port=llm)
         self._imap_server = imap_server
+        self._trusted_authserv_ids = _trusted_ids_for(imap_server, trusted_authserv_ids)
         self._imap_user = imap_user
         self._imap_password = imap_password
         self._smtp_server = smtp_server
@@ -250,7 +281,9 @@ class EmailAdapter(GatewayAdapter):
                                                 "message_id": parsed.get("Message-Id", ""),
                                                 "in_reply_to": parsed.get("In-Reply-To", ""),
                                                 "sender_authenticated": _sender_authenticated(
-                                                    parsed, sender.strip()
+                                                    parsed,
+                                                    sender.strip(),
+                                                    self._trusted_authserv_ids,
                                                 ),
                                             },
                                         )
