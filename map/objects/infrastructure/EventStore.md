@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 95cdb738
+commit: 5b57564e
 ---
 
 # Event store
