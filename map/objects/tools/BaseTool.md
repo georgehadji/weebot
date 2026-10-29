@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-29
-commit: e7779ea6
+commit: 1ddb8f84
 ---
 
 # BaseTool
@@ -23,22 +23,23 @@ The tool contract. `BaseTool` is what every agent tool subclasses, `ToolResult` 
   - `set_visible(names)` limits which definitions are sent while every tool stays callable; `hidden_names()` lists the rest (`:167-174`).
   - `to_params()` skips hidden tools and tools that failed `check_health()` once it has run, and lets the contract loader extend descriptions (`:176-193`).
   - `canonical_args(name, args)` returns the arguments as `execute` will run them; the executor's effect ledger keys on it (`:112-128`).
-  - `execute(_name, **kwargs)` (`:195`): fuzzy name match on a miss (`:196-204`); refuse an unhealthy tool (`:206-214`); canonicalizer may block or rewrite args (`:216-226`); cache lookup (`:232-238`); per-tool semaphore when `max_concurrent > 0` (`:240-247`); a model-supplied `_max_retries` is dropped (`:251-253`); run; stamp `execution_time_ms`, `retry_count`, `tool_name` (`:265-273`); truncate output over `MAX_TOOL_OUTPUT_CHARS` (20 000, `weebot/config/constants.py:85`) by the tool's strategy (`weebot/application/models/tool_collection.py:275-285`, `_truncate` `:23-52`); cache store on success (`:297-299`).
+  - `resolve_name(name)` (`:195`): exact name, else fuzzy match; the executor calls it once, before any guard, so checks and dispatch see the same tool (audit R24).
+  - `execute(_name, **kwargs)` (`:205`): canonical names only, an unknown one is an error (`:206-210`); refuse an unhealthy tool (`:213-221`); canonicalizer may block or rewrite args (`:223-233`); cache lookup (`:239-245`); per-tool semaphore when `max_concurrent > 0` (`:247-252`); a model-supplied `_max_retries` is dropped (`:258`); run; stamp `execution_time_ms`, `retry_count`, `tool_name` (`:272-280`); truncate output over `MAX_TOOL_OUTPUT_CHARS` (20 000, `weebot/config/constants.py:85`) by the tool's strategy (`weebot/application/models/tool_collection.py:281-291`, `_truncate` `:23-52`); cache store on success (`:304-306`).
   - Exceptions: logged with traceback (`:305`); non-retryable ones return an error result at once (`:310-317`); `OSError`, `TimeoutError`, `ConnectionError` retry up to `DEFAULT_MAX_RETRIES` = 2 with capped backoff (`:86-87, 329-341`).
   - `teardown()` shuts down an `apify_service` attribute (looking through a `GuardedTool` to `.inner`) and calls every tool's `close()` (`:130-154`).
 
 ### How a call reaches a tool
-1. `ToolExecutor.execute_tool` takes the timeout from the tool's `default_timeout_seconds` (`weebot/application/agents/executor/_tool_executor.py:382`), gets the egress guard (`:403`, `_get_egress_guard` `:262`), runs `guard.classify` (`:421-424`) and, if a human approved there, records that call's fingerprint (`:449-451`). An egress this session already completed is not re-run: the ledger returns a replay note (`:428-441`).
+1. `ToolExecutor.execute_tool` takes the timeout from the tool's `default_timeout_seconds` (`weebot/application/agents/executor/_tool_executor.py:388`), gets the egress guard (`:403`, `_get_egress_guard` `:262`), runs `guard.classify` (`:421-424`) and, if a human approved there, records that call's fingerprint (`:449-451`). An egress this session already completed is not re-run: the ledger returns a replay note (`:428-441`).
 2. It calls `self._tools.execute(...)` under `approval_scope(session_id, approved_call)` with an `asyncio.wait_for` timeout (`:476-482`).
 3. `ToolCollection.execute` dispatches to the tool, which for `bash`, `powershell`, `python_execute` and any financial or outbound tool is a `GuardedTool` (`weebot/application/services/tool_guards.py:43, 514-535`).
 4. `GuardedTool.execute` (`:413`) runs `GuardChain.evaluate`: every guard is asked, the most restrictive verdict wins, a guard that raises yields DENY (`:324-349`). The full chain is BashGuard, CommandSecurityAnalyzer, ExecApprovalPolicy, financial, outbound and (optionally) egress adapters (`:352-365`); the first three only look at `command` of `bash`/`powershell` (`:41, 79-83`).
 5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:215-219`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:461-465`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`:313-318`), goes to `_resolve_ask` (`:433-437`).
 6. `_resolve_ask` skips the question if the executor already approved this exact call (`:452-454`, `weebot/application/services/tool_approval.py:192-194`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:499`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:103-111, 172`), `ConsoleApproval` (TTY prompt, `:135-159`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `:114-127`). PENDING returns `pending_result` with `data["approval_required"]` (`:246-263`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-40`, called at `weebot/application/agents/executor/_tool_batch.py:224`).
-7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:332-353`, called at `weebot/application/agents/executor/_tool_batch.py:242`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:548-551`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:223`).
+7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:332-353`, called at `weebot/application/agents/executor/_tool_batch.py:242`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:554-557`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:223`).
 
 Consequences (read from source, not run):
 - Only `output`/`error` reach the model. A tool that puts its payload only in `data` gives the agent nothing to act on; see the WebTools card (`search_images`).
-- Retries re-run the whole tool on `OSError`/`ConnectionError` (`weebot/application/models/tool_collection.py:87, 329-341`), including non-idempotent ones like `bash` or `file_editor`.
+- Retries re-run the whole tool on `OSError`/`ConnectionError` (`weebot/application/models/tool_collection.py:87, 335-347`), including non-idempotent ones like `bash` or `file_editor`.
 - `error_result(error, data=...)` puts `data` into `metadata["data"]`, not `data`, because `data` is not a parameter (`weebot/domain/models/tool_result.py:95-108`).
 
 ## Connected to
