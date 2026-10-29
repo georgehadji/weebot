@@ -62,6 +62,7 @@ class OpenAIAdapter(LLMPort):
         api_key: str | None = None,
         base_url: str | None = None,
         default_model: str = MODEL_DEFAULT_OPENAI,
+        default_headers: dict[str, str] | None = None,
     ):
         # API key recovery chain
         key = (
@@ -87,7 +88,7 @@ class OpenAIAdapter(LLMPort):
             elif model_lower.startswith("deepseek/") or os.getenv("DEEPSEEK_API_KEY") == key:
                 url = DEEPSEEK_API_BASE
 
-        self._client = AsyncOpenAI(api_key=key, base_url=url)
+        self._client = AsyncOpenAI(api_key=key, base_url=url, default_headers=default_headers)
         self._default_model = default_model
         # This adapter walks a model chain of its own on RateLimitError, beneath
         # the CascadeExecutor whose job that is. Under the factory the flag is
