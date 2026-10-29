@@ -21,6 +21,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Scripts CI runs that cannot run here; every other workflow script must be a gate
+# (tests/unit/test_prepush_gates.py checks it).
+CI_ONLY = {
+    "scripts/check_branch_protection.py": "reads the live ruleset through the GitHub API",
+}
+
 _TARGET = re.compile(r"^([\w.-]+):(?!=)\s*(.*)$")
 
 

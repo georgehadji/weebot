@@ -50,3 +50,23 @@ def test_the_real_makefile_yields_the_full_gate_list():
     assert {"check-arch", "lint-imports", "lint-ruff", "lint-env-access", "lint-map-drift"} <= set(
         names
     )
+
+
+def test_every_script_ci_runs_is_a_local_gate_or_marked_ci_only():
+    """The unused-local and bandit B110 ratchets ran only in CI, so PR 105 failed there
+    after a green local run (remaining-work plan, G1)."""
+    import re
+
+    script = _script()
+    local = " ".join(
+        cmd for _, cmds in script.gates(Path("Makefile").read_text(encoding="utf-8")) for cmd in cmds
+    )
+    in_ci = {
+        path
+        for workflow in Path(".github/workflows").glob("*.yml")
+        for line in workflow.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("run:")
+        for path in re.findall(r"python (scripts/[\w./-]+\.py)", line)
+    }
+    missing = sorted(p for p in in_ci if p not in local and p not in script.CI_ONLY)
+    assert missing == []

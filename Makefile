@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-map-drift lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui check-arch check
+.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-map-drift lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui lint-unused-locals lint-bandit-b110 lint-agent-json-parsing check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -74,6 +74,18 @@ lint-ruff:
 lint-long-functions:
 	@echo "=== Functions over 150 lines (AST, ratcheted) ==="
 	@python scripts/lint_long_functions.py
+
+lint-unused-locals:
+	@echo "=== Unused local variables (ruff F841, ratcheted) ==="
+	@python scripts/lint_unused_locals.py
+
+lint-bandit-b110:
+	@echo "=== try/except/pass sites (bandit B110, ratcheted) ==="
+	@python scripts/lint_bandit_b110.py
+
+lint-agent-json-parsing:
+	@echo "=== Agent structured-output parsing (ratcheted) ==="
+	@python scripts/lint_agent_json_parsing.py
 
 lint-ui:
 	@echo "=== weebot-ui debt (ratcheted) ==="
@@ -153,5 +165,5 @@ lint-container-construction:
 	@echo "=== Hand-built Container() outside application/di (AST, ratcheted) ==="
 	@python scripts/lint_container_construction.py
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-map-drift lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-map lint-map-drift lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui lint-unused-locals lint-bandit-b110 lint-agent-json-parsing
 	@echo "=== All checks passed ==="
