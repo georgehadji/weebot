@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-29
-commit: bc2fe74e
+commit: 9078f3c2
 ---
 
 # BaseTool
@@ -32,7 +32,7 @@ The tool contract. `BaseTool` is what every agent tool subclasses, `ToolResult` 
 2. It calls `self._tools.execute(...)` under `approval_scope(session_id, approved_call)` with an `asyncio.wait_for` timeout (`:476-482`).
 3. `ToolCollection.execute` dispatches to the tool, which for `bash`, `powershell`, `python_execute` and any financial or outbound tool is a `GuardedTool` (`weebot/application/services/tool_guards.py:43, 507-528`).
 4. `GuardedTool.execute` (`:413`) runs `GuardChain.evaluate`: every guard is asked, the most restrictive verdict wins, a guard that raises yields DENY (`:324-349`). The full chain is BashGuard, CommandSecurityAnalyzer, ExecApprovalPolicy, financial, outbound and (optionally) egress adapters (`:352-365`); the first three only look at `command` of `bash`/`powershell` (`:41, 79-83`).
-5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:208-212`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:454-458`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`:313-318`), goes to `_resolve_ask` (`:433-437`).
+5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:215-219`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:454-458`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`:313-318`), goes to `_resolve_ask` (`:433-437`).
 6. `_resolve_ask` skips the question if the executor already approved this exact call (`:452-454`, `weebot/application/services/tool_approval.py:192-194`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:492`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:103-111, 172`), `ConsoleApproval` (TTY prompt, `:135-159`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `:114-127`). PENDING returns `pending_result` with `data["approval_required"]` (`:246-263`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-40`, called at `weebot/application/agents/executor/_tool_batch.py:224`).
 7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:332-353`, called at `weebot/application/agents/executor/_tool_batch.py:242`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:548-551`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:223`).
 

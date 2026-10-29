@@ -5,8 +5,8 @@ code: CascadeExecutor
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-28
-commit: c0cbaa2c
+verified: 2026-10-29
+commit: 9078f3c2
 ---
 
 # CascadeExecutor
@@ -36,7 +36,7 @@ Pool: `_cascade_try_chat` takes a pool slot *before* the latency clock and outsi
 ## Connected to
 - **Owned by** `ExecutorAgent` (`_base.py:249-268`), which passes `model_provider=self._resolve_model_for_step`, `llm_pool`, `provider_account`, and `on_success` = the context compressor's token tracker.
 - **Telemetry:** `ModelCascadeTracker` and optional ACR router record every `CascadeDecision` (`:182-206`). The tracker is an in-memory ring buffer owned by each `ExecutorAgent` (`_base.py:265`); the DI `"cascade_tracker"` binding is not passed to executors, and the Mediator path builds an executor per step, so nothing aggregates decisions across steps (see Event store card, cost views); the cost estimate feeds the number `mcp/resources.py` publishes (comment at `:332-335`).
-- **Config:** tier constants and the one role table (`ROLE_MODEL_CONFIG`, read through `get_model_cascade_for_role`) come from `weebot/config/model_refs.py` (`_cascade.py:25, 55-58, 438`). `weebot/core/model_cascade_config.py` supplies only `estimate_cost` (`_cascade.py:14`), read from the catalog (see its card).
+- **Config:** tier constants and the one role table (`ROLE_MODEL_CONFIG`, read through `get_model_cascade_for_role`) come from `weebot/config/model_refs.py` (`_cascade.py:25, 56-59, 438`). `weebot/core/model_cascade_config.py` supplies only `estimate_cost` (`_cascade.py:14`), read from the catalog (see its card).
 - **Looks like but is not:** the adapter-level resilience in `weebot/infrastructure/adapters/llm/` (retries, its own breakers); this cascade sits above it.
 
 ## If you change this
