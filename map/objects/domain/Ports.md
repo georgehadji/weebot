@@ -63,7 +63,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | SkillStorePort | skill_store_port.py:15 | SkillStore `infrastructure/persistence/skill_store.py:23`, MaterializingSkillStore | key `"skill_store"` `di/_skillopt.py:24` |
 | SoulProviderPort | soul_provider_port.py:6 (re-export of `weebot/core/soul_provider_port.py`) | FileSystemSoulProvider `infrastructure/adapters/soul_provider.py` (`di/_factories.py:250-253`) | key `"soul_provider"` `di/__init__.py:186` |
 | SpeechPort | speech_port.py:12 | OpenRouter / Whisper speech adapters `infrastructure/adapters/speech/` | port `di/__init__.py:174` |
-| StateRepositoryPort | state_repo_port.py:10 | SQLiteStateRepository (card), InMemory, PostgreSQL | port `di/__init__.py:146` |
+| StateRepositoryPort | state_repo_port.py:60 | SQLiteStateRepository (card), InMemory, PostgreSQL | port `di/__init__.py:146` |
 | BehavioralRuleStore, CorrectionStore, SessionConstraintStore, OpportunityStore, MemoryMetadataStore, PlanTemplateWriter (Protocols) | state_roles_port.py:35-86 | structural, the state repo | none (narrowed from `StateRepositoryPort` with `as_role`) |
 | SteeringPort | steering_port.py:17 | InMemorySteeringAdapter `infrastructure/adapters/steering_adapter.py:15` | port `di/__init__.py:164` |
 | StepAuditPort | step_audit_port.py:20 | StepEvidenceAuditor `application/services/step_evidence_auditor.py:45` | key `"step_audit_service"` `di/__init__.py:196` |
