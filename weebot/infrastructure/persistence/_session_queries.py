@@ -184,16 +184,52 @@ class SessionQueries:
         async with self._pool.acquire_write() as conn:
             await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
-    async def count(self, user_id: str | None = None) -> int:
-        """Count session rows, optionally filtered by user."""
+    async def count(self, user_id: str | None = None, status: str | None = None) -> int:
+        """Count session rows, optionally filtered by user and status."""
+        conditions: list[str] = []
+        params: list[str] = []
         if user_id:
-            row = await self._pool.execute_read(
-                "SELECT COUNT(*) as count FROM sessions WHERE user_id = ?",
-                (user_id,),
-                fetch_all=False,
-            )
-        else:
-            row = await self._pool.execute_read(
-                "SELECT COUNT(*) as count FROM sessions", fetch_all=False
-            )
+            conditions.append("user_id = ?")
+            params.append(user_id)
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        row = await self._pool.execute_read(
+            f"SELECT COUNT(*) as count FROM sessions{where_clause}",  # noqa: S608 - fixed clauses
+            tuple(params),
+            fetch_all=False,
+        )
         return row["count"] if row else 0
+
+    async def activity(
+        self, session_ids: list[str]
+    ) -> tuple[dict[str, dict[tuple[str, str], int]], dict[str, list[dict[str, Any]]]]:
+        """Event counts by ``(type, status)`` and the plan and step events, per session.
+
+        Two grouped queries per 500 ids over ``events_json`` (R19); events are not loaded.
+        """
+        counts: dict[str, dict[tuple[str, str], int]] = {sid: {} for sid in session_ids}
+        plans: dict[str, list[dict[str, Any]]] = {sid: [] for sid in session_ids}
+        ids = list(counts)
+        for start in range(0, len(ids), 500):
+            chunk = tuple(ids[start : start + 500])
+            marks = ",".join("?" * len(chunk))
+            rows = await self._pool.execute_read(
+                "SELECT s.id AS sid, json_extract(e.value, '$.type') AS t,"
+                " COALESCE(json_extract(e.value, '$.status'), '') AS st, COUNT(*) AS n"
+                f" FROM sessions s, json_each(s.events_json) e WHERE s.id IN ({marks})"  # noqa: S608
+                " GROUP BY sid, t, st",
+                chunk,
+            )
+            for r in rows:
+                counts[r["sid"]][(r["t"] or "", str(r["st"]))] = r["n"]
+            rows = await self._pool.execute_read(
+                "SELECT s.id AS sid, e.value AS v"
+                f" FROM sessions s, json_each(s.events_json) e WHERE s.id IN ({marks})"  # noqa: S608
+                " AND json_extract(e.value, '$.type') IN ('plan', 'step') ORDER BY sid, e.key",
+                chunk,
+            )
+            for r in rows:
+                plans[r["sid"]].append(json.loads(r["v"]))
+        return counts, plans

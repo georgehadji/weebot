@@ -3,9 +3,58 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
+from weebot.domain.models.plan import StepStatus
 from weebot.domain.models.session import Session, SessionStatus
+
+
+@dataclass(frozen=True)
+class SessionActivity:
+    """What a session has done so far, for list views (audit R19).
+
+    ``list_sessions`` leaves events unloaded to stay cheap, so list views read this
+    instead of counting ``session.events``.
+    """
+
+    steps: int = 0
+    steps_completed: int = 0
+    tool_calls: int = 0
+    messages: int = 0
+    events: int = 0
+
+    @classmethod
+    def build(
+        cls, counts: Mapping[tuple[str, str], int], plan_events: Sequence[Any]
+    ) -> SessionActivity:
+        """From event counts keyed by ``(type, status)`` and the plan and step events in order.
+
+        Steps come from ``Session.get_last_plan``, so a list view and the session agree.
+        """
+        plan = Session(events=list(plan_events)).get_last_plan() if plan_events else None
+        steps = plan.steps if plan else []
+        return cls(
+            steps=len(steps),
+            steps_completed=sum(1 for s in steps if s.status == StepStatus.COMPLETED),
+            tool_calls=counts.get(("tool", "calling"), 0),
+            messages=sum(n for (kind, _), n in counts.items() if kind == "message"),
+            events=sum(counts.values()),
+        )
+
+    @classmethod
+    def of(cls, session: Session) -> SessionActivity:
+        """The same answer from a loaded session's events."""
+
+        def _status(event: Any) -> str:
+            status = getattr(event, "status", "")
+            return str(getattr(status, "value", status) or "")
+
+        counts = Counter((e.type, _status(e)) for e in session.events)
+        return cls.build(counts, [e for e in session.events if e.type in ("plan", "step")])
 
 
 class StateRepositoryPort(ABC):
@@ -59,19 +108,33 @@ class StateRepositoryPort(ABC):
         """List all sessions, optionally filtered by user, status, and paginated."""
         ...
 
-    async def count_sessions(self, user_id: str | None = None) -> int:
-        """How many sessions *user_id* has (all users when None).
+    async def count_sessions(self, user_id: str | None = None, status: str | None = None) -> int:
+        """How many sessions *user_id* has (all users when None), optionally in *status*.
 
         A default over ``list_sessions`` so every repository answers it (W5.1);
         SQLiteStateRepository overrides it with a COUNT query.
         """
         total, offset, page = 0, 0, 500
         while True:
-            batch = await self.list_sessions(user_id=user_id, limit=page, offset=offset)
+            batch = await self.list_sessions(
+                user_id=user_id, status=status, limit=page, offset=offset
+            )
             total += len(batch)
             if len(batch) < page:
                 return total
             offset += page
+
+    async def session_activity(self, session_ids: Sequence[str]) -> dict[str, SessionActivity]:
+        """Activity per session id; a missing session reads as no activity (R19).
+
+        A default that loads each session, for in-memory repositories; SQLite and
+        PostgreSQL override it with grouped queries.
+        """
+        out: dict[str, SessionActivity] = {}
+        for sid in session_ids:
+            session = await self.load_session(sid)
+            out[sid] = SessionActivity.of(session) if session else SessionActivity()
+        return out
 
     @abstractmethod
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:

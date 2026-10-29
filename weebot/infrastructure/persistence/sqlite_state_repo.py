@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_repo_port import SessionActivity, StateRepositoryPort
 from weebot.application.ports.state_roles_port import (  # W5.1: the roles it plays
     BehavioralRuleStore,
     CommitmentStore,
@@ -503,9 +504,15 @@ class SQLiteStateRepository(
         except Exception:
             logger.debug("FTS5 cleanup skipped for %s", session_id)
 
-    async def count_sessions(self, user_id: str | None = None) -> int:
+    async def count_sessions(self, user_id: str | None = None, status: str | None = None) -> int:
         await self._init_helpers()
-        return await self._session_queries.count(user_id)  # type: ignore[union-attr]
+        return await self._session_queries.count(user_id, status)  # type: ignore[union-attr]
+
+    async def session_activity(self, session_ids: Sequence[str]) -> dict[str, SessionActivity]:
+        await self._init_helpers()
+        queries = self._session_queries
+        counts, plans = await queries.activity(list(session_ids))  # type: ignore[union-attr]
+        return {sid: SessionActivity.build(counts[sid], plans[sid]) for sid in counts}
 
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
         query = query[:500]

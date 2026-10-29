@@ -98,7 +98,7 @@ async def list_sessions(
     sessions = await state_repo.list_sessions(
         user_id=effective_user, status=status, limit=limit, offset=offset
     )
-    total = await state_repo.count_sessions(user_id=effective_user)
+    total = await state_repo.count_sessions(user_id=effective_user, status=status)
 
     counts = await _event_counts(http_request, [s.id for s in sessions])
     return SessionListResponse(

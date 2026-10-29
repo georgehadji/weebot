@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from collections.abc import Sequence
 from typing import Any
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.state_repo_port import SessionActivity, StateRepositoryPort
 from weebot.application.ports.state_roles_port import (
     BehavioralRuleStore,
     CommitmentStore,
@@ -243,14 +244,42 @@ class PostgreSQLStateRepository(
                 sessions.append(self._to_session(r, events))
             return sessions
 
-    async def count_sessions(self, user_id: str | None = None) -> int:
+    async def count_sessions(self, user_id: str | None = None, status: str | None = None) -> int:
+        conditions: list[str] = []
+        params: list[Any] = []
+        if user_id:
+            params.append(user_id)
+            conditions.append(f"user_id = ${len(params)}")
+        if status:
+            params.append(status)
+            conditions.append(f"status = ${len(params)}")
+        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         pool = await self._pool()
         async with pool.acquire() as conn:
-            if user_id:
-                return await conn.fetchval(
-                    "SELECT COUNT(*) FROM sessions WHERE user_id = $1", user_id
-                )
-            return await conn.fetchval("SELECT COUNT(*) FROM sessions")
+            return await conn.fetchval(f"SELECT COUNT(*) FROM sessions{where}", *params)  # noqa: S608
+
+    async def session_activity(self, session_ids: Sequence[str]) -> dict[str, SessionActivity]:
+        """Two grouped queries over session_events; events are not loaded (R19)."""
+        ids = list(dict.fromkeys(session_ids))
+        counts: dict[str, dict[tuple[str, str], int]] = {sid: {} for sid in ids}
+        plans: dict[str, list[Any]] = {sid: [] for sid in ids}
+        pool = await self._pool()
+        async with pool.acquire() as conn:
+            for r in await conn.fetch(
+                "SELECT session_id, event_data->>'type' AS t,"
+                " COALESCE(event_data->>'status', '') AS st, COUNT(*) AS n"
+                " FROM session_events WHERE session_id = ANY($1::text[]) GROUP BY 1, 2, 3",
+                ids,
+            ):
+                counts[r["session_id"]][(r["t"] or "", r["st"])] = r["n"]
+            for r in await conn.fetch(
+                "SELECT session_id, event_data FROM session_events"
+                " WHERE session_id = ANY($1::text[]) AND event_data->>'type' IN ('plan', 'step')"
+                " ORDER BY session_id, idx",
+                ids,
+            ):
+                plans[r["session_id"]].append(r["event_data"])
+        return {sid: SessionActivity.build(counts[sid], plans[sid]) for sid in ids}
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
         await self._execute(
