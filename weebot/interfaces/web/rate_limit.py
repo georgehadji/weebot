@@ -207,7 +207,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         # Resolve principal key
-        principal = self._resolve_principal(request)
+        principal = await self._resolve_principal(request)
 
         # Check rate limit
         bucket = await self._get_bucket(tier, principal)
@@ -256,17 +256,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
     @staticmethod
-    def _resolve_principal(request: Request) -> str:
-        """Return the principal key for rate limiting.
+    async def _resolve_principal(request: Request) -> str:
+        """Return the principal key for rate limiting: the verified caller, else the IP.
 
-        Post-WI-11: uses X-API-Key (SHA-256 derived) when available.
-        Falls back to client IP.
+        It hashed whatever ``X-API-Key`` was sent, unchecked, so each junk key got a
+        fresh bucket and bearer callers fell to the IP bucket (R18b, plan S6). The
+        verdict is cached on the request scope, so the auth middleware reuses it.
         """
-        api_key = request.headers.get("X-API-Key", "")
-        if api_key:
-            import hashlib
+        from weebot.interfaces.web import auth
 
-            return f"key:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+        principal = await auth.authenticate(request)
+        if principal and principal != "anonymous":
+            return f"key:{principal}"
         client_host = request.client.host if request.client else "unknown"
         return f"ip:{client_host}"
 
