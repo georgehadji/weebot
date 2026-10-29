@@ -66,6 +66,19 @@ def _flow_view(session: Session, flow: object, yielded: list, title: str) -> Ses
     return base
 
 
+@dataclass
+class _RetryState:
+    """One session's retry budget and the factory its retry runs (audit R16).
+
+    The count caches the persisted ``context.extra["retries_remaining"]``; the Session is
+    the source of truth, so a restart does not reset the budget (SCL-1). The factory is
+    code, not state: a retry after a restart needs the caller to supply one again.
+    """
+
+    factory: FlowFactory
+    remaining: int
+
+
 class TaskRunner:
     """Runs agent flows as background asyncio tasks with session persistence."""
 
@@ -116,12 +129,8 @@ class TaskRunner:
         # Fallback to asyncio.PriorityQueue when no external queue is provided
         self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending) if task_queue is None else None  # type: ignore[assignment]
         self._worker_task: asyncio.Task | None = None
-        # In-process cache of the persisted count (session.context.extra["retries_remaining"]);
-        # the Session is the source of truth, so a restart does not reset the budget (SCL-1).
-        self._retry_counts: dict[str, int] = {}  # session_id -> attempts remaining
-        # Code, not state: a factory cannot be persisted, so a retry after a restart needs
-        # the caller to supply one again (rerun_failed_session says so).
-        self._flow_factories: dict[str, FlowFactory] = {}  # session_id -> factory for retries
+        # Held while the session has a task; dropped when its current task ends (R16).
+        self._retries: dict[str, _RetryState] = {}
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
@@ -188,11 +197,14 @@ class TaskRunner:
         session_id = session.id
 
         # Record the factory so _run_flow can retry on failure
-        self._flow_factories[session_id] = flow_factory
-        if session_id not in self._retry_counts:
-            self._retry_counts[session_id] = int(
-                session.context.extra.get(_RETRIES_KEY, self._max_session_retries)
+        state = self._retries.get(session_id)
+        if state is None:
+            self._retries[session_id] = _RetryState(
+                flow_factory,
+                int(session.context.extra.get(_RETRIES_KEY, self._max_session_retries)),
             )
+        else:
+            state.factory = flow_factory
 
         task = asyncio.create_task(
             self._run_flow_bounded(session_id, flow_factory(session), prompt),
@@ -203,17 +215,13 @@ class TaskRunner:
         def _cleanup(t: asyncio.Task) -> None:
             # Only pop if this task is the one currently tracked.
             # When a retry creates a new task via _start_direct, the old
-            # task's cleanup must not remove the new task from _tasks.
+            # task's cleanup must not remove the new task from _tasks, nor the
+            # retry state that task now runs on. The current task's end, however
+            # it ended, is the end of the session's run (R16): success and
+            # cancellation used to keep the factory and its tools forever.
             if self._tasks.get(session_id) is t:
                 self._tasks.pop(session_id, None)
-            # Only clean up retry state when no more retries are expected.
-            # If _retry_counts > 0, a retry task is in-flight and owns the
-            # count; popping here would kill the retry task's counter
-            # before it can read it, leaving it with 0 retries remaining.
-            remaining = self._retry_counts.get(session_id, 0)
-            if remaining <= 0:
-                self._flow_factories.pop(session_id, None)
-                self._retry_counts.pop(session_id, None)
+                self._retries.pop(session_id, None)
             # `Task.exception()` RAISES CancelledError when the task was
             # cancelled, and cancelling a session is an ordinary operation --
             # `flow cancel <id>` is a CLI command. Unguarded, every cancellation
@@ -348,9 +356,10 @@ class TaskRunner:
         except Exception as failure:
             logger.exception("Flow failed for session %s", session_id)
             # Session-level retry: requeue with exponential backoff
-            remaining = self._retry_counts.get(session_id, 0)
-            if remaining > 0:
-                self._retry_counts[session_id] = remaining - 1
+            state = self._retries.get(session_id)
+            remaining = state.remaining if state else 0
+            if state is not None and remaining > 0:
+                state.remaining = remaining - 1
                 # Persist the spent attempt before sleeping: a crash during the backoff
                 # must not hand the session a fresh budget.
                 if owns:
@@ -370,7 +379,7 @@ class TaskRunner:
                     remaining - 1,
                 )
                 await asyncio.sleep(backoff)
-                factory = self._flow_factories.get(session_id)
+                factory = state.factory
                 if factory:
                     reloaded = await self._state_repo.load_session(session_id)
                     if reloaded:
@@ -396,7 +405,8 @@ class TaskRunner:
             finally:
                 # The dead-letter queue is the persisted FAILED status plus failure_reason
                 # (list_failed_sessions reads it); nothing else to record here.
-                self._retry_counts[session_id] = 0
+                if state is not None:
+                    state.remaining = 0
         else:
             # Sync flow-mutated state (facts, compaction) back into
             # the local session before final save. The flow modifies
@@ -519,7 +529,8 @@ class TaskRunner:
             )
             return False
 
-        factory = self._flow_factories.pop(session_id, None)
+        state = self._retries.pop(session_id, None)
+        factory = state.factory if state else None
         if factory is None:
             # Try the default PlanActFlow factory builder fallback
             logger.warning(
@@ -531,7 +542,6 @@ class TaskRunner:
 
         # Clear dead-letter and retry state so the new attempt gets a clean
         # retry budget.
-        self._retry_counts.pop(session_id, None)
         session = _with_extra(
             session, **{_RETRIES_KEY: self._max_session_retries, _FAILURE_KEY: None}
         )
