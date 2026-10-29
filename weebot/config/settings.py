@@ -261,11 +261,11 @@ class WeebotSettings(BaseSettings):
     @field_validator("sandbox_mode")
     @classmethod
     def validate_sandbox_mode(cls, v: str) -> str:
-        allowed = {"auto", "docker_first", "native", "docker", "wsl2"}
+        allowed = {"auto", "docker_first", "native", "docker", "wsl2", "modal"}
         if v.lower() not in allowed:
             raise ValueError(
                 f"sandbox_mode must be one of {allowed}, got '{v}'. "
-                "Set SANDBOX_MODE to 'auto', 'docker_first', 'native', 'docker', or 'wsl2'."
+                "Set SANDBOX_MODE to 'auto', 'docker_first', 'native', 'docker', 'wsl2' or 'modal'."
             )
         return v.lower()
 

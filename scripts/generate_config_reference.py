@@ -120,7 +120,8 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "SANDBOX_ALLOW_NETWORK", "type": "bool",
      "desc": "Allow network access from sandboxed code execution"},
     {"var": "SANDBOX_MODE", "type": "str",
-     "desc": "auto (native on Windows, Docker elsewhere), docker_first, native, docker, wsl2"},
+     "desc": "auto (native on Windows, Docker elsewhere), docker_first, native, docker, wsl2, "
+             "modal (remote, billed; needs `pip install modal` and a Modal token)"},
     {"var": "SANDBOX_REQUIRE_ISOLATION", "type": "bool",
      "desc": "Refuse sandboxed calls on a backend that cannot enforce network-off (ADR-014)"},
     {"var": "WEEBOT_AUTO_APPROVE", "type": "str", "default": "",

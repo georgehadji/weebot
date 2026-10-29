@@ -1,22 +1,21 @@
-"""ModalSandboxBackend — serverless sandbox execution via Modal.
+"""ModalSandboxBackend — run commands in a Modal (modal.com) sandbox.
 
-Runs commands on Modal (modal.com) serverless infrastructure.
-The environment hibernates when idle and wakes on demand,
-costing nearly nothing between executions.
+Selected with ``SANDBOX_MODE=modal``. Needs the optional ``modal`` package
+(``pip install modal``) and a Modal token (``modal token new``, or
+``MODAL_TOKEN_ID`` / ``MODAL_TOKEN_SECRET``); every run is billed by Modal.
 
-Requires ``modal`` Python package and ``modal token set`` auth.
-
-To use, register the adapter in the DI container:
-    container.register(
-        SandboxPort,
-        lambda: ModalSandboxBackend(app_name="weebot-sandbox"),
-    )
+Each call creates a sandbox from ``image``, runs the command there and
+terminates it. The network is blocked unless the config allows it or the call
+was cleared for it (``network_cleared_for_call``), which is when
+``NETWORK_ISOLATION`` is claimed. Written against Modal's ``Sandbox.create`` /
+``exec`` API without the package installed here; tests drive a fake module.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from weebot.application.ports.sandbox_port import (
@@ -25,6 +24,7 @@ from weebot.application.ports.sandbox_port import (
     SandboxPort,
     SandboxResult,
     SandboxType,
+    network_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,61 +37,61 @@ try:
 except ImportError:
     modal = None  # type: ignore[assignment]
 
+_TRUNCATION_NOTE = "...[truncated]"
+
+
+def _token_configured() -> bool:
+    from weebot.config.secret_accessor import SecretAccessor
+
+    if SecretAccessor.get("MODAL_TOKEN_ID"):
+        return True
+    return (Path.home() / ".modal.toml").exists()
+
 
 class ModalSandboxBackend(SandboxPort):
-    """Sandbox implementation using Modal serverless functions.
-
-    Commands are executed in a Modal container with persistence
-    via Modal Volumes.  The environment keeps state across
-    executions within a session but hibernates between sessions.
+    """Sandbox on Modal serverless containers.
 
     Args:
-        app_name: Modal app name (must be unique per user).
-        config: Sandbox configuration.  Uses defaults if None.
-        image: Modal Image to use.  Defaults to python:3.12-slim
-            with common tools installed.
+        config: Sandbox configuration; defaults if None. The factory passes it
+            positionally, like every other backend.
+        app_name: Modal app the sandboxes run under (created when missing).
+        image: Registry image to run; python:3.12-slim by default.
     """
 
     DEFAULT_IMAGE = "python:3.12-slim"
 
     def __init__(
         self,
-        app_name: str = "weebot-sandbox",
         config: SandboxConfig | None = None,
+        app_name: str = "weebot-sandbox",
         image: str | None = None,
     ) -> None:
-        self._app_name = app_name
         self._config = config or SandboxConfig()
+        self._app_name = app_name
         self._image = image or self.DEFAULT_IMAGE
 
     @property
     def sandbox_type(self) -> SandboxType:
-        return SandboxType.DOCKER_LINUX
+        return SandboxType.MODAL
 
     async def is_available(self) -> bool:
-        """Check if Modal is installed and authenticated."""
-        if not _MODAL_AVAILABLE:
-            return False
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "modal",
-                "token",
-                "list",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await asyncio.wait_for(proc.wait(), timeout=5.0)
-            return proc.returncode == 0
-        except Exception:
-            return False
+        """The package is installed and a token is configured."""
+        return _MODAL_AVAILABLE and _token_configured()
 
     def get_capabilities(self) -> set[SandboxCapability]:
-        return {
-            SandboxCapability.BASH,
-            SandboxCapability.PYTHON,
-            SandboxCapability.FILE_SYSTEM,
-            SandboxCapability.NETWORK_ACCESS,
-        }
+        caps = {SandboxCapability.BASH, SandboxCapability.PYTHON, SandboxCapability.FILE_SYSTEM}
+        if self._config.allow_network:
+            caps.add(SandboxCapability.NETWORK_ACCESS)
+        else:
+            caps.add(SandboxCapability.NETWORK_ISOLATION)
+        return caps
+
+    def _truncate(self, text: str) -> str:
+        limit = self._config.max_output_bytes
+        data = text.encode("utf-8", errors="replace")
+        if len(data) <= limit:
+            return text
+        return data[:limit].decode("utf-8", errors="ignore") + _TRUNCATION_NOTE
 
     async def execute(
         self,
@@ -101,78 +101,51 @@ class ModalSandboxBackend(SandboxPort):
         env: dict[str, str] | None = None,
         memory_limit_mb: int | None = None,
     ) -> SandboxResult:
-        """Execute a command on Modal.
+        started = time.monotonic()
 
-        In the full implementation, this creates a Modal function
-        that runs the command and returns output.  The current
-        stub falls back to local Docker if Modal is unavailable.
-        """
-        if not await self.is_available():
+        def result(stdout="", stderr="", returncode=-1, timed_out=False) -> SandboxResult:
             return SandboxResult(
-                stdout="",
-                stderr="Modal not available. Install with: pip install modal",
-                returncode=-1,
-                elapsed_ms=0.0,
+                stdout=stdout,
+                stderr=stderr,
+                returncode=returncode,
+                elapsed_ms=(time.monotonic() - started) * 1000,
+                timed_out=timed_out,
                 sandbox_type=self.sandbox_type,
             )
 
         if not _MODAL_AVAILABLE:
-            return SandboxResult(
-                stdout="",
-                stderr="modal package not installed. Install with: pip install modal",
-                returncode=-1,
-                elapsed_ms=0.0,
-                sandbox_type=self.sandbox_type,
-            )
+            return result(stderr="Modal not available. Install with: pip install modal")
 
-        import time
-
-        t_start = time.monotonic()
-
+        limit = timeout or self._config.timeout
+        merged_env = {**self._config.env_vars, **(env or {})}
+        workdir = str(cwd or self._config.working_dir or "") or None
+        sandbox = None
         try:
-            # Stub: use docker as the underlying executor when Modal is
-            # authenticated but the full function deployment isn't set up.
-            docker_cmd = ["docker", "run", "--rm", "-i"]
-
-            # Memory limit (pass through to docker stub)
-            limit = memory_limit_mb or self._config.memory_limit_mb
-            if limit:
-                docker_cmd.extend(["-m", f"{limit}m"])
-
-            docker_cmd.extend([self._image] + command)
-
-            proc = await asyncio.create_subprocess_exec(
-                *docker_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            app = await modal.App.lookup.aio(self._app_name, create_if_missing=True)
+            sandbox = await modal.Sandbox.create.aio(
+                app=app,
+                image=modal.Image.from_registry(self._image),
+                timeout=max(1, int(limit) + 5),
+                block_network=not network_allowed(self._config),
+                secrets=[modal.Secret.from_dict(merged_env)] if merged_env else [],
+                memory=memory_limit_mb or self._config.memory_limit_mb,
             )
-            stdout_b, stderr_b = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout or self._config.timeout
-            )
-            elapsed_ms = (time.monotonic() - t_start) * 1000
-
-            return SandboxResult(
-                stdout=stdout_b.decode("utf-8", errors="replace"),
-                stderr=stderr_b.decode("utf-8", errors="replace"),
-                returncode=proc.returncode if proc.returncode is not None else -1,
-                elapsed_ms=elapsed_ms,
-                sandbox_type=self.sandbox_type,
-            )
+            process = await sandbox.exec.aio(*command, workdir=workdir)
+            returncode = await asyncio.wait_for(process.wait.aio(), timeout=limit)
+            stdout = await process.stdout.read.aio()
+            stderr = await process.stderr.read.aio()
+            return result(self._truncate(stdout), self._truncate(stderr), returncode)
         except TimeoutError:
-            return SandboxResult(
-                stdout="",
-                stderr=f"Command timed out after {timeout or self._config.timeout:.0f}s on Modal.",
-                returncode=-1,
-                elapsed_ms=(time.monotonic() - t_start) * 1000,
-                timed_out=True,
-                sandbox_type=self.sandbox_type,
-            )
+            return result(stderr=f"Process killed after {limit:.0f}s timeout.", timed_out=True)
         except Exception as exc:
-            return SandboxResult(
-                stdout="",
-                stderr=f"Modal execution failed: {exc}",
-                returncode=-1,
-                elapsed_ms=(time.monotonic() - t_start) * 1000,
-                sandbox_type=self.sandbox_type,
-            )
+            logger.warning("Modal sandbox run failed: %s", exc)
+            return result(stderr=f"Modal sandbox failed: {exc}")
+        finally:
+            if sandbox is not None:
+                try:
+                    await sandbox.terminate.aio()
+                except Exception:
+                    logger.debug("Modal sandbox terminate failed", exc_info=True)
 
     async def execute_shell(
         self,
