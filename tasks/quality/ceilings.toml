@@ -385,7 +385,8 @@ functions_over_150_lines = 23
 # 624 -> 619 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
 # 619 -> 618 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
 # 618 -> 616 with wave 6 G11: the PowerShell tool's private deny lists moved into the approval policy.
-ruff_violations = 616
+# 616 -> 614 with D4 slice 5.
+ruff_violations = 614
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

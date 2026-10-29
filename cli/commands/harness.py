@@ -9,6 +9,16 @@ from weebot.config.constants import DB_SESSIONS_PATH
 console = Console()
 
 
+def _answer_scorer(container):
+    """The container's ScoringPort, unless WEEBOT_SCORING_MODE leaves answers unscored."""
+    from weebot.application.ports.scoring_port import ScoringPort
+    from weebot.config import feature_flags
+
+    if feature_flags.SCORING_MODE == "plan_outcome":
+        return None
+    return container.get(ScoringPort)
+
+
 @click.group()
 def benchmark() -> None:
     """Run weebot agents against SIA-compatible benchmark tasks."""
@@ -95,6 +105,7 @@ def benchmark_run(
             flow_factory=container._create_target_flow_factory(),
             scorer=TaskScorer(),
             skill_name=skill_name,
+            answer_scorer=_answer_scorer(container),
         )
         result = await runner.run_task(task, sample_idx)
         console.print(json.dumps(result.to_dict(), indent=2))
@@ -135,6 +146,7 @@ def benchmark_batch(
             flow_factory=container._create_target_flow_factory(),
             scorer=TaskScorer(),
             skill_name=skill_name,
+            answer_scorer=_answer_scorer(container),
         )
         results = await runner.run_batch(tasks, concurrency=concurrency)
         records = [r.to_dict() for r in results]

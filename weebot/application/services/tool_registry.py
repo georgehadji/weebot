@@ -450,6 +450,7 @@ class RoleBasedToolRegistry:
         rerank = rerank if rerank is not None else wired.get("rerank")
         collaborators: dict[str, dict] = wired.get("collaborators") or {}
         browser_factory = wired.get("browser_factory")
+        workflow_events = wired.get("workflow_events")
 
         class_map = self.build_tool_class_map()
         tools: list = []
@@ -493,6 +494,12 @@ class RoleBasedToolRegistry:
                     )
                 elif name in _flow_factory_llm_tools:
                     tool = tool_cls(llm=llm_port, flow_factory=flow_factory)
+                elif name == "workflow_orchestrator":
+                    tool = tool_cls(
+                        flow_factory=flow_factory,
+                        state_repo=state_repo,
+                        event_publisher=workflow_events,
+                    )
                 elif name in _flow_factory_state_tools:
                     tool = tool_cls(flow_factory=flow_factory, state_repo=state_repo)
                 elif name in _browser_adapter_tools:

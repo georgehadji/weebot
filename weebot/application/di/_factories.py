@@ -307,6 +307,33 @@ class FactoriesMixin:
 
         return StepEvidenceAuditor(file_storage=self.get(FileStoragePort))
 
+    def _create_scoring_port(self):
+        """PlanOutcomeScorer, or an AnswerScorer over it when WEEBOT_SCORING_MODE names
+        an answer scorer for sessions that come with an expected answer."""
+        from weebot.config import feature_flags
+        from weebot.infrastructure.scoring.plan_outcome_scorer import PlanOutcomeScorer
+
+        mode = feature_flags.SCORING_MODE
+        if mode == "plan_outcome":
+            return PlanOutcomeScorer()
+        from weebot.infrastructure.scoring import (
+            ExactMatchScorer,
+            ExecutionResultScorer,
+            VerifierScorer,
+        )
+        from weebot.infrastructure.scoring.answer_scorer import AnswerScorer
+
+        builders = {
+            "exact": ExactMatchScorer,
+            "execution": ExecutionResultScorer,
+            "verifier": lambda: VerifierScorer(llm=self._create_llm_for_role("verifier")),
+        }
+        if mode not in builders:
+            raise ValueError(
+                f"WEEBOT_SCORING_MODE={mode!r}: use plan_outcome, exact, execution or verifier"
+            )
+        return AnswerScorer(answer_scorer=builders[mode](), fallback=PlanOutcomeScorer())
+
     def _create_step_evaluator(self):
         """The per-step progress evaluator, or None while WEEBOT_STEP_EVALUATOR is off."""
         from weebot.config import feature_flags
@@ -528,8 +555,14 @@ class FactoriesMixin:
                     "product": "repo",
                     "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
                     "persistent_memory": "memory"}
+        from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
+
+        bus = self._maybe_get(EventBusPort)
         return {
             "state_repo": state_repo,
+            # The workflow orchestrator tool's progress events, onto the shared bus.
+            "workflow_events": EventBrokerAdapter(bus) if bus is not None else None,
             "browser_factory": self._playwright_adapter,
             "rerank": self._maybe_get(RerankPort),
             "tool_config": self._maybe_get(ToolConfig),

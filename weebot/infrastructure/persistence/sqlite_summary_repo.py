@@ -1,78 +1,116 @@
-"""SQLite-based summary repository with lightweight in-memory vector search."""
+"""SQLite episodic-summary store with in-Python similarity search.
+
+Similarity is cosine over local embeddings when both sides have one of the same
+size, and token Jaccard (the plan-template cache's tokenizer) otherwise. Local
+embeddings are an optional extra, so the fallback is what a default install uses.
+The table is created on first write: a delete for a never-used store opens nothing.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
+from weebot.domain.services.plan_template_cache import jaccard_similarity, tokenize
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS summaries (
+    session_id TEXT PRIMARY KEY,
+    task TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    embedding_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+"""
+
+
+async def _embed(text: str) -> list[float] | None:
+    """A local embedding of *text*, or None when the extra is not installed."""
+    try:
+        from weebot.qmd_integration.embeddings import get_local_embeddings
+
+        emb = get_local_embeddings()
+        if not emb.is_available():
+            return None
+        return list((await emb.embed_query(text)).embedding)
+    except Exception:
+        logger.debug("Summary embedding unavailable; token overlap is used", exc_info=True)
+        return None
 
 
 class SQLiteSummaryRepository(SummaryRepositoryPort):
-    """Stores session summaries in SQLite and performs cosine similarity in Python."""
+    """Summaries of successful sessions, one row per session."""
 
-    def __init__(self, db_path: str = "./weebot_summaries.db") -> None:
+    def __init__(self, db_path: str) -> None:
         self._db_path = db_path
-        self._init_db()
 
-    def _init_db(self) -> None:
-        with closing(sqlite3.connect(self._db_path)) as conn, conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS summaries (
-                    session_id TEXT PRIMARY KEY,
-                    summary TEXT NOT NULL,
-                    embedding_json TEXT NOT NULL
-                )
-                """)
-            conn.commit()
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.execute(_SCHEMA)
+        return conn
 
-    async def save_summary(self, session_id: str, summary: str, embedding: list[float]) -> None:
+    async def save_summary(self, session_id: str, task: str, summary: str) -> None:
+        embedding = await _embed(task) or []
+
         def _save() -> None:
-            with closing(sqlite3.connect(self._db_path)) as conn, conn:
+            with closing(self._connect()) as conn, conn:
                 conn.execute(
-                    "INSERT OR REPLACE INTO summaries (session_id, summary, embedding_json) VALUES (?, ?, ?)",
-                    (session_id, summary, json.dumps(embedding)),
+                    "INSERT OR REPLACE INTO summaries (session_id, task, summary, embedding_json)"
+                    " VALUES (?, ?, ?, ?)",
+                    (session_id, task, summary, json.dumps(embedding)),
                 )
-                conn.commit()
 
         await asyncio.to_thread(_save)
 
-    async def find_similar(
-        self, embedding: list[float], k: int = 3
-    ) -> list[tuple[str, str, float]]:
-        def _query():
-            with closing(sqlite3.connect(self._db_path)) as conn, conn:
+    async def find_similar(self, task: str, k: int = 3) -> list[tuple[str, str, str, float]]:
+        if not Path(self._db_path).exists():
+            return []
+
+        def _rows():
+            with closing(self._connect()) as conn:
                 return conn.execute(
-                    "SELECT session_id, summary, embedding_json FROM summaries"
+                    "SELECT session_id, task, summary, embedding_json FROM summaries"
                 ).fetchall()
 
-        rows = await asyncio.to_thread(_query)
+        rows = await asyncio.to_thread(_rows)
+        if not rows:
+            return []
+        query_vec = await _embed(task)
+        query_tokens = tokenize(task)
+        scored = []
+        for session_id, past_task, summary, emb_json in rows:
+            vec = json.loads(emb_json or "[]")
+            if query_vec and vec and len(vec) == len(query_vec):
+                score = _cosine(query_vec, vec)
+            else:
+                score = jaccard_similarity(query_tokens, tokenize(past_task))
+            scored.append((session_id, past_task, summary, score))
+        scored.sort(key=lambda row: row[3], reverse=True)
+        return scored[:k]
 
-        results: list[tuple[str, str, float]] = []
-        query_norm = _norm(embedding)
-        for session_id, summary, emb_json in rows:
-            candidate = json.loads(emb_json)
-            score = _cosine_similarity(embedding, candidate, query_norm)
-            results.append((session_id, summary, score))
+    async def delete_by_session_id(self, session_id: str) -> int:
+        if not Path(self._db_path).exists():
+            return 0
 
-        results.sort(key=lambda x: x[2], reverse=True)
-        return results[:k]
+        def _delete() -> int:
+            with closing(self._connect()) as conn, conn:
+                return conn.execute(
+                    "DELETE FROM summaries WHERE session_id = ?", (session_id,)
+                ).rowcount
 
-
-def _norm(v: list[float]) -> float:
-    return math.sqrt(sum(x * x for x in v))
+        return await asyncio.to_thread(_delete)
 
 
-def _cosine_similarity(a: list[float], b: list[float], norm_a: float | None = None) -> float:
-    if len(a) != len(b):
+def _cosine(a: list[float], b: list[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    if norm == 0.0:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_b = _norm(b)
-    if norm_a is None:
-        norm_a = _norm(a)
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+    return sum(x * y for x, y in zip(a, b, strict=True)) / norm

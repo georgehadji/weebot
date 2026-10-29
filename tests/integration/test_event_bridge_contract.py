@@ -77,8 +77,11 @@ async def test_unknown_event_type_maps_to_notification(
 
     event_bus.subscribe(handler)
 
+    # With a session: without one the adapter drops it rather than broadcast it (D4).
     await adapter.publish(
-        event_type="custom_unknown_type", agent_id="test-agent", data={"msg": "hello"}
+        event_type="custom_unknown_type",
+        agent_id="test-agent",
+        data={"msg": "hello", "session_id": "s1"},
     )
 
     assert len(received) == 1

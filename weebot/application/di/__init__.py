@@ -216,17 +216,12 @@ class Container(
         # call, on the cheap verifier tier. The score itself is free.
         from weebot.application.ports.scoring_port import ScoringPort
 
-        def _create_plan_outcome_scorer():
-            from weebot.infrastructure.scoring.plan_outcome_scorer import PlanOutcomeScorer
-
-            return PlanOutcomeScorer()
-
         def _create_trajectory_builder():
             from weebot.application.services.trajectory_builder import TrajectoryBuilder
 
             return TrajectoryBuilder(llm=self.get("verifier_llm"))
 
-        self.register(ScoringPort, _create_plan_outcome_scorer)
+        self.register(ScoringPort, self._create_scoring_port)
         self.register("trajectory_builder", _create_trajectory_builder)
         self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter

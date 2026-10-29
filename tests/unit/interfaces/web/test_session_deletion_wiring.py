@@ -28,7 +28,13 @@ from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 
 # Every store a web session writes, besides the state repo. The checkpoint
 # store is not among them: see test_nothing_writes_checkpoints_so_none_are_purged.
-_SESSION_STORES = {"event_store", "gateway_session_store", "knowledge_graph"}
+_SESSION_STORES = {
+    "event_store",
+    "gateway_session_store",
+    "knowledge_graph",
+    "episodic_summaries",
+    "flow_checkpoints",
+}
 
 
 # Container construction imports the whole application -- 20-30s cold on
@@ -62,23 +68,23 @@ def test_a_deletion_reaches_every_store(container):
 
 
 @pytest.mark.timeout(360)
-def test_nothing_writes_checkpoints_so_none_are_purged(container):
-    """The recorded decision, enforced. The flow checkpoint store is not purged
-    because no production flow is given a checkpoint_port. If that changes,
-    this fails -- and the store must be added to dependencies._session_stores
-    in the same change, or deleted sessions leave their checkpoints behind."""
+def test_checkpoints_are_written_only_when_enabled_but_always_purged(container):
+    """D4 wired the checkpoint store (WEEBOT_FLOW_CHECKPOINTS, off by default). A
+    web flow gets no checkpoints while the flag is off, but the store is bound and
+    in the purge list either way, so checkpoints written while it was on still go
+    with their session."""
     from weebot.application.services.task_runner import TaskRunner
 
     runner = container.get(TaskRunner)
     flow = runner.create_plan_act_factory(llm=MagicMock(), tools=ToolCollection())(
         Session(id="web-1", user_id="u", agent_id="a")
     )
-    assert flow._checkpoint_port is None
+    assert flow._checkpoints is None
 
     from weebot.application.ports.checkpoint_port import CheckpointPort
 
-    with pytest.raises(KeyError):
-        container.get(CheckpointPort)
+    assert container.get(CheckpointPort) is not None
+    assert "flow_checkpoints" in _orchestrator(container).store_names
 
 
 def test_a_store_without_the_purge_method_is_refused_at_wiring_time():

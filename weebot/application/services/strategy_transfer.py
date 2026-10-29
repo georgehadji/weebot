@@ -12,7 +12,7 @@ meta-improvement knowledge.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from weebot.application.ports.strategy_store_port import StrategyStorePort
@@ -92,12 +92,50 @@ class StrategyTransferService:
 
         return "\n".join(lines)
 
+    async def record_success(self, task: str, plan: Any) -> None:
+        """Record a fully successful plan's approach under the task's category.
+
+        One row per task (the id is the task hash), so re-runs update it. Never
+        raises: learning must not fail a completed run.
+        """
+        try:
+            if not task or plan is None or not plan.steps or not plan.is_successful():
+                return
+            from weebot.application.services.task_model_router import category_for_step
+            from weebot.domain.services.plan_template_cache import compute_task_hash
+
+            approach = "; ".join(s.description[:60] for s in plan.steps)[:300]
+            await self.record_strategy(
+                source_domain=category_for_step(task),
+                prompt_snippet=f"For '{task[:80]}': {approach}",
+                score=1.0,
+                strategy_id=compute_task_hash(task),
+            )
+        except Exception:
+            logger.warning("Recording a strategy failed", exc_info=True)
+
+    async def notes_for(self, task: str, limit: int = 2) -> list[str]:
+        """Planner notes: approaches that worked in OTHER task categories; [] on any problem."""
+        try:
+            from weebot.application.services.task_model_router import category_for_step
+
+            domain = category_for_step(task)
+            strategies = (await self.get_strategies_for(domain))[:limit]
+        except Exception as exc:
+            logger.debug("Strategy lookup skipped: %s", exc)
+            return []
+        return [
+            f"An approach that worked on a {s.source_domain} task: {s.meta_agent_prompt_snippet}"
+            for s in strategies
+        ]
+
     async def record_strategy(
         self,
         source_domain: str,
         prompt_snippet: str,
         score: float,
         target_domain: str | None = None,
+        strategy_id: str | None = None,
     ) -> str:
         """Persist a new improvement strategy after a successful epoch.
 
@@ -113,6 +151,7 @@ class StrategyTransferService:
         from weebot.domain.models.self_improvement import ImprovementStrategy
 
         strategy = ImprovementStrategy(
+            strategy_id=strategy_id or "",
             source_domain=source_domain,
             target_domain=target_domain,
             meta_agent_prompt_snippet=prompt_snippet,

@@ -216,8 +216,20 @@ class PlanningState(FlowState):
         _failure_notes = await similar_failure_notes(
             getattr(context, "_trajectory_repo", None), prompt
         )
+        from weebot.application.services.episodic_summaries import similar_session_notes
+
+        # Successes go before failures: the planner keeps only the last 5 notes.
+        _success_notes = await similar_session_notes(
+            getattr(context, "_summary_repo", None), prompt
+        )
+        _strategy = getattr(context, "_strategy_transfer", None)
+        _strategy_notes = await _strategy.notes_for(prompt) if _strategy is not None else []
         _avoidance_notes = (
-            session_lessons(context._session.context.meta_notes) + _failure_notes + _avoidance_notes
+            session_lessons(context._session.context.meta_notes)
+            + _strategy_notes
+            + _success_notes
+            + _failure_notes
+            + _avoidance_notes
         )
         # ─────────────────────────────────────────────────────────────────────
 

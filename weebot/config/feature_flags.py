@@ -196,6 +196,36 @@ SKILL_PROMOTION_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_PROMOTION_GATE", de
 STAGED_VALIDATION_ENABLED: bool = _env_bool("WEEBOT_STAGED_VALIDATION", default=False)
 
 
+# ── Episodic summaries (D4) ─────────────────────────────────────────────────
+# When True, a fully successful session saves a short summary of its plan, and
+# planning a similar task later gets "a similar past task succeeded" notes. No
+# model calls; summaries are matched by local embeddings when installed, by
+# token overlap otherwise. Default OFF.
+EPISODIC_SUMMARIES_ENABLED: bool = _env_bool("WEEBOT_EPISODIC_SUMMARIES", default=False)
+
+
+# ── Scoring with a gold answer (D4) ─────────────────────────────────────────
+# What scores a session that comes with an expected answer (benchmark samples):
+#   "plan_outcome" (default) — the answer is ignored, as before;
+#   "exact" / "execution" — free comparisons; "verifier" — one verifier call.
+# Sessions without an expected answer always get the plan-outcome score.
+SCORING_MODE: str = os.environ.get("WEEBOT_SCORING_MODE", "plan_outcome").strip().lower()
+
+
+# ── Flow checkpoints (D4) ───────────────────────────────────────────────────
+# When True, PlanActFlow saves its plan after every step event, and an
+# interrupted session can be re-run from it (`flow recover`). One small SQLite
+# write per step, no model calls. Default OFF.
+FLOW_CHECKPOINTS_ENABLED: bool = _env_bool("WEEBOT_FLOW_CHECKPOINTS", default=False)
+
+
+# ── Strategy transfer (D4) ──────────────────────────────────────────────────
+# When True, a fully successful run records its approach under the task's
+# category, and planning a task of another category gets up to two of those
+# approaches as notes. No model calls. Default OFF.
+STRATEGY_TRANSFER_ENABLED: bool = _env_bool("WEEBOT_STRATEGY_TRANSFER", default=False)
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new

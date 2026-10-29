@@ -81,6 +81,8 @@ LEGACY_KWARG_NAMES: tuple[str, ...] = (
     "skill_review_gate",
     "trajectory_repo",
     "step_evaluator",
+    "summary_repo",
+    "strategy_transfer",
 )
 
 
@@ -146,9 +148,17 @@ def wire_ports(flow: Any, cfg: PlanActFlowConfig) -> None:
     flow._knowledge_graph = cfg.knowledge_graph
     flow._behavioral_learner = cfg.behavioral_learner
     flow._checkpoint_port = cfg.checkpoint_port
+    if cfg.checkpoint_port is not None:
+        from weebot.application.flows._checkpoint_scheduler import CheckpointScheduler
+
+        flow._checkpoints = CheckpointScheduler(cfg.checkpoint_port)
+    else:
+        flow._checkpoints = None
     flow._hooks = cfg.hooks  # Optional[HookRegistry] -- None = no-op
     flow._misalignment_journal = cfg.misalignment_journal
     flow._trajectory_repo = cfg.trajectory_repo  # past failures on similar tasks
+    flow._summary_repo = cfg.summary_repo  # past successes on similar tasks
+    flow._strategy_transfer = cfg.strategy_transfer  # approaches from other task kinds
     flow._correction_tracker = cfg.correction_tracker
     flow._sc_extractor = cfg.session_constraint_extractor
     flow._session_constraints = None  # hydrated lazily in run()

@@ -472,6 +472,29 @@ class CompletedState(FlowState):
                 name=f"retention-review:{context._session.id[:8]}",
             )
 
+        # ── Episodic summary of a successful run (WEEBOT_EPISODIC_SUMMARIES) ──
+        if getattr(context, "_summary_repo", None) is not None and context._plan is not None:
+            from weebot.application.services.episodic_summaries import save_session_summary
+
+            _background().spawn(
+                save_session_summary(
+                    context._summary_repo,
+                    context._session.id,
+                    task_text(context, prompt),
+                    context._plan,
+                ),
+                name=f"episodic-summary:{context._session.id[:8]}",
+            )
+
+        # ── Strategy for other kinds of task (WEEBOT_STRATEGY_TRANSFER) ──
+        if getattr(context, "_strategy_transfer", None) is not None:
+            _background().spawn(
+                context._strategy_transfer.record_success(
+                    task_text(context, prompt), context._plan
+                ),
+                name=f"strategy:{context._session.id[:8]}",
+            )
+
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
         _gaps = list(getattr(context, "step_skill_gaps", []) or []) + list(
             getattr(getattr(context, "_summary_executor", None), "_skill_gaps", []) or []

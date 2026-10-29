@@ -62,9 +62,12 @@ class BenchmarkRunner:
         scorer: TaskScorer | None = None,
         skill_name: str = "general",
         skill_version: int = 0,
+        answer_scorer: Any | None = None,
     ) -> None:
         self._flow_factory = flow_factory
         self._scorer = scorer or TaskScorer()
+        # Optional ScoringPort for samples with an expected answer (WEEBOT_SCORING_MODE).
+        self._answer_scorer = answer_scorer
         self._skill_name = skill_name
         self._skill_version = skill_version
 
@@ -102,7 +105,13 @@ class BenchmarkRunner:
         completed_session = getattr(flow, "_session", session)
 
         try:
-            score = await self._scorer.score(completed_session, task, sample_idx)
+            if self._answer_scorer is not None and sample.expected_answer:
+                scored = await self._answer_scorer.score(
+                    completed_session, expected_answer=sample.expected_answer
+                )
+                score = scored.score
+            else:
+                score = await self._scorer.score(completed_session, task, sample_idx)
         except Exception as exc:
             logger.warning(
                 "Scoring failed for task %s sample %d: %s", task.task_id, sample_idx, exc

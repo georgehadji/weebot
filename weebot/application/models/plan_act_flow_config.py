@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from weebot.application.ports.hook_registry_port import HookRegistryPort
     from weebot.application.ports.misalignment_journal_port import MisalignmentJournalPort
     from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
+    from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
+    from weebot.application.services.strategy_transfer import StrategyTransferService
     from weebot.application.ports.retention_agent_port import RetentionAgentPort
     from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -155,6 +157,8 @@ class PlanActFlowConfig:
     # ── Misalignment journal ─────────────────────────────────────────
     misalignment_journal: MisalignmentJournalPort | None = None  # MisalignmentJournalPort
     trajectory_repo: TrajectoryRepositoryPort | None = None  # for past-failure notes
+    summary_repo: SummaryRepositoryPort | None = None  # past successes on similar tasks
+    strategy_transfer: StrategyTransferService | None = None  # approaches from other task kinds
 
     # ── ICM edit-source tracking ─────────────────────────────────────
     correction_tracker: CorrectionTracker | None = None  # CorrectionTracker

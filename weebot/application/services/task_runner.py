@@ -6,7 +6,7 @@ import asyncio
 import logging
 import weakref
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from collections.abc import Callable
 
 from weebot.application.abstractions import BaseFlow
@@ -458,6 +458,30 @@ class TaskRunner:
             # taken as a plan-change request.
             await self._start_direct(session, flow_factory, prompt=answer)
 
+            return session
+
+    async def resume_from_checkpoint(
+        self, session_id: str, flow_factory: FlowFactory, *, checkpoints: Any
+    ) -> Session:
+        """Re-run an interrupted session from its last flow checkpoint.
+
+        The checkpointed plan replaces the session's own copy only when the
+        session fell behind it; FlowRouter then resumes at the first unfinished step.
+        """
+        from weebot.application.flows._checkpoint_scheduler import restore_from_checkpoint
+
+        async with self._lock_for(session_id):
+            session = await self._state_repo.load_session(session_id)
+            if session is None:
+                raise ValueError(f"Session {session_id} not found")
+            if session.status == SessionStatus.RUNNING and session_id in self._tasks:
+                raise ValueError(f"Session {session_id} is still running")
+            checkpoint = await checkpoints.load(session_id)
+            if checkpoint is None:
+                raise ValueError(f"Session {session_id} has no checkpoint")
+            session = restore_from_checkpoint(session, checkpoint)
+            await self._state_repo.save_session(session)
+            await self._start_direct(session, flow_factory, prompt="")
             return session
 
     async def cancel_session(self, session_id: str) -> bool:
