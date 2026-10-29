@@ -251,7 +251,17 @@ Each loop below carries something from one run into later ones. All of them are 
 - **Models.** One shared `AdaptiveCapabilityRouter` records each model call's outcome per step category in `acr_posteriors.db`. Those posteriors move its ranking; it adds at most two models to the cascade.
 - **Corrections.** User corrections become behavioral rules in later prompts.
 
-Not automatic: `SkillOptFlow` and `HarnessOptFlow` (manual commands), the `self_harness_weekly` job (it needs held-in and held-out task sets), and self-editing (`WEEBOT_METACOGNITIVE_IMPROVEMENT`, off).
+Opt-in loops (D4, each off until its flag is set):
+
+- **Step progress** (`WEEBOT_STEP_EVALUATOR`): a verifier-model call scores each step; a step that does not advance the plan is replanned and counts as a failed use of its candidate skills.
+- **Promotion veto** (`WEEBOT_SKILL_PROMOTION_GATE`): before a candidate becomes trusted, chain of verification checks its claims; contradicted claims keep it a candidate.
+- **Episodic summaries** (`WEEBOT_EPISODIC_SUMMARIES`): a successful run leaves a summary; planning a similar task gets "a similar past task succeeded" notes.
+- **Strategies** (`WEEBOT_STRATEGY_TRANSFER`): a successful run's approach is offered when planning a different kind of task.
+- **Checkpoints** (`WEEBOT_FLOW_CHECKPOINTS`): the plan is saved after each step; `flow recover ID` resumes an interrupted run.
+- **Model benchmarks**: `benchmark model ID` measures a model and merges the result, axis by axis, into the profile the router reads.
+- **Config edits** (`WEEBOT_SELF_EDIT_CONFIG`): `improve propose FILE` asks a model to revise a rule or contract file from recent failures; nothing changes until a human runs `improve apply ID`.
+
+Not automatic: `SkillOptFlow` and `HarnessOptFlow` (manual commands; `harness evolve --quality-signal`, `harness baseline --judge`, `skill compare`), the `self_harness_weekly` job (it needs held-in and held-out task sets), and self-editing of the improver itself (`WEEBOT_METACOGNITIVE_IMPROVEMENT`, off).
 
 ### Architecture Enforcement
 

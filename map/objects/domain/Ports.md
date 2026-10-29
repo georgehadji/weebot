@@ -27,7 +27,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:36` |
 | BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:25` | none |
 | CanonicalizerPort | canonicalizer_port.py:18 | ActionCanonicalizer `infrastructure/adapters/action_canonicalizer.py:34` | key `"build_action_canonicalizer"` `di/__init__.py:298` |
-| CheckpointPort | checkpoint_port.py:14 | SQLiteCheckpointStore `infrastructure/persistence/checkpoint_store.py:24` | none |
+| CheckpointPort | checkpoint_port.py:14 | SQLiteCheckpointStore `infrastructure/persistence/checkpoint_store.py:35` | port `di/_capabilities.py:53` (always bound, for the delete cascade); flows get it only with `WEEBOT_FLOW_CHECKPOINTS` |
 | CodeReviewerPort | code_reviewer_port.py:12 | CodeReviewerService `application/services/code_reviewer_service.py:72` | key `"code_reviewer"` `di/__init__.py:189` |
 | DatabaseRouterPort | database_router_port.py:15 | DefaultDatabaseRouter `infrastructure/persistence/default_database_router.py:16` | none (used in `sqlite_state_repo.py`) |
 | DesktopPort | desktop_port.py:41 | WindowsDesktopAdapter `infrastructure/adapters/windows_desktop.py:66` | none |
@@ -39,7 +39,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | IGatewaySessionStorePort (Protocol) / AbstractGatewaySessionStore | gateway_session_store_port.py:15, 67 | SQLiteGatewaySessionStore `infrastructure/persistence/gateway_session_store.py:40` | port `di/__init__.py:178` |
 | HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:163`, `models/plan_act_flow_config.py:187`) |
 | IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:191`, `di/_factories.py:274-282` |
-| JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:44, 102` | ModelJudge built by `harness baseline --judge` (`cli/commands/harness.py:368`) |
+| JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:44, 102` | ModelJudge built by `harness baseline --judge` (`cli/commands/harness.py:417`) |
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
 | LLMPort | llm_port.py:9 | adapters in `infrastructure/adapters/llm/` (LLMAdapters card) | port `di/__init__.py:152` |
 | MainReviewPort | main_review_port.py:12 | MainReviewService `application/services/main_review_service.py:39` | inside `"idea_gate"` (same) |
@@ -56,8 +56,8 @@ Dependency inversion: application code types against the port, and an adapter is
 | RerankPort | rerank_port.py:16 | OpenRouterRerankAdapter `infrastructure/adapters/openrouter_rerank_adapter.py:35` | port `di/__init__.py:187` |
 | RetentionAgentPort | retention_agent_port.py:11 | RetentionAgent `application/agents/retention_agent.py:40` | key `"retention_agent"` `di/__init__.py:192` |
 | SandboxPort | sandbox_port.py:137 | backends in `infrastructure/sandbox/` (Sandbox card) | port `di/__init__.py:153` |
-| ScoringPort | scoring_port.py:15 | PlanOutcomeScorer `infrastructure/scoring/plan_outcome_scorer.py:31` (+ ExactMatch, ExecutionResult) | port `di/__init__.py:228` |
-| SelfImprovementPort | self_improvement_port.py:11 | SelfImprover `application/services/self_improver.py:57` | none |
+| ScoringPort | scoring_port.py:15 | PlanOutcomeScorer `infrastructure/scoring/plan_outcome_scorer.py:31`; AnswerScorer `infrastructure/scoring/answer_scorer.py:14` over ExactMatch / ExecutionResult / Verifier | port `di/__init__.py:224` (`WEEBOT_SCORING_MODE`) |
+| SelfImprovementPort | self_improvement_port.py:11 | SelfImprover `application/services/self_improver.py:60` | none; built by the `improve` CLI (`cli/commands/improve.py:45`) |
 | SkillIndexPort | skill_index_port.py:31 | Agentskills / AwesomeAgentSkills / GitHub index adapters `infrastructure/adapters/` | none |
 | SkillRetrieverPort | skill_retriever_port.py:15 | BM25 / Semantic / Reranking retrievers `application/services/` | key `"skill_retriever"` `di/__init__.py:188` |
 | SkillStorePort | skill_store_port.py:15 | SkillStore `infrastructure/persistence/skill_store.py:23`, MaterializingSkillStore | key `"skill_store"` `di/_skillopt.py:24` |
@@ -67,11 +67,11 @@ Dependency inversion: application code types against the port, and an adapter is
 | BehavioralRuleStore, CorrectionStore, SessionConstraintStore, OpportunityStore, MemoryMetadataStore, PlanTemplateWriter (Protocols) | state_roles_port.py:35-86 | structural, the state repo | none (narrowed from `StateRepositoryPort` with `as_role`) |
 | SteeringPort | steering_port.py:17 | InMemorySteeringAdapter `infrastructure/adapters/steering_adapter.py:15` | port `di/__init__.py:164` |
 | StepAuditPort | step_audit_port.py:20 | StepEvidenceAuditor `application/services/step_evidence_auditor.py:45` | key `"step_audit_service"` `di/__init__.py:196` |
-| StepEvaluatorPort | step_evaluator_port.py:29 | NoOp / LLMStepEvaluator `application/services/step_evaluator.py:42, 60` | key `STEP_EVALUATOR` `di/__init__.py:201`, None unless `WEEBOT_STEP_EVALUATOR` |
+| StepEvaluatorPort | step_evaluator_port.py:29 | NoOp / LLMStepEvaluator `application/services/step_evaluator.py:42, 60` | key `STEP_EVALUATOR` `di/__init__.py:202`, None unless `WEEBOT_STEP_EVALUATOR` |
 | StreamingLLMPort (Protocol) | streaming_llm_port.py:27 | structural | none |
 | SubAgentCostTrackerPort | sub_agent_cost_tracker_port.py:10 | SubAgentCostTracker `infrastructure/adapters/sub_agent_cost_tracker.py:17` | port `di/__init__.py:185` |
 | SubAgentFactoryPort | sub_agent_factory_port.py:10 | SubAgentFactory `infrastructure/adapters/sub_agent_factory.py:44` | port `di/__init__.py:184` |
-| SummaryRepositoryPort | summary_repo_port.py:8 | SQLiteSummaryRepository `infrastructure/persistence/sqlite_summary_repo.py:14` | none |
+| SummaryRepositoryPort | summary_repo_port.py:8 | SQLiteSummaryRepository `infrastructure/persistence/sqlite_summary_repo.py:49` | key `SUMMARY_REPO` `di/_capabilities.py:47` (always bound); flows get it only with `WEEBOT_EPISODIC_SUMMARIES` |
 | SwarmEventBusPort | swarm_event_bus_port.py:13 | SwarmEventBus `infrastructure/swarm_event_bus.py:34` | port `di/__init__.py:183` |
 | TaskQueuePort | task_queue_port.py:38 | InMemory / Redis task queues `infrastructure/queue/` | port `di/__init__.py:155`; RESERVED (D4), pinned by `tests/unit/test_task_queue_contract.py` |
 | TaskRouterPort | task_router_port.py:15 | KeywordTaskRouter `application/services/keyword_task_router.py:25` | none |
