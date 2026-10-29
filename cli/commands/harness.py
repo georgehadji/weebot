@@ -9,9 +9,56 @@ from weebot.config.constants import DB_SESSIONS_PATH
 console = Console()
 
 
+def _answer_scorer(container):
+    """The container's ScoringPort, unless WEEBOT_SCORING_MODE leaves answers unscored."""
+    from weebot.application.ports.scoring_port import ScoringPort
+    from weebot.config import feature_flags
+
+    if feature_flags.SCORING_MODE == "plan_outcome":
+        return None
+    return container.get(ScoringPort)
+
+
 @click.group()
 def benchmark() -> None:
     """Run weebot agents against SIA-compatible benchmark tasks."""
+
+
+@benchmark.command("model")
+@click.argument("model_id")
+@click.option(
+    "--max-cost", default=0.50, type=float, show_default=True, help="Abort above this estimate"
+)
+def benchmark_model(model_id: str, max_cost: float) -> None:
+    """Measure MODEL_ID on the capability suites and save its quality profile.
+
+    About 60 billed calls. The model router reads the saved profile, merged axis
+    by axis over the seeded one.
+    """
+    import asyncio
+
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.config import capability_profiles
+    from weebot.infrastructure.benchmark.runner import BenchmarkRunner, CostGuardError
+    from weebot.interfaces.factories import shared_container
+
+    llm = shared_container().get(LLMPort)
+
+    async def call_llm(model, messages):
+        return await llm.chat(messages=messages, model=model)
+
+    try:
+        profile = asyncio.run(
+            BenchmarkRunner(call_llm=call_llm, cost_ceiling=max_cost).run(model_id)
+        )
+    except CostGuardError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if profile is None:
+        raise click.ClickException(f"every benchmark call failed for {model_id}")
+    capability_profiles.save_benchmark_profile(profile)
+    for axis, score in sorted(profile.axes.items(), key=lambda kv: kv[0].value):
+        console.print(f"  {axis.value:12} {score:.1f}")
+    console.print(f"[green]Saved the benchmark profile for {model_id}.[/green]")
 
 
 @benchmark.command("list")
@@ -58,6 +105,7 @@ def benchmark_run(
             flow_factory=container._create_target_flow_factory(),
             scorer=TaskScorer(),
             skill_name=skill_name,
+            answer_scorer=_answer_scorer(container),
         )
         result = await runner.run_task(task, sample_idx)
         console.print(json.dumps(result.to_dict(), indent=2))
@@ -98,6 +146,7 @@ def benchmark_batch(
             flow_factory=container._create_target_flow_factory(),
             scorer=TaskScorer(),
             skill_name=skill_name,
+            answer_scorer=_answer_scorer(container),
         )
         results = await runner.run_batch(tasks, concurrency=concurrency)
         records = [r.to_dict() for r in results]
@@ -218,6 +267,11 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
     help="Number of Self-Harness optimization iterations",
 )
 @click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
+@click.option(
+    "--quality-signal",
+    is_flag=True,
+    help="Score failed gate runs' output with one model call each (billed)",
+)
 def harness_evolve(
     harness_path: str,
     output_dir: str | None,
@@ -226,6 +280,7 @@ def harness_evolve(
     max_proposals: int,
     iterations: int,
     db: str,
+    quality_signal: bool,
 ) -> None:
     """Run the Self-Harness optimization loop to evolve an agent harness.
 
@@ -257,6 +312,11 @@ def harness_evolve(
         container.configure_defaults(db_path=db)
         llm = container.get(LLMPort)
         trajectory_repo = TrajectoryRepository(db_path=db)
+        code_quality_signal = None
+        if quality_signal:
+            from weebot.application.services.code_quality_signal import CodeQualitySignal
+
+            code_quality_signal = CodeQualitySignal(llm=container._create_llm_for_role("verifier"))
 
         # Create optimization target
         target = HarnessOptimizationTarget(harness_path=harness_path, output_dir=output_dir)
@@ -279,6 +339,8 @@ def harness_evolve(
                 held_in_tasks=list(held_in_tasks),
                 held_out_tasks=list(held_out_tasks),
                 max_proposals=max_proposals,
+                code_quality_signal=code_quality_signal,
+                flow_factory=container._create_target_flow_factory(),
             )
 
             try:
@@ -335,23 +397,36 @@ def _git_sha() -> str:
         return "unknown"
 
 
-async def _run_eval_tasks(tasks, model, db, concurrency):
+async def _run_eval_tasks(tasks, model, db, concurrency, judge=False):
     """Run (task_id, split, prompt) triples through PlanActFlow.
 
-    Returns a list of TaskOutcome. A task counts as passed when its flow
-    reaches a terminal state without raising — the eval prompts have no
-    expected answers, so this measures completion, not correctness.
+    Returns a list of TaskOutcome. Without *judge* a task counts as passed when
+    its flow reaches a terminal state without raising — the eval prompts have no
+    expected answers, so this measures completion, not correctness. With *judge*
+    a ModelJudge on the verifier tier also scores the answer.
     """
-    import asyncio as _asyncio
-    import uuid
-
     from weebot.application.di import Container
-    from weebot.application.harness.baseline import TaskOutcome, prompt_fingerprint
-    from weebot.domain.models.session import Session
 
     container = Container()
     container.configure_defaults(db_path=db, default_model=model)
     flow_factory = container._create_target_flow_factory()
+    model_judge = None
+    if judge:
+        from weebot.application.eval.judges import ModelJudge
+
+        model_judge = ModelJudge(llm=container._create_llm_for_role("verifier"))
+    return await _score_tasks(tasks, flow_factory, concurrency, judge=model_judge)
+
+
+async def _score_tasks(tasks, flow_factory, concurrency, judge=None):
+    """Run each task's flow; score completion, and the answer when *judge* is given."""
+    import asyncio as _asyncio
+    import uuid
+
+    from weebot.application.eval.eval_runner import EvalRunner, EvalTask
+    from weebot.application.harness.baseline import TaskOutcome, prompt_fingerprint
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.domain.models.session import Session
 
     semaphore = _asyncio.Semaphore(concurrency)
 
@@ -362,28 +437,46 @@ async def _run_eval_tasks(tasks, model, db, concurrency):
                 user_id="baseline",
                 agent_id="harness-baseline",
             )
-            try:
+            ran = {}
+
+            async def target(p):
                 flow = flow_factory(session)
-                async for _ in flow.run(prompt):
+                ran["flow"] = flow
+                async for _ in flow.run(p):
                     pass
-            except Exception as exc:
+                return TaskScorer._extract_answer(getattr(flow, "_session", session))
+
+            if judge is not None:
+                [result] = (
+                    await EvalRunner(judge=judge).run(target, [EvalTask(id=task_id, prompt=prompt)])
+                ).results
+                error, judged = result.error, result
+            else:
+                error, judged = "", None
+                try:
+                    await target(prompt)
+                except Exception as exc:
+                    error = str(exc)
+            if error:
                 return TaskOutcome(
                     task_id=task_id,
                     split=split,
                     fingerprint=prompt_fingerprint(prompt),
                     passed=False,
                     score=0.0,
-                    error=str(exc)[:200],
+                    error=error[:200],
                 )
-            completed = getattr(flow, "_session", session)
+            completed = getattr(ran.get("flow"), "_session", session)
             status = str(getattr(completed, "status", "")).lower()
-            passed = "fail" not in status and "error" not in status
+            finished = "fail" not in status and "error" not in status
+            passed = finished and (judged is None or judged.passed)
+            score = (judged.score if judged is not None else 1.0) if finished else 0.0
             return TaskOutcome(
                 task_id=task_id,
                 split=split,
                 fingerprint=prompt_fingerprint(prompt),
                 passed=passed,
-                score=1.0 if passed else 0.0,
+                score=score,
             )
 
     return list(await _asyncio.gather(*[_one(*t) for t in tasks]))
@@ -401,7 +494,8 @@ def harness_baseline() -> None:
 @click.option("--db", default="./weebot_baseline.db", show_default=True)
 @click.option("--concurrency", default=2, type=int, show_default=True)
 @click.option("--notes", default="", help="Free-text note stored in the artifact")
-def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> None:
+@click.option("--judge", is_flag=True, help="Also score each answer with a model judge (billed)")
+def harness_baseline_record(output, tasks, model, db, concurrency, notes, judge) -> None:
     """Run the eval set and write a baseline snapshot.
 
     Requires LLM credentials. Commit the resulting artifact — every later
@@ -415,7 +509,7 @@ def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> Non
     triples = load_eval_tasks(tasks)
     console.print(f"Running {len(triples)} eval task(s)…")
 
-    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency))
+    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency, judge=judge))
 
     try:
         harness_version = HarnessConfig.default().version
@@ -455,7 +549,8 @@ def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> Non
     show_default=True,
     help="Allowed drop in pass rate (0.1 = 10 points)",
 )
-def harness_baseline_check(baseline_path, tasks, model, db, concurrency, tolerance) -> None:
+@click.option("--judge", is_flag=True, help="Score answers with a model judge; match the baseline")
+def harness_baseline_check(baseline_path, tasks, model, db, concurrency, tolerance, judge) -> None:
     """Re-run the eval set and compare against the recorded baseline.
 
     Exits non-zero on regression, so it can gate CI.
@@ -471,7 +566,7 @@ def harness_baseline_check(baseline_path, tasks, model, db, concurrency, toleran
         f"re-running {len(triples)} eval task(s)…"
     )
 
-    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency))
+    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency, judge=judge))
     result = compare(base, outcomes, tolerance=tolerance)
 
     console.print("\n" + result.summary())

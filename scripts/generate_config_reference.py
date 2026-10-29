@@ -59,6 +59,15 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Context the model really has (num_ctx); Ollama's /v1 ignores a per-request value"},
     {"var": "OLLAMA_ROLES", "type": "str", "default": "summarizer,documentation",
      "desc": "Roles that try an Ollama model first: `role` or `role=tag` (e.g. verifier=gemma4:31b-cloud)"},
+    {"var": "WEEBOT_FREE_ROLES", "type": "str", "default": "",
+     "desc": "Roles that try a free-tier model first, `role=provider/model` (e.g. "
+             "executor=groq/openai/gpt-oss-120b); the paid cascade stays behind it. Gemini's "
+             "free tier may train on prompts, so it is skipped once a session reads untrusted "
+             "content"},
+    {"var": "GROQ_API_KEY", "type": "str", "default": "", "sensitive": True,
+     "desc": "Groq API key, for `groq/...` entries in WEEBOT_FREE_ROLES"},
+    {"var": "GEMINI_API_KEY", "type": "str", "default": "", "sensitive": True,
+     "desc": "Google AI Studio API key, for `gemini/...` entries in WEEBOT_FREE_ROLES"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,
@@ -120,7 +129,8 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "SANDBOX_ALLOW_NETWORK", "type": "bool",
      "desc": "Allow network access from sandboxed code execution"},
     {"var": "SANDBOX_MODE", "type": "str",
-     "desc": "auto (native on Windows, Docker elsewhere), docker_first, native, docker, wsl2"},
+     "desc": "auto (native on Windows, Docker elsewhere), docker_first, native, docker, wsl2, "
+             "modal (remote, billed; needs `pip install modal` and a Modal token)"},
     {"var": "SANDBOX_REQUIRE_ISOLATION", "type": "bool",
      "desc": "Refuse sandboxed calls on a backend that cannot enforce network-off (ADR-014)"},
     {"var": "WEEBOT_AUTO_APPROVE", "type": "str", "default": "",
@@ -150,8 +160,6 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Seconds the pre-planning intent review may take; on timeout it fails open"},
 
     # ── Model / LLM ───────────────────────────────────────────────
-    {"var": "WEEBOT_MODEL", "type": "str", "default": "",
-     "desc": "Override the default model ID for all roles"},
     {"var": "DAILY_AI_BUDGET", "type": "float",
      "desc": "Maximum daily AI spend in USD"},
     {"var": "WEEBOT_PONYTAIL_MODE", "type": "str",
@@ -162,8 +170,6 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Log level (DEBUG, INFO, WARNING, ERROR)"},
     {"var": "WEEBOT_LOG_FORMAT", "type": "str", "default": "",
      "desc": "Log format: json|console|dev"},
-    {"var": "WEEBOT_OTEL_ENDPOINT", "type": "str", "default": "",
-     "desc": "OpenTelemetry collector endpoint"},
     {"var": "WEEBOT_ENABLE_ATOMIC_MAIL", "type": "bool", "default": "0",
      "desc": "Enable atomic-mail agent inbox (JMAP)"},
     {"var": "BROWSER_HEADLESS", "type": "bool", "default": "true",
@@ -183,8 +189,6 @@ CONFIG_SCHEMA: list[dict] = [
              "so they need an API key"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
      "desc": "Largest request body the web API accepts (413 above it)"},
-    {"var": "WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS", "type": "bool", "default": "false",
-     "desc": "EXPERIMENTAL: enable raw-SQL migration scripts. Do not enable in production."},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
      "desc": "Allow unsigned WhatsApp webhooks (dev only)"},
     {"var": "STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",
@@ -235,6 +239,30 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Max concurrent gateway sessions per platform"},
     {"var": "SIGNAL_CLI_REST_URL", "type": "str",
      "desc": "Signal CLI REST API URL"},
+
+    # ── Optional features, off by default (D4) ────────────────────
+    {"var": "WEEBOT_STEP_EVALUATOR", "type": "bool", "default": "false",
+     "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
+    {"var": "WEEBOT_SKILL_PROMOTION_GATE", "type": "bool", "default": "false",
+     "desc": "Chain-of-verification veto before a learned skill is promoted to trusted"},
+    {"var": "WEEBOT_STAGED_VALIDATION", "type": "bool", "default": "false",
+     "desc": "SkillOpt validates a candidate on a 10-task probe first and stops if it scores low"},
+    {"var": "WEEBOT_SCORING_MODE", "type": "str", "default": "plan_outcome",
+     "desc": "Scorer for sessions with an expected answer: plan_outcome|exact|execution|verifier"},
+    {"var": "WEEBOT_EPISODIC_SUMMARIES", "type": "bool", "default": "false",
+     "desc": "Save summaries of successful runs and show them when planning similar tasks"},
+    {"var": "WEEBOT_FLOW_CHECKPOINTS", "type": "bool", "default": "false",
+     "desc": "Save the plan after each step so `flow recover` can resume an interrupted run"},
+    {"var": "WEEBOT_STRATEGY_TRANSFER", "type": "bool", "default": "false",
+     "desc": "Offer approaches that worked on other kinds of task when planning"},
+    {"var": "WEEBOT_EVENT_BUS", "type": "str", "default": "local",
+     "desc": "Event bus: local, or valkey to share events between processes (WEEBOT_VALKEY_URL)"},
+    {"var": "WEEBOT_SELF_EDIT_CONFIG", "type": "bool", "default": "false",
+     "desc": "`improve` CLI: model-proposed edits to rule/contract files, applied by a human"},
+    {"var": "WEEBOT_WINDOWS_TOAST", "type": "bool", "default": "false",
+     "desc": "Windows desktop toasts for errors, questions and finished runs (web backend)"},
+    {"var": "WEEBOT_SPEECH_BACKEND", "type": "str", "default": "whisper",
+     "desc": "Voice tools backend: whisper (local extras) or openrouter (billed, audio leaves)"},
 
     # ── PostgreSQL (optional backend) ──────────────────────────────
     {"var": "WEEBOT_DB_BACKEND", "type": "str", "default": "sqlite",

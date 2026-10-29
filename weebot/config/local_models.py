@@ -8,6 +8,7 @@ catalog as before. The id is ``ollama/<tag>``; the prefix is what routes the cal
 
 from __future__ import annotations
 
+from weebot.config.free_models import free_models
 from weebot.config.model_catalog import MODELS
 from weebot.domain.models.model_config import ModelConfig, ModelTier
 from weebot.domain.models.task_type import TaskType
@@ -99,5 +100,5 @@ def local_models() -> dict[str, ModelConfig]:
 
 
 def all_models() -> dict[str, ModelConfig]:
-    """The generated OpenRouter catalog plus the local model, when enabled."""
-    return {**MODELS, **local_models()}
+    """The generated OpenRouter catalog plus the local and free-tier models, when enabled."""
+    return {**MODELS, **local_models(), **free_models()}

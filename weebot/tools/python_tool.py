@@ -13,6 +13,7 @@ from weebot.config.tool_config import ToolConfig
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
+from weebot.tools._results import to_tool_result
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -160,7 +161,10 @@ class PythonExecuteTool(BaseTool):
             return ToolResult(output="", error=f"Code blocked by BashGuard: {'; '.join(reasons)}")
 
         # --- Safety gate (ExecApprovalPolicy) ---
-        approval = self._policy.evaluate(code)
+        from weebot.core.shell_segments import SegmentSyntax
+
+        # Lines of code are not separate commands (R01 splits shell text on newlines).
+        approval = self._policy.evaluate(code, syntax=SegmentSyntax.PYTHON)
         if not approval.approved:
             return ToolResult(output="", error=f"Code denied by policy: {approval.reason}")
         if approval.requires_confirmation and not is_human_approved(self.name):
@@ -175,12 +179,4 @@ class PythonExecuteTool(BaseTool):
             code=code, timeout=effective_timeout, memory_limit_mb=256
         )
 
-        if result.timed_out:
-            return ToolResult(
-                output="", error=f"Python code timed out after {effective_timeout:.0f}s"
-            )
-        if not result.success:
-            return ToolResult(
-                output=result.stdout, error=result.stderr or f"Exit code {result.returncode}"
-            )
-        return ToolResult(output=result.combined_output)
+        return to_tool_result(result, timeout=effective_timeout, label="Python code")

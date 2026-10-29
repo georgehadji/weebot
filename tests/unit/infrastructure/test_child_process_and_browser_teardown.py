@@ -4,7 +4,8 @@ Both were generated in W4, deferred to W7, and W7 spent its budget elsewhere.
 They are the same shape: a path that acquires something and a path that was
 supposed to give it back.
 
-D38 — `qmd_integration/mcp_client.py`
+D38 — `qmd_integration/mcp_client.py` (deleted in wave 6 G5; the reaping fix,
+    `core/process_lifecycle.reap_process`, stays and is tested here)
     `_start_mcp_http` assigned its child to a LOCAL, so `close()` could not
     reach it and every start leaked a `qmd mcp --http` holding the port. ruff
     reports that as F841; CI selects only `F821,E9`, so nothing asked.
@@ -42,25 +43,6 @@ from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
 
 
 # ── D38 ───────────────────────────────────────────────────────────────
-
-
-def _sleeper(tmp_path) -> str:
-    """A stand-in for `qmd` that ignores its arguments and stays alive.
-
-    It has to be something Popen can execute directly on both platforms.
-    Windows cannot run a `#!` script -- Popen failed with WinError 193, so the
-    two tests using this could never pass on a Windows checkout -- so there it
-    is a .cmd wrapper; both forms run the same Python sleep.
-    """
-    sleep = f'"{sys.executable}" -c "import time; time.sleep(30)"'
-    if sys.platform == "win32":
-        script = tmp_path / "fake_qmd.cmd"
-        script.write_text(f"@{sleep}\n")
-    else:
-        script = tmp_path / "fake_qmd"
-        script.write_text(f"#!/bin/sh\nexec {sleep}\n")
-        script.chmod(0o755)
-    return str(script)
 
 
 def test_reap_collects_the_child_instead_of_leaving_it_defunct():
@@ -103,54 +85,6 @@ def test_reap_escalates_when_sigterm_is_ignored():
         if proc.poll() is None:  # pragma: no cover - belt and braces
             proc.kill()
             proc.wait()
-
-
-@pytest.mark.asyncio
-async def test_the_http_server_is_reachable_by_close(tmp_path, monkeypatch):
-    """The defect in one assertion: `close()` could not see the child.
-
-    `proc = subprocess.Popen(...)` bound a local. Nothing else in the class
-    referenced it, so the server outlived the client that started it.
-    """
-    from weebot.qmd_integration import mcp_client as mod
-
-    monkeypatch.setattr(mod.QMDMCPClient, "_check_qmd", lambda self: True)
-    monkeypatch.setattr(mod.asyncio, "sleep", _instant_sleep)
-
-    client = mod.QMDMCPClient(qmd_path=_sleeper(tmp_path), transport="http")
-    await client._start_mcp_http()
-
-    proc = client._http_process
-    assert proc is not None, "the HTTP server was not reachable from the client"
-    assert proc.poll() is None, "the stand-in server should still be running"
-
-    client.close()
-    assert proc.poll() is not None, "close() left the HTTP server running"
-    assert client._http_process is None
-
-
-@pytest.mark.asyncio
-async def test_starting_twice_does_not_start_a_second_server(tmp_path, monkeypatch):
-    """Without the handle there was nothing to check, so every call started one."""
-    from weebot.qmd_integration import mcp_client as mod
-
-    monkeypatch.setattr(mod.QMDMCPClient, "_check_qmd", lambda self: True)
-    monkeypatch.setattr(mod.asyncio, "sleep", _instant_sleep)
-
-    client = mod.QMDMCPClient(qmd_path=_sleeper(tmp_path), transport="http")
-    try:
-        await client._start_mcp_http()
-        first = client._http_process
-        await client._start_mcp_http()
-        assert client._http_process is first, "a second server was started"
-    finally:
-        client.close()
-
-
-async def _instant_sleep(_seconds):
-    """The real `_start_mcp_http` waits 2s for the server; the wait is not
-    under test and it is paid on every run."""
-    return None
 
 
 # ── D37 ───────────────────────────────────────────────────────────────

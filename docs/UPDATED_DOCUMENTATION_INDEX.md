@@ -30,7 +30,7 @@
 
 | Έγγραφο | Status | Περιγραφή |
 |---------|--------|-----------|
-| `QMD_INTEGRATION.md` | ✅ Νέο | QMD integration (embeddings, MCP, RAG, query expansion) |
+| `QMD_INTEGRATION.md` | ✅ Νέο | QMD integration (local embeddings) |
 
 ### Έγγραφα Deployment & Resilience
 

@@ -277,6 +277,10 @@ async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
         evaluation.regression_detected,
         evaluation.reasoning,
     )
+    # A stopped step counts against the candidate skills it used, like a failed one.
+    from weebot.application.flows.states._step_run import record_skill_uses
+
+    await record_skill_uses(context, step, run, passed=False)
     context.set_state(new_state(StateId.UPDATING))
     return True
 

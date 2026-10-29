@@ -3,6 +3,8 @@
 import io
 from typing import Any
 
+from weebot.core.output_path import write_target
+
 try:
     from mss import mss as _mss_class
     import mss.tools as _mss_tools
@@ -49,6 +51,11 @@ class ScreenCaptureTool:
             {"success": bool, "output": str, "data": bytes | None}
             data is PNG bytes if success, None otherwise.
         """
+        if save_path:
+            try:
+                save_path = write_target(save_path, suffixes=frozenset({".png"}))  # R08
+            except ValueError as exc:
+                return {"success": False, "output": f"Refused save_path: {exc}", "data": None}
         if not _MSS_AVAILABLE:
             return {"success": False, "output": "mss not installed", "data": None}
 

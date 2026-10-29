@@ -83,9 +83,12 @@ candidates:
     wave: W1
     location: weebot/infrastructure/security/state_verifier.py:501
     claim: "Raw `create_subprocess_shell` outside the bash-guard path"
-    status: fixed
-    evidence: tests/unit/infrastructure/security/test_verification_does_not_re_execute.py
+    status: cleared
+    evidence: null
     verdict_note: >-
+      Closed by deletion: D4 (commit 4f0b97fe) deleted
+      weebot/infrastructure/security/state_verifier.py, which had no caller, and
+      its proof test went with it. The history below is how it was found and fixed.
       Confirmed and much worse than the claim. The recorded path had moved to
       weebot/infrastructure/security/, and it was the ONLY shell-execution site
       in weebot/ or cli/ -- zero `shell=True`, zero `os.system`. What it did:
@@ -465,9 +468,12 @@ candidates:
     wave: W3
     location: weebot/infrastructure/watchers/
     claim: "`get_event_loop()` + `create_task` from the watchdog observer thread, swallowed"
-    status: fixed
-    evidence: tests/unit/test_alerting_dispatch.py::test_an_alert_fired_from_a_worker_thread_reaches_async_handlers
+    status: cleared
+    evidence: null
     verdict_note: >-
+      Closed by deletion: wave 6 G4 (commit 1e48faff) deleted weebot/core/alerting.py,
+      the only site with this shape, and its proof test went with it, so no
+      defect remains to prove. The history below is how it was found and fixed.
       The recorded location, weebot/infrastructure/watchers/, DOES NOT EXIST, and
       the note said "generated and read; not triggered within W3's budget" -- so
       the candidate named a directory rather than a site and was never verified.

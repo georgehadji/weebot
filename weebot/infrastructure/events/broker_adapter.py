@@ -36,6 +36,8 @@ class EventBrokerAdapter:
 
     def __init__(self, event_bus: EventBusPort) -> None:
         self._bus = event_bus
+        # handler -> the type-filtering wrapper subscribed for it, for unsubscribe().
+        self._wrappers: dict[Any, Any] = {}
 
     async def publish(
         self, event_type: str, agent_id: str, data: dict[str, Any] | None = None
@@ -47,6 +49,11 @@ class EventBrokerAdapter:
         into WorkingMemory).
         """
         agent_event = self._convert(event_type, agent_id, data or {})
+        if isinstance(agent_event, NotificationEvent) and not agent_event.session_id:
+            # An empty session id is a global broadcast to every WebSocket client;
+            # an event that names no session has no business there.
+            logger.debug("EventBrokerAdapter: dropped '%s' with no session id", event_type)
+            return False
         await self._bus.publish(agent_event)
         return True
 
@@ -60,7 +67,20 @@ class EventBrokerAdapter:
         To unsubscribe, call unsubscribe() with the *same handler
         reference*.
         """
-        self._bus.subscribe_by_type(event_type, handler)
+        # Filtered here rather than with AsyncEventBus.subscribe_by_type, which
+        # the port does not have: the container's DurableEventBus raised on it.
+        async def filtered(event: AgentEvent) -> None:
+            if getattr(event, "type", None) == event_type:
+                await handler(event)
+
+        self._wrappers[handler] = filtered
+        self._bus.subscribe(filtered)
+
+    def unsubscribe(self, handler: Any) -> None:
+        """Stop delivering to *handler* (the same reference given to subscribe)."""
+        wrapper = self._wrappers.pop(handler, None)
+        if wrapper is not None:
+            self._bus.unsubscribe(wrapper)
 
     def _convert(self, event_type: str, agent_id: str, data: dict[str, Any]) -> AgentEvent:
         """Convert an EventBroker-style (event_type, agent_id, data) triple

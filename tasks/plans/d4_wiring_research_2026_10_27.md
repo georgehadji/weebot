@@ -1,5 +1,5 @@
 ---
-status: reference
+status: superseded
 date: 2026-10-27
 note: research for decision D4 of the audit fix plan; how to wire the G8 and G9 code instead of deleting it; findings come from two read-only agents and were not independently re-checked
 ---

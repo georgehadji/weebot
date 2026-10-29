@@ -34,6 +34,8 @@ from weebot.application.di.keys import (  # noqa: E402
     LEARNING_SKILL_STORE,
     LLM_POOL,
     SESSION_COST_METER,
+    SKILL_PROMOTION_GATE,
+    STEP_EVALUATOR,
 )
 from weebot.application.ports.api_key_port import ApiKeyPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
@@ -197,6 +199,7 @@ class Container(
         # tier instead of the flow's (usually pricier) default model. Falls
         # back to that default automatically if role config is absent.
         self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
+        self.register(STEP_EVALUATOR, self._create_step_evaluator)
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)
@@ -213,17 +216,12 @@ class Container(
         # call, on the cheap verifier tier. The score itself is free.
         from weebot.application.ports.scoring_port import ScoringPort
 
-        def _create_plan_outcome_scorer():
-            from weebot.infrastructure.scoring.plan_outcome_scorer import PlanOutcomeScorer
-
-            return PlanOutcomeScorer()
-
         def _create_trajectory_builder():
             from weebot.application.services.trajectory_builder import TrajectoryBuilder
 
             return TrajectoryBuilder(llm=self.get("verifier_llm"))
 
-        self.register(ScoringPort, _create_plan_outcome_scorer)
+        self.register(ScoringPort, self._create_scoring_port)
         self.register("trajectory_builder", _create_trajectory_builder)
         self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
@@ -605,6 +603,7 @@ class Container(
             trajectory_repo=trajectory_repo,
             event_store=self._maybe_get(EventStorePort),
             skill_store=self._maybe_get(LEARNING_SKILL_STORE),
+            skill_promotion_gate=self._maybe_get(SKILL_PROMOTION_GATE),
         )
         return mediator
 

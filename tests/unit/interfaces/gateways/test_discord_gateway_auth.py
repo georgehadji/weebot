@@ -59,10 +59,18 @@ class TestDiscordGatewayAuth:
                     patch(
                         "weebot.interfaces.factories.create_flow", return_value=mock_flow
                     ) as mock_create_flow,
+                    patch.object(adapter, "_edit_original", AsyncMock(return_value=True)) as edit,
                 ):
                     result = await adapter.process_interaction(valid_payload)
+                    # The reply is deferred (R09); the run finishes in a background task.
+                    import asyncio
 
-        assert result["type"] == 4
+                    await asyncio.gather(
+                        *[t for t in asyncio.all_tasks() if t.get_name().startswith("discord-")]
+                    )
+
+        assert result["type"] == 5
+        edit.assert_awaited_once()
         mock_build_tools.assert_called_once()
         mock_create_flow.assert_called_once()
         mock_flow.run.assert_called_once()

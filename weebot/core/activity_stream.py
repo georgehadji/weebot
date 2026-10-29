@@ -3,8 +3,7 @@
 Supports an optional list of analytics sink callables that receive every
 event for external analytics (OTel, Parquet, etc.).  Sinks are duck-typed:
 any object with ``async def push(event: ActivityEvent) -> None`` and
-``async def flush() -> None`` works.  The canonical interface is
-:class:`~weebot.application.ports.analytics_port.AnalyticsSinkPort`.
+``async def flush() -> None`` works.
 """
 
 from __future__ import annotations

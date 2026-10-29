@@ -18,7 +18,12 @@ import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    flow_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,30 +107,21 @@ class WhatsAppAdapter(GatewayAdapter):
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
-
         from weebot.domain.models.session import Session
-        from weebot.interfaces.factories import build_tools, create_flow
+        from weebot.interfaces.factories import run_scope
 
-        session_id = f"whatsapp-{message.external_id}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("whatsapp", message.external_id)
         session = Session(
             id=session_id, user_id=f"whatsapp-{message.external_id}", agent_id="whatsapp-agent"
         )
 
-        tools = await build_tools(role="admin")
-        flow = create_flow(
-            flow_type="plan_act",
-            session=session,
-            llm=self._llm,
-            tools=tools,
-            state_repo=self._state_repo,
-            profile_name=self._profile_name,
-        )
-
         response = ""
-        async for event in flow.run(text):
-            if getattr(event, "type", "") == "message":
-                response = getattr(event, "message", "") or response
+        async with run_scope(
+            session, llm=self._llm, state_repo=self._state_repo, profile_name=self._profile_name
+        ) as flow:
+            async for event in flow.run(text):
+                if getattr(event, "type", "") == "message":
+                    response = getattr(event, "message", "") or response
 
         return response or "(no response produced)"
 

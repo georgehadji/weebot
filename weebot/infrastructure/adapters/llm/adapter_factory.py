@@ -76,6 +76,8 @@ class AdapterFactory:
         },
         # Local: a cold model load plus CPU offload on a laptop is minutes, not seconds.
         "ollama": {"timeout": 300.0, "default_model": "qwen3:8b"},
+        # Free tiers answer fast or rate-limit fast; the paid cascade is behind them.
+        "free": {"timeout": 60.0},
     }
 
     def __init__(
@@ -213,10 +215,19 @@ class AdapterFactory:
             enable_caching=enable_caching if enable_caching is not None else self._enable_caching,
         )
 
-        # `ollama/<tag>` model ids (the cascade's per-attempt `model=`) go to the local server,
-        # not to this adapter's fixed endpoint. Only when Ollama is switched on.
-        if provider != "ollama" and _ollama_enabled():
-            resilient = LocalModelRouter(resilient, lambda: self.create_adapter("ollama"))
+        # `ollama/<tag>` and `free/<provider>/<model>` ids (the cascade's per-attempt `model=`)
+        # go to their own endpoints, not to this adapter's fixed one. Only when switched on.
+        ollama_on, free_on = _ollama_enabled(), _free_roles_enabled()
+        if provider not in ("ollama", "free") and (ollama_on or free_on):
+            resilient = LocalModelRouter(
+                resilient,
+                (lambda: self.create_adapter("ollama")) if ollama_on else None,
+                free_factory=(
+                    (lambda model_id: self.create_adapter("free", model=model_id))
+                    if free_on
+                    else None
+                ),
+            )
 
         # Cache adapter
         self._adapters[cache_key] = resilient
@@ -337,6 +348,22 @@ class AdapterFactory:
                 default_model=model.removeprefix("ollama/") or settings.ollama_model,
             )
 
+        elif provider == "free":
+            from weebot.config.free_models import PROVIDERS, provider_key, split_free_id
+
+            parts = split_free_id(model)
+            if parts is None or parts[0] not in PROVIDERS:
+                raise ValueError(
+                    f"Unknown free provider in {model!r}: use free/<{'|'.join(PROVIDERS)}>/<model>"
+                )
+            name, bare = parts
+            key = provider_key(name)
+            if not key:
+                # Never let OpenAIAdapter pick a key itself: its chain would send the
+                # OpenRouter key to this provider.
+                raise ValueError(f"{model} needs {PROVIDERS[name].key_env} in .env")
+            return OpenAIAdapter(api_key=key, base_url=PROVIDERS[name].base_url, default_model=bare)
+
         elif model and "/" in model:
             # A vendor/model id with no direct adapter here (google/, poolside/,
             # microsoft/, ...) is an OpenRouter id. These raised "Unknown
@@ -418,6 +445,16 @@ def _ollama_enabled() -> bool:
         return bool(get_settings().ollama_enabled)
     except Exception:
         logger.debug("could not read the Ollama switch; treating Ollama as off", exc_info=True)
+        return False
+
+
+def _free_roles_enabled() -> bool:
+    try:
+        from weebot.config.free_models import role_models
+
+        return bool(role_models())
+    except Exception:
+        logger.debug("could not read WEEBOT_FREE_ROLES; treating free tiers as off", exc_info=True)
         return False
 
 

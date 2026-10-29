@@ -9,12 +9,10 @@ completed successfully" for a run whose steps failed.
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 from weebot.domain.models.event import DoneEvent
 from weebot.interfaces.cli.event_logger import _format_event
-from weebot.interfaces.sse_event_subscriber import SSEEventSubscriber
 from weebot.interfaces.windows_toast_subscriber import WindowsToastSubscriber
 
 FAILED = DoneEvent(status="failed")
@@ -39,10 +37,6 @@ async def test_the_toast_does_not_report_success_for_a_failed_run():
     await WindowsToastSubscriber(channel=_Channel()).on_event(FAILED)
     assert "success" not in sent[0].message.lower()
     assert sent[0].level.value == "error"
-
-
-def test_the_sse_stream_carries_the_status():
-    assert json.loads(SSEEventSubscriber()._serialize(FAILED))["status"] == "failed"
 
 
 def test_the_auto_execute_script_names_a_failed_run():

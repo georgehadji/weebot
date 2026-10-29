@@ -1,13 +1,13 @@
 ---
 status: open
 date: 2026-10-27
-note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 A28 fixed (A28 without the scheduler timezone change; branch fix/audit-track-a2); A26 fixed in all five parts on branch fix/audit-track-a3 with follow-ups on fix/audit-track-a4 (direct media metered, planner deadline, queued probes unbilled, every session listed; the scheduler stays in local time); the rest not started; 2026-10-28 on feat/master-plan-ready: B1 (scripts/prepush_gates.py), B2, A22 note, E2 (effects cards checked), A12 watermark and unique index, W2.1 one authenticator built
+note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 A28 fixed (A28 without the scheduler timezone change; branch fix/audit-track-a2); A26 fixed in all five parts on branch fix/audit-track-a3 with follow-ups on fix/audit-track-a4 (direct media metered, planner deadline, queued probes unbilled, every session listed; the scheduler stays in local time); the rest not started; 2026-10-28 on feat/master-plan-ready: B1 (scripts/prepush_gates.py), B2, A22 note, E2 (effects cards checked), A12 watermark and unique index, W2.1 one authenticator built; 2026-10-29 D4 decided and done on feat/d4-wiring (wave 6 complete, unpushed)
 ---
 
 # Master plan: everything still open
 
 This plan sits above `tasks/plans/audit_2026_10_27_fix_plan.md` (the audit plan, waves 0 to 6) and
-`tasks/plans/d4_wiring_research_2026_10_27.md`. It does not repeat their detail. It says what is left, in
+`tasks/plans/d4_wiring_research_2026_10_29.md`. It does not repeat their detail. It says what is left, in
 what order, who decides what, and how each piece is proven done. Sizes: S under half a day, M about a day,
 L more. Sizes are estimates from the audit plan, not measurements.
 
@@ -46,7 +46,7 @@ These are the standing rules, written once so the tracks need not repeat them.
 | Id | Question | Recommended | Blocks |
 | --- | --- | --- | --- |
 | D3a | Turn the shell default-ASK from observe to enforce? | Yes if one normal 12-task batch adds 2 or fewer asks | A20 enforce |
-| D4 | What happens to G8 and G9? | Keep the summary repository and Valkey trio reserved; wire the step evaluator and an eval command; delete the rest after tagging | wave 6 G8, G9 |
+| D4 | What happens to G8 and G9? | **Decided 2026-10-29** by the owner: "wire everything that can be wired, following the order in d4_wiring_research_2026_10_29.md"; new flags off; Postgres, strategy store, self_improver and Modal in scope; the rest deleted after tagging. Done on `feat/d4-wiring` (see track D). | wave 6 G8, G9 |
 | D5 | Take A11, the untrusted-content guard? | Needs a product call: it makes every non-read-only tool ask after any web or mail fetch | A11 and A21 shell half |
 | D6 | Apply `.github/rulesets/main.json` so `main` is protected? | Yes; today direct pushes to `main` succeed | Track B |
 | D7 | Draft PR #54 (LuaLaTeX): rebase or close? | Close or park; it is 422 commits behind | Track C |
@@ -137,14 +137,22 @@ Ordered by risk, one PR per group, tag before each. Details are in the audit pla
    removed the encoded-command copy. S.
 3. **G10** requirements removals, after the groups that used them. Keep `pywin32` and `duckduckgo-search`
    until checked on a clean Windows install. Regenerate `requirements.txt.lock`.
-4. **G8 and G9, per D4.** If the owner takes the recommendation:
-   - wire the step evaluator behind a flag (one language-model call per step, fails open) — M;
-   - add `cli/commands/eval.py` with a judge from the container (writes nothing) — S to M;
-   - repair the skill promotion check only if a second veto on skills is wanted; it cannot pass as written
-     and a live promotion path already exists — M to L, dry-run one release first;
-   - keep the summary repository and the three Valkey files, annotated as reserved;
-   - delete the rest of G8 and G9 after tagging.
-5. Fix `docs/SECURITY_MODULE.md:168` (says `BashTool` uses `state_verifier`, which it does not). S.
+4. **G8 and G9, per D4 (decided: wire everything that can be wired).** Done on `feat/d4-wiring`, branched
+   from `feat/wave6-lean` (G1 to G7, G10, G11: 37661b3c to e8fa19b0), one commit per slice, each behind a flag
+   that is off by default:
+   - 340794f3 small pieces: dead validators' shell rules into the live gates, `safe_decode`, step evaluator,
+     `harness baseline --judge`, Windows toasts, OpenRouter speech;
+   - a4009a01 harness gate judges tasks by the final session (a live bug), code quality signal;
+   - 78bcc65f chain of verification fails closed, promotion veto, `skill compare`;
+   - 4d5414d4 `benchmark model`, staged SkillOpt validation;
+   - bc2fe74e episodic summaries, answer scoring, flow checkpoints and `flow recover`, strategy transfer,
+     workflow events;
+   - 37e3643d Valkey event bridge (`WEEBOT_EVENT_BUS=valkey`);
+   - 9e524c75 PostgreSQL backend (schema, role stores, knowledge graph cascade);
+   - 85229df2 Modal sandbox; 95cdb738 `improve` (model-proposed config edits a human applies);
+   - 4f0b97fe kind-4 deletions after tags `pre-wave6-g8`/`pre-wave6-g9`, and `docs/SECURITY_MODULE.md`
+     rewritten.
+   Not verified live: Postgres, Valkey and Modal ran only against fakes; no billed model run yet.
 
 ### Track E: map, docs and ICM
 
@@ -193,7 +201,8 @@ I have not re-read these plans for this document; the "default" column comes fro
 2. **Then, two lanes that touch different files:**
    - Lane 1, safety and money: Track A in the order given.
    - Lane 2, lean: Track D G1 to G7, G10, G11. It deletes code lane 1 does not edit.
-3. **Wave 6 G8 and G9** wait for D4. **A11** waits for D5. **A20 enforce** waits for D3a.
+3. **Wave 6 G8 and G9** done on `feat/d4-wiring` (D4 decided 2026-10-29). **A11** waits for D5. **A20
+   enforce** waits for D3a.
 4. **Track E card refresh** runs after lanes 1 and 2 settle, as one pass.
 5. **Track C** re-tests each blocked PR only when its blocker is released; Track B5 reduces the noise.
 6. **Track F** triage can happen any time and costs the owner about an hour of reading.

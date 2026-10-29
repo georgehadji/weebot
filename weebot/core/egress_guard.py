@@ -32,6 +32,7 @@ from typing import Any
 
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.core.durable_state import preserve_unreadable, write_text_atomic
+from weebot.core.jmap_ops import sends_mail
 
 _log = logging.getLogger(__name__)
 
@@ -517,8 +518,8 @@ class EgressGuard:
             if ops_file:
                 if ops_file.removesuffix(".json") in _JMAP_READ_PRESETS:
                     return None, False
-            elif "EmailSubmission" not in str(args.get("ops", "")):
-                return None, False
+            elif not sends_mail(args.get("ops", ""), args.get("vars")):
+                return None, False  # judged after $VAR substitution, as sent (R02)
             # $TO is the send_mail preset's recipient var. reply.json has no
             # extractable recipient -> None -> classify() treats an unknown
             # destination as first-time and requires approval (fails closed).

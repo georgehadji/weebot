@@ -1,8 +1,10 @@
 """SelfImprover — controlled self-improvement service.
 
-Constrained to editing skill prompts, tool contract YAML files, and
-rule files. Every patch is validated through AST parsing + sandbox
-execution before being applied. Patches are git-backed for rollback.
+Constrained to editing skill prompts, tool contract YAML files, and rule
+files. A patch carries the file's original and new content: validation checks
+the new content, apply refuses when the file changed since the proposal, and
+revert writes the original back. Nothing here applies a patch on its own; the
+``improve`` CLI holds proposals until a human applies them (D4).
 """
 
 from __future__ import annotations
@@ -11,7 +13,8 @@ import asyncio
 import difflib
 import json
 import logging
-import re
+import posixpath
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -28,9 +31,9 @@ _ALLOWED_TARGET_DIRS = [
     "weebot/skills/builtin",
     "weebot/config/contracts",
     "weebot/config/prompts/rules",
-    "weebot/config/prompts/variants",  # HyperAgents Enhancement 5
-    "weebot/config/harness",
 ]
+# Not here on purpose: weebot/config/harness holds the evaluation tasks that judge
+# an edit, so an editor allowed there could grade itself (D4).
 
 # Tier 2 allowlist — only active when METACOGNITIVE_IMPROVEMENT_ENABLED.
 # These directories contain the self-improvement machinery itself.
@@ -122,6 +125,8 @@ class SelfImprover(SelfImprovementPort):
             target_file=target_file,
             target_type=target_type,
             diff=diff,
+            original_content=current_content,
+            new_content=new_content,
             validation_tasks=context.get("validation_tasks", []),
         )
 
@@ -144,23 +149,15 @@ class SelfImprover(SelfImprovementPort):
             except Exception as exc:
                 logger.warning("Validation runner failed: %s", exc)
 
-        # Default: YAML/JSON parse check
-        path = self._project_root / patch.target_file
-        if path.suffix in (".yaml", ".yml"):
-            try:
-                content = await asyncio.to_thread(path.read_text, encoding="utf-8")
-                yaml.safe_load(content)
-                return 0.7
-            except Exception:
-                return 0.0
-        elif path.suffix == ".json":
-            try:
-                content = await asyncio.to_thread(path.read_text, encoding="utf-8")
-                json.loads(content)
-                return 0.7
-            except Exception:
-                return 0.0
-        elif path.suffix == ".md":
+        # Default: the PATCHED content must parse. This read the file on disk,
+        # which is the unpatched one, so every patch "validated".
+        valid, _ = self._validate_content(patch.target_file, patch.new_content)
+        if not valid or not patch.new_content.strip():
+            return 0.0
+        suffix = Path(patch.target_file).suffix
+        if suffix in (".yaml", ".yml", ".json"):
+            return 0.7
+        if suffix == ".md":
             return 0.8  # Markdown is hard to structurally validate
         return 0.5
 
@@ -173,6 +170,9 @@ class SelfImprover(SelfImprovementPort):
         Returns:
             True if applied successfully.
         """
+        if not self._is_allowed_target(patch.target_file):
+            logger.error("Refusing to apply a patch to %s: not allowed", patch.target_file)
+            return False
         path = self._project_root / patch.target_file
         if not path.exists():
             logger.error("Target file does not exist: %s", path)
@@ -180,21 +180,18 @@ class SelfImprover(SelfImprovementPort):
 
         try:
             current = await asyncio.to_thread(path.read_text, encoding="utf-8")
-            # Apply diff
-            new = self._apply_diff(current, patch.diff)
-            if new is None:
-                logger.error("Failed to apply diff to %s", patch.target_file)
+            if current != patch.original_content:
+                logger.error("%s changed since the patch was proposed", patch.target_file)
                 return False
-
-            # Final validation before write
-            valid, error = self._validate_content(patch.target_file, new)
+            valid, error = self._validate_content(patch.target_file, patch.new_content)
             if not valid:
                 logger.error("Pre-apply validation failed: %s", error)
                 return False
-
-            # Write
-            await asyncio.to_thread(path.write_text, new, encoding="utf-8")
+            await asyncio.to_thread(
+                path.write_text, patch.new_content, encoding="utf-8", newline=""
+            )
             patch.applied = True
+            patch.applied_at = datetime.now(UTC)
             logger.info("Applied patch to %s", patch.target_file)
             return True
 
@@ -215,6 +212,9 @@ class SelfImprover(SelfImprovementPort):
             logger.warning("Patch %s was never applied — nothing to revert", patch.id)
             return False
 
+        if not self._is_allowed_target(patch.target_file):
+            logger.error("Refusing to revert a patch on %s: not allowed", patch.target_file)
+            return False
         path = self._project_root / patch.target_file
         if not path.exists():
             logger.error("Target file does not exist: %s", path)
@@ -222,15 +222,14 @@ class SelfImprover(SelfImprovementPort):
 
         try:
             current = await asyncio.to_thread(path.read_text, encoding="utf-8")
-            # Reverse the diff
-            reversed_diff = self._reverse_diff(patch.diff)
-            reverted = self._apply_diff(current, reversed_diff)
-            if reverted is None:
-                logger.error("Failed to reverse patch for %s", patch.target_file)
+            if current != patch.new_content:
+                logger.error("%s changed since the patch was applied", patch.target_file)
                 return False
-
-            await asyncio.to_thread(path.write_text, reverted, encoding="utf-8")
+            await asyncio.to_thread(
+                path.write_text, patch.original_content, encoding="utf-8", newline=""
+            )
             patch.reverted = True
+            patch.reverted_at = datetime.now(UTC)
             logger.info("Reverted patch on %s", patch.target_file)
             return True
 
@@ -255,20 +254,29 @@ class SelfImprover(SelfImprovementPort):
         Returns:
             True if allowed.
         """
-        path = Path(target_file).as_posix()
-        ext = Path(target_file).suffix
+        raw = Path(target_file)
+        if raw.is_absolute() or raw.drive or target_file.startswith(("/", "\\")):
+            return False
+        # Normalised, so `builtin/../../x` cannot step outside; then a whole path
+        # segment must match, so `builtin_evil/` is not inside `builtin/`.
+        path = posixpath.normpath(raw.as_posix())
+        if path == ".." or path.startswith("../"):
+            return False
+
+        def inside(allowed: str) -> bool:
+            return path == allowed or path.startswith(allowed + "/")
 
         effective = _get_effective_allowlist()
         # Meta tier (the .py self-improvement machinery) only while its flag is on: the
         # effective allowlist holds it then, and not otherwise.
         for allowed in _META_ALLOWED_TARGET_DIRS:
-            if allowed in effective and path.startswith(allowed):
+            if allowed in effective and inside(allowed):
                 return True
 
         # Tier-1 check: normal extensions only
-        if ext not in _ALLOWED_EXTENSIONS:
+        if Path(path).suffix not in _ALLOWED_EXTENSIONS:
             return False
-        return any(path.startswith(allowed) for allowed in _ALLOWED_TARGET_DIRS)
+        return any(inside(allowed) for allowed in _ALLOWED_TARGET_DIRS)
 
     @staticmethod
     def _infer_type(target_file: str) -> str:
@@ -335,77 +343,3 @@ class SelfImprover(SelfImprovementPort):
             old_lines, new_lines, fromfile=f"a/{filepath}", tofile=f"b/{filepath}"
         )
         return "".join(diff)
-
-    @staticmethod
-    def _apply_diff(content: str, diff: str) -> str | None:
-        """Apply a unified diff to content.
-
-        Args:
-            content: Original content.
-            diff: Unified diff string.
-
-        Returns:
-            Patched content, or None if the diff couldn't be applied.
-        """
-        if not diff:
-            return content
-
-        result_lines = content.splitlines(keepends=True)
-        # Simple line-based patch application
-        # Parse diff hunks
-        lines_to_add: dict[int, list[str]] = {}
-        lines_to_remove: set[int] = set()
-
-        current_line = 0
-        for line in diff.splitlines(keepends=True):
-            # Parse @@ -start,count +start,count @@
-            if line.startswith("@@"):
-                match = re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
-                if match:
-                    current_line = int(match.group(2)) - 1  # 0-indexed
-                    continue
-            if line.startswith("---") or line.startswith("+++"):
-                continue
-            if line.startswith("+"):
-                lines_to_add.setdefault(current_line, []).append(line[1:])
-                current_line += 1
-            elif line.startswith("-"):
-                lines_to_remove.add(current_line)
-                # Don't increment — the removed line doesn't exist in new
-            else:
-                current_line += 1
-
-        # Build result (skip removed, insert added before corresponding lines)
-        result: list[str] = []
-        for i, line in enumerate(result_lines):
-            if i in lines_to_remove:
-                continue
-            if i in lines_to_add:
-                result.extend(lines_to_add[i])
-            result.append(line)
-
-        return "".join(result)
-
-    @staticmethod
-    def _reverse_diff(diff: str) -> str:
-        """Reverse a unified diff (swap + and - lines).
-
-        Args:
-            diff: Original unified diff.
-
-        Returns:
-            Reversed unified diff.
-        """
-        result: list[str] = []
-        for line in diff.splitlines(keepends=True):
-            if line.startswith("+"):
-                result.append("-" + line[1:])
-            elif line.startswith("-"):
-                result.append("+" + line[1:])
-            elif line.startswith("---"):
-                result.append("+++" + line[3:])
-            elif line.startswith("+++"):
-                result.append("---" + line[3:])
-            else:
-                result.append(line)
-        return "".join(result)

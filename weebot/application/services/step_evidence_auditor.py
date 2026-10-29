@@ -64,6 +64,7 @@ class StepEvidenceAuditor(StepAuditPort):
         # the step COMPLETED.
         skipped: list[str] = []
         violations += await self._gate_written_files(events, skipped)
+        violations += await self._gate_written_content(events, skipped)
         violations += self._gate_test_output(events)
         violations += await self._gate_image_quality(events, skipped)
 
@@ -153,6 +154,51 @@ class StepEvidenceAuditor(StepAuditPort):
                         description=f"written file missing on disk: {p}",
                         location=p,
                         recommendation="Re-write the file, or correct the claimed path.",
+                    )
+                )
+        return violations
+
+    async def _gate_written_content(
+        self, events: Sequence[ToolEvent], skipped: list[str]
+    ) -> list[Violation]:
+        """Gate A2: a full-content write must still be what is on disk.
+
+        Moved from the uncalled state_verifier (D4). Only the last full write of a
+        path is compared, and not when a later partial edit (str_replace,
+        insert) touched it; line endings do not count.
+        """
+        last_full: dict[str, str] = {}
+        for event in events:
+            if event.tool_name not in _WRITE_TOOLS:
+                continue
+            args = event.function_args or {}
+            path = str(args.get("path") or args.get("file_path") or args.get("target_file", ""))
+            if not path:
+                continue
+            text = args.get("file_text", args.get("content"))
+            command = args.get("command", "create")
+            if command in ("create", "write_large") and isinstance(text, str):
+                last_full[path] = text
+            else:
+                last_full.pop(path, None)
+
+        violations: list[Violation] = []
+        for path, written in last_full.items():
+            try:
+                if not await self._files.exists(path):
+                    continue  # Gate A reports a missing file
+                on_disk = await self._files.read_text(path)
+            except (ValueError, OSError):
+                skipped.append(f"file content not checked (unreadable path): {path}")
+                continue
+            if on_disk.replace("\r\n", "\n") != written.replace("\r\n", "\n"):
+                violations.append(
+                    Violation(
+                        dimension=AuditDimension.INTEGRITY,
+                        severity=ViolationSeverity.MEDIUM,
+                        description=f"written file content differs from what the step wrote: {path}",
+                        location=path,
+                        recommendation="Re-write the file, or say what changed it afterwards.",
                     )
                 )
         return violations

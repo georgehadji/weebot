@@ -166,8 +166,12 @@ class TestOutputDirectoryAllowlist:
             assert self.policy.evaluate(command).requires_confirmation is True, command
 
     def test_remove_item_outside_output_dir_still_asks(self):
-        result = self.policy.evaluate("Remove-Item 'C:\\Windows\\System32\\cmd.exe'")
+        result = self.policy.evaluate("Remove-Item 'D:\\data\\report.txt'")
         assert result.requires_confirmation is True
+
+    def test_remove_item_under_windows_is_denied(self):
+        result = self.policy.evaluate("Remove-Item 'C:\\Windows\\System32\\cmd.exe'")
+        assert result.approved is False
 
     def test_remove_item_bare_path_still_asks(self):
         result = self.policy.evaluate("Remove-Item old_logs")

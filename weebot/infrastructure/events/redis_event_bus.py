@@ -1,151 +1,181 @@
-"""Valkey-backed event bus adapter with in-memory fallback (Redis-compatible).
+"""ValkeyEventBus — share bus events between processes through Valkey pub/sub.
 
-Implements ``EventBusPort``.  When Valkey is unavailable (no ``WEEBOT_REDIS_URL``
-env var or connection fails at first publish), falls back to ``AsyncEventBus``
-so the system never breaks from a missing Valkey dependency.
+Selected with ``WEEBOT_EVENT_BUS=valkey`` (DI wraps it in DurableEventBus, so
+the journal still sees every event this process publishes).
 
-Not wired (W4.3, F24): nothing reads the Valkey channels back into local
-subscribers, so with Valkey connected ``publish`` refuses instead of dropping
-the event, and DI refuses a configured Valkey URL. The fix is a reader task
-that re-dispatches channel messages, tagged with an origin id against echo.
+- ``publish`` delivers to this process's subscribers first, then sends the
+  event on the channel tagged with this bus's origin id. A Valkey outage costs
+  only the cross-process copy: local delivery never waits on it.
+- A reader task receives the channel, drops messages carrying its own origin
+  (no echo), rebuilds the event (``event_codec``) and delivers it locally. Remote
+  events are not journaled again: the process that published them already did.
+- The reader reconnects with exponential backoff, capped at ``max_delay``.
+- Subscribing starts the reader when a loop is running, so a process that only
+  listens still hears the others. Subscribed before any loop runs? ``start()``
+  or the first ``publish()`` starts it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
+from collections.abc import Callable
 from typing import Any
 
-from weebot.application.ports.event_bus_port import EventBusPort, EventHandler, DomainEventHandler
+from weebot.application.ports.event_bus_port import DomainEventHandler, EventBusPort, EventHandler
 from weebot.domain.models.event import AgentEvent, DomainEvent
+from weebot.infrastructure.events import event_codec
 
 logger = logging.getLogger(__name__)
 
-# Sentinel for unavailable Valkey
-_VALKEY_UNAVAILABLE = object()
-_NOT_BRIDGED = (
-    "ValkeyEventBus: Valkey is connected, but nothing delivers its channels to this "
-    "process's subscribers yet (F24); refusing rather than dropping the event"
-)
+CHANNEL = "weebot:events"
 
 
 class ValkeyEventBus(EventBusPort):
-    """Event bus backed by Valkey pub/sub, with in-memory fallback (Redis-compatible).
+    """Local fan-out plus a Valkey channel shared by every weebot process.
 
-    Usage::
-
-        bus = ValkeyEventBus(valkey_url="valkey://localhost:6379/0")
-        bus.subscribe(my_handler)
-        await bus.publish(event)
-
-    When *redis_url* is ``None`` (default), reads ``WEEBOT_REDIS_URL`` from
-    the environment.  If neither is set, falls back to in-memory event bus.
+    Args:
+        valkey_url: Connection URL (``redis://`` / ``valkey://``). Never logged.
+        client_factory: Builds the async client; defaults to ``valkey.asyncio``.
+        reconnect_delay: First wait after a lost connection, in seconds.
+        max_delay: Longest wait between reconnect attempts.
     """
 
-    def __init__(self, valkey_url: str | None = None):
-        self._valkey_url = valkey_url
-        self._redis: Any = None  # valkey client or _VALKEY_UNAVAILABLE
-        self._in_memory: Any = None  # AsyncEventBus fallback
-        self._lock = asyncio.Lock()
-        self._subscribers: list[EventHandler] = []
-        self._domain_subscribers: list[DomainEventHandler] = []
+    def __init__(
+        self,
+        valkey_url: str,
+        *,
+        channel: str = CHANNEL,
+        client_factory: Callable[[], Any] | None = None,
+        reconnect_delay: float = 0.5,
+        max_delay: float = 30.0,
+    ) -> None:
+        from weebot.infrastructure.event_bus import AsyncEventBus
+
+        self._url = valkey_url
+        self._channel = channel
+        self._client_factory = client_factory or self._default_client
+        self._reconnect_delay = reconnect_delay
+        self._max_delay = max_delay
+        self._origin = uuid.uuid4().hex
+        self._local = AsyncEventBus()
+        self._client: Any = None
+        self._client_loop: Any = None
+        self._reader: asyncio.Task | None = None
+
+    def _default_client(self) -> Any:
+        import valkey.asyncio as aivalkey
+
+        return aivalkey.from_url(self._url, decode_responses=True, socket_connect_timeout=3)
 
     # ── Lifecycle ─────────────────────────────────────────────────
 
-    async def _ensure_valkey(self) -> Any:
-        """Lazily connect to Valkey, falling back to in-memory on failure."""
-        if self._redis is None:
-            async with self._lock:
-                if self._redis is not None:
-                    return self._redis
-                url = self._valkey_url
-                if url is None:
-                    try:
-                        from weebot.config.secret_accessor import SecretAccessor
+    async def start(self) -> None:
+        """Start the reader. Idempotent; publish() calls it too."""
+        self._start_reader()
+        await asyncio.sleep(0)  # let it subscribe before the first publish
 
-                        url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get(
-                            "WEEBOT_REDIS_URL"
-                        )
+    def _start_reader(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no loop yet: start() or the first publish() starts it
+        if self._reader is None or self._reader.done() or self._reader.get_loop() is not loop:
+            self._reader = asyncio.create_task(self._read_forever(), name="valkey-event-reader")
+
+    async def close(self) -> None:
+        if self._reader is not None:
+            self._reader.cancel()
+            try:
+                await self._reader
+            except (asyncio.CancelledError, Exception):
+                logger.debug("Valkey reader stopped", exc_info=True)
+            self._reader = None
+        if self._client is not None:
+            try:
+                await self._client.aclose()
+            except Exception:
+                logger.debug("Valkey client close failed", exc_info=True)
+            self._client = None
+
+    async def _connected(self) -> Any:
+        # A client only works on the loop that built it; a second asyncio.run gets a new one.
+        loop = asyncio.get_running_loop()
+        if self._client is None or self._client_loop is not loop:
+            client = self._client_factory()
+            await client.ping()
+            self._client, self._client_loop = client, loop
+        return self._client
+
+    async def _read_forever(self) -> None:
+        delay = self._reconnect_delay
+        while True:
+            pubsub = None
+            try:
+                client = await self._connected()
+                pubsub = client.pubsub()
+                await pubsub.subscribe(self._channel)
+                delay = self._reconnect_delay
+                while True:
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    if message and message.get("type") == "message":
+                        await self._deliver_remote(message.get("data", ""))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Valkey event reader lost its connection (%s); retrying", exc)
+                self._client = None
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, self._max_delay)
+            finally:
+                if pubsub is not None:
+                    try:
+                        await pubsub.aclose()
                     except Exception:
-                        url = None
-                if url:
-                    try:
-                        import valkey.asyncio as aivalkey
+                        logger.debug("Valkey pubsub close failed", exc_info=True)
 
-                        self._redis = aivalkey.from_url(
-                            url, decode_responses=True, socket_connect_timeout=3
-                        )
-                        await self._redis.ping()  # Valkey RESP-compatible
-                        logger.info("ValkeyEventBus: connected to %s", url)
-                        return self._redis
-                    except Exception as exc:
-                        logger.warning(
-                            "ValkeyEventBus: cannot connect to %s (%s). "
-                            "Falling back to in-memory bus.",
-                            url,
-                            exc,
-                        )
-                # Fallback to in-memory
-                self._redis = _VALKEY_UNAVAILABLE
-                self._in_memory = self._create_in_memory()
-                return self._redis
-        return self._redis
+    async def _deliver_remote(self, message: str) -> None:
+        origin, event = event_codec.loads(message)
+        if origin == self._origin or event is None:
+            return
+        if isinstance(event, DomainEvent):
+            await self._local.publish_domain_event(event)
+        else:
+            await self._local.publish(event)
 
-    def _create_in_memory(self):
-        """Create an in-memory AsyncEventBus instance as fallback."""
-        from weebot.infrastructure.event_bus import AsyncEventBus
+    async def _broadcast(self, event: Any) -> None:
+        try:
+            await self.start()
+            client = await self._connected()
+            await client.publish(self._channel, event_codec.dumps(self._origin, event))
+        except Exception as exc:
+            # Local subscribers already have it; only other processes miss this one.
+            logger.warning("Valkey publish failed (%s); delivered locally only", exc)
 
-        bus = AsyncEventBus()
-        for h in self._subscribers:
-            bus.subscribe(h)
-        for h in self._domain_subscribers:
-            bus.subscribe_domain(h)
-        return bus
-
-    async def _get_bus(self) -> Any:
-        """Return the active bus: Redis client or in-memory."""
-        r = await self._ensure_valkey()
-        if r is _VALKEY_UNAVAILABLE:
-            return self._in_memory
-        return r
-
-    # ── EventBusPort implementation ──────────────────────────────
+    # ── EventBusPort ──────────────────────────────────────────────
 
     async def publish(self, event: AgentEvent) -> None:
-        """Publish an agent event."""
-        r = await self._ensure_valkey()
-        if r is _VALKEY_UNAVAILABLE:
-            await self._in_memory.publish(event)
-        else:
-            raise RuntimeError(_NOT_BRIDGED)
+        await self._local.publish(event)
+        await self._broadcast(event)
 
     async def publish_domain_event(self, event: DomainEvent) -> None:
-        """Publish a domain event."""
-        r = await self._ensure_valkey()
-        if r is _VALKEY_UNAVAILABLE:
-            await self._in_memory.publish_domain_event(event)
-        else:
-            raise RuntimeError(_NOT_BRIDGED)
+        await self._local.publish_domain_event(event)
+        await self._broadcast(event)
 
     def subscribe(self, handler: EventHandler) -> None:
-        self._subscribers.append(handler)
-        if self._in_memory is not None:
-            self._in_memory.subscribe(handler)
+        self._local.subscribe(handler)
+        self._start_reader()
 
     def subscribe_domain(self, handler: DomainEventHandler) -> None:
-        self._domain_subscribers.append(handler)
-        if self._in_memory is not None:
-            self._in_memory.subscribe_domain(handler)
+        self._local.subscribe_domain(handler)
+        self._start_reader()
 
     def unsubscribe(self, handler: EventHandler) -> None:
-        self._subscribers = [h for h in self._subscribers if h is not handler]
-        if self._in_memory is not None:
-            self._in_memory.unsubscribe(handler)
+        self._local.unsubscribe(handler)
 
     def unsubscribe_domain(self, handler: DomainEventHandler) -> None:
-        self._domain_subscribers = [h for h in self._domain_subscribers if h is not handler]
-        if self._in_memory is not None:
-            self._in_memory.unsubscribe_domain(handler)
+        self._local.unsubscribe_domain(handler)
 
 
 # Backward-compatible alias

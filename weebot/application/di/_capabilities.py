@@ -33,8 +33,51 @@ class CapabilitiesMixin:
         from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
 
         self.register(SQLiteKnowledgeGraph, lambda: SQLiteKnowledgeGraph(db_path=db_path))
-        self.register("kg_adapter", lambda: self.get(SQLiteKnowledgeGraph))
+        # The graph follows WEEBOT_DB_BACKEND like the state repository does.
+        self.register("kg_adapter", self._create_kg_adapter)
         self.register("knowledge_graph", lambda: self._create_kg_service())
+        # Episodic summaries (WEEBOT_EPISODIC_SUMMARIES gates their use, not this
+        # binding: a session deleted after the flag was turned off is still purged).
+        from pathlib import Path
+
+        from weebot.application.di.keys import SUMMARY_REPO
+        from weebot.infrastructure.persistence.sqlite_summary_repo import SQLiteSummaryRepository
+
+        summaries_db = str(Path(db_path).parent / "episodic_summaries.db")
+        self.register(SUMMARY_REPO, lambda: SQLiteSummaryRepository(db_path=summaries_db))
+        # Flow checkpoints, bound always for the same reason (WEEBOT_FLOW_CHECKPOINTS).
+        from weebot.application.ports.checkpoint_port import CheckpointPort
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+
+        checkpoints_db = str(Path(db_path).parent / "flow_checkpoints.db")
+        self.register(CheckpointPort, lambda: SQLiteCheckpointStore(db_path=checkpoints_db))
+        from weebot.application.di.keys import STRATEGY_TRANSFER
+
+        strategies_db = Path(db_path).parent / "improvement_strategies.db"
+        self.register(STRATEGY_TRANSFER, lambda: self._create_strategy_transfer(strategies_db))
+
+    @staticmethod
+    def _create_strategy_transfer(db_path):
+        """StrategyTransferService over its store, or None while WEEBOT_STRATEGY_TRANSFER is off."""
+        from weebot.config import feature_flags
+
+        if not feature_flags.STRATEGY_TRANSFER_ENABLED:
+            return None
+        from weebot.application.services.strategy_transfer import StrategyTransferService
+        from weebot.infrastructure.persistence.strategy_store import StrategyStore
+
+        return StrategyTransferService(StrategyStore(db_path=db_path))
+
+    def _create_kg_adapter(self):
+        if self._db_backend() == "postgresql":  # type: ignore[attr-defined]
+            from weebot.infrastructure.persistence.postgresql.knowledge_graph import (
+                PostgreSQLKnowledgeGraph,
+            )
+
+            return PostgreSQLKnowledgeGraph()
+        from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
+
+        return self.get(SQLiteKnowledgeGraph)
 
     def _create_kg_service(self):
         from weebot.application.services.knowledge_graph import KnowledgeGraphService

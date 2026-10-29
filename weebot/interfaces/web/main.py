@@ -217,6 +217,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     broadcaster = WebSocketEventBroadcaster(manager)
     event_bus.subscribe(broadcaster.publish)
     app.state.event_broadcaster = broadcaster
+    # Desktop toasts for errors, questions and finished runs (WEEBOT_WINDOWS_TOAST).
+    from weebot.interfaces.windows_toast_subscriber import subscribe_if_enabled
+
+    subscribe_if_enabled(event_bus)
 
     # ── Build the Mediator now, not inside the first user's request ──
     # Every web-started flow needs it: PlanningState refuses to run without
@@ -356,8 +360,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await signal_adapter.stop()
     if email_adapter is not None:
         await email_adapter.stop()
-    if hasattr(app.state, "heartbeat"):
-        await app.state.heartbeat.stop()
     # Persist circuit breaker state before shutdown
     try:
         import importlib as _il

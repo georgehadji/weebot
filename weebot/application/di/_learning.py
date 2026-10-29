@@ -15,7 +15,7 @@ was removed in phase 2.3.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from weebot.application.di.keys import LEARNING_SKILL_STORE
+from weebot.application.di.keys import LEARNING_SKILL_STORE, SKILL_PROMOTION_GATE
 from weebot.config.constants import DB_SESSIONS_PATH
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ class LearningMixin:
         self.register("skill_materializer", self._create_skill_materializer)
         self.register("misalignment_journal", lambda: self._create_misalignment_journal(db_path))
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
+        self.register(SKILL_PROMOTION_GATE, self._create_skill_promotion_gate)
         # The store live steps count candidate-skill uses against (RecordSkillUseHandler).
         self.register(LEARNING_SKILL_STORE, lambda: self._get_learning_skill_store(db_path))
         self.register("behavioral_learner", self._create_behavioral_learner)
@@ -157,6 +158,20 @@ class LearningMixin:
         store = self._get_learning_skill_store(db_path)
         llm = self._maybe_get(LLMPort)  # type: ignore[attr-defined]
         return SkillReviewGate(llm=llm, skill_store=store)
+
+    def _create_skill_promotion_gate(self):
+        """Chain-of-verification veto on promotion, or None while its flag is off."""
+        from weebot.config import feature_flags
+
+        if not feature_flags.SKILL_PROMOTION_GATE_ENABLED:
+            return None
+        from weebot.application.services.chain_of_verification import (
+            ChainOfVerificationService,
+        )
+        from weebot.domain.services.skill_promotion_gate import SkillPromotionGate
+
+        llm = self._create_llm_for_role("verifier")  # type: ignore[attr-defined]
+        return SkillPromotionGate(chain_of_verification=ChainOfVerificationService(llm))
 
     def _create_skill_materializer(self):
         """Build the SkillMaterializer, sharing the live retriever's own

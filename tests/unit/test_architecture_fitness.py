@@ -513,9 +513,7 @@ def test_core_modules_in_correct_package():
         "agent.py",
         "agent_context.py",
         "agent_profile.py",
-        "tool_agent.py",
         "workflow_orchestrator.py",
-        "workflow_tracer.py",
         "dependency_graph.py",
     }
     violations: list[str] = []
@@ -925,7 +923,6 @@ def test_core_no_global_singletons_outside_di():
     allowlisted_global_files = {
         "bash_guard.py",  # _bash_guard_hooks — lightweight hook list
         "structured_logger.py",  # _correlation_id — contextvar, not plain global
-        "alerting.py",  # WP-3: alert registry singleton
         "behavior_integration.py",  # WP-3: integration state singleton
         "memory_monitor.py",  # WP-3: memory monitor singleton
     }
@@ -1028,7 +1025,6 @@ def test_orphan_ports_flagged():
         "PlanCriticPort",
         "SelfImprovementPort",
         "IGatewaySessionStorePort",
-        "IContextEnginePort",
         "EventPublisherPort",  # → WebSocketEventBroadcaster in interfaces/ (not infra/)
         "AuditPort",  # → AuditService in application/services/ (DI registers concrete class since b2b1d5b)
         # → HarnessOptimizationTarget in application/services/, used directly by
@@ -1557,17 +1553,14 @@ def test_browser_tool_has_protocol_bridge():
     assert inspect.iscoroutinefunction(tool.execute), "execute() must be async"
 
 
-def test_harness_opt_flow_no_flow_factory():
-    """HarnessOptFlow must NOT accept a flow_factory parameter (A4)."""
+def test_harness_opt_flow_flow_factory_is_used():
+    """A4 removed a dead ``flow_factory`` parameter. D4 brought one back because the
+    gate's runner built flows with no mediator; it must reach the runner, not sit idle."""
     import inspect
     from weebot.application.flows.harness_opt_flow import HarnessOptFlow
 
-    sig = inspect.signature(HarnessOptFlow.__init__)
-    params = list(sig.parameters.keys())
-    assert "flow_factory" not in params, (
-        f"flow_factory must be removed from HarnessOptFlow.__init__ params. "
-        f"Current params: {params}"
-    )
+    assert "flow_factory" in inspect.signature(HarnessOptFlow.__init__).parameters
+    assert "self._flow_factory(" in inspect.getsource(HarnessOptFlow._make_task_runner)
 
 
 def test_no_b006_violations():
@@ -1788,12 +1781,9 @@ def test_there_is_exactly_one_flow_routing_table():
 # sanitiser are applied. An LLM client built anywhere else has none of them —
 # not a weaker version, none — and nothing about the call site says so.
 #
-# Both entries below are real bypasses, grandfathered at their measured count
-# so that a NEW one fails. Neither is endorsed:
+# The entry below is a real bypass, grandfathered at its measured count so
+# that a NEW one fails. It is not endorsed:
 #
-#   core/tool_agent.py     — constructs AsyncOpenAI directly. The module is
-#                            already deprecated (it raises DeprecationWarning
-#                            in __init__); the fix is deletion, not plumbing.
 #   osworld/agent_adapter.py — constructs OpenAIAdapter directly, so the call
 #                            has no ResilientLLMAdapter above it: no circuit
 #                            breaker, no retry, and its only time bound is the
@@ -1809,7 +1799,6 @@ _CONCRETE_ADAPTERS = {
 }
 _ADAPTER_PACKAGE = ("infrastructure", "adapters", "llm")
 _GRANDFATHERED_BYPASSES = {
-    "core/tool_agent.py": "AsyncOpenAI",
     "osworld/agent_adapter.py": "OpenAIAdapter",
 }
 
@@ -2077,3 +2066,29 @@ def test_every_application_subpackage_is_under_the_inward_contract():
         "nothing forbids them importing infrastructure. Add each to "
         "`app-no-infrastructure` in .importlinter:\n  " + "\n  ".join(ungoverned)
     )
+
+
+# Tool modules that write files from a model-chosen path must go through the one write rule
+# (weebot/core/output_path.write_target) or file_editor's PathValidator. screen_capture,
+# image_gen and video_gen each wrote any path; .env was overwritten by a screenshot (R08,
+# R14). A module listed here writes no model-chosen path, for the reason given.
+_WRITES_WITHOUT_A_CHOSEN_PATH = {
+    "python_tool.py": "inspects code for open(..., 'w'); writes nothing itself",
+    "remotion_video.py": "writes fixed scaffold names under output_path()",
+}
+_FILE_WRITE = re.compile(r"write_text\(|write_bytes\(|open\([^)]*['\"](?:w|wb|a|ab)['\"]")
+
+
+def test_tool_file_writes_go_through_the_write_rule():
+    offenders = []
+    for path in sorted((ROOT / "tools").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if not _FILE_WRITE.search(source) or path.name in _WRITES_WITHOUT_A_CHOSEN_PATH:
+            continue
+        if "write_target(" not in source and "PathValidator" not in source:
+            offenders.append(str(path.relative_to(ROOT)))
+    assert offenders == [], (
+        "these tools write files without write_target() or PathValidator: "
+        + ", ".join(offenders)
+    )
+

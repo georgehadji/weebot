@@ -93,6 +93,13 @@ class WeebotSettings(BaseSettings):
     # "summarizer,documentation,verifier=gemma4:31b-cloud".
     ollama_roles: str = "summarizer,documentation"  # env: OLLAMA_ROLES
 
+    # Free-tier providers (weebot/config/free_models.py). Off by default: a role tries one
+    # only when WEEBOT_FREE_ROLES lists it and that provider's key is set.
+    groq_api_key: str | None = None  # env: GROQ_API_KEY
+    gemini_api_key: str | None = None  # env: GEMINI_API_KEY
+    # Comma separated `role=provider/model`, e.g. "executor=groq/openai/gpt-oss-120b".
+    free_roles: str = Field(default="", alias="WEEBOT_FREE_ROLES")
+
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
     reasoner_api_key: str | None = None  # env: REASONER_API_KEY
@@ -261,11 +268,11 @@ class WeebotSettings(BaseSettings):
     @field_validator("sandbox_mode")
     @classmethod
     def validate_sandbox_mode(cls, v: str) -> str:
-        allowed = {"auto", "docker_first", "native", "docker", "wsl2"}
+        allowed = {"auto", "docker_first", "native", "docker", "wsl2", "modal"}
         if v.lower() not in allowed:
             raise ValueError(
                 f"sandbox_mode must be one of {allowed}, got '{v}'. "
-                "Set SANDBOX_MODE to 'auto', 'docker_first', 'native', 'docker', or 'wsl2'."
+                "Set SANDBOX_MODE to 'auto', 'docker_first', 'native', 'docker', 'wsl2' or 'modal'."
             )
         return v.lower()
 
@@ -511,6 +518,3 @@ def ensure_workspace() -> None:
     """Ensure workspace and logs directories exist."""
     WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(exist_ok=True)
-
-
-# OSWorldSettings moved to weebot/config/osworld_settings.py (ICM fix plan W2.4).

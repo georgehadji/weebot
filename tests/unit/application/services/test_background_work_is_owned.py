@@ -134,7 +134,8 @@ def test_the_default_owner_is_stable():
 
 
 def test_completed_state_spawns_through_the_owner():
-    """The three sites the record names."""
+    """The three sites the record names, plus the two D4 added (episodic summary
+    and strategy record)."""
     import inspect
 
     from weebot.application.flows.states import completed
@@ -144,4 +145,4 @@ def test_completed_state_spawns_through_the_owner():
         line for line in src.splitlines() if not line.lstrip().startswith("#")
     )
     assert "ensure_future(" not in code, "an orphaned spawn is still present in CompletedState"
-    assert code.count("_background().spawn(") == 3
+    assert code.count("_background().spawn(") == 5

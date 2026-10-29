@@ -32,34 +32,24 @@ class GetActiveSessionsHandler(QueryHandler):
             # documented as returning only the caller's sessions, and
             # without this filter it returned every user's running
             # sessions.
-            sessions = await self._state_repo.list_sessions(user_id=query.user_id, status="running")
-            limited = sessions[: query.limit]
+            sessions = await self._state_repo.list_sessions(
+                user_id=query.user_id, status="running", limit=query.limit
+            )
+            # list_sessions leaves events unloaded, so the counts come from the
+            # repository's read model (R19); they were always 0 before.
+            activity = await self._state_repo.session_activity([s.id for s in sessions])
 
             active = []
-            for s in limited:
-                plan = s.get_last_plan() if hasattr(s, "get_last_plan") else None
-                step_count = len(plan.steps) if plan else 0
-                completed = (
-                    sum(
-                        1
-                        for st in plan.steps
-                        if hasattr(st.status, "value") and st.status.value == "completed"
-                    )
-                    if plan
-                    else 0
-                )
-
-                # Count tool calls from events
-                tool_calls = sum(1 for e in s.events if hasattr(e, "type") and e.type == "tool")
-
+            for s in sessions:
+                a = activity[s.id]
                 active.append(
                     {
                         "session_id": s.id,
                         "status": s.status.value if hasattr(s.status, "value") else str(s.status),
-                        "step_count": step_count,
-                        "steps_completed": completed,
-                        "tool_calls": tool_calls,
-                        "elapsed_events": len(s.events),
+                        "step_count": a.steps,
+                        "steps_completed": a.steps_completed,
+                        "tool_calls": a.tool_calls,
+                        "elapsed_events": a.events,
                     }
                 )
 

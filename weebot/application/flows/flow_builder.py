@@ -13,7 +13,14 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from weebot.application.di.keys import SESSION_COST_METER
+from weebot.application.di.keys import (
+    SESSION_COST_METER,
+    STEP_EVALUATOR,
+    STRATEGY_TRANSFER,
+    SUMMARY_REPO,
+)
+from weebot.application.ports.checkpoint_port import CheckpointPort
+from weebot.config import feature_flags
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -50,6 +57,26 @@ def _resolve_personality(resolve: Resolve):
     if personality is None:
         _log.debug("PersonalityManager not available in DI")
     return personality
+
+
+def _optional_learning(resolve: Resolve) -> dict[str, Any]:
+    """The D4 services a plan-act flow gets only while each one's flag is on."""
+    return {
+        # Per-step progress check; None unless WEEBOT_STEP_EVALUATOR is on.
+        "step_evaluator": resolve(STEP_EVALUATOR),
+        # A checkpoint after each step, for recovery (WEEBOT_FLOW_CHECKPOINTS).
+        "checkpoint_port": (
+            resolve(CheckpointPort) if feature_flags.FLOW_CHECKPOINTS_ENABLED else None
+        ),
+        # Approaches from other kinds of task (WEEBOT_STRATEGY_TRANSFER).
+        "strategy_transfer": (
+            resolve(STRATEGY_TRANSFER) if feature_flags.STRATEGY_TRANSFER_ENABLED else None
+        ),
+        # Past successes on similar tasks (WEEBOT_EPISODIC_SUMMARIES).
+        "summary_repo": (
+            resolve(SUMMARY_REPO) if feature_flags.EPISODIC_SUMMARIES_ENABLED else None
+        ),
+    }
 
 
 def build_flow(
@@ -176,6 +203,7 @@ def build_flow(
             skill_review_gate=resolve("skill_review_gate"),
             # Failed runs on similar tasks, turned into planner notes.
             trajectory_repo=resolve("trajectory_repo"),
+            **_optional_learning(resolve),
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

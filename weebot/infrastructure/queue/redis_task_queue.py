@@ -84,7 +84,8 @@ class RedisTaskQueue(TaskQueuePort):
     async def _get_redis(self):
         """Lazy-init the Redis connection."""
         if self._redis is None:
-            import redis.asyncio as aioredis
+            # valkey is the pinned client (same API); `redis` is not installed.
+            import valkey.asyncio as aioredis
 
             self._redis = aioredis.from_url(
                 self._redis_url, decode_responses=True, socket_connect_timeout=5

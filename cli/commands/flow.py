@@ -209,6 +209,54 @@ def flow_resume(session_id: str, answer: str) -> None:
     _run_async(_run)
 
 
+def _checkpoint_store():
+    from weebot.application.ports.checkpoint_port import CheckpointPort
+
+    return _get_container().get(CheckpointPort)
+
+
+async def _resume_inline(session_id: str, answer: str):
+    """Run a WAITING session inline, as `flow resume` does, yielding its events."""
+    from weebot.config.model_refs import MODEL_BUDGET
+
+    runner = AgentRunner(
+        llm=_cli_llm(MODEL_BUDGET),
+        state_repo=_get_state_repo(),
+        mediator=_get_mediator(),
+        use_rich=False,
+        event_bus=_get_container().get(EventBusPort),
+    )
+    try:
+        async for event in runner.resume_session(session_id, answer):
+            yield event
+    finally:
+        await runner.close()
+
+
+@flow.command("recover")
+@click.argument("session_id")
+def flow_recover(session_id: str) -> None:
+    """Resume an interrupted session from its last checkpoint (WEEBOT_FLOW_CHECKPOINTS)."""
+    from weebot.application.flows._checkpoint_scheduler import restore_from_checkpoint
+
+    async def _run() -> None:
+        repo = _get_state_repo()
+        session = await repo.load_session(session_id)
+        if session is None:
+            raise click.ClickException(f"session {session_id} not found")
+        checkpoint = await _checkpoint_store().load(session_id)
+        if checkpoint is None:
+            raise click.ClickException(
+                f"session {session_id} has no checkpoint (is WEEBOT_FLOW_CHECKPOINTS on?)"
+            )
+        await repo.save_session(restore_from_checkpoint(session, checkpoint))
+        subscriber = CLIEventSubscriber(use_rich=True)
+        async for event in _resume_inline(session_id, "Continue from the last checkpoint."):
+            await subscriber.on_event(event)
+
+    _run_async(_run)
+
+
 @flow.command("list")
 @click.option("--user-id", default=None, help="Filter by user ID")
 def flow_list(user_id: str | None) -> None:

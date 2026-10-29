@@ -30,6 +30,25 @@ if TYPE_CHECKING:
     from weebot.application.ports.task_runner_port import TaskRunnerPort
 
 
+@dataclass(frozen=True)
+class RunOptions:
+    """How a session runs: its model and ponytail mode (audit R20).
+
+    ``/run`` and ``/input`` both build it from the session, so neither drops a choice
+    the session was created with. A model sent with the request wins over the stored one.
+    """
+
+    model: str | None = None
+    ponytail_mode: str | None = None
+
+    @classmethod
+    def from_session(cls, session: Session, override_model: str | None = None) -> RunOptions:
+        return cls(
+            model=override_model or session.context.get("model") or None,
+            ponytail_mode=session.context.get("ponytail_mode") or None,
+        )
+
+
 @dataclass
 class SessionInputContext:
     """Everything a strategy needs, already resolved by the caller.
@@ -48,9 +67,8 @@ class SessionInputContext:
     steering: SteeringPort
     build_tools: Callable[[], Awaitable[object]]
     build_chat_flow: Callable[[Session, str | None], object]
-    model: str | None = None
+    model: str | None = None  # the request's model; overrides the session's
     client_msg_id: str | None = None
-    ponytail_mode: str | None = None
 
 
 @dataclass
@@ -80,14 +98,15 @@ async def _start_task(ctx: SessionInputContext) -> SessionInputResult:
     session = _with_prompt(ctx.session, ctx.text, ctx.model)
     await ctx.state_repo.save_session(session)
 
+    opts = RunOptions.from_session(session)
     tools = await ctx.build_tools()
     try:
         factory = ctx.task_runner.create_plan_act_factory(
             llm=ctx.llm,
             tools=tools,
             event_bus=ctx.event_bus,
-            model=ctx.model,
-            ponytail_mode=ctx.ponytail_mode,
+            model=opts.model,
+            ponytail_mode=opts.ponytail_mode,
             steering=ctx.steering,
         )
         session = await ctx.task_runner.start_session(session, factory)
@@ -103,14 +122,15 @@ async def _resume(ctx: SessionInputContext) -> SessionInputResult:
     This used to store the answer and set RUNNING without running anything, so
     a web plan review or tool approval never moved on (found in plan B2c).
     """
+    opts = RunOptions.from_session(ctx.session, ctx.model)
     tools = await ctx.build_tools()
     try:
         factory = ctx.task_runner.create_plan_act_factory(
             llm=ctx.llm,
             tools=tools,
             event_bus=ctx.event_bus,
-            model=ctx.model,
-            ponytail_mode=ctx.ponytail_mode,
+            model=opts.model,
+            ponytail_mode=opts.ponytail_mode,
             steering=ctx.steering,
         )
         session = await ctx.task_runner.resume_session(
@@ -138,8 +158,10 @@ async def _chat(ctx: SessionInputContext) -> SessionInputResult:
     session = _with_prompt(ctx.session, ctx.text, ctx.model)
     await ctx.state_repo.save_session(session)
 
+    model = RunOptions.from_session(session).model
+
     def _factory(s: Session):
-        return ctx.build_chat_flow(s, ctx.model)
+        return ctx.build_chat_flow(s, model)
 
     session = await ctx.task_runner.start_session(session, _factory)
     return SessionInputResult(session=session, verb="chat")

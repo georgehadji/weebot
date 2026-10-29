@@ -18,6 +18,9 @@ import types
 from dataclasses import dataclass
 from enum import Enum
 
+from weebot.core.shell_segments import SegmentSyntax, split_segments
+from weebot.core.shell_segments import inline_literal_vars as _inline_literal_vars
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,6 +98,54 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         is_regex=True,
         undo_hint="Formatting is irreversible. Use Diskpart carefully.",
     ),
+    CommandRule(
+        r"\bClear-Disk\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Clearing a disk is irreversible.",
+    ),
+    # Deleting the OS or installed programs: denied, not asked. These and the
+    # rules below were PowerShellTool's private lists (wave 6 G11); the guard
+    # chain had no counterpart, and the tool itself consults only this policy.
+    CommandRule(
+        _ALIAS_AT
+        + r"(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b.*\b[a-z]:\\(?:Windows|Program Files)\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Deleting Windows or Program Files breaks the system.",
+    ),
+    # Running code from a string or on another machine
+    CommandRule(
+        r"\bInvoke-Expression\b|" + _ALIAS_AT + r"iex\b(?!-)",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Invoke-Expression runs arbitrary code. Run the command directly.",
+    ),
+    CommandRule(
+        r"\bInvoke-Command\b|" + _ALIAS_AT + r"icm\b(?!-)",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Invoke-Command runs code on another machine or session.",
+    ),
+    CommandRule(
+        r"\bStart-Process\b.*\s-Credential\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Starting a process as another user is not allowed.",
+    ),
+    # Accounts and Windows features
+    CommandRule(
+        r"\b(?:New|Set)-LocalUser\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Creating or changing local accounts is not allowed.",
+    ),
+    CommandRule(
+        r"\b(?:Add-WindowsCapability|Remove-WindowsFeature)\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Adding or removing Windows features is not allowed.",
+    ),
     # Registry editing — always ask
     CommandRule(
         r"\breg\s+(delete|add)",
@@ -121,6 +172,27 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
         ApprovalMode.ALWAYS_ASK,
         is_regex=True,
         undo_hint="Taking ownership changes file access control.",
+    ),
+    # The rules below were only in the uncalled CommandValidator and
+    # tools/validation.py (D4); the live chain allowed these commands.
+    CommandRule(
+        r"\bcacls\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="ACL changes may lock out users or expose sensitive files.",
+    ),
+    # PowerShell accepts any prefix of -ExecutionPolicy, so -ex and -exec count too
+    CommandRule(
+        r"\s-(?:ep|ex\w*)\s+['\"]?(?:bypass|unrestricted)\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Bypassing the execution policy runs unsigned scripts. Review the script.",
+    ),
+    CommandRule(
+        r"\bcipher\b[^;|&]*\s/w:",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="cipher /w overwrites all free space on the volume; it cannot be undone.",
     ),
     # Links make a path lead somewhere else, which defeats every path check after them
     CommandRule(
@@ -313,7 +385,15 @@ class ExecApprovalPolicy:
                         exc,
                     )
 
-    def evaluate(self, command: str, tool_category: str = "") -> ApprovalResult:
+    def evaluate(
+        self,
+        command: str,
+        tool_category: str = "",
+        *,
+        syntax: SegmentSyntax = SegmentSyntax.SHELL,
+        cwd: str | None = None,
+    ) -> ApprovalResult:
+        """Judge *command*; *cwd* is where it will run (Output paths resolve against it)."""
         if self._broken_rules:
             return ApprovalResult(
                 command=command,
@@ -339,15 +419,15 @@ class ExecApprovalPolicy:
                 )
 
         # ── Pure fold over segments (ICM fix plan W3.3, F04) ──
-        # The command is split on ; && || | & outside quotes and each segment
-        # is judged alone, so an AUTO_APPROVE carve-out (the Output\ rule)
+        # The command is split on ; && || | & and newlines outside quotes (R01), and
+        # each segment is judged alone, so an AUTO_APPROVE carve-out (the Output\ rule)
         # covers only its own segment. The strictest segment wins:
         # DENY > ASK > AUTO_APPROVE. The chained-keyword check used to
         # `return` ASK before DENY rules were read, so
         # `Format-Volume D; rm x` was asked about instead of denied.
-        segments = _inline_literal_vars(split_segments(command))
+        segments = _inline_literal_vars(split_segments(command, syntax=syntax))
         chained = len(segments) > 1
-        decisions = [self._evaluate_segment(segment, chained) for segment in segments]
+        decisions = [self._evaluate_segment(segment, chained, cwd) for segment in segments]
         worst = max(decisions, key=lambda d: d.rank, default=_NO_MATCH)
 
         if worst.rank == _RANK[ApprovalMode.DENY]:
@@ -373,7 +453,7 @@ class ExecApprovalPolicy:
             undo_hint=worst.undo_hint,
         )
 
-    def unreviewed_segments(self, command: str) -> list[str]:
+    def unreviewed_segments(self, command: str, *, cwd: str | None = None) -> list[str]:
         """Segments no rule has an opinion on and that are not plain reads (audit A20).
 
         Evaluate approves these (default-allow); the shell guard decides what to do with
@@ -383,10 +463,13 @@ class ExecApprovalPolicy:
         chained = len(segments) > 1
         return [
             s for s in segments
-            if not self._evaluate_segment(s, chained).matched and not is_read_only_segment(s)
+            if not self._evaluate_segment(s, chained, cwd).matched
+            and not is_read_only_segment(s)
         ]
 
-    def _evaluate_segment(self, segment: str, chained: bool) -> _SegmentDecision:
+    def _evaluate_segment(
+        self, segment: str, chained: bool, cwd: str | None = None
+    ) -> _SegmentDecision:
         """Judge one segment.
 
         Any DENY rule that matches wins, whatever its length: a longer
@@ -407,7 +490,7 @@ class ExecApprovalPolicy:
         ]
         denies = [r for r in matches if r.mode is ApprovalMode.DENY]
         user_rule_matched = any(r in self._rules[: self._n_user_rules] for r in matches)
-        if not denies and not user_rule_matched and _output_scoped(segment):
+        if not denies and not user_rule_matched and _output_scoped(segment, cwd):
             return _NO_MATCH
         if denies or matches:
             best = max(denies or matches, key=lambda r: len(r.pattern))
@@ -483,6 +566,8 @@ def is_read_only_segment(segment: str) -> bool:
         return sub in _READ_ONLY_GIT
     if first == "find" and ("-delete" in low or "-exec" in low):
         return False
+    if first == "env" and len(tokens) > 1:
+        return False  # `env X` runs X
     return first in READ_ONLY_COMMANDS or first.startswith(_READ_ONLY_PREFIXES)
 
 
@@ -508,16 +593,24 @@ _SWITCHES = {"-force", "-recurse", "-nonewline", "-append", "-passthru", "-confi
 _LINK_TYPES = {"symboliclink", "symlink", "junction", "hardlink"}
 
 
-def _in_output(path: str) -> bool:
-    """True when *path* is strictly inside this workspace's Output/ folder."""
+def _in_output(path: str, cwd: str | None = None) -> bool:
+    """True when *path* is strictly inside this workspace's Output/ folder.
+
+    The workspace is the process cwd. A relative path resolves against *cwd*, the directory
+    the command will run in, so `Output\\x` in another project is not this Output (R01).
+    """
     p = path.strip("'\"").replace("\\", "/")
     if not p or "$" in p or "~" in p or ".." in p.split("/"):
         return False
+    workspace = Path(os.getcwd())
+    base = workspace
     root = os.getcwd().replace("\\", "/").rstrip("/") + "/"
     if p.lower().startswith(root.lower()):
         p = p[len(root) :]
     elif re.match(r"^[A-Za-z]:/|^/", p):
         return False  # absolute, and not under this workspace
+    elif cwd:
+        base = Path(cwd)
     p = p.removeprefix("./")
     head, _, rest = p.partition("/")
     if not (head.lower() == "output" and bool(rest)):
@@ -525,8 +618,8 @@ def _in_output(path: str) -> bool:
     # The text says Output/, but a junction or symlink inside it may lead elsewhere:
     # judge where the path really lands.
     try:
-        real = (Path(os.getcwd()) / p).resolve(strict=False)
-        return real.is_relative_to((Path(os.getcwd()) / head).resolve(strict=False))
+        real = (base / p).resolve(strict=False)
+        return real.is_relative_to((workspace / head).resolve(strict=False))
     except (OSError, ValueError):
         return False
 
@@ -537,14 +630,14 @@ _IF_GUARD = re.compile(
 )
 
 
-def _output_scoped(segment: str) -> bool:
+def _output_scoped(segment: str, cwd: str | None = None) -> bool:
     """A file cmdlet whose every path argument is inside Output/ (fail closed).
 
     `if (Test-Path <p>) { <cmdlet> }` counts when <p> and the one cmdlet do.
     """
     guard = _IF_GUARD.match(segment.strip())
     if guard:
-        return _in_output(guard.group("path")) and _output_scoped(guard.group("body"))
+        return _in_output(guard.group("path"), cwd) and _output_scoped(guard.group("body"), cwd)
     try:
         tokens = shlex.split(segment, posix=False)
     except ValueError:
@@ -590,81 +683,7 @@ def _output_scoped(segment: str) -> bool:
             return False
     if any("/" in n or "\\" in n or ".." in n or "$" in n for n in names):
         return False
-    return bool(paths) and all(_in_output(p) for p in paths)
-
-
-_ASSIGN = re.compile(r"^\$(\w+)\s*=\s*(.*)$", re.S)
-_LITERAL = re.compile(r"""^(["'])([^"'$`]*)\1$""")
-
-
-def _inline_literal_vars(segments: list[str]) -> list[str]:
-    """Substitute `$name` where it is assigned once, to a plain string literal.
-
-    The agent writes `$dir = "...\\Output\\x"; Set-Content "$dir\\a.txt" ...`.
-    Without this the Output/ check saw `$dir` and failed closed. A variable
-    assigned twice, or to anything but a literal free of `$` and backticks,
-    is left alone, so that check still sees `$` and fails closed.
-    """
-    seen: dict[str, int] = {}
-    literals: dict[str, str] = {}
-    for segment in segments:
-        m = _ASSIGN.match(segment)
-        if not m:
-            continue
-        name = m.group(1).lower()
-        seen[name] = seen.get(name, 0) + 1
-        lit = _LITERAL.match(m.group(2).strip())
-        if lit:
-            literals[name] = lit.group(2)
-    safe = {n: v for n, v in literals.items() if seen[n] == 1}
-    if not safe:
-        return segments
-
-    def _inline(segment: str) -> str:
-        def _sub(match: re.Match) -> str:
-            value = safe.get(match.group(1).lower())
-            if value is None:
-                return match.group(0)
-            # Bare `$dst` becomes a quoted literal, so a path with spaces
-            # stays one argument; inside "..." it is spliced as is.
-            inside_quotes = segment[: match.start()].count('"') % 2 == 1
-            return value if inside_quotes else f'"{value}"'
-
-        return re.sub(r"\$(\w+)\b(?!:)", _sub, segment)
-
-    return [s if _ASSIGN.match(s) else _inline(s) for s in segments]
-
-
-def split_segments(command: str) -> list[str]:
-    """Split a command line on ``;`` ``&&`` ``||`` ``|`` ``&`` outside quotes.
-
-    Pure. Returns the non-empty stripped segments; a command with no
-    separator is one segment. Newlines are not separators (multi-line
-    Python passed by python_execute stays one segment, as before).
-    """
-    segments: list[str] = []
-    buf: list[str] = []
-    quote: str | None = None
-    i = 0
-    while i < len(command):
-        ch = command[i]
-        if quote is not None:
-            buf.append(ch)
-            if ch == quote:
-                quote = None
-        elif ch in "'\"":
-            quote = ch
-            buf.append(ch)
-        elif ch in ";&|":
-            segments.append("".join(buf))
-            buf = []
-            if command[i : i + 2] in ("&&", "||"):
-                i += 1
-        else:
-            buf.append(ch)
-        i += 1
-    segments.append("".join(buf))
-    return [s.strip() for s in segments if s.strip()]
+    return bool(paths) and all(_in_output(p, cwd) for p in paths)
 
 
 # ── Tool annotation tiers (MCP destructiveHint/readOnlyHint → approval) ─

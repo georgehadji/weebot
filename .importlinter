@@ -99,10 +99,7 @@ forbidden_modules =
 ignore_imports =
     # Apify actor registry wraps the Apify tool for actor-level discovery.
     weebot.infrastructure.adapters.apify.actor_registry -> weebot.tools.apify_actor_tool
-    # Interface customization reads profile settings from the application service.
-    weebot.infrastructure.interface_customization -> weebot.application.services.profile_manager
     # MCP tool bridge implements the MCP tool port defined in application.ports.
-    weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
     # (moved — sqlite_state_repo -> domain.services.commitment_extractor is
     #  architecturally correct and requires no ignore_imports entry.)
 
@@ -321,8 +318,6 @@ forbidden_modules =
     aiohttp
     requests
 ignore_imports =
-    # Pre-existing, and not provider traffic: webhook delivery and two web
-    # research fetchers. Each wants a port the way the cascade got one.
+    # Pre-existing, and not provider traffic: webhook delivery. It wants a port
+    # the way the cascade got one.
     weebot.application.services.cron_delivery_service -> aiohttp
-    weebot.application.services.multi_source_research -> aiohttp
-    weebot.application.services.source_credibility_assessment -> aiohttp

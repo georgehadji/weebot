@@ -183,17 +183,24 @@ class BehaviorReporter:
         return self.get_date_report(today)
 
     def get_date_report(self, date_str: str) -> dict:
-        """Generate report for a specific date."""
+        """Generate report for a specific date (``YYYY-MM-DD``; anything else is ValueError).
+
+        The date names a file under LEDGER_DIR, so only a real date may reach it (R22).
+        """
+        datetime.strptime(date_str, "%Y-%m-%d")
         entries = self._get_entries_for_date(date_str)
 
         # Filter out watcher died events
         normal_entries = [e for e in entries if not e.watcher_died]
 
         if not normal_entries:
-            return {
+            return {  # every field the response model needs, on an empty day too (R22)
                 "date": date_str,
                 "total_actions": 0,
                 "actions_by_type": {},
+                "autonomous_count": 0,
+                "user_initiated_count": 0,
+                "override_count": 0,
                 "last_action": None,
                 "summary": "No activity recorded today.",
             }
@@ -269,9 +276,12 @@ class BehaviorReporter:
         session_entries = [e for e in entries if e.session_id == session_id and not e.watcher_died]
 
         if not session_entries:
-            return {
+            return {  # the full shape, so an unknown session is not a 500 (R22)
                 "session_id": session_id,
                 "total_actions": 0,
+                "actions_by_type": {},
+                "start_time": None,
+                "end_time": None,
                 "summary": "No actions recorded for this session.",
             }
 

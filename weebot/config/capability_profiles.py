@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 # ── Profile data file path ─────────────────────────────────────────
 _PROFILES_PATH = Path(__file__).resolve().parent / "model_quality_profiles.yaml"
-_BENCHMARK_PATH = Path(__file__).resolve().parent / "benchmark_results.json"
+# Measured results are user data: they live with the other per-user state, not in
+# the installed package (which may be read-only, and is replaced on upgrade).
+_BENCHMARK_PATH = Path.home() / ".weebot" / "benchmark_results.json"
 
 # ── In-memory cache ────────────────────────────────────────────────
 _profiles_cache: dict[str, ModelQualityProfile] | None = None
@@ -65,9 +67,17 @@ def _load_profiles() -> dict[str, ModelQualityProfile]:
         except Exception as exc:
             logger.error("Failed to load seed profiles: %s", exc)
 
-    # Overlay benchmark profiles (seeds → benchmarks)
+    # Overlay benchmark profiles axis by axis. The suites measure six axes; a
+    # whole-profile replace erased the seeded ones they do not (legal, citation,
+    # planning), which the research and legal weights read.
     benchmarks = _load_benchmarks()
-    merged = {**seeds, **benchmarks}
+    merged = dict(seeds)
+    for model_id, measured in benchmarks.items():
+        seed = seeds.get(model_id)
+        axes = {**seed.axes, **measured.axes} if seed is not None else dict(measured.axes)
+        merged[model_id] = ModelQualityProfile(
+            model_id=model_id, axes=axes, source=measured.source
+        )
     logger.info(
         "Quality profiles: %d seeds + %d benchmarks = %d total",
         len(seeds),
@@ -150,6 +160,7 @@ def save_benchmark_profile(profile: ModelQualityProfile) -> None:
     for mid, p in benchmarks.items():
         serialised[mid] = {"axes": {k.value: v for k, v in p.axes.items()}, "source": p.source}
     try:
+        _BENCHMARK_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(_BENCHMARK_PATH, "w", encoding="utf-8") as f:
             json.dump(serialised, f, indent=2)
         logger.info("Saved benchmark profile for %s", profile.model_id)

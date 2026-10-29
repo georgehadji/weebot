@@ -7,6 +7,7 @@ from datetime import datetime
 import logging
 
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.core.credential_sanitizer import sanitize
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -49,7 +50,7 @@ class WindowsToastSubscriber:
         if isinstance(event, ErrorEvent):
             notification = Notification(
                 title="Weebot Error",
-                message=event.error,
+                message=sanitize(event.error),
                 level=NotificationLevel.ERROR,
                 timestamp=datetime.now(),
                 category="error",
@@ -57,7 +58,7 @@ class WindowsToastSubscriber:
         elif isinstance(event, WaitForUserEvent):
             notification = Notification(
                 title="Weebot Needs Input",
-                message=event.question,
+                message=sanitize(event.question),
                 level=NotificationLevel.WARNING,
                 timestamp=datetime.now(),
                 category="urgent",
@@ -82,7 +83,7 @@ class WindowsToastSubscriber:
             if event.status.value == "failed":
                 notification = Notification(
                     title="Step Failed",
-                    message=f"{event.description}",
+                    message=sanitize(f"{event.description}"),
                     level=NotificationLevel.ERROR,
                     timestamp=datetime.now(),
                     category="error",
@@ -98,3 +99,14 @@ class WindowsToastSubscriber:
     def unsubscribe_from(self, bus: EventBusPort) -> None:
         """Unregister this subscriber from the given event bus."""
         bus.unsubscribe(self.on_event)
+
+
+def subscribe_if_enabled(bus: EventBusPort) -> WindowsToastSubscriber | None:
+    """Subscribe desktop toasts to *bus* while WEEBOT_WINDOWS_TOAST is on."""
+    from weebot.config import feature_flags
+
+    if not feature_flags.WINDOWS_TOAST_ENABLED:
+        return None
+    subscriber = WindowsToastSubscriber()
+    subscriber.subscribe_to(bus)
+    return subscriber

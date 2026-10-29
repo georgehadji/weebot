@@ -45,6 +45,7 @@ class EvalResult:
         judge_used: Class name of the judge used.
         reasoning: Summary reasoning from the judge.
         criteria: Per-criterion scores (if available).
+        error: Why the task's run raised; such a task is not judged.
     """
 
     task_id: str
@@ -53,6 +54,7 @@ class EvalResult:
     judge_used: str
     reasoning: str = ""
     criteria: list[CriterionScore] = field(default_factory=list)
+    error: str = ""
 
 
 @dataclass
@@ -65,7 +67,7 @@ class EvalReport:
         pass_rate: Fraction of tasks that passed (0.0–1.0).
         avg_score: Mean score across all tasks.
         results: Per-task results.
-        per_criterion: Per-criterion average scores, if criteria were used.
+        per_criterion: Per-criterion average scores (0.0-1.0), if criteria were used.
     """
 
     total: int = 0
@@ -106,8 +108,18 @@ class EvalRunner:
                 output = await target(task.prompt)
                 output_str = str(output) if output else "(no output)"
             except Exception as exc:
+                # Judging an error message costs a call and can only score 0.
                 logger.warning("Task %s failed during execution: %s", task.id, exc)
-                output_str = f"(execution error: {exc})"
+                results.append(
+                    EvalResult(
+                        task_id=task.id,
+                        score=0.0,
+                        passed=False,
+                        judge_used=type(self._judge).__name__,
+                        error=str(exc),
+                    )
+                )
+                continue
 
             try:
                 verdict = await self._judge.judge(
@@ -140,11 +152,12 @@ class EvalRunner:
         scores = [r.score for r in results]
         avg_score = sum(scores) / total if total > 0 else 0.0
 
-        # Per-criterion aggregation
+        # Per-criterion aggregation. Judges score criteria 0-10; the report uses
+        # the overall score's 0-1 scale so the two can be read side by side.
         per_criterion: dict[str, list[float]] = {}
         for r in results:
             for c in r.criteria:
-                per_criterion.setdefault(c.name, []).append(c.score)
+                per_criterion.setdefault(c.name, []).append(c.score / 10.0)
         per_criterion_avg = {
             name: sum(scores) / len(scores) for name, scores in per_criterion.items()
         }

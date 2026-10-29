@@ -20,7 +20,7 @@ from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
 from weebot.interfaces.web.auth import (
-    get_current_user_id,
+    current_principal,
     require_mutation_identity,
     verify_session_ownership,
 )
@@ -53,7 +53,7 @@ async def _resolve_session(
     Shared by both the blocking and streaming endpoints so ownership
     verification and session creation cannot drift between the two.
     """
-    current_user = get_current_user_id(request)
+    current_user = await current_principal(request)
     if body.session_id:
         session = await state_repo.load_session(body.session_id)
         if session is None:
@@ -154,20 +154,23 @@ async def list_chat_sessions(
     offset: int = 0,
 ) -> ChatSessionList:
     """List recent chat sessions for the current user."""
-    current_user = get_current_user_id(request)
+    current_user = await current_principal(request)
+    limit = max(1, min(limit, 500))
     sessions = await state_repo.list_sessions(user_id=current_user, limit=limit, offset=offset)
+    activity = await state_repo.session_activity([s.id for s in sessions])
     summaries = [
         ChatSessionSummary(
             id=s.id,
             status=s.status.value if hasattr(s.status, "value") else str(s.status),
-            message_count=sum(1 for e in s.events if e.type == "message"),
+            message_count=activity[s.id].messages,
             total_tokens=0,
             total_cost=0.0,
             created_at=s.created_at.isoformat() if hasattr(s, "created_at") else "",
         )
         for s in sessions
     ]
-    return ChatSessionList(sessions=summaries, total=len(summaries))
+    total = await state_repo.count_sessions(user_id=current_user)
+    return ChatSessionList(sessions=summaries, total=total)
 
 
 @router.get("/{session_id}")

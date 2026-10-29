@@ -111,3 +111,67 @@ class TestPostgreSQLStateRepository:
         assert len(results) > 0, "Search should find the test session"
 
         await repo.delete_session("pg-search-1")
+
+
+@_skip_if_no_pg
+class TestPostgreSQLD4Coverage:
+    """D4: the role stores, create/compare-and-set, and the graph's delete cascade."""
+
+    @pytest.mark.asyncio
+    async def test_role_stores_round_trip(self):
+        from weebot.infrastructure.persistence.postgresql.state_repo import (
+            PostgreSQLStateRepository,
+        )
+
+        repo = PostgreSQLStateRepository()
+        await repo.save_plan_template("pg-t1", "h1", "task", "{}", 0.5)
+        await repo.save_plan_template("pg-t1", "h1", "task", "{\"better\": 1}", 0.9)
+        [row] = await repo.find_plan_templates_by_hash("h1")
+        assert row["success_score"] == 0.9 and "better" in row["plan_json"]
+        await repo.save_workflow_template("pg-summary", "{}")
+        assert "{}" in await repo.list_workflow_templates()
+        await repo.upsert_memory_metadata("pg-m1", "text")
+        await repo.upsert_memory_metadata("pg-m1", "text")
+        entry = await repo.get_memory_entry("pg-m1")
+        assert entry["access_count"] == 2 and abs(entry["salience"] - 0.55) < 1e-9
+        assert await repo.delete_memory_entries(["pg-m1"]) == 1
+        await repo.save_behavioral_rule("pg-r1", "always test", scope="global")
+        assert any(r["id"] == "pg-r1" for r in await repo.list_behavioral_rules())
+
+    @pytest.mark.asyncio
+    async def test_create_is_insert_once_and_cas_rejects_a_stale_write(self):
+        from weebot.domain.models.session import Session, SessionContext
+        from weebot.infrastructure.persistence.postgresql.state_repo import (
+            PostgreSQLStateRepository,
+        )
+
+        repo = PostgreSQLStateRepository()
+        session = Session(id="pg-cas-1", context=SessionContext(original_task="find otters"))
+        try:
+            assert await repo.create_session(session) is True
+            assert await repo.create_session(session) is False
+            stored = await repo.load_session("pg-cas-1")
+            assert stored.context.original_task == "find otters"
+            assert await repo.save_session_if_unchanged(stored, stored.updated_at) is True
+            assert any(
+                r["session_id"] == "pg-cas-1" for r in await repo.search_sessions("otters")
+            )
+        finally:
+            await repo.delete_session("pg-cas-1")
+
+    @pytest.mark.asyncio
+    async def test_the_graph_forgets_a_deleted_session(self):
+        from weebot.domain.models.knowledge_graph import KnowledgeNode
+        from weebot.infrastructure.persistence.postgresql.knowledge_graph import (
+            PostgreSQLKnowledgeGraph,
+        )
+
+        graph = PostgreSQLKnowledgeGraph()
+        node = KnowledgeNode(
+            id="pg-n1", label="test", name="pg node", properties={"k": "v"},
+            source_session_id="pg-s1",
+        )
+        saved = await graph.upsert_node(node)
+        assert saved.properties["k"] == "v"
+        assert await graph.delete_by_session_id("pg-s1") >= 1
+        assert await graph.get_node("pg-n1") is None

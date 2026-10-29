@@ -26,6 +26,7 @@ from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER3, M
 from weebot.config.token_bounds import completion_bound
 from weebot.core.error_classifier import ErrorClassifier
 from weebot.application.strategies.llm_pool import unwrap_llm
+from weebot.application.agents.executor._session_scope import keep_private
 
 # Import for ACR telemetry enrichment (Phase P0)
 from weebot.core.model_cascade_tracker import (
@@ -176,12 +177,11 @@ class CascadeExecutor:
     def _is_openrouter_model(model_id: str) -> bool:
         """Return True if the model routes exclusively through OpenRouter.
 
-        Models with a native adapter (x-ai, deepseek, moonshotai, recraft) do
-        NOT exclusively use OpenRouter, so they should NOT be filtered. minimax
+        Models with a native adapter (x-ai, deepseek, moonshotai, recraft), Ollama and the
+        free tiers need no OpenRouter credit, so they should NOT be filtered. minimax
         is not one: its adapter only reaches OpenRouter (adapter_factory).
         """
-        # "ollama" is local: it needs no OpenRouter credit, so a low balance must not drop it.
-        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft", "ollama"}
+        known_direct = {"x-ai", "deepseek", "moonshotai", "recraft", "ollama", "free"}
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
@@ -498,7 +498,7 @@ class CascadeExecutor:
         """The model's own cost tier, for telemetry and the ACR bandit."""
         from weebot.config.model_refs import PREMIUM_MODELS
 
-        if ":free" in model_id:
+        if ":free" in model_id or model_id.startswith("free/"):
             return CascadeTier.FREE
         return CascadeTier.PREMIUM if model_id in PREMIUM_MODELS else CascadeTier.BUDGET
 
@@ -601,7 +601,8 @@ class CascadeExecutor:
                 if m
             )
         )
-        filtered_models = self._within_budget(await self.get_credits_and_filter_direct(all_models))
+        within = self._within_budget(await self.get_credits_and_filter_direct(all_models))
+        filtered_models = keep_private(within)
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
         parallel = list(
@@ -685,7 +686,7 @@ class CascadeExecutor:
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [
             m
-            for m in self._within_budget([role_fallback2, self._TIER4_MODEL])
+            for m in keep_private(self._within_budget([role_fallback2, self._TIER4_MODEL]))
             if m
             and not self.cascade_is_tripped(m)
             and m not in parallel

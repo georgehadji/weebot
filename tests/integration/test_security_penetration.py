@@ -209,14 +209,14 @@ def test_browser_form_submit_is_classified_as_egress(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "tool_path",
+    ("tool_path", "ok_name"),
     [
-        "weebot.tools.image_gen_tool:ImageGenTool",
-        "weebot.tools.video_gen_tool:VideoGenTool",
-        "weebot.tools.youtube_download_tool:YouTubeDownloadTool",
+        ("weebot.tools.image_gen_tool:ImageGenTool", "ok.png"),
+        ("weebot.tools.video_gen_tool:VideoGenTool", "ok.mp4"),
+        ("weebot.tools.youtube_download_tool:YouTubeDownloadTool", "ok.mp4"),
     ],
 )
-def test_sibling_directory_write_is_rejected(tool_path):
+def test_sibling_directory_write_is_rejected(tool_path, ok_name):
     """"<base>-evil/x" shares a string prefix with "<base>" but is outside it.
 
     output_path is a required, model-settable parameter on these tools, and no
@@ -227,11 +227,12 @@ def test_sibling_directory_write_is_rejected(tool_path):
     module_name, class_name = tool_path.split(":")
     module = importlib.import_module(module_name)
     tool_cls = getattr(module, class_name)
-    base = module._SAFE_BASE
+    # These tools now write through write_target, which contains to the project root (R14).
+    from weebot.core.output_path import _PROJECT_ROOT as base
 
     for escape in (f"{base}-evil/payload.png", f"{base}_backup/id_rsa"):
-        with pytest.raises(ValueError, match="escapes workspace"):
+        with pytest.raises(ValueError, match="escapes"):
             tool_cls._sanitize_output_path(escape)
 
-    # Control: a genuinely contained path is still accepted.
-    assert tool_cls._sanitize_output_path(str(base / "Output" / "ok.png"))
+    # Control: a genuinely contained media path is still accepted.
+    assert tool_cls._sanitize_output_path(str(base / "Output" / ok_name))

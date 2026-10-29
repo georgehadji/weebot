@@ -34,7 +34,7 @@ async def test_route_answers_409_for_an_existing_id():
     repo = InMemoryStateRepository()
     await repo.save_session(Session(id="taken", user_id="alice", context={"last_prompt": "keep"}))
     body = router.CreateSessionRequest(prompt="hijack", session_id="taken")
-    with patch.object(router, "get_current_user_id", return_value="mallory"), \
+    with patch.object(router, "current_principal", AsyncMock(return_value="mallory")), \
          patch.object(router, "_respond", AsyncMock()):
         with pytest.raises(HTTPException) as raised:
             await router.create_session(

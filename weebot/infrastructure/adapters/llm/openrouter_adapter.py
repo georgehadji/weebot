@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from openai import AsyncOpenAI
+from weebot.core.credential_sanitizer import key_fingerprint
 
 from .openai_adapter import OpenAIAdapter
 from weebot.config.model_refs import MODEL_FACTORY_OPENROUTER
@@ -51,10 +51,10 @@ class OpenRouterAdapter(OpenAIAdapter):
             )
         elif not key.startswith(_OPENROUTER_KEY_PREFIX):
             _log.warning(
-                "OPENROUTER_API_KEY (prefix=%s...) does not start with '%s'.  "
+                "OPENROUTER_API_KEY (%s) does not start with '%s'.  "
                 "OpenRouter keys should begin with '%s'.  "
                 "Got an OpenAI key instead?",
-                key[:12],
+                key_fingerprint(key),  # never key characters (R23)
                 _OPENROUTER_KEY_PREFIX,
                 _OPENROUTER_KEY_PREFIX,
             )
@@ -63,8 +63,10 @@ class OpenRouterAdapter(OpenAIAdapter):
             "HTTP-Referer": http_referer or "https://github.com/weebot",
             "X-Title": x_title or "weebot",
         }
-        # Re-initialize the OpenAI client with custom headers
-        self._client = AsyncOpenAI(
-            api_key=key, base_url=OPENROUTER_API_BASE, default_headers=headers
+        # The parent sets up everything its methods read, the fallback flag included (R11).
+        super().__init__(
+            api_key=key,
+            base_url=OPENROUTER_API_BASE,
+            default_model=default_model,
+            default_headers=headers,
         )
-        self._default_model = default_model

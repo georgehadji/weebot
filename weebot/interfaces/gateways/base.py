@@ -16,7 +16,9 @@ never fired: audit A33).
 
 from __future__ import annotations
 
+import random
 import re
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -24,6 +26,42 @@ from pathlib import Path
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.gateway_auth import GatewayAuth
+from weebot.utils.backoff import BackoffConfig
+
+
+class PollBackoff:
+    """Capped exponential delay, with jitter, between failed polls (audit R10)."""
+
+    def __init__(self, cap: float = 60.0, jitter: float = 0.25) -> None:
+        self._delays = BackoffConfig(max_delay=cap).delays
+        self._cap = cap
+        self._jitter = jitter
+        self._failures = 0
+
+    def reset(self) -> None:
+        self._failures = 0
+
+    def next_delay(self, retry_after: float | None = None) -> float:
+        """Seconds to wait before the next poll; the server's ``retry_after`` wins."""
+        base = self._delays[min(self._failures, len(self._delays) - 1)]
+        self._failures += 1
+        if retry_after:
+            return float(retry_after)
+        return min(base * random.uniform(1 - self._jitter, 1 + self._jitter), self._cap)
+
+
+_UNSAFE_ID_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def flow_session_id(platform: str, sender: str) -> str:
+    """A Session id for one gateway run: platform, sender and a random suffix.
+
+    Sender ids such as a Signal phone number (``+3069...``) or an email address carry
+    characters Session ids reject, so those become ``_``; the sender part is cut to keep
+    the id under Session's 128-character limit. The raw sender stays in ``user_id``.
+    """
+    safe = _UNSAFE_ID_CHARS.sub("_", sender)[:100]
+    return f"{platform}-{safe}-{uuid.uuid4().hex[:6]}"
 
 
 @dataclass

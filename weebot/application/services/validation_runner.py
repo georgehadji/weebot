@@ -73,16 +73,25 @@ class ValidationRunner:
     returns a pass/fail decision.
     """
 
-    def __init__(self, task_runner: TaskRunner, flow_factory: Callable, scoring_fn: Callable):
+    def __init__(
+        self,
+        task_runner: TaskRunner,
+        flow_factory: Callable,
+        scoring_fn: Callable,
+        staged: Any | None = None,
+    ):
         """
         Args:
             task_runner: For executing validation tasks.
             flow_factory: Factory that creates flows with a given skill context.
             scoring_fn: Function that scores a completed session (0.0–1.0).
+            staged: Optional StagedEvaluator: probe a few tasks first and stop
+                there when the candidate scores below its threshold.
         """
         self._task_runner = task_runner
         self._flow_factory = flow_factory
         self._scoring_fn = scoring_fn
+        self._staged = staged
 
     async def validate(
         self,
@@ -137,10 +146,26 @@ class ValidationRunner:
                 logger.warning("Validation task '%s' failed: %s", task_id, exc)
                 return 0.0
 
-        tasks = [run_task(tid) for tid in validation_task_ids]
-        scores = await asyncio.gather(*tasks)
+        # Each task runs at most once: the stager's full pass re-asks the probe tasks.
+        score_of: dict[str, float] = {}
 
-        candidate_score = sum(scores) / len(scores) if scores else 0.0
+        async def eval_fn(_agent, task_ids: list[str]) -> float:
+            pending = [tid for tid in task_ids if tid not in score_of]
+            for tid, score in zip(pending, await asyncio.gather(*map(run_task, pending))):
+                score_of[tid] = score
+            return sum(score_of[tid] for tid in task_ids) / len(task_ids)
+
+        stage_details: dict[str, Any] = {}
+        if self._staged is not None:
+            staged = await self._staged.evaluate(None, validation_task_ids, eval_fn)
+            candidate_score = staged.score
+            stage_details = {
+                "probe_score": staged.probe_score,
+                "tasks_skipped": staged.tasks_skipped,
+            }
+        else:
+            candidate_score = await eval_fn(None, validation_task_ids)
+        scores = [score_of[tid] for tid in validation_task_ids if tid in score_of]
 
         # When baseline_score is None this is a first-version bootstrap run.
         # The docstring promises "always accepted" for bootstrap, but using
@@ -159,9 +184,10 @@ class ValidationRunner:
             passed=passed,
             candidate_score=candidate_score,
             current_score=current_score,
-            n_tasks=len(validation_task_ids),
+            n_tasks=len(scores),
             details={
                 "harness": harness,
-                "individual_scores": dict(zip(validation_task_ids, scores)),
+                "individual_scores": dict(score_of),
+                **stage_details,
             },
         )

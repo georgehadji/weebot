@@ -44,6 +44,7 @@ class SandboxType(Enum):
     DOCKER_LINUX = auto()
     WSL2 = auto()
     KUBERNETES = auto()
+    MODAL = auto()  # remote, billed (SANDBOX_MODE=modal)
 
 
 class SandboxCapability(Enum):

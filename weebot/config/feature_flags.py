@@ -159,6 +159,89 @@ MEMORY_SNAPSHOT_CAP_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_CAP", defa
 WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").strip().lower()
 
 
+# ── Step progress evaluator (D4) ────────────────────────────────────────────
+# When True, the main flow gets an LLMStepEvaluator on the verifier tier, and
+# `progress_gate` sends a step whose output does not advance the plan back to
+# UPDATING. Costs one verifier call per completed step; fails open on errors,
+# marked `evaluator_failed`. Default OFF until a live run has measured its
+# false-stop rate.
+STEP_EVALUATOR_ENABLED: bool = _env_bool("WEEBOT_STEP_EVALUATOR", default=False)
+
+
+# ── Desktop toasts (D4) ─────────────────────────────────────────────────────
+# When True, the web backend shows a Windows toast for errors, questions and
+# finished runs. The text is credential-redacted first. Default OFF: a toast
+# for every session's events suits a single-user desktop, not a shared server.
+WINDOWS_TOAST_ENABLED: bool = _env_bool("WEEBOT_WINDOWS_TOAST", default=False)
+
+
+# ── Speech backend (D4) ─────────────────────────────────────────────────────
+# "whisper" (default): local openai-whisper + pyttsx3, which are optional extras.
+# "openrouter": OpenRouter's audio endpoints with OPENROUTER_API_KEY; the audio
+# leaves the machine, and each call is billed.
+SPEECH_BACKEND: str = os.environ.get("WEEBOT_SPEECH_BACKEND", "whisper").strip().lower()
+
+
+# ── Skill promotion veto (D4) ───────────────────────────────────────────────
+# When True, a candidate skill that live use would promote to trusted is first
+# checked by chain of verification; contradicted claims keep it a candidate.
+# Up to seven verifier calls per promotion, once per skill version. Default OFF.
+SKILL_PROMOTION_GATE_ENABLED: bool = _env_bool("WEEBOT_SKILL_PROMOTION_GATE", default=False)
+
+
+# ── Staged SkillOpt validation (D4) ─────────────────────────────────────────
+# When True, a candidate skill is first run on a probe of 10 held-out tasks; one
+# scoring below 0.3 stops there instead of running the whole set. Saves billed
+# runs; a candidate that would have recovered on later tasks is rejected early.
+STAGED_VALIDATION_ENABLED: bool = _env_bool("WEEBOT_STAGED_VALIDATION", default=False)
+
+
+# ── Episodic summaries (D4) ─────────────────────────────────────────────────
+# When True, a fully successful session saves a short summary of its plan, and
+# planning a similar task later gets "a similar past task succeeded" notes. No
+# model calls; summaries are matched by local embeddings when installed, by
+# token overlap otherwise. Default OFF.
+EPISODIC_SUMMARIES_ENABLED: bool = _env_bool("WEEBOT_EPISODIC_SUMMARIES", default=False)
+
+
+# ── Scoring with a gold answer (D4) ─────────────────────────────────────────
+# What scores a session that comes with an expected answer (benchmark samples):
+#   "plan_outcome" (default) — the answer is ignored, as before;
+#   "exact" / "execution" — free comparisons; "verifier" — one verifier call.
+# Sessions without an expected answer always get the plan-outcome score.
+SCORING_MODE: str = os.environ.get("WEEBOT_SCORING_MODE", "plan_outcome").strip().lower()
+
+
+# ── Flow checkpoints (D4) ───────────────────────────────────────────────────
+# When True, PlanActFlow saves its plan after every step event, and an
+# interrupted session can be re-run from it (`flow recover`). One small SQLite
+# write per step, no model calls. Default OFF.
+FLOW_CHECKPOINTS_ENABLED: bool = _env_bool("WEEBOT_FLOW_CHECKPOINTS", default=False)
+
+
+# ── Strategy transfer (D4) ──────────────────────────────────────────────────
+# When True, a fully successful run records its approach under the task's
+# category, and planning a task of another category gets up to two of those
+# approaches as notes. No model calls. Default OFF.
+STRATEGY_TRANSFER_ENABLED: bool = _env_bool("WEEBOT_STRATEGY_TRANSFER", default=False)
+
+
+# ── Event bus backend (D4) ──────────────────────────────────────────────────
+# "local" (default): in-process fan-out only.
+# "valkey": also share events with other weebot processes over Valkey pub/sub
+# (WEEBOT_VALKEY_URL). Only worth it once more than one process serves the UI.
+EVENT_BUS: str = os.environ.get("WEEBOT_EVENT_BUS", "local").strip().lower()
+
+
+# ── Self-editing of rule and contract files (D4) ────────────────────────────
+# When True, `improve propose` asks a model for an edit to a file under
+# weebot/config/contracts, weebot/config/prompts/rules or weebot/skills/builtin,
+# held as pending; `improve apply ID` writes it. Nothing is applied without that
+# human step. Separate from METACOGNITIVE_IMPROVEMENT, which only widens the
+# targets to the self-improver itself. Default OFF.
+SELF_EDIT_CONFIG_ENABLED: bool = _env_bool("WEEBOT_SELF_EDIT_CONFIG", default=False)
+
+
 # ── Plan-template cache (D74–D77) ───────────────────────────────────────────
 # When True, CompletedState stores each finished plan as a reusable template
 # and CreatePlanHandler seeds the planner with the templates matching a new

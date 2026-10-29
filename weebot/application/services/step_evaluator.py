@@ -13,6 +13,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.step_evaluator_port import StepEvaluation, StepEvaluatorPort
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.domain.models.plan import Plan, Step
+from weebot.models.structured_output import extract_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +74,10 @@ class LLMStepEvaluator(StepEvaluatorPort):
     async def evaluate(
         self, step: Step, output: str, plan: Plan, previous_outputs: list[str]
     ) -> StepEvaluation:
+        # The prompt promises the most recent output first; the list arrives in plan order.
+        recent = list(reversed(previous_outputs[-3:]))
         prev_summary = (
-            "\n".join(f"  [{i+1}] {o[:200]}" for i, o in enumerate(previous_outputs[-3:]))
-            or "  (none)"
+            "\n".join(f"  [{i+1}] {o[:200]}" for i, o in enumerate(recent)) or "  (none)"
         )
 
         prompt = _EVAL_PROMPT.format(
@@ -99,7 +101,8 @@ class LLMStepEvaluator(StepEvaluatorPort):
             content = (resp.content or "").strip()
             if not content:
                 raise ValueError("evaluator returned an empty completion")
-            data = json.loads(content)
+            # A ```json fence is the common reply shape; a bare parse failed it open.
+            data = json.loads(extract_json_text(content))
             if "score" not in data:
                 raise ValueError(f"evaluator response has no 'score' field: {content[:120]}")
             score = float(data["score"])

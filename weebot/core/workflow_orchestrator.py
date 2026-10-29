@@ -103,6 +103,8 @@ class WorkflowOrchestrator:
         circuit_breaker: CircuitBreaker | None = None,
         event_broker: EventBroker | None = None,
         task_handler: TaskHandler | None = None,
+        event_publisher: Any | None = None,
+        session_id: str = "",
     ):
         """
         Initialize workflow orchestrator.
@@ -119,6 +121,9 @@ class WorkflowOrchestrator:
         self._circuit_breaker = circuit_breaker
         self._event_broker = event_broker
         self._task_handler = task_handler or self._default_task_handler
+        # Optional bus publisher (EventBrokerAdapter) and the session it reports for.
+        self._event_publisher = event_publisher
+        self._session_id = session_id
 
         self._cancelled_sessions: dict[str, bool] = {}
         self._lock = asyncio.Lock()
@@ -188,6 +193,7 @@ class WorkflowOrchestrator:
             nesting_level=1,
             shared_data=shared_data or {},
             event_broker=self._event_broker or EventBroker(),
+            event_publisher=self._event_publisher,
         )
 
         await self._publish_event(
@@ -464,9 +470,12 @@ class WorkflowOrchestrator:
     async def _publish_event(
         self, event_type: str, data: dict[str, Any], orch_id: str | None = None
     ) -> None:
-        """Publish event to broker if available."""
-        if self._event_broker:
-            await self._event_broker.publish(
+        """Publish event to the bus publisher, else the broker, if either is set."""
+        target = self._event_publisher or self._event_broker
+        if target:
+            if self._session_id:
+                data = {**data, "session_id": self._session_id}
+            await target.publish(
                 event_type=event_type,
                 agent_id=orch_id or self._orchestrator_id or "orchestrator",
                 data=data,

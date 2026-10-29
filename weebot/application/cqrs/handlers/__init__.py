@@ -97,6 +97,7 @@ def register_default_handlers(
     trajectory_repo=None,
     event_store=None,
     skill_store=None,
+    skill_promotion_gate=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -176,7 +177,8 @@ def register_default_handlers(
 
     if skill_store is not None:
         mediator.register_command_handler(
-            RecordSkillUseCommand, RecordSkillUseHandler(skill_store=skill_store)
+            RecordSkillUseCommand,
+            RecordSkillUseHandler(skill_store=skill_store, promotion_gate=skill_promotion_gate),
         )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────

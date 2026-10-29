@@ -21,6 +21,7 @@ MODE_TO_TYPE: dict[str, SandboxType] = {
     "native": SandboxType.NATIVE_WINDOWS,
     "docker": SandboxType.DOCKER_LINUX,
     "wsl2": SandboxType.WSL2,
+    "modal": SandboxType.MODAL,
 }
 from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.infrastructure.sandbox.wsl2 import WSL2Sandbox
@@ -72,6 +73,10 @@ class SandboxFactory:
 
         if DOCKER_AVAILABLE:
             self._sandbox_classes[SandboxType.DOCKER_LINUX] = DockerLinuxSandbox
+        # Remote and billed: only an explicit SANDBOX_MODE=modal picks it.
+        from weebot.infrastructure.sandbox.modal_backend import ModalSandboxBackend
+
+        self._sandbox_classes[SandboxType.MODAL] = ModalSandboxBackend
 
     async def detect_available(
         self, required_capabilities: set[SandboxCapability] | None = None
@@ -414,7 +419,7 @@ def create_default_sandbox() -> SandboxPort:
         if sandbox_type is None:
             raise ValueError(
                 f"Unknown sandbox_mode '{settings.sandbox_mode}'. "
-                f"Set SANDBOX_MODE to: auto, docker_first, native, docker, wsl2."
+                f"Set SANDBOX_MODE to: auto, docker_first, native, docker, wsl2, modal."
             )
         sandbox = SandboxFactory().create(sandbox_type, config)
     if (

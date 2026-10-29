@@ -77,12 +77,19 @@ class VoiceOutputTool(BaseTool):
         else:
             return ToolResult(error=f"Voice output not supported on {_sys.platform}", output="")
 
+        suffix = getattr(self._speech, "audio_suffix", ".wav")
         if not output_path:
-            output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}.wav")
+            output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}{suffix}")
+        else:
+            # The file is named for what the backend returns (mp3 from OpenRouter).
+            output_path = str(Path(output_path).with_suffix(suffix))
         try:
-            from weebot.core.output_path import output_path as _in_project
+            from weebot.core.output_path import write_target
 
-            output_path = _in_project(output_path)  # writes stay in the project (F50)
+            # In the project (F50), and an audio file, never .env or source (R14).
+            output_path = write_target(
+                output_path, suffixes=frozenset({".wav", ".mp3", ".ogg", ".flac", ".m4a"})
+            )
         except ValueError as exc:
             return ToolResult(error=str(exc), output="")
 

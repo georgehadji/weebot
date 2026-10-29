@@ -47,7 +47,8 @@ class VideoGenParams(BaseModel):
 # ── Download safety limits ────────────────────────────────────────────
 _MAX_VIDEO_BYTES: int = 512 * 1024 * 1024  # 512 MiB — generous for AI clips
 _DOWNLOAD_CHUNK_SIZE: int = 64 * 1024  # 64 KiB per chunk
-_SAFE_BASE: Path = Path.cwd().resolve()
+# What output_path may name (R14): a media file inside the project, never .env or source.
+_VIDEO_SUFFIXES: frozenset[str] = frozenset({".mp4", ".webm", ".mov", ".gif", ".mkv"})
 
 
 class VideoGenTool(BaseTool):
@@ -209,25 +210,14 @@ class VideoGenTool(BaseTool):
 
     @staticmethod
     def _sanitize_output_path(output_path: str) -> Path:
-        """Resolve and validate *output_path* — reject paths escaping the workspace.
-
-        Returns:
-            Resolved Path guaranteed to be under ``_SAFE_BASE``.
+        """The absolute path *output_path* may be written to (``write_target``, R14).
 
         Raises:
-            ValueError: If the path contains ``..`` components or resolves outside
-                        the safe base directory.
+            ValueError: outside the project, a protected file, or not a video type.
         """
-        if ".." in output_path.split("/"):
-            raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
-        resolved = Path(output_path).resolve()
-        # str.startswith is a string prefix test, not path containment: a
-        # sibling directory whose name merely extends the base (".../weebot"
-        # vs ".../weebot-evil") passed it, giving an arbitrary write outside
-        # the workspace with no ".." anywhere in the path.
-        if not resolved.is_relative_to(_SAFE_BASE):
-            raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
-        return resolved
+        from weebot.core.output_path import write_target
+
+        return Path(write_target(output_path, suffixes=_VIDEO_SUFFIXES))
 
     async def _download_video(
         self, video_url: str, output_path: str, model: str, prompt: str
@@ -403,7 +393,7 @@ class VideoGenTool(BaseTool):
             return ToolResult.error_result("output_path is required")
 
         try:
-            self._sanitize_output_path(params.output_path)
+            params.output_path = str(self._sanitize_output_path(params.output_path))
         except ValueError as exc:
             return ToolResult.error_result(str(exc))
 

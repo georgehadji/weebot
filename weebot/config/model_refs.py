@@ -151,13 +151,22 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
         if role and role in ROLE_MODEL_CONFIG
         else list(_DEFAULT_ROLE_CASCADE)
     )
-    local = _local_model_for_role(role)
-    cascade = [local, *cascade] if local else cascade
+    front = [m for m in (_local_model_for_role(role), _free_model_for_role(role)) if m]
+    cascade = [*front, *cascade]
     # The user's pick from the UI goes first; everything else stays as its fallback.
     from weebot.config.role_overrides import get_overrides
 
     chosen = get_overrides().get(role or "")
     return [chosen, *(m for m in cascade if m != chosen)] if chosen else cascade
+
+
+def role_primary_model(role: str) -> str | None:
+    """The model a single-model caller uses for *role*: its cascade's first non-free entry.
+
+    A caller with one model has no fallback, so a free tier's daily limit would fail the
+    role outright; free-tier models are skipped here.
+    """
+    return next((m for m in get_model_cascade_for_role(role) if not m.startswith("free/")), None)
 
 
 def _local_model_for_role(role: str | None) -> str | None:
@@ -172,6 +181,19 @@ def _local_model_for_role(role: str | None) -> str | None:
 
     tag = role_models().get(role)
     return local_model_id(tag) if tag else None
+
+
+def _free_model_for_role(role: str | None) -> str | None:
+    """``free/<provider>/<model>`` when WEEBOT_FREE_ROLES lists *role* and its key is set.
+
+    It goes after the Ollama model and before the role's cascade, which stays behind it for
+    a 429 or any other failure.
+    """
+    if not role:
+        return None
+    from weebot.config.free_models import role_models
+
+    return role_models().get(role)
 
 
 # Sub-agent model per AgentTier value ("budget", "standard", "premium"), for a

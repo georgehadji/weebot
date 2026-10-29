@@ -50,6 +50,52 @@ def output_path(relative: str) -> str:
     return str(_PROJECT_ROOT / relative)
 
 
+# Never written through a model-chosen path, whatever its location (audit 2026-10-29 R08,
+# R13, R14). PathValidator.DENIED_BASENAMES reads the same set.
+PROTECTED_BASENAMES: frozenset[str] = frozenset({
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.development",
+    ".env.staging",
+    ".env.test",
+    "id_rsa",
+    "id_ed25519",
+    "id_dsa",
+    "id_ecdsa",
+})
+# Whole-file writes never produce these; scripts are made by a human or the shell tool.
+EXECUTABLE_SUFFIXES: frozenset[str] = frozenset({
+    ".ps1", ".bat", ".cmd", ".sh", ".exe", ".dll", ".com", ".msi", ".scr", ".vbs", ".wsf",
+})
+
+
+def write_target(path: str, *, suffixes: frozenset[str] | None = None) -> str:
+    """The absolute path a tool may write *path* to; ValueError says why it may not.
+
+    Inside the project (``output_path``, then resolved, so a link cannot lead out), never a
+    protected file (``.env``, SSH keys, anything under ``.git``) or an executable type, and,
+    when the tool names the *suffixes* it produces, one of those. screen_capture, image_gen
+    and video_gen wrote any path a model chose (R08, R14).
+    """
+    target = Path(output_path(path)).resolve(strict=False)
+    if not target.is_relative_to(_PROJECT_ROOT):
+        raise ValueError(f"Path escapes the workspace (project root): {path}")
+    parts = [p.lower() for p in target.relative_to(_PROJECT_ROOT).parts]
+    if target.name.lower() in PROTECTED_BASENAMES or ".git" in parts:
+        raise ValueError(f"Refusing to write a protected file: {path}")
+    suffix = target.suffix.lower()
+    if suffix in EXECUTABLE_SUFFIXES:
+        raise ValueError(f"Refusing to write an executable file: {path}")
+    if suffixes is not None and suffix not in suffixes:
+        allowed = ", ".join(sorted(suffixes))
+        found = suffix or "no extension"
+        raise ValueError(f"This tool writes {allowed} files, not {found}: {path}")
+    if target.is_dir():
+        raise ValueError(f"Path is a directory: {path}")
+    return str(target)
+
+
 def output_dir(relative: str) -> str:
     """Like ``output_path`` but ensures the parent directory exists.
 

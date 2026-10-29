@@ -136,3 +136,19 @@ _DEFAULT_SCOPE = SessionScope()
 def get_session_scope() -> SessionScope:
     """The process-wide scope, for the executor and for the code that closes sessions."""
     return _DEFAULT_SCOPE
+
+
+def keep_private(models: list[str]) -> list[str]:
+    """*models* minus free tiers that train on prompts, once this session read untrusted content.
+
+    The cascade applies it to every list it tries, so a tainted session's prompts (fetched
+    pages, mail, file contents) never reach such a provider.
+    """
+    from weebot.config.free_models import trains_on_prompts
+    from weebot.core.log_context import session_id_var
+
+    training = [m for m in models if m and trains_on_prompts(m)]
+    if not training or not _DEFAULT_SCOPE.is_tainted(session_id_var.get() or ""):
+        return models
+    logger.info("untrusted content in this session: skipping %d free model(s)", len(training))
+    return [m for m in models if m not in training]

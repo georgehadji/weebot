@@ -10,6 +10,23 @@ import os
 # test module imports browser_use, so this runs at conftest import time.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
+# A library's load_dotenv() must not copy the repo's .env into the test run:
+# browser_use/agent/service.py calls it at import, and every later test then saw the
+# developer's real settings (WEEBOT_FREE_ROLES gave test_w61 a free-tier coder model).
+# weebot's own loaders already skip under pytest (cli/main.py, interfaces/web/main.py).
+# Patched here, before any test imports a library, so `from dotenv import load_dotenv`
+# binds this one. Tests that need a value set it with monkeypatch.
+import dotenv as _dotenv
+import dotenv.main as _dotenv_main
+
+
+def _no_dotenv(*_args, **_kwargs) -> bool:
+    return False
+
+
+_dotenv.load_dotenv = _no_dotenv
+_dotenv_main.load_dotenv = _no_dotenv
+
 import logging
 from pathlib import Path
 from typing import Any

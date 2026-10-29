@@ -33,8 +33,9 @@ from weebot.config.constants import MAX_EXECUTOR_STEPS
 from weebot.config.model_refs import MODEL_CASCADE_TIER1
 from weebot.core.trust_boundary import escalate, must_fence, trust_of, wrap_untrusted
 from weebot.application.agents.executor._error_handler import (
+    ReplyKind,
     build_stuck_error,
-    follow_up_like,
+    classify_reply,
     normalize_text,
 )
 from weebot.domain.models.event import (
@@ -605,7 +606,13 @@ class ExecutorAgent:
             if not turn.response.tool_calls:
                 guard.record_assistant_turn(normalize_text(turn.assistant_content))
                 step_result = turn.assistant_content or "No result"
-                if follow_up_like(step_result):
+                kind = classify_reply(step_result)
+                if kind is ReplyKind.REFUSAL:  # keep the reason; the step fails (R07)
+                    loop_error = f"The model could not do this step: {step_result[:500]}"
+                    yield MessageEvent(role="assistant", message=step_result)
+                    yield ErrorEvent(error=loop_error)
+                    break
+                if kind is ReplyKind.FILLER:
                     step_result = "Step completed. Continuing to the next plan step."
 
                 if guard.is_assistant_turn_loop():

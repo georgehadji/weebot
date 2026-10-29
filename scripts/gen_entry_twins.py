@@ -26,7 +26,11 @@ def expected() -> bytes:
 
 def main() -> int:
     want = expected()
-    stale = [n for n in TWINS if not (ROOT / n).exists() or (ROOT / n).read_bytes() != want]
+    # Line endings are not drift: git's core.autocrlf rewrites them on checkout.
+    stale = [
+        n for n in TWINS
+        if not (ROOT / n).exists() or (ROOT / n).read_bytes().replace(b"\r\n", b"\n") != want
+    ]
     if "--check" in sys.argv:
         for n in stale:
             print(f"{n} differs from CLAUDE.md; run `make gen-entry-twins`")

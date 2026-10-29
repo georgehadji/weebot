@@ -12,7 +12,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.domain.services.session_title import derive_session_title
 from weebot.interfaces.web.auth import (
-    get_current_user_id,
+    current_principal,
     require_mutation_identity,
     verify_session_ownership,
 )
@@ -94,11 +94,11 @@ async def list_sessions(
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionListResponse:
     """List all sessions for the current user."""
-    effective_user = get_current_user_id(http_request)
+    effective_user = await current_principal(http_request)
     sessions = await state_repo.list_sessions(
         user_id=effective_user, status=status, limit=limit, offset=offset
     )
-    total = await state_repo.count_sessions(user_id=effective_user)
+    total = await state_repo.count_sessions(user_id=effective_user, status=status)
 
     counts = await _event_counts(http_request, [s.id for s in sessions])
     return SessionListResponse(
@@ -122,7 +122,7 @@ async def create_session(
         context["ponytail_mode"] = body.ponytail_mode
 
     # Override user_id with the authenticated identity
-    current_user = get_current_user_id(http_request)
+    current_user = await current_principal(http_request)
 
     session = Session(
         id=body.session_id or str(uuid.uuid4()),
@@ -209,15 +209,18 @@ async def delete_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    # Use orchestrator to cascade delete across all stores
+    # Stop the run first, then cascade across all stores (R04): a flow still running
+    # would save the session back.
+    from weebot.application.ports.task_runner_port import TaskRunnerPort
+    from weebot.application.use_cases.delete_session import DeleteSession
+
+    try:
+        task_runner = http_request.app.state.container.get(TaskRunnerPort)
+    except Exception:
+        logger.warning("No TaskRunner to stop session %s before deleting it", session_id)
+        task_runner = None
     orch = build_deletion_orchestrator(http_request, state_repo)
-    results = await orch.delete_session(session_id)
-
-    # The per-session security caches are not a store, but they are keyed by this
-    # session id and would otherwise outlive it in this process (WB-03).
-    from weebot.application.agents.executor._session_scope import get_session_scope
-
-    get_session_scope().close(session_id)
+    results = await DeleteSession(task_runner, orch).execute(session_id)
 
     logger.info("Deleted session %s (results: %s)", session_id, results)
 
@@ -329,13 +332,13 @@ async def run_session(
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.application.ports.steering_port import SteeringPort
+        from weebot.application.use_cases.dispatch_session_input import RunOptions
 
         task_runner: TaskRunnerPort = container.get(TaskRunnerPort)
         llm = container.get(LLMPort)
         event_bus = container.get(EventBusPort)
         steering = container.get(SteeringPort)
-        model = session.context.get("model") or None
-        ponytail_mode = session.context.get("ponytail_mode") or None
+        opts = RunOptions.from_session(session)
 
         from weebot.interfaces.factories import build_tools
 
@@ -345,8 +348,8 @@ async def run_session(
                 llm=llm,
                 tools=tools,
                 event_bus=event_bus,
-                model=model,
-                ponytail_mode=ponytail_mode,
+                model=opts.model,
+                ponytail_mode=opts.ponytail_mode,
                 steering=steering,
             )
             session = await task_runner.start_session(session, factory)

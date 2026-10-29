@@ -40,6 +40,14 @@ class PlanStatus(str, Enum):
     FAILED = "failed"
 
 
+class PlanOutcome(Enum):
+    """How a finished run went, judged from its steps (audit R06)."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"  # a step failed
+    INCOMPLETE = "incomplete"  # nothing failed, but a step is unverified or never ran
+
+
 class ContextScope(str, Enum):
     """What context sources a step needs in its executor prompt.
 
@@ -254,6 +262,18 @@ class Plan(BaseModel):
     def failed_steps(self) -> list[Step]:
         """Steps that reached FAILED. Empty when the plan succeeded."""
         return [s for s in self.steps if s.status == StepStatus.FAILED]
+
+    def unfinished_steps(self) -> list[Step]:
+        """Steps neither COMPLETED nor FAILED: unverified, or never run to the end."""
+        return [s for s in self.steps if not s.is_done()]
+
+    def outcome(self) -> PlanOutcome:
+        """FAILED if a step failed, INCOMPLETE if one is unverified or unrun, else SUCCEEDED."""
+        if self.failed_steps():
+            return PlanOutcome.FAILED
+        if self.unfinished_steps():
+            return PlanOutcome.INCOMPLETE
+        return PlanOutcome.SUCCEEDED
 
     # ── Domain validation methods (migrated from application layer) ──
 

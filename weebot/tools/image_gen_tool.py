@@ -35,7 +35,10 @@ _SVG_SANITIZE_RE = re.compile(r'[<>"\'&]')
 # ── Download safety limits ────────────────────────────────────────────
 _MAX_IMAGE_BYTES: int = 100 * 1024 * 1024  # 100 MiB — generous for AI-generated images
 _DOWNLOAD_CHUNK_SIZE: int = 64 * 1024  # 64 KiB per chunk
-_SAFE_BASE: Path = Path.cwd().resolve()
+# What output_path may name (R14): a media file inside the project, never .env or source.
+_IMAGE_SUFFIXES: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif"}
+)
 
 # Replicate is optional — only needed for raster image generation
 try:
@@ -794,25 +797,14 @@ class ImageGenTool(BaseTool):
 
     @staticmethod
     def _sanitize_output_path(output_path: str) -> Path:
-        """Resolve and validate *output_path* — reject paths escaping the workspace.
-
-        Returns:
-            Resolved Path guaranteed to be under ``_SAFE_BASE``.
+        """The absolute path *output_path* may be written to (``write_target``, R14).
 
         Raises:
-            ValueError: If the path contains ``..`` components or resolves outside
-                        the safe base directory.
+            ValueError: outside the project, a protected file, or not an image type.
         """
-        if ".." in output_path.split("/"):
-            raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
-        resolved = Path(output_path).resolve()
-        # str.startswith is a string prefix test, not path containment: a
-        # sibling directory whose name merely extends the base (".../weebot"
-        # vs ".../weebot-evil") passed it, giving an arbitrary write outside
-        # the workspace with no ".." anywhere in the path.
-        if not resolved.is_relative_to(_SAFE_BASE):
-            raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
-        return resolved
+        from weebot.core.output_path import write_target
+
+        return Path(write_target(output_path, suffixes=_IMAGE_SUFFIXES))
 
     async def _download_image(
         self, image_url: str, output_path: str, model: str, prompt: str, *, kind: str = "image"
@@ -920,9 +912,10 @@ class ImageGenTool(BaseTool):
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = ImageGenParams(**{k: v for k, v in kwargs.items() if v is not None})
         if params.output_path:
-            # Every branch writes output_path; only _download_image checked it (F50).
+            # Every branch writes output_path; only _download_image checked it (F50). The
+            # checked absolute path replaces it, so no branch resolves it differently.
             try:
-                self._sanitize_output_path(params.output_path)
+                params.output_path = str(self._sanitize_output_path(params.output_path))
             except ValueError as exc:
                 return ToolResult(output="", error=str(exc))
 

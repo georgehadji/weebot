@@ -134,10 +134,10 @@ class TestWebhookToolRole:
         mock_flow.is_done = MagicMock(return_value=True)
 
         with patch(
-            "weebot.interfaces.web.routers.webhook.build_tools",
+            "weebot.interfaces.factories.build_tools",
             new=AsyncMock(return_value=mock_tools),
         ) as mock_build_tools:
-            with patch("weebot.interfaces.web.routers.webhook.create_flow", return_value=mock_flow):
+            with patch("weebot.interfaces.factories.create_flow", return_value=mock_flow):
                 client = TestClient(app)
                 response = client.post(
                     "/api/webhook/run", json={"text": "hello"}, headers={"X-Webhook-Key": "secret"}
@@ -162,10 +162,10 @@ class TestWebhookToolRole:
         mock_flow.is_done = MagicMock(return_value=True)
 
         with patch(
-            "weebot.interfaces.web.routers.webhook.build_tools",
+            "weebot.interfaces.factories.build_tools",
             new=AsyncMock(return_value=mock_tools),
         ) as mock_build_tools:
-            with patch("weebot.interfaces.web.routers.webhook.create_flow", return_value=mock_flow):
+            with patch("weebot.interfaces.factories.create_flow", return_value=mock_flow):
                 client = TestClient(app)
                 response = client.post(
                     "/api/webhook/run", json={"text": "hello"}, headers={"X-Webhook-Key": "secret"}
@@ -182,7 +182,7 @@ class TestWebhookSessionOwnership:
         app = _make_webhook_app(monkeypatch, webhook_api_key="k")
         repo = app.state.container.get(None)
         repo.load_session = AsyncMock(return_value=Session(id="s-alice", user_id="alice"))
-        with patch("weebot.interfaces.web.routers.webhook.create_flow") as create_flow:
+        with patch("weebot.interfaces.factories.create_flow") as create_flow:
             resp = TestClient(app).post(
                 "/api/webhook/run",
                 json={"text": "hi", "session_id": "s-alice"},

@@ -18,8 +18,6 @@ from weebot.domain.models.self_improvement import ImprovementStrategy
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DB_PATH = Path("improvement_strategies.db")
-
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS improvement_strategies (
     strategy_id          TEXT PRIMARY KEY,
@@ -46,8 +44,9 @@ class StrategyStore(StrategyStorePort):
     annotates its collaborator with the port, and this is the class that satisfies it.
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path or _DEFAULT_DB_PATH
+    def __init__(self, db_path: Path | str) -> None:
+        # No default: a bare filename put the store in whatever the working directory was.
+        self._db_path = Path(db_path)
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:

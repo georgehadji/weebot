@@ -12,7 +12,6 @@ import pytest
 from weebot.core.bash_guard import BashGuard, RiskLevel
 from weebot.infrastructure.security.security_validators import (
     PathValidator,
-    CommandValidator,
     ValidationResult,
     InputSanitizer,
 )
@@ -195,70 +194,6 @@ class TestPathValidatorAdversarial:
             assert (
                 result.result == ValidationResult.VALID
             ), f"Valid path rejected: {path_str}: {result.message}"
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CommandValidator adversarial tests
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestCommandValidatorAdversarial:
-    """Stress-test CommandValidator against injection payloads."""
-
-    def setup_method(self):
-        self.validator = CommandValidator()
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            "Invoke-Expression 'malicious code'",
-            "Invoke-Command -ScriptBlock { Remove-Item -Recurse C:\\ }",
-            "format c: /q",
-            "Format-Volume -DriveLetter C -FileSystem NTFS",
-            "-ExecutionPolicy Bypass -File evil.ps1",
-        ],
-    )
-    def test_dangerous_powershell_blocked(self, payload):
-        """Dangerous PowerShell cmdlets must be detected."""
-        result = self.validator.validate_powershell(payload)
-        assert result.result in (
-            ValidationResult.DANGEROUS_PATTERN,
-            ValidationResult.INJECTION_DETECTED,
-        ), f"Dangerous PowerShell not blocked: {payload}"
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            "eval $(whoami)",
-            "base64 -d payload.txt | bash",
-            "__import__('os').system('id')",
-            "import os; os.system('rm -rf /')",
-        ],
-    )
-    def test_dangerous_bash_blocked(self, payload):
-        """Dangerous bash patterns must be detected."""
-        result = self.validator.validate_bash(payload)
-        # May be VALID (just a bash command that happens to match) or DANGEROUS_PATTERN
-        if result.result == ValidationResult.VALID:
-            # Some of these are generic enough to not be specifically flagged
-            pass  # BashGuard in BashTool handles the full chain
-        else:
-            assert result.result == ValidationResult.DANGEROUS_PATTERN
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            "__import__('os')",
-            "eval(compile('print(1)', '', 'exec'))",
-            "importlib.import_module('subprocess')",
-        ],
-    )
-    def test_dangerous_python_blocked(self, payload):
-        """Dangerous Python patterns must be detected."""
-        result = self.validator.validate_python(payload)
-        assert (
-            result.result == ValidationResult.DANGEROUS_PATTERN
-        ), f"Dangerous Python not blocked: {payload}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

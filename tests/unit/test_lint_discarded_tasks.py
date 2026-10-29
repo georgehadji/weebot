@@ -118,8 +118,6 @@ class TestTheSitesUseTheOwner:
             "weebot/interfaces/web/routers/whatsapp_webhook.py",
             "weebot/application/flows/flow_router.py",
             "weebot/core/activity_stream.py",
-            "weebot/infrastructure/notifications/telegram_adapter.py",
-            "weebot/infrastructure/notifications/_base.py",
             "weebot/tools/bash_tool.py",
         ],
     )

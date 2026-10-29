@@ -450,6 +450,7 @@ class RoleBasedToolRegistry:
         rerank = rerank if rerank is not None else wired.get("rerank")
         collaborators: dict[str, dict] = wired.get("collaborators") or {}
         browser_factory = wired.get("browser_factory")
+        workflow_events = wired.get("workflow_events")
 
         class_map = self.build_tool_class_map()
         tools: list = []
@@ -493,6 +494,12 @@ class RoleBasedToolRegistry:
                     )
                 elif name in _flow_factory_llm_tools:
                     tool = tool_cls(llm=llm_port, flow_factory=flow_factory)
+                elif name == "workflow_orchestrator":
+                    tool = tool_cls(
+                        flow_factory=flow_factory,
+                        state_repo=state_repo,
+                        event_publisher=workflow_events,
+                    )
                 elif name in _flow_factory_state_tools:
                     tool = tool_cls(flow_factory=flow_factory, state_repo=state_repo)
                 elif name in _browser_adapter_tools:
@@ -518,7 +525,7 @@ class RoleBasedToolRegistry:
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)
-                # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine).
+                # Inject RerankPort if tool supports it (WebSearchTool).
                 # None: no reranker configured, results keep engine order.
                 if rerank is not None and hasattr(tool, "set_rerank"):
                     tool.set_rerank(rerank)

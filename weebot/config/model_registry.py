@@ -50,6 +50,7 @@ class ModelProvider(Enum):
     LM_STUDIO = "lm_studio"
     VLLM = "vllm"
     CUSTOM_OPENAI = "custom_openai"
+    FREE = "free"  # free/<provider>/<model>: weebot/config/free_models.py
 
     @classmethod
     def from_model_name(cls, model_name: str) -> "ModelProvider":
@@ -67,6 +68,8 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
     # The explicit local prefix, before the bare llama/qwen/phi guess below.
     if name.startswith("ollama/"):
         return ModelProvider.OLLAMA
+    if name.startswith("free/"):
+        return ModelProvider.FREE
     # Known direct-provider prefixes (checked BEFORE the generic OpenRouter catch-all).
     # These have direct API adapters with provider-specific API keys.
     if name.startswith("deepseek/"):

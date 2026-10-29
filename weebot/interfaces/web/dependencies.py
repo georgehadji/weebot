@@ -21,12 +21,11 @@ logger = logging.getLogger(__name__)
 # class that nothing registered raised KeyError into a bare `except: pass`,
 # which is how the checkpoint and gateway purges never ran.
 #
-# Deliberately absent: the flow checkpoint store (SQLiteCheckpointStore).
-# Nothing in production writes it -- no PlanActFlowConfig is built with a
-# checkpoint_port, so CheckpointScheduler returns early and flow_checkpoints
-# stays empty. test_session_deletion_wiring fails if CheckpointPort is ever
-# registered without a purge being added here.
+# The flow checkpoint store is here since D4 wired it (WEEBOT_FLOW_CHECKPOINTS);
+# it is purged whether or not the flag is on now, since it may have been earlier.
 def _session_stores() -> list[tuple[str, Any, str]]:
+    from weebot.application.di.keys import SUMMARY_REPO
+    from weebot.application.ports.checkpoint_port import CheckpointPort
     from weebot.application.ports.event_store_port import EventStorePort
     from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
 
@@ -37,6 +36,10 @@ def _session_stores() -> list[tuple[str, Any, str]]:
         ("gateway_session_store", IGatewaySessionStorePort, "delete_by_session_id"),
         # Entities and relations extracted during the session.
         ("knowledge_graph", "kg_adapter", "delete_by_session_id"),
+        # What a successful session did, kept for planning similar tasks.
+        ("episodic_summaries", SUMMARY_REPO, "delete_by_session_id"),
+        # The plan snapshot after each step, for recovering an interrupted run.
+        ("flow_checkpoints", CheckpointPort, "delete"),
     ]
 
 

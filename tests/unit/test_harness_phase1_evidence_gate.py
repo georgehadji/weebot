@@ -4,7 +4,6 @@ Covers:
 1. RegressionGate fail-closed default
 2. RegressionGate composite-metric acceptance/rejection
 3. HarnessMetricScorer from a known session
-4. RegressionSuite load and oracle evaluation
 5. TaskRunReport with composite metrics
 """
 
@@ -15,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from weebot.domain.models.harness_metrics import HarnessMetrics
-from weebot.domain.models.regression_task import RegressionTask
 
 # ============================================================================
 # 1. RegressionGate — fail-closed default
@@ -235,74 +233,6 @@ class TestHarnessMetricScorer:
         """All metrics zero => composite should be 0."""
         metrics = HarnessMetrics()
         assert metrics.composite() == 0.0
-
-
-# ============================================================================
-# 4. RegressionSuite
-# ============================================================================
-
-
-class TestRegressionSuite:
-    """RegressionSuite loads tasks from JSONL and evaluates oracles."""
-
-    def test_load_held_in_tasks(self):
-        """Held-in tasks should load and parse correctly."""
-        from weebot.application.services.regression_suite import RegressionSuite
-
-        suite = RegressionSuite.load(
-            held_in_path="weebot/infrastructure/fixtures/regression/held_in.jsonl",
-            held_out_path="weebot/infrastructure/fixtures/regression/held_out.jsonl",
-        )
-        assert len(suite.held_in) == 5
-        assert len(suite.held_out) == 3
-        assert suite.held_in[0].id == "task-write-readme"
-
-    def test_empty_suite_has_no_tasks(self):
-        """Empty suite should have no tasks in either set."""
-        from weebot.application.services.regression_suite import RegressionSuite
-
-        suite = RegressionSuite.empty()
-        assert len(suite.held_in) == 0
-        assert len(suite.held_out) == 0
-
-    def test_get_by_id_found(self):
-        """get_by_id should return the correct task."""
-        from weebot.application.services.regression_suite import RegressionSuite
-
-        suite = RegressionSuite.load(
-            held_in_path="weebot/infrastructure/fixtures/regression/held_in.jsonl",
-            held_out_path="weebot/infrastructure/fixtures/regression/held_out.jsonl",
-        )
-        task = suite.get_by_id("task-write-readme")
-        assert task is not None
-        assert task.id == "task-write-readme"
-
-    def test_get_by_id_not_found(self):
-        """get_by_id should return None for unknown task."""
-        from weebot.application.services.regression_suite import RegressionSuite
-
-        suite = RegressionSuite.empty()
-        assert suite.get_by_id("nonexistent") is None
-
-    def test_evaluate_file_exists_oracle(self):
-        """file_exists oracle should pass when context has the file."""
-
-        task = RegressionTask(id="test-eval", prompt="Create a file")
-        task._oracle = lambda ctx: ctx.get("files_created", {}).get("test.txt", False)
-
-        result = task.evaluate({"files_created": {"test.txt": True}})
-        assert result.passed is True
-
-        result = task.evaluate({"files_created": {}})
-        assert result.passed is False
-
-    def test_evaluate_default_oracle_passes_no_error(self):
-        """Default oracle should pass when context has no error."""
-
-        task = RegressionTask(id="test-eval", prompt="Do something")
-        # No _oracle set = default
-        assert task.evaluate({"stdout": "ok"}).passed is True
-        assert task.evaluate({"error": "Something failed"}).passed is False
 
 
 # ============================================================================

@@ -5,8 +5,8 @@ code: ExecApprovalPolicy, ApprovalMode, CommandRule
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-27
-commit: 2c6a2a72
+verified: 2026-10-29
+commit: b894409d
 ---
 
 # ExecApprovalPolicy
@@ -29,13 +29,14 @@ Ported from OpenClaw and written for Windows PowerShell (`weebot/core/approval_p
 
 Consequences (read from source, not run):
 - Fixed 2026-10-22 (plan W3.3, F04, F05): `evaluate` now splits the command with `split_segments()` and folds the segments, so `Format-Volume ...; rm x` is denied. Any matching DENY rule beats a longer pattern within a segment. Set-Content, Copy-Item, Move-Item and Rename-Item ask on their own. Steps 3 and 4 above describe the code at `f00ea38`; the source docstring holds the current rule.
+- Fixed 2026-10-29 (audit R01): `split_segments` lives in `weebot/core/shell_segments.py` and, for shell text, also splits on newlines outside quotes, so a delete on the line after an Output\ write is judged on its own; python_execute code stays one block (`SegmentSyntax.PYTHON`, `python_tool.py:167`). The Output\ carve-out resolves relative paths against the directory the command runs in (`evaluate(..., cwd=)`, `bash_tool.py:397`).
 - "Longest pattern wins" compares string length of the *pattern*, not specificity. Regex rules tend to be long, so they usually beat the short plain-text rules like `"rm "` (`:299`).
 - `Set-Content`, `Copy-Item`, `Move-Item`, `Rename-Item` are only asked about when chained after a separator; standalone they match no rule and are approved (they are in `_DESTRUCTIVE_KEYWORDS`, `:46-62`, but have no standalone rule).
 - The `finance` and `payment` categories have no live caller: the only `evaluate` call that passes a category is `ExecutingState` with `"inbound_mail"` (`weebot/application/flows/states/_execution_gates.py:104`); the tools call `evaluate(command)` without one. Only tests exercise those two.
-- Fixed 2026-10-23 (ADR-013): a confirmation now reaches a human. `GuardedTool` sends an ASK verdict to the approval channel and runs the approved call inside `human_approved_call` (`application/services/tool_guards.py:462-469`, `core/approval.py:143-155`). `bash`, `python_execute` and `powershell` return "requires confirmation" as an error string only outside that block (`tools/bash_tool.py:398-402`, `python_tool.py:166-171`, `powershell_tool.py:193-197`). `ApprovalManager` (`core/approval.py:157`) is now the single-use grant store behind it (`application/services/tool_approval.py:93`).
+- Fixed 2026-10-23 (ADR-013): a confirmation now reaches a human. `GuardedTool` sends an ASK verdict to the approval channel and runs the approved call inside `human_approved_call` (`application/services/tool_guards.py:469-476`, `core/approval.py:143-155`). `bash`, `python_execute` and `powershell` return "requires confirmation" as an error string only outside that block (`tools/bash_tool.py:400-404`, `python_tool.py:170-175`, `powershell_tool.py:156-159`). `ApprovalManager` (`core/approval.py:157`) is now the single-use grant store behind it (`application/services/tool_approval.py:94`).
 
 ## Connected to
-- **Callers:** `BashTool` (`bash_tool.py:144, 395`), `PythonTool` (`python_tool.py:114, 162`), `PowerShellTool` (`powershell_tool.py:186-187`, a new instance per call), `ExecutingState` inbound-mail gate (`weebot/application/flows/states/_execution_gates.py:98-104`; the pause and the answer handling live in FlowRouter, see its card), `SafetyChecker.generate_plan_b` (`core/safety.py:43,64`; no production caller since the gateway gate was deleted, audit A33).
+- **Callers:** `BashTool` (`bash_tool.py:146, 397`), `PythonTool` (`python_tool.py:116, 167`), `PowerShellTool` (`powershell_tool.py:152-153`, a new instance per call), `ExecutingState` inbound-mail gate (`weebot/application/flows/states/_execution_gates.py:98-104`; the pause and the answer handling live in FlowRouter, see its card), `SafetyChecker.generate_plan_b` (`core/safety.py:43,64`; no production caller since the gateway gate was deleted, audit A33).
 - **Related:** `BashGuard` (risk levels, own card), `EgressGuard` (outbound sends, own card), `weebot/core/approval.py` (unused interactive layer).
 - **Looks like but is not:** `BashGuard.requires_approval()` (a method on the scanner, not enforced by the tools); `ApprovalMode` here vs `ApprovalDecision` in `approval.py`.
 

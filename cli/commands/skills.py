@@ -108,6 +108,69 @@ def skill_convert_all(dry_run: bool) -> None:
     asyncio.run(_run())
 
 
+def _loaded_registry():
+    from weebot.application.skills.skill_registry import SkillRegistry
+
+    registry = SkillRegistry()
+    registry.load_all()
+    return registry
+
+
+def _ab_flow_factory(registry, base_factory):
+    """ComparisonRunner's ``flow_factory(session=, skill_names=)`` over the target factory.
+
+    The named skills become the run's skill prompt; retrieval is off on both sides,
+    so the "without" run has no skill and the "with" run has only the named one.
+    """
+
+    def factory(session, skill_names):
+        prompt = registry.build_system_prompt_extensions(skill_names) if skill_names else ""
+        return base_factory(session, skill_prompt=prompt or None, skill_retrieval=False)
+
+    return factory
+
+
+async def _compare(skill_name, prompts, expected):
+    from weebot.application.harness.comparison_runner import ComparisonRunner
+    from weebot.interfaces.factories import shared_container
+
+    container = shared_container()  # one container per process
+    factory = _ab_flow_factory(_loaded_registry(), container._create_target_flow_factory())
+    return await ComparisonRunner(flow_factory=factory).evaluate(skill_name, prompts, expected)
+
+
+@skill.command("compare")
+@click.argument("skill_name")
+@click.option("--prompt", "-p", "prompts", multiple=True, required=True, help="Task (repeatable)")
+@click.option("--expected", "-e", multiple=True, help="Expected answer per prompt, in order")
+def skill_compare(skill_name, prompts, expected) -> None:
+    """Run each prompt with and without SKILL_NAME and compare the answers.
+
+    Two full, billed flow runs per prompt. Without --expected the score is a
+    length heuristic, so pass expected answers when you have them.
+    """
+    if expected and len(expected) != len(prompts):
+        raise click.UsageError("give one --expected per --prompt, or none")
+    if _loaded_registry().get(skill_name) is None:
+        raise click.ClickException(f"no skill named {skill_name!r}")
+    report = asyncio.run(_compare(skill_name, list(prompts), list(expected) or None))
+    table = Table(title=f"With vs without '{skill_name}'")
+    table.add_column("Prompt", style="cyan")
+    table.add_column("With", justify="right")
+    table.add_column("Without", justify="right")
+    table.add_column("Delta", justify="right")
+    for prompt, r in zip(prompts, report.results, strict=False):
+        scores = (f"{r.score_with:.2f}", f"{r.score_without:.2f}", f"{r.delta:+.2f}")
+        table.add_row(prompt[:50], *scores)
+    console.print(table)
+    console.print(
+        f"Average delta {report.avg_delta:+.2f} over {report.total} prompt(s); "
+        f"{report.pass_count} not worse with the skill."
+    )
+    for error in report.errors:
+        console.print(f"[red]{error}[/red]")
+
+
 @skill.command("list")
 @click.option("--active-only", is_flag=True, help="Show only active skills")
 def skill_list(active_only: bool) -> None:

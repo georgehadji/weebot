@@ -75,7 +75,12 @@ unit_coverage_floor = 64
 # 112 -> 111 with A15 (audit fix plan): connection_pool.acquire_write's rollback
 # failure is logged instead of swallowed.
 # 111 -> 110 with A34: BashGuard's security-event callback logs its failure.
-silent_except_handlers = 110
+# 110 -> 102 with wave 6 G1: the unused template engine was deleted.
+# 102 -> 101 with wave 6 G3: the two unused research services were deleted.
+# 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
+# 96 -> 95 with D4 slice 7.
+# 95 -> 94 with D4 slice 10 deletions.
+silent_except_handlers = 94
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -90,7 +95,13 @@ blocking_io_in_async = 0
 # deleted rather than moved. Dead code does not only cost its own lines; it
 # holds debt the ratchets count, so it also hides how much debt is live.
 # Measured by: the `lint-no-print` target in the Makefile.
-print_in_production = 105
+# 105 -> 100 with wave 6 G1: the unused template engine was deleted.
+# 100 -> 89 with wave 6 G2: interface customization and the profile island were deleted.
+# 89 -> 69 with wave 6 G3: the two unused research services were deleted.
+# 69 -> 64 with wave 6 G4: the unwired observability modules were deleted.
+# 64 -> 62 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
+# 62 -> 60 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
+print_in_production = 60
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was
@@ -107,7 +118,11 @@ print_in_production = 105
 # `create_llm_adapter` (WB-02), which is deleted -- the container builds ports for a
 # model now (Container.create_llm_for_model).
 # Measured by: the `lint-env-access` target in the Makefile.
-bare_env_reads = 68
+# 68 -> 67 with wave 6 G1: the unused template engine was deleted.
+# 67 -> 63 with wave 6 G4: the unwired observability modules were deleted.
+# 63 -> 62 with D4 slice 1.
+# 62 -> 60 with D4 slice 10 deletions.
+bare_env_reads = 60
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
@@ -133,7 +148,7 @@ bare_env_reads = 68
 # 54 -> 52: the same two web/auth.py handlers as silent_except_handlers 115 -> 113.
 # 52 -> 51 with A15: the same connection_pool handler as silent_except_handlers 112 -> 111.
 # 51 -> 50 with A34: the same BashGuard handler as silent_except_handlers 111 -> 110.
-bandit_b110 = 50
+bandit_b110 = 48
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -155,7 +170,7 @@ bandit_b110 = 50
 # 28 -> 27 with W3.6: layer 2 of tools/bash_security.py built an `operators`
 # set it never read (ruff 0.17.1 both before and after).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 26
+unused_locals = 19
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
@@ -266,7 +281,10 @@ unregistered_di_keys = 0
 # 63 -> 62 with plan 3.2: the registry's Playwright, tool_discovery's and templates'
 # tool_registry exemptions are gone; interfaces/factories gains flow_builder and the
 # registry (its hidden dynamic imports became visible).
-import_exemptions = 62
+# 62 -> 61 with wave 6 G2: interface customization and the profile island were deleted.
+# 61 -> 59 with wave 6 G3: the two unused research services were deleted.
+# 59 -> 58 with D4 slice 10 deletions.
+import_exemptions = 58
 
 # Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
 # (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
@@ -346,7 +364,9 @@ dynamic_weebot_imports = 15
 # ExecutorAgent.execute_step (527) became the loop in _base.py plus
 # _step_setup/_turn/_tool_batch/_tool_pairing.
 # Measured by: scripts/lint_long_functions.py
-functions_over_150_lines = 25
+# 25 -> 24 with wave 6 G2: interface customization and the profile island were deleted.
+# 24 -> 23 with wave 6 G4: the unwired observability modules were deleted.
+functions_over_150_lines = 23
 
 # Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
 # CI's blocking selector is F821,E9 only; this catches growth in the rest.
@@ -362,7 +382,17 @@ functions_over_150_lines = 25
 # (127 and 112 chars) that are now wrapped. ruff is also pinned in requirements.txt
 # as of the same change, so this number is reproducible instead of depending on what
 # pip resolved.
-ruff_violations = 736
+# 736 -> 687 with wave 6 G1: the unused template engine was deleted.
+# 687 -> 674 with wave 6 G2: interface customization and the profile island were deleted.
+# 674 -> 671 with wave 6 G3: the two unused research services were deleted.
+# 671 -> 624 with wave 6 G4: the unwired observability modules were deleted.
+# 624 -> 619 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
+# 619 -> 618 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
+# 618 -> 616 with wave 6 G11: the PowerShell tool's private deny lists moved into the approval policy.
+# 616 -> 614 with D4 slice 5.
+# 614 -> 607 with D4 slice 7.
+# 607 -> 589 with D4 slice 10 deletions.
+ruff_violations = 587
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

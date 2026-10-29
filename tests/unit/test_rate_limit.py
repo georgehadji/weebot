@@ -66,8 +66,8 @@ class TestTierMapping:
         assert _get_tier("/api/models") == "read"
 
     def test_mutating_tier(self):
-        assert _get_tier("/api/sessions/abc") == "mutating"
-        assert _get_tier("/api/chat/send") == "mutating"
+        assert _get_tier("/api/sessions/abc", "POST") == "mutating"
+        assert _get_tier("/api/chat/send", "POST") == "mutating"
 
     def test_webhook_tier(self):
         assert _get_tier("/api/webhook/run") == "webhook"
@@ -75,7 +75,7 @@ class TestTierMapping:
         assert _get_tier("/api/slack/commands") == "webhook"
 
     def test_expensive_tier(self):
-        assert _get_tier("/api/flow/run") == "expensive"
+        assert _get_tier("/api/flow/run", "POST") == "expensive"
 
     def test_unknown_defaults_to_read(self):
         assert _get_tier("/api/unknown") == "read"

@@ -17,6 +17,7 @@ import json
 import logging
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.models.structured_output import extract_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,8 @@ class CodeQualitySignal:
                 return self._default()
 
             raw = response.content.strip()
-            parsed = json.loads(raw)
+            # A fenced reply fell back to the neutral 0.5 defaults and never rejected.
+            parsed = json.loads(extract_json_text(raw))
 
             return {
                 "artifact_presence": max(

@@ -105,6 +105,18 @@ def _secret_redactor() -> Any:
     return SecretRedactor.from_settings()
 
 
+def key_fingerprint(key: str | None) -> str:
+    """A short, non-reversible tag for logs: tells two keys apart, reveals neither (R23).
+
+    Logs used to carry the first 12 characters of a rejected key, enough to identify it.
+    """
+    if not key:
+        return "none"
+    import hashlib
+
+    return "sha256:" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
+
+
 def sanitize(text: str) -> str:
     """Apply all credential-redaction patterns to *text*.
 

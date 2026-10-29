@@ -63,8 +63,8 @@ UNLIMITED_TIERS = {"unlimited"}
 UNLIMITED_PATHS = {"/api/health", "/api/live", "/api/ready"}
 
 
-def _get_tier(path: str) -> str:
-    """Return the rate limit tier for a request path."""
+def _path_tier(path: str) -> str:
+    """The tier a path belongs to, before the method is known."""
     if path in _PATH_TIERS:
         return _PATH_TIERS[path]
     # Prefix match for parameterized paths — check longest first
@@ -75,6 +75,24 @@ def _get_tier(path: str) -> str:
             matched_tier = tier
             matched_len = len(prefix)
     return matched_tier
+
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _get_tier(path: str, method: str = "GET") -> str:
+    """The rate-limit tier for *method* on *path* (R18).
+
+    A read never spends the change budget, and a change is never charged as a read: the
+    path alone charged every GET of /api/sessions/{id} to "mutating" (20 a minute), so the
+    UI's polling got 429s, while POST /api/sessions and POST /api/chat counted as reads.
+    """
+    tier = _path_tier(path)
+    if tier in ("unlimited", "webhook"):
+        return tier
+    if method.upper() in _SAFE_METHODS:
+        return "read"
+    return "mutating" if tier == "read" else tier
 
 
 class _TokenBucket:
@@ -170,7 +188,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path in UNLIMITED_PATHS:
             return await call_next(request)
 
-        tier = _get_tier(path)
+        tier = _get_tier(path, request.method)
 
         # Unlimited tier check
         if tier in UNLIMITED_TIERS:

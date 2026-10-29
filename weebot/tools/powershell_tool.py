@@ -17,6 +17,7 @@ from weebot.config.tool_config import ToolConfig
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.encoded_command import has_encoded_command
+from weebot.tools._results import to_tool_result
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -88,34 +89,6 @@ class PowerShellTool(BaseTool):
         "system_events": "Get-EventLog -LogName System -Newest 5 | Select-Object EntryType, Source, Message",
     }
 
-    # PowerShell dangerous cmdlets and patterns
-    DANGEROUS_PATTERNS: ClassVar[list] = [
-        r"\bformat-volume\b",
-        r"\bformat\s+[a-z]:",
-        r"\bInvoke-Expression\b|\biex\b",
-        r"\bInvoke-Command\b|\bicm\b",
-        r"\bStart-Process\b.*-Credential",
-        r"\bNew-LocalUser\b|\bSet-LocalUser\b",
-        r"\bAdd-WindowsCapability\b|\bRemove-WindowsFeature\b",
-    ]
-
-    def _validate_path_safety(self, command: str) -> bool:
-        """Ensure command doesn't access dangerous system paths."""
-        # Block dangerous system paths but allow user directories
-        dangerous_patterns = [
-            r"rm\s+-Recurse\s+C:\\Windows",
-            r"rm\s+-Recurse\s+C:\\Program\s+Files",
-            r"Remove-Item\s+.*C:\\Windows",
-            r"Remove-Item\s+.*C:\\Program\s+Files",
-            r"Format-Volume",
-            r"Clear-Disk",
-        ]
-
-        for pattern in dangerous_patterns:
-            if re.search(pattern, command, re.IGNORECASE):
-                return False
-        return True
-
     def _validate_no_encoded_commands(self, command: str) -> tuple[bool, str]:
         """
         Check for encoded PowerShell commands which are a common injection vector.
@@ -123,7 +96,6 @@ class PowerShellTool(BaseTool):
         Returns:
             (is_valid, error_message)
         """
-        cmd_lower = command.lower()
 
         if has_encoded_command(command):
             return False, (
@@ -154,14 +126,6 @@ class PowerShellTool(BaseTool):
                 except Exception:
                     pass
 
-        # Check for dangerous cmdlets
-        for pattern in self.DANGEROUS_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
-                return False, (
-                    f"Security Error: Command contains restricted operation. "
-                    f"Pattern matched: {pattern}"
-                )
-
         return True, ""
 
     def _get_max_timeout(self) -> float:
@@ -182,10 +146,9 @@ class PowerShellTool(BaseTool):
         is_valid, error_msg = self._validate_no_encoded_commands(command)
         if not is_valid:
             return ToolResult(output="", error=error_msg)
-        if not self._validate_path_safety(command):
-            return ToolResult(output="", error="Error: Command violates sandbox constraints")
-
         # ── Approval policy gate ──
+        # Dangerous cmdlets and system paths are DENY rules in the policy itself
+        # (wave 6 G11), so the guard chain and a directly built tool see one list.
         policy = ExecApprovalPolicy()
         approval = policy.evaluate(command)
         if not approval.approved:
@@ -213,12 +176,6 @@ class PowerShellTool(BaseTool):
             s_result = await self._sandbox.execute_shell(
                 script=command, shell="powershell", timeout=effective_timeout
             )
-            if s_result.timed_out:
-                return ToolResult(
-                    output="", error=f"Command timed out after {effective_timeout:.0f}s"
-                )
-            if not s_result.success and s_result.stderr:
-                return ToolResult(output=s_result.stdout, error=s_result.stderr)
-            return ToolResult(output=s_result.combined_output)
+            return to_tool_result(s_result, timeout=effective_timeout)
         except Exception as e:
             return ToolResult(output="", error=str(e))

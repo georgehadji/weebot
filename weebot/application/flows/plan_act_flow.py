@@ -258,6 +258,8 @@ class PlanActFlow(BaseFlow):
         publisher._session = self._session
         publisher._plan = self._plan  # truth binding and checkpoints read it
         self._session = await publisher.emit(event)
+        if event.type == "step" and getattr(self, "_checkpoints", None) is not None:
+            await self._checkpoints.maybe_save(self._session, self._plan, self._state)
 
     async def _extract_session_constraints(self, prompt: str) -> None:
         """Extract, persist, and publish any side constraints in *prompt*.

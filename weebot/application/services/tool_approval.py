@@ -20,6 +20,7 @@ an interactive process narrows it with ``approval_scope(approval=DenyApproval())
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -224,11 +225,44 @@ def _redact(value: Any) -> Any:
     return sanitize(value) if isinstance(value, str) else value
 
 
+# How much of a call the prompt shows (R15). The approval always covers the whole call, so
+# what does not fit is cut from the middle, never the end, and the prompt says how much.
+_PROMPT_CHARS = 4000
+_SHORT_PROMPT_CHARS = 800  # chat gateways
+_VALUE_CHARS = 1500
+
+
+def _elide(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    head = limit * 2 // 3
+    tail = limit - head
+    return f"{text[:head]} …[{len(text) - limit:,} characters hidden]… {text[-tail:]}"
+
+
+def render_call(arguments: dict[str, Any], *, limit: int = _PROMPT_CHARS) -> str:
+    """Every argument of a call, redacted, with both ends of anything too long (R15).
+
+    The prompt used to show ``command[:500]`` and nothing for other tools: a harmless first
+    500 characters hid a destructive tail, and paid tools were approved blind.
+    """
+    command = arguments.get("command") or arguments.get("code")
+    parts = [str(_redact(str(command)))] if command else []
+    for key, value in arguments.items():
+        if command is not None and value is command:
+            continue
+        text = value if isinstance(value, str) else json.dumps(value, default=str)
+        parts.append(f"{key}={_elide(str(_redact(text)), _VALUE_CHARS)}")
+    return _elide("\n".join(parts), limit)
+
+
 def approval_prompt(request: ToolCallApproval, *, short: bool = False) -> str:
-    command = request.arguments.get("command") or request.arguments.get("code") or ""
+    call = render_call(
+        request.arguments, limit=_SHORT_PROMPT_CHARS if short else _PROMPT_CHARS
+    )
     lines = [
         f"Tool '{request.tool_name}' needs your approval ({request.guard}: {request.reason}).",
-        f"Call: {_redact(str(command))[:500]}" if command else "",
+        f"Call: {call}" if call else "",
     ]
     if not short:
         lines.append(

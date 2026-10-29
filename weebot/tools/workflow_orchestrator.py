@@ -103,11 +103,20 @@ class WorkflowOrchestratorTool(BaseTool):
     # Private injected dependencies — excluded from Pydantic schema
     _flow_factory: Callable | None = None
     _state_repo: Any | None = None
+    _event_publisher: Any | None = None
 
-    def __init__(self, flow_factory: Callable | None = None, state_repo: Any | None = None, **data):
+    def __init__(
+        self,
+        flow_factory: Callable | None = None,
+        state_repo: Any | None = None,
+        event_publisher: Any | None = None,
+        **data,
+    ):
         super().__init__(**data)
         object.__setattr__(self, "_flow_factory", flow_factory)
         object.__setattr__(self, "_state_repo", state_repo)
+        # Workflow progress onto the event bus, under the calling session.
+        object.__setattr__(self, "_event_publisher", event_publisher)
 
     async def execute(self, tasks: list[dict[str, Any]], max_parallel: int = 4, **_) -> ToolResult:
         if not self._flow_factory:
@@ -167,10 +176,14 @@ class WorkflowOrchestratorTool(BaseTool):
                     logger.warning("DAG sub-agent failed for task_id=%s: %s", task_id, exc)
                     return {"task_id": task_id, "status": "failed", "error": str(exc)[:500]}
 
+        from weebot.core.log_context import session_id_var
+
         orchestrator = WorkflowOrchestrator(
             max_parallel_agents=min(max(1, max_parallel), 10),
             timeout_per_task=300,
             task_handler=_agent_task_handler,
+            event_publisher=self._event_publisher,
+            session_id=session_id_var.get() or "",
         )
 
         try:

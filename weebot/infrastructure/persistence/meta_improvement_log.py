@@ -26,8 +26,6 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_LOG_PATH = Path("meta_improvement_log.db")
-
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS meta_edits (
     edit_id        TEXT PRIMARY KEY,
@@ -49,7 +47,7 @@ class MetaImprovementLog:
     """Append-only audit log for metacognitive self-improvements.
 
     Usage:
-        log = MetaImprovementLog()
+        log = MetaImprovementLog(db_path=data_dir / "meta_improvement_log.db")
         await log.record(
             editor="MetaSelfImprover",
             target_file="self_improver.py:allowlist",
@@ -59,8 +57,9 @@ class MetaImprovementLog:
         )
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        self._db_path = db_path or _DEFAULT_LOG_PATH
+    def __init__(self, db_path: Path) -> None:
+        # No default: a bare filename put the log in whatever the working directory was.
+        self._db_path = Path(db_path)
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:

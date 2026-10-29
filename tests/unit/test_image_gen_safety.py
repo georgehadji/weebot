@@ -21,18 +21,19 @@ def test_sanitize_output_path_rejects_dotdot():
     from weebot.tools.image_gen_tool import ImageGenTool
 
     t = ImageGenTool()
-    with pytest.raises(ValueError, match="Unsafe|escapes"):
+    with pytest.raises(ValueError, match="traversal|escapes"):  # write_target (R14)
         t._sanitize_output_path("../../etc/bad.png")
 
 
 def test_sanitize_output_path_accepts_safe():
     """_sanitize_output_path must accept paths within the workspace."""
-    from weebot.tools.image_gen_tool import ImageGenTool, _SAFE_BASE
+    from weebot.core.output_path import _PROJECT_ROOT
+    from weebot.tools.image_gen_tool import ImageGenTool
 
     t = ImageGenTool()
-    safe = str(_SAFE_BASE / "Output" / "images" / "test.png")
+    safe = str(_PROJECT_ROOT / "Output" / "images" / "test.png")
     result = t._sanitize_output_path(safe)
-    assert result == _SAFE_BASE / "Output" / "images" / "test.png"
+    assert result == (_PROJECT_ROOT / "Output" / "images" / "test.png").resolve()
 
 
 # ══════════════════════════════════════════════════════════════════════

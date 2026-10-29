@@ -1,7 +1,9 @@
 # Core Framework
 fastapi==0.161.1
 uvicorn[standard]==0.54.0
-langchain==1.4.7
+# langchain_core is imported directly (infrastructure/llm/langchain_adapter.py);
+# the langchain meta-package itself is not.
+langchain-core==1.6.13
 langchain-openai==1.7.2
 pydantic==2.14.1
 # Imported directly by weebot.config.settings; also required transitively by
@@ -28,32 +30,23 @@ mss==10.2.0
 pystray>=0.19.5; platform_system=="Windows"
 keyboard>=0.13.5; platform_system=="Windows"
 pywin32==312; platform_system=="Windows"
-wmi>=1.5.1; platform_system=="Windows"
 winotify==1.1.0; platform_system=="Windows"
 
 # Research & Scientific
 numpy==2.5.4
 pandas==3.1.0
 matplotlib==3.11.2
-seaborn==0.13.2
-scipy==1.18.1
 # Imported directly by image tools (ocr, screen_tool, computer_use, som_renderer);
 # also pulled by matplotlib — pin explicitly so it can't be dropped transitively.
 Pillow>=10.0.0
 
 # Document Processing
-pypandoc==1.17
-python-docx==1.2.0
 openpyxl==3.1.5
 
 # AI/ML
 openai>=2.26.0
 anthropic==0.117.0
 tiktoken==0.14.0
-
-# Data Validation & Types
-marshmallow==4.3.1
-cerberus>=1.3.8
 
 # HTTP & Networking
 aiohttp==3.14.5
@@ -70,8 +63,6 @@ alembic>=1.20.0
 # CLI & UI
 click==8.5.0
 rich==15.0.0
-prompt-toolkit>=3.0.53
-colorama==0.4.6
 
 # Async
 aiofiles==25.1.0
@@ -88,16 +79,11 @@ duckduckgo-search>=7.0
 
 # Utilities
 pyyaml>=6.0.3
-toml==0.10.2
-python-dateutil==2.9.0.post0
-uuid-utils>=0.0.0
 
 # Optional: For Jupyter integration
 # ipywidgets>=8.0.0
 # IPython>=8.0.0
 
-# Optional: For Zotero integration
-# pyzotero>=1.5.0
 
 # Filesystem watching (behavior_tracker)
 watchdog==6.0.0
@@ -112,8 +98,6 @@ yt-dlp>=2026.8.19  # YouTube video download
 # Security
 cryptography==50.0.2
 
-# Templating
-jinja2>=3.1.6
 
 # Caching / Message Queue
 valkey==6.2.0  # Drop-in redis replacement (BSD-3-Clause, Linux Foundation)
