@@ -101,7 +101,10 @@ class GatewayCommandDispatcher:
         if not text.startswith("/"):
             return ("", [], text)
 
-        parts = shlex.split(text)
+        try:
+            parts = shlex.split(text)
+        except ValueError:  # an unbalanced quote, as in "/what's up" (R21)
+            parts = text.split()
         cmd = parts[0][1:].lower()  # Strip leading /
         args = parts[1:] if len(parts) > 1 else []
         raw_rest = text[len(parts[0]) :].strip()
