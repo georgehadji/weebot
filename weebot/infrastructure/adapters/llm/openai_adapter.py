@@ -15,6 +15,7 @@ from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.llm_response import LLMChunk
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 from weebot.config.api_endpoints import DEEPSEEK_API_BASE, OPENROUTER_API_BASE
+from weebot.core.credential_sanitizer import key_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -270,12 +271,11 @@ class OpenAIAdapter(LLMPort):
         except AuthenticationError as exc:
             # 401/403 — API key is invalid, expired, or lacks permissions.
             # Log clearly so the operator can rotate the key.
-            key_prefix = (self._client.api_key or "")[:12]
             logger.error(
-                "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
+                "AUTHENTICATION ERROR: The API key (%s) was rejected "
                 "by the provider (base_url=%s). Check that the key is valid, "
                 "not expired, and has the required model permissions.",
-                key_prefix,
+                key_fingerprint(self._client.api_key),  # never key characters (R23)
                 self._client.base_url,
             )
             raise LLMAuthenticationError(str(exc)) from exc
@@ -375,11 +375,10 @@ class OpenAIAdapter(LLMPort):
         try:
             response_stream = await self._client.chat.completions.create(**kwargs)
         except AuthenticationError as exc:
-            key_prefix = (self._client.api_key or "")[:12]
             logger.error(
-                "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
+                "AUTHENTICATION ERROR: The API key (%s) was rejected "
                 "by the provider (base_url=%s) on stream open.",
-                key_prefix,
+                key_fingerprint(self._client.api_key),
                 self._client.base_url,
             )
             raise LLMAuthenticationError(str(exc)) from exc

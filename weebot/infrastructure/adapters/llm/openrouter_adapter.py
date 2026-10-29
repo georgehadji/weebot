@@ -7,6 +7,8 @@ import os
 
 from openai import AsyncOpenAI
 
+from weebot.core.credential_sanitizer import key_fingerprint
+
 from .openai_adapter import OpenAIAdapter
 from weebot.config.model_refs import MODEL_FACTORY_OPENROUTER
 from weebot.config.api_endpoints import OPENROUTER_API_BASE
@@ -51,10 +53,10 @@ class OpenRouterAdapter(OpenAIAdapter):
             )
         elif not key.startswith(_OPENROUTER_KEY_PREFIX):
             _log.warning(
-                "OPENROUTER_API_KEY (prefix=%s...) does not start with '%s'.  "
+                "OPENROUTER_API_KEY (%s) does not start with '%s'.  "
                 "OpenRouter keys should begin with '%s'.  "
                 "Got an OpenAI key instead?",
-                key[:12],
+                key_fingerprint(key),  # never key characters (R23)
                 _OPENROUTER_KEY_PREFIX,
                 _OPENROUTER_KEY_PREFIX,
             )
