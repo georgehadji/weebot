@@ -26,7 +26,7 @@ class _Sandbox:
     async def execute_shell(self, script, **kw):
         self.scripts.append(script)
         return SimpleNamespace(
-            timed_out=False, success=True, stdout="", stderr="", returncode=0,
+            timed_out=False, memory_killed=False, success=True, stdout="", stderr="", returncode=0,
             combined_output="done",
         )
 
@@ -76,7 +76,7 @@ class _PySandbox:
     async def execute_python(self, code, **kw):
         self.codes.append(code)
         return SimpleNamespace(
-            timed_out=False, success=True, stdout="ok", stderr="", returncode=0,
+            timed_out=False, memory_killed=False, success=True, stdout="ok", stderr="", returncode=0,
             combined_output="ok",
         )
 

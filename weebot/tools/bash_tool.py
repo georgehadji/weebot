@@ -17,6 +17,7 @@ from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.background_tasks import get_background_tasks
 from weebot.core.bash_guard import BashGuard
 from weebot.core.credential_sanitizer import sanitize
+from weebot.tools._results import to_tool_result
 from weebot.tools.base import BaseTool, ToolResult
 
 import logging
@@ -416,11 +417,4 @@ class BashTool(BaseTool):
             script=command, shell=shell_type, timeout=effective_timeout, cwd=working_dir
         )
 
-        if result.timed_out:
-            return ToolResult(output="", error=f"Command timed out after {effective_timeout:.0f}s")
-        if not result.success:
-            return ToolResult(
-                output=result.stdout, error=result.stderr or f"Exit code {result.returncode}"
-            )
-
-        return ToolResult(output=result.combined_output)
+        return to_tool_result(result, timeout=effective_timeout)

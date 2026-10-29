@@ -17,6 +17,7 @@ from weebot.config.tool_config import ToolConfig
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.encoded_command import has_encoded_command
+from weebot.tools._results import to_tool_result
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -175,12 +176,6 @@ class PowerShellTool(BaseTool):
             s_result = await self._sandbox.execute_shell(
                 script=command, shell="powershell", timeout=effective_timeout
             )
-            if s_result.timed_out:
-                return ToolResult(
-                    output="", error=f"Command timed out after {effective_timeout:.0f}s"
-                )
-            if not s_result.success and s_result.stderr:
-                return ToolResult(output=s_result.stdout, error=s_result.stderr)
-            return ToolResult(output=s_result.combined_output)
+            return to_tool_result(s_result, timeout=effective_timeout)
         except Exception as e:
             return ToolResult(output="", error=str(e))
