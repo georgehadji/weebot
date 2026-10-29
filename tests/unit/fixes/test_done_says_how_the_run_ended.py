@@ -36,6 +36,8 @@ async def _done(status: StepStatus) -> DoneEvent:
     def _first(state):
         if not started["done"]:
             started["done"] = True
+            if status is StepStatus.COMPLETED:  # a run that worked finished every step (R06)
+                flow._plan = flow._plan.update_step_status("s2", StepStatus.COMPLETED)
             return orig(CompletedState())
         return orig(state)
 

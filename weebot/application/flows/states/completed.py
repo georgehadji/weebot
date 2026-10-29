@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 from weebot.application.agents.executor._session_scope import get_session_scope
 from weebot.application.flows.states._step_outcome import set_replans
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
-from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
-from weebot.domain.models.plan import PlanStatus, StepStatus
+from weebot.domain.models.event import AgentEvent, DoneEvent, ErrorEvent, PlanEvent
+from weebot.domain.models.plan import PlanOutcome, PlanStatus, StepStatus
 from weebot.domain.models.session import SessionStatus
 from weebot.domain.models.event import ProductDecisionEvent
 from datetime import UTC
@@ -173,9 +173,19 @@ class CompletedState(FlowState):
         # `Plan.is_complete()` is `all(is_done())` and `is_done()` counts
         # FAILED, so "we stopped" and "it worked" were the same predicate here.
         failed_steps = context._plan.failed_steps() if context._plan else []
+        # An unverified or never-run step is not success either (R06, owner decision D-R1).
+        outcome = context._plan.outcome() if context._plan else PlanOutcome.SUCCEEDED
+        match outcome:
+            case PlanOutcome.SUCCEEDED:
+                terminal_plan_status, terminal, done_status = (
+                    PlanStatus.COMPLETED, SessionStatus.COMPLETED, "completed"
+                )
+            case PlanOutcome.FAILED | PlanOutcome.INCOMPLETE:
+                terminal_plan_status, terminal, done_status = (
+                    PlanStatus.FAILED, SessionStatus.FAILED, "failed"
+                )
 
         if context._plan:
-            terminal_plan_status = PlanStatus.FAILED if failed_steps else PlanStatus.COMPLETED
             context._plan = context._plan.model_copy(update={"status": terminal_plan_status})
 
             # ── AWM: induce workflow template from completed session ────
@@ -298,7 +308,13 @@ class CompletedState(FlowState):
         # The run is over, however it ended: the next task in this session starts its
         # own count of replans without progress.
         set_replans(context, 0)
-        terminal = SessionStatus.COMPLETED if not failed else SessionStatus.FAILED
+        if outcome is PlanOutcome.INCOMPLETE:
+            reason = "The run ended with steps not done: " + "; ".join(
+                f"{s.id} ({s.status.value}): {s.description[:80]}"
+                for s in context._plan.unfinished_steps()[:5]
+            )
+            logger.warning("Session %s: %s", context._session.id, reason)
+            yield ErrorEvent(error=reason)
         context._session = context._session.set_status(terminal)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
@@ -308,7 +324,7 @@ class CompletedState(FlowState):
         # rows in the event store and _hydrate_session_state replays them if the
         # session runs again; a TTL would not be safe, which is why there is none.
         get_session_scope().close(context._session.id)
-        yield DoneEvent(status="failed" if failed else "completed")
+        yield DoneEvent(status=done_status)
 
         # --- CQRS: score the trajectory if mediator is available ---
         if context._mediator:
@@ -352,7 +368,7 @@ class CompletedState(FlowState):
             )
 
             # Count tool calls and errors from session events
-            from weebot.domain.models.event import ToolEvent, ErrorEvent
+            from weebot.domain.models.event import ToolEvent
 
             tool_count = sum(1 for e in context._session.events if isinstance(e, ToolEvent))
             error_count = sum(1 for e in context._session.events if isinstance(e, ErrorEvent))
