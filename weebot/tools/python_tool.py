@@ -160,7 +160,10 @@ class PythonExecuteTool(BaseTool):
             return ToolResult(output="", error=f"Code blocked by BashGuard: {'; '.join(reasons)}")
 
         # --- Safety gate (ExecApprovalPolicy) ---
-        approval = self._policy.evaluate(code)
+        from weebot.core.shell_segments import SegmentSyntax
+
+        # Lines of code are not separate commands (R01 splits shell text on newlines).
+        approval = self._policy.evaluate(code, syntax=SegmentSyntax.PYTHON)
         if not approval.approved:
             return ToolResult(output="", error=f"Code denied by policy: {approval.reason}")
         if approval.requires_confirmation and not is_human_approved(self.name):

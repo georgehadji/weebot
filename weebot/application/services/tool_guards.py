@@ -162,21 +162,28 @@ class ApprovalPolicyAdapter:
         self._policy = policy
 
     def check(self, tool_name: str, args: Mapping[str, Any]) -> GuardVerdict | None:
+        from weebot.core.shell_segments import SegmentSyntax
+
         command = _shell_command(tool_name, args)
+        syntax = SegmentSyntax.SHELL
         if command is None and tool_name == "python_execute" and args.get("code"):
             command = str(args["code"])  # python_execute runs the same policy on its code
+            syntax = SegmentSyntax.PYTHON  # its lines are code, not separate commands
         if command is None:
             return None
-        result = self._policy.evaluate(command)
+        cwd = str(args["working_dir"]) if args.get("working_dir") else None
+        result = self._policy.evaluate(command, syntax=syntax, cwd=cwd)
         if not result.approved:
             return GuardVerdict(GuardAction.DENY, self.name, result.reason)
         if result.requires_confirmation:
             return GuardVerdict(
                 GuardAction.ASK, self.name, result.reason or result.undo_hint or "confirm"
             )
-        return self._default_ask(tool_name, command)
+        return self._default_ask(tool_name, command, cwd)
 
-    def _default_ask(self, tool_name: str, command: str) -> GuardVerdict | None:
+    def _default_ask(
+        self, tool_name: str, command: str, cwd: str | None = None
+    ) -> GuardVerdict | None:
         """A shell segment no rule covers and that is not a plain read (audit A20, D3a).
 
         WEEBOT_SHELL_DEFAULT_ASK: ``off``; ``observe`` (default) logs "would ask" and lets it
@@ -190,7 +197,7 @@ class ApprovalPolicyAdapter:
         mode = get_settings().shell_default_ask
         if mode == "off":
             return None
-        unreviewed = self._policy.unreviewed_segments(command)
+        unreviewed = self._policy.unreviewed_segments(command, cwd=cwd)
         if not unreviewed:
             return None
         reason = f"no approval rule covers: {unreviewed[0][:120]}"

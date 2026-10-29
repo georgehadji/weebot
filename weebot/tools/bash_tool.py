@@ -392,7 +392,7 @@ class BashTool(BaseTool):
             )
 
         # --- Safety gate (ExecApprovalPolicy) ---
-        approval = self._policy.evaluate(command)
+        approval = self._policy.evaluate(command, cwd=working_dir)  # where it will run (R01)
         if not approval.approved:
             return ToolResult(output="", error=f"Command denied by policy: {approval.reason}")
         if approval.requires_confirmation and not is_human_approved(self.name):
