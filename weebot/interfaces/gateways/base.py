@@ -16,6 +16,7 @@ never fired: audit A33).
 
 from __future__ import annotations
 
+import random
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -24,6 +25,28 @@ from pathlib import Path
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.gateway_auth import GatewayAuth
+from weebot.utils.backoff import BackoffConfig
+
+
+class PollBackoff:
+    """Capped exponential delay, with jitter, between failed polls (audit R10)."""
+
+    def __init__(self, cap: float = 60.0, jitter: float = 0.25) -> None:
+        self._delays = BackoffConfig(max_delay=cap).delays
+        self._cap = cap
+        self._jitter = jitter
+        self._failures = 0
+
+    def reset(self) -> None:
+        self._failures = 0
+
+    def next_delay(self, retry_after: float | None = None) -> float:
+        """Seconds to wait before the next poll; the server's ``retry_after`` wins."""
+        base = self._delays[min(self._failures, len(self._delays) - 1)]
+        self._failures += 1
+        if retry_after:
+            return float(retry_after)
+        return min(base * random.uniform(1 - self._jitter, 1 + self._jitter), self._cap)
 
 
 @dataclass

@@ -17,7 +17,12 @@ import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    PollBackoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,23 +61,26 @@ class SignalAdapter(GatewayAdapter):
         logger.info("SignalAdapter stopped")
 
     async def _poll_loop(self) -> None:
+        backoff = PollBackoff()
         while self._running:
             try:
                 messages = await self.receive_messages()
-                for msg in messages:
-                    try:
-                        text = await self._process_message(msg)
-                        if text:
-                            await self.send_response(
-                                GatewayResponse(
-                                    text=text, platform="signal", external_id=msg.external_id
-                                )
-                            )
-                    except Exception as exc:
-                        logger.warning("Error processing Signal message: %s", exc)
             except Exception as exc:
                 logger.error("Signal poll error: %s", exc)
-                await asyncio.sleep(5.0)
+                await asyncio.sleep(backoff.next_delay())
+                continue
+            backoff.reset()
+            for msg in messages:
+                try:
+                    text = await self._process_message(msg)
+                    if text:
+                        await self.send_response(
+                            GatewayResponse(
+                                text=text, platform="signal", external_id=msg.external_id
+                            )
+                        )
+                except Exception as exc:
+                    logger.warning("Error processing Signal message: %s", exc)
 
     async def _process_message(self, message: GatewayMessage) -> str:
         """Run an inbound Signal message through PlanActFlow.
@@ -139,34 +147,34 @@ class SignalAdapter(GatewayAdapter):
     async def receive_messages(self) -> list[GatewayMessage]:
         """Poll for incoming Signal messages.
 
-        Returns list of new GatewayMessages.
+        Returns list of new GatewayMessages. Raises when signal-cli cannot be reached or
+        answers with an error, so the poll loop backs off instead of spinning (R10).
         """
         messages: list[GatewayMessage] = []
 
         url = f"{self._rest_url}/v1/receive/{self._account_number}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params={"timeout": 10}) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        for item in data if isinstance(data, list) else [data]:
-                            envelope = item.get("envelope", {})
-                            sender = envelope.get("source", "")
-                            data_message = envelope.get("dataMessage", {})
-                            text = data_message.get("message", "")
-                            if sender and text:
-                                messages.append(
-                                    GatewayMessage(
-                                        platform="signal",
-                                        external_id=sender,
-                                        text=text.strip(),
-                                        metadata={
-                                            "timestamp": envelope.get("timestamp"),
-                                            "message_id": data_message.get("timestamp"),
-                                        },
-                                    )
-                                )
-        except Exception as exc:
-            logger.debug("Signal receive error (may be normal): %s", exc)
-
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(url, params={"timeout": 10}) as resp,
+        ):
+            if resp.status != 200:
+                raise RuntimeError(f"signal-cli receive answered HTTP {resp.status}")
+            data = await resp.json()
+        for item in data if isinstance(data, list) else [data]:
+            envelope = item.get("envelope", {})
+            sender = envelope.get("source", "")
+            data_message = envelope.get("dataMessage", {})
+            text = data_message.get("message", "")
+            if sender and text:
+                messages.append(
+                    GatewayMessage(
+                        platform="signal",
+                        external_id=sender,
+                        text=text.strip(),
+                        metadata={
+                            "timestamp": envelope.get("timestamp"),
+                            "message_id": data_message.get("timestamp"),
+                        },
+                    )
+                )
         return messages

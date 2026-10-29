@@ -392,7 +392,7 @@ functions_over_150_lines = 23
 # 616 -> 614 with D4 slice 5.
 # 614 -> 607 with D4 slice 7.
 # 607 -> 589 with D4 slice 10 deletions.
-ruff_violations = 589
+ruff_violations = 587
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

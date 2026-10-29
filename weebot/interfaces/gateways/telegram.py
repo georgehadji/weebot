@@ -30,9 +30,23 @@ from weebot.application.services.gateway_flow_resolver import GatewayFlowResolve
 from weebot.domain.models.gateway_session import GatewaySessionKey
 from weebot.domain.models.session import Session
 from weebot.interfaces.factories import run_scope
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    PollBackoff,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class TelegramApiError(Exception):
+    """getUpdates answered ``ok: false`` (audit R10)."""
+
+    def __init__(self, code: int, description: str, retry_after: float | None) -> None:
+        super().__init__(f"Telegram API error {code}: {description}")
+        self.code = code
+        self.retry_after = retry_after
 
 
 class TelegramAdapter(GatewayAdapter):
@@ -75,36 +89,51 @@ class TelegramAdapter(GatewayAdapter):
         logger.info("TelegramAdapter stopped")
 
     async def _poll_loop(self) -> None:
+        backoff = PollBackoff()
         while self._running:
             try:
                 updates = await self._get_updates()
-                for update in updates:
-                    msg = self._parse_update(update)
-                    if msg:
-                        try:
-                            response_text = await self._process_message(msg)
-                            await self.send_response(
-                                GatewayResponse(
-                                    text=response_text or "Done.",
-                                    platform="telegram",
-                                    external_id=str(msg.external_id),
-                                )
-                            )
-                        except Exception as exc:
-                            logger.warning("Error processing Telegram message: %s", exc)
+            except TelegramApiError as exc:
+                if exc.code == 401:  # a rejected token does not get better by asking again
+                    logger.error("Telegram polling stopped: %s", exc)
+                    self._running = False
+                    return
+                logger.warning("Telegram poll error: %s", exc)
+                await asyncio.sleep(backoff.next_delay(exc.retry_after))
+                continue
             except Exception as exc:
                 logger.error("Telegram poll error: %s", exc)
-                await asyncio.sleep(5.0)
+                await asyncio.sleep(backoff.next_delay())
+                continue
+            backoff.reset()
+            for update in updates:
+                try:
+                    msg = self._parse_update(update)
+                    if msg:
+                        response_text = await self._process_message(msg)
+                        await self.send_response(
+                            GatewayResponse(
+                                text=response_text or "Done.",
+                                platform="telegram",
+                                external_id=str(msg.external_id),
+                            )
+                        )
+                except Exception as exc:
+                    logger.warning("Error processing Telegram message: %s", exc)
 
     async def _get_updates(self) -> list[dict]:
+        """New updates; raises TelegramApiError when the API answers ``ok: false``."""
         url = f"{self._api}/getUpdates"
         params = {"offset": self._offset, "timeout": 30}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params) as resp:
-                data = await resp.json()
-                if data.get("ok"):
-                    return data.get("result", [])
-        return []
+        async with aiohttp.ClientSession() as session, session.get(url, params=params) as resp:
+            data = await resp.json(content_type=None)
+            if data.get("ok"):
+                return data.get("result", [])
+            raise TelegramApiError(
+                int(data.get("error_code") or resp.status),
+                str(data.get("description", "")),
+                (data.get("parameters") or {}).get("retry_after"),
+            )
 
     def _parse_update(self, update: dict) -> GatewayMessage | None:
         msg = update.get("message", {})
