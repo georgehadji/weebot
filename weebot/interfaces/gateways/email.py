@@ -23,7 +23,12 @@ from email.mime.text import MIMEText
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    flow_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -154,12 +159,10 @@ class EmailAdapter(GatewayAdapter):
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
-
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope
 
-        session_id = f"email-{sender}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("email", sender)
         session = Session(id=session_id, user_id=f"email-{sender}", agent_id="email-agent")
 
         response = ""

@@ -18,7 +18,12 @@ import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    flow_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +107,10 @@ class WhatsAppAdapter(GatewayAdapter):
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
-
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope
 
-        session_id = f"whatsapp-{message.external_id}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("whatsapp", message.external_id)
         session = Session(
             id=session_id, user_id=f"whatsapp-{message.external_id}", agent_id="whatsapp-agent"
         )

@@ -23,7 +23,12 @@ from nacl.signing import VerifyKey
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    flow_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,12 +213,11 @@ class DiscordAdapter(GatewayAdapter):
         )
 
     async def _run(self, msg: GatewayMessage, text: str) -> str:
-        import uuid
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope
 
         user_id = msg.metadata.get("user_id", "unknown")
-        session_id = f"discord-{user_id}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("discord", user_id)
 
         session = Session(id=session_id, user_id=f"discord-{user_id}", agent_id="discord-agent")
 

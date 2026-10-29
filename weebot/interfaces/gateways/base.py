@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import random
 import re
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -47,6 +48,20 @@ class PollBackoff:
         if retry_after:
             return float(retry_after)
         return min(base * random.uniform(1 - self._jitter, 1 + self._jitter), self._cap)
+
+
+_UNSAFE_ID_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def flow_session_id(platform: str, sender: str) -> str:
+    """A Session id for one gateway run: platform, sender and a random suffix.
+
+    Sender ids such as a Signal phone number (``+3069...``) or an email address carry
+    characters Session ids reject, so those become ``_``; the sender part is cut to keep
+    the id under Session's 128-character limit. The raw sender stays in ``user_id``.
+    """
+    safe = _UNSAFE_ID_CHARS.sub("_", sender)[:100]
+    return f"{platform}-{safe}-{uuid.uuid4().hex[:6]}"
 
 
 @dataclass

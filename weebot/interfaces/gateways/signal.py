@@ -22,6 +22,7 @@ from weebot.interfaces.gateways.base import (
     GatewayMessage,
     GatewayResponse,
     PollBackoff,
+    flow_session_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,12 +99,10 @@ class SignalAdapter(GatewayAdapter):
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
-
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope
 
-        session_id = f"signal-{message.external_id}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("signal", message.external_id)
         session = Session(
             id=session_id, user_id=f"signal-{message.external_id}", agent_id="signal-agent"
         )

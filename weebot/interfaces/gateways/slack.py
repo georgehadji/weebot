@@ -16,7 +16,12 @@ import aiohttp
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.factories import run_scope
-from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
+from weebot.interfaces.gateways.base import (
+    GatewayAdapter,
+    GatewayMessage,
+    GatewayResponse,
+    flow_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +123,7 @@ class SlackAdapter(GatewayAdapter):
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
-
-        session_id = f"slack-{msg.external_id}-{uuid.uuid4().hex[:6]}"
+        session_id = flow_session_id("slack", msg.external_id)
         from weebot.domain.models.session import Session
 
         session = Session(id=session_id, user_id=f"slack-{msg.external_id}", agent_id="slack-agent")
