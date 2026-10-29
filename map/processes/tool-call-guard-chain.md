@@ -4,9 +4,9 @@ name: tool call guard chain
 code: ToolExecutor.execute_tool -> ToolCollection.execute -> GuardedTool.execute
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-10-29
-commit: ed20cfa8
+commit: 80801cd5
 consumes:
   - ../objects/application/ExecutorAgent.md
   - ../objects/tools/BaseTool.md
@@ -43,7 +43,7 @@ produces:
 11. **Back in the executor.** `result.data` goes to `_facts` (`_tool_batch.py:222-223`); `approval_required` in `data` yields `ToolApprovalEvent` then `WaitForUserEvent` and ends the step (`_tool_batch.py:224-228`; `weebot/application/agents/executor/_step_result_handler.py:16-41`); the model receives `str(result)`, wrapped by `wrap_untrusted` unless the tool is LOCAL (`_tool_batch.py:242`; `_base.py:327-348`; `trust_boundary.py:74-76, 107`). On resume, `FlowRouter` turns the reply into a single-use grant through `record_flow_reply` (`weebot/application/flows/flow_router.py:144-149`; `tool_approval.py:338-361`), which `FlowPauseApproval` consumes on retry (`:124-126`).
 
 Consequences (read from source, not run):
-- The taint flag outlives a step. The executor reads it from a process-wide `SessionScope` keyed by session id (`_tool_executor.py:176, 184-193`; `weebot/application/agents/executor/_session_scope.py:31-59, 136-138`), the write is also appended as a `session_flag` row and replayed on a new process (`_tool_executor.py:205-217, 224-236`). It is dropped only by `close`, called when a session completes or is deleted (`_session_scope.py:99-111`; `weebot/application/flows/states/completed.py:310`; `weebot/interfaces/web/routers/sessions.py:220`), and the module says never to put a TTL on it (`_session_scope.py:18-21`).
+- The taint flag outlives a step. The executor reads it from a process-wide `SessionScope` keyed by session id (`_tool_executor.py:176, 184-193`; `weebot/application/agents/executor/_session_scope.py:31-59, 136-138`), the write is also appended as a `session_flag` row and replayed on a new process (`_tool_executor.py:205-217, 224-236`). It is dropped only by `close`, called when a session completes or is deleted (`_session_scope.py:99-111`; `weebot/application/flows/states/completed.py:310`; `weebot/application/use_cases/delete_session.py:39`, after the run is stopped (audit R04)), and the module says never to put a TTL on it (`_session_scope.py:18-21`).
 - Taint comes only from a non-error result of an EXTERNAL tool (`trust_boundary.py:79-90`). A `file://` or loopback tab and the session's own written files do not taint (`_tool_executor.py:535-557`); the tab state is tracked from the last navigate, not the real tab (`:522-523`).
 
 ## If you change this
