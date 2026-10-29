@@ -232,15 +232,17 @@ class DiscordAdapter(GatewayAdapter):
             f"https://discord.com/api/v10/webhooks/{application_id}/{token}/messages/@original"
         )
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.patch(url, json={"content": content}) as resp:
-                    if resp.status != 200:
-                        logger.warning(
-                            "Discord reply edit failed (HTTP %d): %s",
-                            resp.status,
-                            (await resp.text())[:200],
-                        )
-                    return resp.status == 200
+            async with (
+                aiohttp.ClientSession() as session,
+                session.patch(url, json={"content": content}) as resp,
+            ):
+                if resp.status != 200:
+                    logger.warning(
+                        "Discord reply edit failed (HTTP %d): %s",
+                        resp.status,
+                        (await resp.text())[:200],
+                    )
+                return resp.status == 200
         except Exception as exc:
             logger.warning("Discord reply edit failed: %s", exc)
             return False
