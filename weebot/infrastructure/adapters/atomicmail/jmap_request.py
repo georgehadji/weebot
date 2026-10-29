@@ -18,6 +18,8 @@ from .credentials import CredentialStore
 from .credentials import try_read_credentials
 from .session import AgentSession, JMAP_BLOB_URN, create_agent_session, inbox_id_to_mailbox_email
 from .shared_assets import shared_dir, try_read_shared_json
+# One placeholder syntax and one substitution, shared with the egress check (R02).
+from weebot.core.jmap_ops import VAR_PATTERN as _VAR_PATTERN, fill_vars
 
 DEFAULT_JMAP_USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]
 BUNDLED_OPS_PRESET_NAMES = [
@@ -27,7 +29,6 @@ BUNDLED_OPS_PRESET_NAMES = [
     "send_mail_attachment.json",
     "send_mail_blob_attachment.json",
 ]
-_VAR_PATTERN = re.compile(r"\$([A-Z][A-Z0-9_]*)")
 USER_VAR_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _SESSION_VAR_NAMES = {"ACCOUNT_ID", "INBOX", "INBOX_MAILBOX_ID"}
 _EXT_TO_MIME = {
@@ -450,7 +451,7 @@ def _substitute_vars(
             )
         raise ValueError(message)
 
-    return _VAR_PATTERN.sub(lambda match: resolved[match.group(1)], raw)
+    return fill_vars(raw, resolved)  # the egress check fills them the same way (R02)
 
 
 def _resolve_inbox_mailbox_email(session: AgentSession) -> str:
