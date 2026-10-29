@@ -11,7 +11,7 @@ commit: 1d9bfa57
 
 # ExecTools
 
-The tools that run code or write files: `bash`, `powershell`, `python_execute`, `file_editor`. Two more modules sit beside them, `secure_output.py` and `validation.py`, and nothing imports either.
+The tools that run code or write files: `bash`, `powershell`, `python_execute`, `file_editor`.
 
 ## Why this shape
 Each exec tool keeps its own gates inside `execute` and also runs behind `GuardedTool` (see the BaseTool card). The inner gates predate the chain; the chain was added so `powershell` and the MCP server could not skip BashGuard (`weebot/application/services/tool_guards.py:1-9`). Execution goes through a `SandboxPort`, so the tool does not choose how a process is isolated (see the Sandbox card).
@@ -30,8 +30,6 @@ Each exec tool keeps its own gates inside `execute` and also runs behind `Guarde
 - `bash` rewrites a leading `curl` to `curl.exe` on Windows (`weebot/tools/bash_tool.py:332-338`) and fires a `post_bash_guard` hook without awaiting it (`weebot/tools/bash_tool.py:363-379`).
 - `powershell` accepts shortcut names (`system_info`, `reset_browser`, ...) that expand to fixed commands before the gates (`weebot/tools/powershell_tool.py:80-89, 142`).
 - `file_editor` commands: `view`, `create` (refuses to overwrite, `weebot/tools/file_editor.py:232-235`), `str_replace` (first match only, `weebot/tools/file_editor.py:267`), `insert`, `write_large` (overwrites without the existence check, `weebot/tools/file_editor.py:181-196`).
-- `SecureOutputFile` (`weebot/tools/secure_output.py:15`): writes to a `mkstemp` file with mode 0o600, `cleanup()` deletes it (`weebot/tools/secure_output.py:34-58`). No importer in `weebot/`, `cli/` or `tests/`.
-- `ValidationPipeline` (`weebot/tools/validation.py:221`) with `SecurityValidator`, `SafetyValidator`, `BusinessRuleValidator` (`weebot/tools/validation.py:41-218`) and `validate_tool_call` (`weebot/tools/validation.py:253`). No importer anywhere; its `file_editor` rule checks a `file_path` param the tool does not have (`weebot/tools/validation.py:134` vs `weebot/tools/file_editor.py:39`).
 
 Consequences (read from source, not run):
 - An approved ASK runs once. In `enforce` mode `GuardedTool` sends an ExecApprovalPolicy ASK to a human (`weebot/application/services/tool_guards.py:173-176, 433-439`); after "yes" it calls the inner tool inside `human_approved_call` (`weebot/application/services/tool_guards.py:466-469`, `weebot/core/approval.py:143-154`), so the tool's own `requires_confirmation` check lets it through (`weebot/tools/bash_tool.py:398`, `weebot/tools/powershell_tool.py:155`, `weebot/tools/python_tool.py:166`). Called outside `GuardedTool`, the inner tool still refuses an ASK.
@@ -47,11 +45,11 @@ Consequences (read from source, not run):
 - **Built by** `RoleBasedToolRegistry` (sandbox and `set_config` wiring, `weebot/application/services/tool_registry.py:446-520`), the MCP server, which wraps `bash` and `python_execute` with the egress guard included (`weebot/mcp/server.py:383-392`).
 - **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:322, 364-420`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:36`); `load_fs_permission_checker` (`weebot/application/services/fs_permission_policy.py:33`).
 - **Runs on** the Sandbox card's `SandboxPort`.
-- **Looks like but is not:** `weebot/tools/validation.py` validators (dead) and the guard chain (live).
+- **Looks like but is not:** the guard chain (live).
 
 ## If you change this
 **Hits:** the `admin`, `coder`, `analyst`, `automation`, `product_manager` roles (`bash`), `admin`, `coder`, `analyst`, `automation` (`python_execute`), `admin` only (`powershell`), every role but `custom` (`file_editor`), MCP `bash`/`python` tools. Tests: `tests/unit/tools/test_bash_tool.py`, `tests/unit/tools/test_bash_security_falsifying.py`, `tests/unit/tools/test_python_tool.py`, `tests/unit/tools/test_python_tool_timeout.py`, `tests/unit/tools/test_file_editor.py`, `tests/unit/tools/test_tool_wrappers.py`, `tests/unit/test_fs_permissions.py`, `tests/unit/security/test_security_gates_fail_closed.py`, `tests/unit/test_adversarial_security.py`, `tests/unit/test_audit_findings.py`, `tests/unit/fixes/test_f12_hook_payload.py`, `tests/unit/interfaces/test_mcp_server.py`, `tests/integration/test_security_penetration.py`, `tests/integration/test_website_generation.py`, `tests/e2e/test_portfolio_website.py`, `tests/conftest.py`.
-**Does not hit:** `secure_output.py` and `validation.py` (no callers); the guard rules themselves.
+**Does not hit:** the guard rules themselves.
 
 ## Surfaces
 Agent tool calls; MCP `bash`/`python` tools; the approval prompt for ASK verdicts.

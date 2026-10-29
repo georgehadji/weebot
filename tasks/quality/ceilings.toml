@@ -79,7 +79,8 @@ unit_coverage_floor = 64
 # 102 -> 101 with wave 6 G3: the two unused research services were deleted.
 # 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
 # 96 -> 95 with D4 slice 7.
-silent_except_handlers = 95
+# 95 -> 94 with D4 slice 10 deletions.
+silent_except_handlers = 94
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -120,7 +121,8 @@ print_in_production = 60
 # 68 -> 67 with wave 6 G1: the unused template engine was deleted.
 # 67 -> 63 with wave 6 G4: the unwired observability modules were deleted.
 # 63 -> 62 with D4 slice 1.
-bare_env_reads = 62
+# 62 -> 60 with D4 slice 10 deletions.
+bare_env_reads = 60
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
@@ -281,7 +283,8 @@ unregistered_di_keys = 0
 # registry (its hidden dynamic imports became visible).
 # 62 -> 61 with wave 6 G2: interface customization and the profile island were deleted.
 # 61 -> 59 with wave 6 G3: the two unused research services were deleted.
-import_exemptions = 59
+# 59 -> 58 with D4 slice 10 deletions.
+import_exemptions = 58
 
 # Direct `WeebotSettings(...)` calls in weebot/, cli/, run.py, run_mcp.py
 # (AST; weebot/config/settings.py and tests excluded). ICM fix plan W2.2 (F16):
@@ -388,7 +391,8 @@ functions_over_150_lines = 23
 # 618 -> 616 with wave 6 G11: the PowerShell tool's private deny lists moved into the approval policy.
 # 616 -> 614 with D4 slice 5.
 # 614 -> 607 with D4 slice 7.
-ruff_violations = 607
+# 607 -> 589 with D4 slice 10 deletions.
+ruff_violations = 589
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

@@ -100,7 +100,6 @@ ignore_imports =
     # Apify actor registry wraps the Apify tool for actor-level discovery.
     weebot.infrastructure.adapters.apify.actor_registry -> weebot.tools.apify_actor_tool
     # MCP tool bridge implements the MCP tool port defined in application.ports.
-    weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
     # (moved — sqlite_state_repo -> domain.services.commitment_extractor is
     #  architecturally correct and requires no ignore_imports entry.)
 

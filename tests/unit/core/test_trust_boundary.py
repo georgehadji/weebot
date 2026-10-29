@@ -59,10 +59,8 @@ class TestTrustOf:
         assert trust_of(Unclassified()) is EXTERNAL
 
     def test_the_mcp_bridge_tools_are_external(self):
-        from weebot.infrastructure.mcp.mcp_tool_bridge import _MCPToolWrapper
         from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolAdapter
 
-        assert trust_of(_MCPToolWrapper(name="mcp__s__t")) is EXTERNAL
         assert trust_of(MCPToolAdapter("mcp__s__t", "d", {}, manager=None)) is EXTERNAL
 
     def test_a_guard_wrapper_does_not_change_the_wrapped_trust(self):

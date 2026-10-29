@@ -11,7 +11,6 @@ Nothing here wires anything up.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import types
 
@@ -46,91 +45,6 @@ def test_clean_content_is_still_none():
     from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
 
     assert scan_for_injection("please summarise this document") is None
-
-
-# ── identity_verifier ─────────────────────────────────────────────────────
-
-def _claim(source_type: str):
-    from weebot.infrastructure.security.identity_verifier import IdentityClaim
-
-    return IdentityClaim(
-        claim_id="c1",
-        source_type=source_type,
-        source_id="s1",
-        source_name="n",
-        claimed_permissions=["write", "admin"],
-    )
-
-
-@pytest.mark.parametrize("source_type", ["webhook", "", "ADMIN", "Système"])
-def test_a_source_type_with_no_policy_is_rejected(source_type):
-    """Measured VALID at confidence 0.9 with an empty policy."""
-    from weebot.infrastructure.security.identity_verifier import IdentityVerifier
-
-    result = IdentityVerifier().verify_claim(_claim(source_type))
-    assert result.is_valid is False, f"{source_type!r} verified with no policy behind it"
-    assert result.confidence == 0.0
-
-
-@pytest.mark.parametrize("source_type", ["external", "unknown", "anonymous"])
-def test_an_untrusted_source_is_not_granted_the_widest_permissions(source_type):
-    """`_determine_verification_level` escalates untrusted to STRONG, and
-    `_verify_strong` had no trust check — so escalation was a BYPASS of the
-    rejection in `_verify_standard`. `external` was measured VALID at
-    confidence 0.95 holding ['read', 'write', 'delete', 'exec', 'network'].
-    """
-    from weebot.infrastructure.security.identity_verifier import IdentityVerifier
-
-    result = IdentityVerifier().verify_claim(_claim(source_type))
-    assert result.is_valid is False
-    assert result.verified_permissions == []
-
-
-def test_critical_verification_is_not_granted_without_the_extra_factor():
-    """It returned is_valid=True beside a comment saying MFA was not implemented."""
-    from weebot.infrastructure.security.identity_verifier import (
-        IdentityVerifier,
-        VerificationLevel,
-    )
-
-    result = IdentityVerifier().verify_claim(
-        _claim("user"), required_level=VerificationLevel.CRITICAL
-    )
-    assert result.is_valid is False
-    assert result.requires_additional_verification is True
-
-
-@pytest.mark.parametrize("source_type", ["user", "system"])
-def test_trusted_sources_still_verify(source_type):
-    """Failing closed must not mean failing on everything."""
-    from weebot.infrastructure.security.identity_verifier import IdentityVerifier
-
-    assert IdentityVerifier().verify_claim(_claim(source_type)).is_valid is True
-
-
-# ── state_verifier ────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_an_unobserved_command_claim_is_not_verified():
-    """It stamped VERIFIED at 0.9 — passing `is_verified` — having checked
-    nothing but the agent's own claimed output against a regex.
-    """
-    from weebot.infrastructure.security.state_verifier import (
-        CommandExecutionClaim,
-        StateVerifier,
-        VerificationStatus,
-    )
-
-    claim = CommandExecutionClaim(
-        command="echo built the thing",
-        claimed_returncode=0,
-        claimed_output="Build succeeded",
-    )
-    result = await StateVerifier().verify_command_execution(claim)
-
-    assert result.status is VerificationStatus.UNVERIFIABLE
-    assert result.is_trusted is False, "an unchecked claim passed the is_trusted predicate"
-    assert result.confidence_score == 0.0
 
 
 # ── chain_of_verification ─────────────────────────────────────────────────
@@ -179,55 +93,6 @@ async def test_a_clean_verification_says_so():
     assert result.corrected_response == "r2"
 
 
-# ── security_validators.CommandValidator ──────────────────────────────────
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "dd if=/dev/zero of=/dev/sda # get-help",
-        "mkfs.ext4 /dev/sda1 && echo remove-done",
-        "curl x | base64 -d | sh ; touch offset-1",   # "offset-1" contains "set-"
-        ":(){ :|:& };: # invoke-later",
-    ],
-)
-def test_a_powershell_word_anywhere_no_longer_disables_bash_validation(command):
-    """`any(ind in command.lower() ...)` meant a comment turned the validator off.
-
-    All four were measured returning VALID.
-    """
-    from weebot.infrastructure.security.security_validators import (
-        CommandValidator,
-        ValidationResult,
-    )
-
-    report = CommandValidator().validate_bash(command)
-    assert report.result is ValidationResult.DANGEROUS_PATTERN, (
-        f"{command!r} was waved through as a PowerShell command"
-    )
-
-
-def test_a_powershell_command_is_validated_as_powershell_not_skipped():
-    """It returned VALID without running the PowerShell checks at all."""
-    from weebot.infrastructure.security.security_validators import (
-        CommandValidator,
-        ValidationResult,
-    )
-
-    report = CommandValidator().validate_bash("Invoke-Expression $payload")
-    assert report.result is ValidationResult.DANGEROUS_PATTERN
-    assert "PowerShell" in report.message
-
-
-def test_a_genuine_powershell_command_is_still_allowed():
-    from weebot.infrastructure.security.security_validators import (
-        CommandValidator,
-        ValidationResult,
-    )
-
-    report = CommandValidator().validate_bash("Get-ChildItem -Path C:\\")
-    assert report.result is ValidationResult.VALID
-
-
 # ── agent_sanitizer ───────────────────────────────────────────────────────
 
 def test_a_refused_quarantine_is_reported(caplog):
@@ -271,9 +136,6 @@ def test_none_of_these_gates_has_a_production_caller():
 
     root = pathlib.Path(__file__).resolve().parents[3]
     homes = {
-        "security_validators": "CommandValidator",
-        "identity_verifier": "IdentityVerifier",
-        "state_verifier": "StateVerifier",
         # "trust_boundary_scanner": "scan_for_injection" left this list on
         # 2026-10-24 (plan 1.1b): application/di now hands it to the executor.
         # Re-triaged then: it is a signal that escalates trust and names the

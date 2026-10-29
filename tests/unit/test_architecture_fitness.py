@@ -1025,7 +1025,6 @@ def test_orphan_ports_flagged():
         "PlanCriticPort",
         "SelfImprovementPort",
         "IGatewaySessionStorePort",
-        "IContextEnginePort",
         "EventPublisherPort",  # → WebSocketEventBroadcaster in interfaces/ (not infra/)
         "AuditPort",  # → AuditService in application/services/ (DI registers concrete class since b2b1d5b)
         # → HarnessOptimizationTarget in application/services/, used directly by

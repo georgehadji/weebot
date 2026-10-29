@@ -11,6 +11,7 @@ from weebot.application.ports.notification_port import (
     NotificationLevel,
     NotificationPort,
     NotificationResult,
+    NotificationSubscriber,
 )
 
 
@@ -184,7 +185,7 @@ class WindowsToastAdapter(NotificationPort):
         return True, f"Windows toast ready ({self._lib_type})"
 
 
-class WindowsToastSubscriber:
+class WindowsToastSubscriber(NotificationSubscriber):
     """Helper class to subscribe to notifications and show toast popups.
 
     This subscriber connects to a NotificationBus and displays

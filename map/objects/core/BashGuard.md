@@ -41,7 +41,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Wired in** `BashTool.__init__` (`bash_tool.py:144-145`) and `PythonExecuteTool.__init__` (`python_tool.py:116`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:59`).
-- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:93`) (own cards, all in this folder). A comment in `infrastructure/security/state_verifier.py:312-313` records a past shell-execution site that never consulted BashGuard.
+- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:93`) (own cards, all in this folder).
 - **Looks like but is not:** `ExecApprovalPolicy` (a different rule table, PowerShell-oriented, modes not levels); `CommandRiskLevel` (3 levels, analyzer).
 
 ## If you change this
