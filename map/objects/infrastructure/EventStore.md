@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-29
-commit: 78bcc65f
+commit: 37e3643d
 ---
 
 # Event store
@@ -17,7 +17,7 @@ An append-only SQLite journal of events and per-session cost, used for audit, co
 Kept apart from session state so event logging is a cheap insert and can fail without affecting a run: `DurableEventBus` journals every event best-effort before fan-out and "never blocks event delivery" (`weebot/infrastructure/event_bus.py:180-199`, journal helpers `:221-262`). Behind `EventStorePort` so tests can use an in-memory store (`application/ports/event_store_port.py:1-8`).
 
 ## Shape
-- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:94`), exported under the old name `EventStore = AsyncEventStore` (`:487-488`); DI imports `EventStore` (`application/di/_factories.py:107-110`).
+- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:94`), exported under the old name `EventStore = AsyncEventStore` (`:487-488`); DI imports `EventStore` (`application/di/_factories.py:115-118`).
 - File: `~/.weebot/events.db` by default (`:106`), created on construction (`:107`). Pool: shared `SQLiteConnectionPool`, 3 read connections, WAL (`:111-119`).
 - Tables: `sessions(id, started_at, ended_at, status, user_id, total_cost, total_tokens)` and `events(id, timestamp, session_id, event_type, data_json, cost, model, tokens_used)` with indexes on session, type, timestamp (`:121-158`). Note this `sessions` table is not the state repository's `sessions` table.
 - Cost columns are written for one event type only: `DurableEventBus._journal_domain` passes `cost`, `model` and `tokens_used` when the event is `LLMCallCompleted` (W4.1, 2026-10-22), which `CascadeExecutor` raises after each successful executor LLM call. Every other event keeps the defaults (0, "", 0). LLM calls outside the executor cascade (planner, verifier) are not recorded.

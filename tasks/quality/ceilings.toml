@@ -78,7 +78,8 @@ unit_coverage_floor = 64
 # 110 -> 102 with wave 6 G1: the unused template engine was deleted.
 # 102 -> 101 with wave 6 G3: the two unused research services were deleted.
 # 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
-silent_except_handlers = 96
+# 96 -> 95 with D4 slice 7.
+silent_except_handlers = 95
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -386,7 +387,8 @@ functions_over_150_lines = 23
 # 619 -> 618 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
 # 618 -> 616 with wave 6 G11: the PowerShell tool's private deny lists moved into the approval policy.
 # 616 -> 614 with D4 slice 5.
-ruff_violations = 614
+# 614 -> 607 with D4 slice 7.
+ruff_violations = 607
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

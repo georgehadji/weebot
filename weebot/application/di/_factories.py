@@ -31,8 +31,15 @@ class FactoriesMixin:
     """Factory methods extracted from Container."""
 
     @staticmethod
+    def _db_backend() -> str:
+        """``sqlite`` (default) or ``postgresql``, from WEEBOT_DB_BACKEND."""
+        from weebot.config.secret_accessor import SecretAccessor
+
+        return (SecretAccessor.get("WEEBOT_DB_BACKEND") or "sqlite").strip().lower()
+
+    @staticmethod
     def _create_state_repo(db_path: str) -> StateRepositoryPort:
-        if _os.environ.get("WEEBOT_DB_BACKEND", "").lower() == "postgresql":
+        if FactoriesMixin._db_backend() == "postgresql":
             from weebot.infrastructure.persistence.postgresql.state_repo import (
                 PostgreSQLStateRepository,
             )

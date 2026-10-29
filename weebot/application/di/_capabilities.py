@@ -33,7 +33,8 @@ class CapabilitiesMixin:
         from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
 
         self.register(SQLiteKnowledgeGraph, lambda: SQLiteKnowledgeGraph(db_path=db_path))
-        self.register("kg_adapter", lambda: self.get(SQLiteKnowledgeGraph))
+        # The graph follows WEEBOT_DB_BACKEND like the state repository does.
+        self.register("kg_adapter", self._create_kg_adapter)
         self.register("knowledge_graph", lambda: self._create_kg_service())
         # Episodic summaries (WEEBOT_EPISODIC_SUMMARIES gates their use, not this
         # binding: a session deleted after the flag was turned off is still purged).
@@ -66,6 +67,17 @@ class CapabilitiesMixin:
         from weebot.infrastructure.persistence.strategy_store import StrategyStore
 
         return StrategyTransferService(StrategyStore(db_path=db_path))
+
+    def _create_kg_adapter(self):
+        if self._db_backend() == "postgresql":  # type: ignore[attr-defined]
+            from weebot.infrastructure.persistence.postgresql.knowledge_graph import (
+                PostgreSQLKnowledgeGraph,
+            )
+
+            return PostgreSQLKnowledgeGraph()
+        from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
+
+        return self.get(SQLiteKnowledgeGraph)
 
     def _create_kg_service(self):
         from weebot.application.services.knowledge_graph import KnowledgeGraphService

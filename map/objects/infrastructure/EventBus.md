@@ -4,9 +4,9 @@ name: Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus)
 code: AsyncEventBus, DurableEventBus, ValkeyEventBus
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-10-29
-commit: bc2fe74e
+commit: 37e3643d
 ---
 
 # Event bus
@@ -20,9 +20,9 @@ Publishers must never be slowed or broken by listeners. Each subscriber call is 
 - **AsyncEventBus** (`event_bus.py:43`): in-process. `publish` increments a Prometheus counter, copies the handler list under a lock and runs all handlers with `asyncio.gather`, each with `handler_timeout` (default 30 s); a timed-out handler drops that event for that subscriber only (`:58-91`). `subscribe_by_type(type, handler)` wraps a handler with an exact-match filter and records the original so `unsubscribe` can find it (`:96-132`). `publish_domain_event` is the same for domain handlers (`:135-178`).
 - **DurableEventBus** (`:180`): `publish` first writes the event to `EventStorePort.log_event(session_id, event_type, data)`, then to the inner bus. A journal failure is logged and delivery continues (`:201-209, 227-281`). Agent events carry no cost columns; a `LLMCallCompleted` domain event fills `cost`, `model` and `tokens_used` (`:261-274`; see Event store card). Subscriber calls are delegated to the inner bus (`:213-223`).
 - **ValkeyEventBus** (`infrastructure/events/redis_event_bus.py:32`): delivers to its own in-process `AsyncEventBus` first, then publishes on `weebot:events` tagged with an origin id (`:145-151`); a Valkey failure costs only the cross-process copy. A reader task reconnects with backoff, drops its own origin, rebuilds the event with `event_codec` and delivers it locally without re-journaling (`:98-133`).
-- **Selection** in `FactoriesMixin._create_event_bus`: `WEEBOT_EVENT_BUS=valkey` (needs `WEEBOT_VALKEY_URL`) wraps `ValkeyEventBus` in `DurableEventBus`; the default `local` wraps `AsyncEventBus`. A URL alone changes nothing (`application/di/_factories.py:45-68`).
+- **Selection** in `FactoriesMixin._create_event_bus`: `WEEBOT_EVENT_BUS=valkey` (needs `WEEBOT_VALKEY_URL`) wraps `ValkeyEventBus` in `DurableEventBus`; the default `local` wraps `AsyncEventBus`. A URL alone changes nothing (`application/di/_factories.py:[stale 45-68]`).
 
-**Valkey is opt-in (D4, tested with a fake broker, not a live Valkey):** `docker-compose.yml` sets `WEEBOT_VALKEY_URL` for the api service and leaves `WEEBOT_EVENT_BUS=local` (`docker-compose.yml:79-81`). Pinned by `tests/unit/fixes/test_d4_valkey_bridge.py`.
+**Valkey is opt-in (D4, tested with a fake broker, not a live Valkey):** `docker-compose.yml` sets `WEEBOT_VALKEY_URL` for the api service and leaves `WEEBOT_EVENT_BUS=local` (`docker-compose.yml:82-84`). Pinned by `tests/unit/fixes/test_d4_valkey_bridge.py`.
 
 ## Connected to
 - **Subscribers (real code):** `WebSocketEventBroadcaster.publish` at app start (`interfaces/web/main.py:218`); SSE route handler per connection (`interfaces/web/routers/sse.py:85`); `interfaces/cli/event_logger.py:88` (CLI printer); `interfaces/sse_event_subscriber.py:36`; `infrastructure/notifications/windows_toast.py:261` and `interfaces/windows_toast_subscriber.py:97`; `SessionScopedEventBus` wraps another bus, stamps `session_id` on publish and delegates subscriptions (`application/services/session_scoped_event_bus.py:28-32, 37-41`); `PlanActFlow` subscribes a domain handler for `SkillGapDetected` when a misalignment journal is wired (`weebot/application/flows/_plan_act_wiring.py:288`, in the flow composition step).

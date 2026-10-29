@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-10-29
-commit: bc2fe74e
+commit: 37e3643d
 ---
 
 # WeebotSettings
@@ -30,7 +30,7 @@ Consequences (read from source, not run; `pydantic_settings` is not installed he
 - `financial_tools_always_ask` (`settings.py:437-439`) is read by the tool guard chain (`weebot/application/services/tool_guards.py:247`).
 - `reasoner_dir`, `berb_dir` and `scraper_dir` default to None (`settings.py:99, 104, 92`); the tools refuse their CLI path by name when unset (`weebot/config/tool_config.py:92`, `require_setting`).
 - The comment at `settings.py:372-374` says both `WEEBOT_PLAN_REVIEW_ENABLED` and `PLAN_REVIEW_ENABLED` are accepted for `plan_review_enabled`, which has only `alias="WEEBOT_PLAN_REVIEW_ENABLED"` (`:342-346`). Whether the bare name is read was not run.
-- `.env.example` and `docs/CONFIGURATION.md` take field defaults from this class (`scripts/generate_config_reference.py:380`, `resolved_schema`). The `ToolConfig` the DI container binds is built from it (`weebot/config/tool_config.py:59`, `di/__init__.py:146`).
+- `.env.example` and `docs/CONFIGURATION.md` take field defaults from this class (`scripts/generate_config_reference.py:382`, `resolved_schema`). The `ToolConfig` the DI container binds is built from it (`weebot/config/tool_config.py:59`, `di/__init__.py:146`).
 
 ## Connected to
 - **Built by** `get_settings()` only; resolved from the DI container as `WeebotSettings`.
