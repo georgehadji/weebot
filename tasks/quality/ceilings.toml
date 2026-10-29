@@ -148,7 +148,7 @@ bare_env_reads = 60
 # 54 -> 52: the same two web/auth.py handlers as silent_except_handlers 115 -> 113.
 # 52 -> 51 with A15: the same connection_pool handler as silent_except_handlers 112 -> 111.
 # 51 -> 50 with A34: the same BashGuard handler as silent_except_handlers 111 -> 110.
-bandit_b110 = 50
+bandit_b110 = 48
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -170,7 +170,7 @@ bandit_b110 = 50
 # 28 -> 27 with W3.6: layer 2 of tools/bash_security.py built an `operators`
 # set it never read (ruff 0.17.1 both before and after).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 26
+unused_locals = 19
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
