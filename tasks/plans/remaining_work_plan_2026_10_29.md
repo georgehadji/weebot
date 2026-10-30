@@ -138,6 +138,8 @@ Run these only after the owner decides. Each one makes the agent ask more often.
 - **P1. D3a: shell default-ASK to enforce** (`config/settings.py:220-225`, `application/services/tool_guards.py:184-207`), S.
   - **Before:** the owner runs one 12-task batch and counts `shell_default_ask would ask` in the log. The threshold is 2 or fewer asks.
   - **Fix:** the default becomes `enforce`.
+  - **2026-10-30 batch:** 19 asks, so not flipped. First treat literal assignments, reads assigned to a variable, `Get-FileHash`, `Format-Table` and `--version` as reviewed (test first), then rerun the batch.
+  - **Rerun (2026-10-30):** done, 12 asks; the rest are script blocks and inline code. Not flipped. Next, if wanted: add `Compress-Archive` to the `Output/` carve-out.
 - **P2. D5: the untrusted-content guard (A11)**, M.
   - **Fix:** a tool guard in `default_guard_chain()` returns ASK for every non-read-only tool while `scope.is_tainted(session_id)`. Today taint only escalates egress, and the mail gate pauses only the next step.
 - **P3. A21: egress beyond send verbs** (`core/egress_guard.py:87-114, 529-535`; strict xfails in `tests/unit/fixes/test_a21_egress_beyond_send_verbs.py`), M.
@@ -228,7 +230,7 @@ New providers (Mistral, NVIDIA NIM, OVH) are parked until Groq and Gemini prove 
 | ID | Question | Recommendation | Blocks |
 |---|---|---|---|
 | D2 | Remove the `?token=` WebSocket fallback now? | Yes; the UI no longer uses it | F3 |
-| D3a | Shell default-ASK to enforce? | Yes, if the 12-task batch shows 2 or fewer asks. 2026-10-30: in a tainted session it already asks (D5); the global flip waits for the batch, which is billed | P1 |
+| D3a | Shell default-ASK to enforce? | Not yet. 2026-10-30 batch: 19 would-ask lines in 12 runs (threshold 2), all false positives; 12/12 tasks correct. 13 are `$x = "literal"` assignments, 3 are reads the rule list lacks (`Get-FileHash`, `Format-Table`, `<exe> --version`), 1 is a read assigned to a variable, 2 run an agent-written script under `Output/`. Those read shapes now count as reads (fae7c211). Rerun: 12 lines, 12/12 correct, none of the old shapes. Left: 8 script blocks or subexpressions (`if (...) {...}`, `ForEach-Object {...}`, `"$(...)"`), 1 `python -c`, 1 `Add-Type`, 1 `Compress-Archive` into `Output/`, 1 script run. A regex cannot judge script blocks or inline code, so stay `observe`: enforce would add about one prompt per task. In a tainted session it already asks (D5) | P1 |
 | D5 | Every non-read-only tool asks after untrusted content is read? | DECIDED 2026-10-30: yes; `Output/` writes and plain reads stay unasked. P2 and P3 done | P2, P3 |
 | D6 | Apply `.github/rulesets/main.json`? | DECIDED 2026-10-30: yes; the owner runs the POST (an external write the agent may not make) | none |
 | D7 | Draft PR #54 (LuaLaTeX): rebase or close? | Close, or park as a branch | none |
