@@ -99,7 +99,10 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
                    ON CONFLICT (label, name) DO UPDATE SET
                        properties = kg_nodes.properties || EXCLUDED.properties,
                        version = kg_nodes.version + 1,
-                       updated_at = NOW()
+                       updated_at = NOW(),
+                       -- the first session owns the node; an empty owner is claimed (D-KG)
+                       source_session_id = COALESCE(NULLIF(kg_nodes.source_session_id, ''),
+                                                    EXCLUDED.source_session_id)
                    RETURNING *""",
                 node.id,
                 node.label,
