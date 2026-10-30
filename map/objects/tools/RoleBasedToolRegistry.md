@@ -5,8 +5,8 @@ code: RoleBasedToolRegistry
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-29
-commit: d0fa4540
+verified: 2026-10-30
+commit: bb1181cc
 ---
 
 # RoleBasedToolRegistry
@@ -30,7 +30,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `FactoriesMixin._create_tool_registry` (above) and the direct sites. **Used by** `ToolAssembler` (`weebot/application/flows/collaborators/tool_assembler.py:12, 24-31`), the MCP scope logic via `scope_config.registry` (`weebot/application/flows/mcp_scope.py:37`), `weebot/application/di/_agent_tools.py:46`, `weebot/application/services/cron_agent_runner.py:78-90`, and the MCP bridge adapter (`weebot/application/di/_factories.py:485`).
-- **Related:** `BaseTool` and `ToolCollection` (BaseTool card), the `Sandbox` card, `guard_tools` (`weebot/application/services/tool_guards.py:514`).
+- **Related:** `BaseTool` and `ToolCollection` (BaseTool card), the `Sandbox` card, `guard_tools` (`weebot/application/services/tool_guards.py:560`).
 - **Looks like but is not:** the guards (`BashGuard`, `ExecApprovalPolicy`, `EgressGuard`) which act on each call; the MCP server's own tool list (`weebot/mcp/server.py`), built separately.
 
 ## If you change this

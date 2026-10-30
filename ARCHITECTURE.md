@@ -69,7 +69,7 @@ live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` 
 | D3 | `.importlinter` ignore_imports | LOW | Count and target live in `import_exemptions` in `tasks/quality/ceilings.toml` (`scripts/lint_import_exemptions.py`); this table states no number |
 | D4 | `plan_act_flow.py` over its 700-line target | — | CLOSED 2026-10-30: 654 lines. The once-per-run prologue of `_run_states` (run span, original task, side constraints, rule hydration, tool scoping, initial-state routing) moved to `flows/_run_prologue.py` as `begin_run`; the tool-result handling had already moved out |
 | D5 | `_base.py` over its 650-line target | — | CLOSED 2026-10-30: 647 lines. The preamble was already in `_step_setup.py`; the system-prompt loader moved to `_system_prompt.py` (one loader, shared with `_tool_executor.py`), and the skill-gap recorder to `_step_setup.py`, which calls it again |
-| D6 | `behavior_tracker.py` git ops in core layer | LOW | Extracted to async helper; needs migration to infrastructure/persistence (P4) |
+| D6 | `behavior_tracker.py` git ops in core layer | LOW | ACCEPTED 2026-10-30: the tracker is a file watcher that also writes files and commits them. Moving only the git calls leaves core doing the same I/O, and moving the whole tracker routes three interface callers through DI for a LOW item. Revisit if the tracker grows |
 
 ---
 
@@ -231,7 +231,7 @@ The flow's `EventPublisher` owns session persistence: it saves after every event
 
 ### Network off in the native sandboxes
 
-With `allow_network` off, `NativeWindowsSandbox` only points the proxy variables at a dead port (`infrastructure/sandbox/native_windows.py`, `_build_child_env`), and the WSL2 sandbox does nothing. A tool that ignores proxies, or opens a raw socket, still reaches the network. It stays advisory unless the owner decides otherwise (master plan D9 recommends keeping it so): enforcing it would take a per-process firewall rule. The sandbox factory logs this once per sandbox type (`_warn_if_network_off_is_best_effort`). For real isolation use `SANDBOX_MODE=docker` (audit A22).
+With `allow_network` off, `NativeWindowsSandbox` only points the proxy variables at a dead port (`infrastructure/sandbox/native_windows.py`, `_build_child_env`), and the WSL2 sandbox does nothing. A tool that ignores proxies, or opens a raw socket, still reaches the network. It stays advisory by the owner's decision D9 (2026-10-30): enforcing it would take an admin-only firewall rule per program. The sandbox factory logs this once per sandbox type (`_warn_if_network_off_is_best_effort`). For real isolation use `SANDBOX_MODE=docker` (audit A22).
 
 ### How weebot learns
 

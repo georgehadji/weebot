@@ -28,6 +28,7 @@ Aimed at the "lethal trifecta": an agent that can read private data, ingest untr
   - `python_execute`/`python` code that imports a network library such as `requests`, `httpx`, `urllib`, `socket` (plan W3.8, F09) (`:114-125, 443-449`).
   - Browser tools `advanced_browser`, `browser_navigator`, `browser_tool`, `computer_use` on submit-style actions or with POST data (`:161-174, 412-422`); `camofox_browser` `type` (`:407-410`); a browser/scraper URL that holds a secret, and `advanced_browser` page writes (`fill`, `type`, `select`, `evaluate`) once the context is tainted (F41) (`:176-182, 348-360`).
   - `atomic_mail` `jmap_request` that submits: inline `ops` are judged after `$VAR` substitution by exact method name (`EmailSubmission/set`), and unreadable ops count as a send (`sends_mail`, `weebot/core/jmap_ops.py`; audit R02); read presets like `list_inbox` and dry runs are excluded (`egress_guard.py:202, 514-528`).
+  - In a tainted session only (A21, `_network_capable`): any shell call that can reach the network (downloads, DNS lookups, .NET web clients, sockets) and all `python_execute` code. The decision is `network_only`, so the effect ledger does not skip a repeat.
   - `telegram_send`, `windows_toast`, `notification`, `schedule_tool` always (`:184-192, 451-455`).
 - Recipient: the host of the first `http(s)://` URL in the command or code; no URL means no recipient, which counts as first-time (`:479-482, 331-336`).
 - `network_use(tool_name, args)` (plan W3.9): says whether a shell call reaches the network without being egress (downloads, package installs, git remotes, `docker pull`) and which host: the URL host, a `git@host:` remote, or the implied registry (`:140-154, 362-382`).
@@ -35,6 +36,8 @@ Aimed at the "lethal trifecta": an agent that can read private data, ingest untr
 - Enforcement switch: `WEEBOT_EGRESS_ENFORCE`, default true; false means detect-only (log, allow) (`:41-47`).
 
 Where it runs: `ToolExecutor._get_egress_guard` constructs `EgressGuard()` lazily and latches only a successful build (`_tool_executor.py:256-288`). `execute_tool` calls `guard.classify` before every tool call (`:421-424`). When approval is required and enforcement is on, `_ask_about_egress` sends a `ToolCallApproval` to the current approval channel: approved runs the call, pending pauses the flow, denied returns "Outbound action blocked — requires human approval" (`:46-76, 442-448`, message `:33-43`). Detect-only logs and allows (`:452-455`). A non-egress call that reaches the network while the sandbox network is off asks through the same channel (`:79-123, 456-464`). `GuardedTool` also runs this guard for the MCP server's shell tools (`EgressAdapter`, `application/services/tool_guards.py:180-205`).
+
+After untrusted content (decision D5): in a tainted session, a call that does more than read asks through the same channel even when it is not egress (`reads_only` in `application/services/tool_guards.py`, `_ask_after_untrusted_content` in `_tool_executor.py`). An egress approval already covers the call.
 
 Effect ledger (ORCH-2): an egress call this session already completed is not run again, and a completed one is recorded (`_tool_executor.py:422-435, 493-503`; `application/services/effect_ledger.py`, key from `core/effect_key.py`).
 

@@ -156,6 +156,17 @@ _SHELL_NETWORK_RE = re.compile(
 )
 _DEFAULT_HOSTS = {"pypi": "pypi.org", "npm": "registry.npmjs.org", "docker": "docker.io"}
 
+# Other shell ways onto the network: lookups, .NET clients, raw sockets (A21). Egress only
+# in a session that has read untrusted content, where any of them can carry data out.
+_SHELL_ANY_NETWORK_RE = re.compile(
+    r"""
+    \b(?:nslookup|Resolve-DnsName|dig|ping|Test-NetConnection|tnc|Test-Connection|ssh|ftp|
+         telnet|ncat|socat|certutil|bitsadmin)\b
+    | \bNet\.(?:WebClient|Http|Sockets|Dns|WebRequest)
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
 # browser tools indicating form-submit or navigation with POST data.
 # Entries are ``BaseTool.name`` values — the identifier ``classify()`` receives.
 # "browser_tool" is the module file name of the tool registered as
@@ -221,6 +232,9 @@ class EgressDecision:
     recipient: str | None = None
     tool_name: str = ""
     detected_patterns: list[str] = field(default_factory=list)
+    # Egress only because the call can reach the network in a tainted session (A21): it may
+    # be a plain read, so the effect ledger does not treat a repeat as a resend.
+    network_only: bool = False
 
     @property
     def summary(self) -> str:
@@ -388,6 +402,9 @@ class EgressGuard:
         recipient, is_egress = self._detect_egress(tool_name, args)
         if not is_egress:
             recipient, is_egress = self._browser_egress(tool_name, args, untrusted_context_active)
+        if not is_egress and untrusted_context_active:
+            recipient, is_egress = self._network_capable(tool_name, args)
+            decision.network_only = is_egress
         if not is_egress:
             return decision
 
@@ -432,6 +449,22 @@ class EgressGuard:
         action = str(args.get("action", "")).lower()
         if tainted and tool_name == "advanced_browser" and action in _BROWSER_PAGE_WRITE_ACTIONS:
             return None, True  # the page's scripts see it; the host is the tab's, unknown here
+        return None, False
+
+    def _network_capable(self, tool_name: str, args: dict[str, Any]) -> tuple[str | None, bool]:
+        """(recipient, is_egress) for a call that can reach the network at all (A21).
+
+        Asked only for a session that has read untrusted content. There a GET with data in
+        the query, a DNS lookup or a .NET client carries data out as well as a POST does, and
+        Python reaches the network in ways no import list covers (importlib, subprocess).
+        """
+        tool_lower = tool_name.lower()
+        if tool_lower in ("bash_execute", "powershell", "bash", "shell", "cmd", "terminal"):
+            cmd = str(args.get("command", ""))
+            if _SHELL_NETWORK_RE.search(cmd) or _SHELL_ANY_NETWORK_RE.search(cmd):
+                return self._extract_host_from_cmd(cmd), True
+        elif tool_lower in ("python_execute", "python") and str(args.get("code", "")).strip():
+            return self._extract_host_from_cmd(str(args["code"])), True
         return None, False
 
     def network_use(self, tool_name: str, args: dict[str, Any]) -> tuple[bool, str | None]:

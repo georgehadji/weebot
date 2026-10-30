@@ -5,8 +5,8 @@ code: config/mcp_servers.json -> MCPClientManager -> MCPToolkitAdapter -> build_
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-29
-commit: 265af724
+verified: 2026-10-30
+commit: bb1181cc
 consumes:
   - ../objects/core/WeebotSettings.md
   - ../objects/application/DIContainer.md
@@ -32,7 +32,7 @@ produces:
 7. **Adapt.** `MCPToolkitAdapter.initialize` turns `get_all_tools()` specs into `MCPToolAdapter` tools (`weebot/infrastructure/mcp/mcp_toolkit_adapter.py:39-56`). Names come from `build_namespaced_name` as `mcp__<server>__<tool>`, descriptions are prefixed `[<server>]` (`mcp_client_manager.py:245-266`; `weebot/core/mcp_naming.py:50-64`).
 8. **Join the collection.** `build_tools` (`factories.py:322`) starts from the registry's role collection (`:297-314`). With an explicit `mcp_config` it builds a fresh adapter from that dict (`:316-325`); otherwise it appends `_mcp_tools_within()` (`:326-327`). Extra and Apify preset tools follow (`:329-350`).
 9. **Guard.** `guard_tools` from DI wraps the whole list with `include_egress=False`; without it, `RuntimeError` (`factories.py:388-395`). Every `mcp__` tool not named as a read asks (`weebot/application/services/tool_guards.py:274-290, 260-295`); see [tool-call-guard-chain](tool-call-guard-chain.md). The collection is then built with the canonicalizer and contract loader (`factories.py:396-398`).
-10. **Call.** `MCPToolAdapter.execute` calls `manager.call_tool` (`mcp_toolkit_adapter.py:24-29`), which maps the public name back to server and tool by building names for the discovered tools, reconnects a dropped server once, and joins the text content (`mcp_client_manager.py:268-315`). Output is fenced as untrusted and taints later egress because `MCPToolAdapter` declares `OutputTrust.EXTERNAL` (`mcp_toolkit_adapter.py:16`); a `GuardedTool` passes that declaration through (`tool_guards.py:441-444`), and `trust_of`, `must_fence` and `must_taint` decide from it, not from the `mcp__` prefix (`weebot/core/trust_boundary.py:58-90`).
+10. **Call.** `MCPToolAdapter.execute` calls `manager.call_tool` (`mcp_toolkit_adapter.py:24-29`), which maps the public name back to server and tool by building names for the discovered tools, reconnects a dropped server once, and joins the text content (`mcp_client_manager.py:268-315`). Output is fenced as untrusted and taints later egress because `MCPToolAdapter` declares `OutputTrust.EXTERNAL` (`mcp_toolkit_adapter.py:16`); a `GuardedTool` passes that declaration through (`tool_guards.py:487-490`), and `trust_of`, `must_fence` and `must_taint` decide from it, not from the `mcp__` prefix (`weebot/core/trust_boundary.py:58-90`).
 11. **Close.** `close_mcp_toolkit` cleans up in the ending task (`factories.py:164-177`), called by the CLI wrapper (`cli/commands/flow.py:70-72`) and the web app shutdown (`weebot/interfaces/web/main.py:385-387`).
 
 Consequences (read from source, not run):
