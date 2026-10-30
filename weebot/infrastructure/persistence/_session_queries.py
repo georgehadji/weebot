@@ -180,10 +180,8 @@ class SessionQueries:
             )
 
     async def delete(self, session_id: str) -> None:
-        """Delete a session row, with the side-constraints and corrections it recorded."""
+        """Delete a session row."""
         async with self._pool.acquire_write() as conn:
-            for table in ("session_constraints", "correction_records"):
-                await conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
             await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
     async def count(self, user_id: str | None = None, status: str | None = None) -> int:

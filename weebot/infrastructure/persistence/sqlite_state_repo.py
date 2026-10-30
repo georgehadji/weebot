@@ -495,6 +495,11 @@ class SQLiteStateRepository(
 
     async def delete_session(self, session_id: str) -> None:
         await self._init_helpers()
+        # The side-constraints and corrections it recorded go with it (plan L1).
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            for table in ("session_constraints", "correction_records"):
+                await conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (session_id,))
         await self._session_queries.delete(session_id)  # type: ignore[union-attr]
         # Clean up FTS5 entries
         try:
