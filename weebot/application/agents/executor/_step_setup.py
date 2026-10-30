@@ -68,6 +68,7 @@ async def build_step_prompts(
 
     step_scope = getattr(step, "context_scope", None)
     scope_value = step_scope.value if step_scope is not None else "full"
+    retrieval_scores: list[float] = []
     system_prompt = await build_executor_prompt(
         step_description=step.description,
         base_prompt=executor._load_prompt(),
@@ -80,7 +81,10 @@ async def build_step_prompts(
         personality=executor._personality,
         profile_name=executor._profile_name,
         skills_used=executor._skills_used,
+        retrieval_scores=retrieval_scores,
     )
+    if retrieval_scores:
+        record_skill_gap(executor, step.description, retrieval_scores[0])
 
     # Gated by scope: minimal/skill steps don't need the cached user profile blob
     # (ICM per-step context scoping — see _prompt_builder).
@@ -171,3 +175,52 @@ def _seed_conversation(
     # instead of calling ask_human again.
     if user_input:
         executor._conversation_buffer.append({"role": "user", "content": user_input})
+
+
+def record_skill_gap(
+    executor: ExecutorAgent, step_description: str, best_score: float
+) -> None:
+    """Record a skill-gap signal when retrieval misses the creation threshold.
+
+    Two output paths:
+    1. Append to ``executor._skill_gaps`` for downstream ``IdeaContract``
+       creation (existing, processed in ``CompletedState``).
+    2. Emit a ``SkillGapDetected`` domain event (new) for lightweight
+       subscribers (misalignment journal, diagnostic logger).
+
+    Never raises — both paths are purely additive.
+    """
+    from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
+    from weebot.config.learning import TAU_CREATE
+
+    if not SKILL_GAP_TRIGGER_ENABLED:
+        return
+    if best_score >= TAU_CREATE:
+        return  # retrieval hit — no gap
+
+    executor._skill_gaps.append({"step": step_description[:200], "score": best_score})
+    logger.debug(
+        "Phase 2: skill gap recorded (score=%.3f < %.3f) for step: %s",
+        best_score,
+        TAU_CREATE,
+        step_description[:80],
+    )
+
+    # Enhancement 5: emit SkillGapDetected domain event for lightweight subscribers
+    try:
+        from weebot.domain.models.event import SkillGapDetected
+
+        event = SkillGapDetected(
+            session_id=getattr(executor, "_current_session_id", "unknown"),
+            step_description=step_description[:200],
+            best_score=best_score,
+        )
+        if executor._event_bus is not None:
+            from weebot.core.background_tasks import get_background_tasks
+
+            get_background_tasks().spawn(
+                executor._event_bus.publish_domain_event(event), name="skill-gap-detected"
+            )
+    except Exception:
+        logger.debug("SkillGapDetected event emission failed (non-blocking)")
+        pass  # event emission must never block the execution loop

@@ -9,14 +9,14 @@ Format: name — source — status — card
 - Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — stale 2026-10-29 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — stale 2026-10-28 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-10-28 — [card](domain/Session.md)
-- Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-29 — [card](domain/Step.md)
+- Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-30 — [card](domain/Step.md)
 
 ## application
-- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-29 — [card](application/CascadeExecutor.md)
+- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-30 — [card](application/CascadeExecutor.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-10-24 — [card](application/DIContainer.md)
-- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-29 — [card](application/ExecutorAgent.md)
-- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-29 — [card](application/FlowRouter.md)
-- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-29 — [card](application/FlowState.md)
+- ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-30 — [card](application/ExecutorAgent.md)
+- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-30 — [card](application/FlowRouter.md)
+- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-30 — [card](application/FlowState.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-10-29 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-10-25 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-10-29 — [card](application/PlannerAgent.md)
@@ -38,7 +38,7 @@ Format: name — source — status — card
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-27 — [card](interfaces/WebUI.md)
 
 ## core
-- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-29 — [card](core/ApprovalManager.md)
+- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-30 — [card](core/ApprovalManager.md)
 - BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — stale 2026-10-29 — [card](core/BashGuard.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — stale 2026-10-27 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-10-25 — [card](core/EgressGuard.md)

@@ -213,6 +213,7 @@ class AdapterFactory:
             ),
             enable_retry=enable_retry if enable_retry is not None else self._enable_retry,
             enable_caching=enable_caching if enable_caching is not None else self._enable_caching,
+            retry_rate_limits=provider != "free",
         )
 
         # `ollama/<tag>` and `free/<provider>/<model>` ids (the cascade's per-attempt `model=`)

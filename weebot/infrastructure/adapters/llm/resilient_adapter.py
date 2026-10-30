@@ -117,6 +117,7 @@ class ResilientLLMAdapter(LLMPort):
         enable_retry: bool = True,
         enable_caching: bool = False,
         cache: Any | None = None,
+        retry_rate_limits: bool = True,
     ):
         """
         Initialize resilient adapter wrapper.
@@ -129,6 +130,8 @@ class ResilientLLMAdapter(LLMPort):
             enable_retry: Whether to retry on transient failures
             enable_caching: Whether to cache responses
             cache: Optional custom cache implementation
+            retry_rate_limits: False hands a 429 straight back (free tiers: a spent
+                daily quota does not come back in a minute, the cascade's next model might)
         """
         self._inner = inner_adapter
         self._model_name = model_name
@@ -136,6 +139,7 @@ class ResilientLLMAdapter(LLMPort):
         self._timeout = timeout
         self._enable_caching = enable_caching
         self._cache = cache
+        self._retry_rate_limits = retry_rate_limits
 
         # Configure retry with exponential backoff
         # The template: each call copies its delays into its own RetryWithBackoff, because
@@ -371,6 +375,8 @@ class ResilientLLMAdapter(LLMPort):
             if self._is_timeout(exc):
                 timeouts += 1
                 return timeouts <= 1
+            if not self._retry_rate_limits and self._is_rate_limit(exc):
+                return False
             return template.retryable is None or template.retryable(exc)
 
         return RetryWithBackoff(
@@ -389,6 +395,12 @@ class ResilientLLMAdapter(LLMPort):
         return isinstance(exc, TimeoutError) or ErrorClassifier.classify(exc) == (
             ErrorCategory.TIMEOUT
         )
+
+    @staticmethod
+    def _is_rate_limit(exc: Exception) -> bool:
+        from weebot.core.error_classifier import ErrorCategory
+
+        return ErrorClassifier.classify(exc) == ErrorCategory.RATE_LIMIT
 
     def _is_retryable_error(self, exc: Exception) -> bool:
         """Delegate retry decision to ErrorClassifier using the action ladder.

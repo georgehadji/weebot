@@ -5,8 +5,8 @@ code: FlowState
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-29
-commit: bc2fe74e
+verified: 2026-10-30
+commit: 9a422252
 ---
 
 # FlowState
@@ -14,12 +14,12 @@ commit: bc2fe74e
 The abstract base for one step of the Plan-Act state machine, plus the 14 state classes under `weebot/application/flows/states/`. A state is an object with one async-generator method; it moves the machine by calling `context.set_state(next)`.
 
 ## Why this shape
-States are classes so each owns its status and transitions, and `PlanActFlow.set_state` needs no hard-coded table (`states/base.py:58-61`, `plan_act_flow.py:295-299`). A state gets the whole `PlanActFlow` as `context` and reaches into its private attributes (`context._session`, `context._plan`, `context._plan_critic`), so states are tightly bound to the flow, not independent units. A state names its successor by `StateId` through a registry (`new_state(StateId.X)`, `states/base.py:78-116`), so the registered states import no sibling (plan 3.6; the import cycle is gone, `tests/unit/application/flows/test_state_registry.py`). Nine classes register with `@register_state`. `CompletedState`, `MetaAnalysisState`, `ProductGateState`, `IdleState` and `ChatMessageState` do not (`StateId.COMPLETED` has no class); the code that reaches them imports them directly (`summarizing.py:24` to MetaAnalysis, `meta_analysis.py:94` to Verifying, `verifying.py:68` to Completed, `product_gate.py:96` to Planning, `idle.py:34` to ChatMessage, `plan_act_flow.py:451-453` to ProductGate).
+States are classes so each owns its status and transitions, and `PlanActFlow.set_state` needs no hard-coded table (`states/base.py:58-61`, `plan_act_flow.py:291-295`). A state gets the whole `PlanActFlow` as `context` and reaches into its private attributes (`context._session`, `context._plan`, `context._plan_critic`), so states are tightly bound to the flow, not independent units. A state names its successor by `StateId` through a registry (`new_state(StateId.X)`, `states/base.py:78-116`), so the registered states import no sibling (plan 3.6; the import cycle is gone, `tests/unit/application/flows/test_state_registry.py`). Nine classes register with `@register_state`. `CompletedState`, `MetaAnalysisState`, `ProductGateState`, `IdleState` and `ChatMessageState` do not (`StateId.COMPLETED` has no class); the code that reaches them imports them directly (`summarizing.py:24` to MetaAnalysis, `meta_analysis.py:94` to Verifying, `verifying.py:68` to Completed, `product_gate.py:96` to Planning, `idle.py:34` to ChatMessage, `_run_prologue.py:128-130` to ProductGate).
 
 ## Shape
-- `FlowState.execute(context, prompt)` → `AsyncGenerator[AgentEvent, None]`, abstract (`base.py:55-66`). `MetaAnalysisState` is a plain coroutine instead; the run loop accepts both (`plan_act_flow.py:555-559`).
+- `FlowState.execute(context, prompt)` → `AsyncGenerator[AgentEvent, None]`, abstract (`base.py:55-66`). `MetaAnalysisState` is a plain coroutine instead; the run loop accepts both (`plan_act_flow.py:437-441`).
 - `status: AgentStatus` class attribute (`base.py:61`); enum values idle, planning, executing, reviewing, updating, verifying, summarizing, completed (`base.py:15-25`). Several sub-states reuse `PLANNING` on purpose (`critiquing.py:38`, `plan_review.py:59`, `premortem.py:38`, `product_gate.py:90`).
-- `task_text(context, prompt)` (`base.py:28`): returns the turn prompt, or falls back to `_original_task` / `last_prompt`, because the run loop empties `prompt` after the first state yields (`plan_act_flow.py:402, 550-551`).
+- `task_text(context, prompt)` (`base.py:28`): returns the turn prompt, or falls back to `_original_task` / `last_prompt`, because the run loop empties `prompt` after the first state yields (`_run_prologue.py:80`, `plan_act_flow.py:433`).
 
 Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 
