@@ -38,3 +38,8 @@ class SteeringPort(ABC):
         Safe to call from any thread / coroutine.
         """
         ...
+
+    @abstractmethod
+    async def discard(self, session_id: str) -> None:
+        """Drop any message still queued for *session_id* (session delete)."""
+        ...
