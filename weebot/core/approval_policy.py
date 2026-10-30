@@ -545,20 +545,43 @@ READ_ONLY_COMMANDS: frozenset[str] = frozenset({
     "sort", "uniq", "cut", "basename", "dirname", "realpath", "env", "printenv",
     "gc", "gci", "gl", "gm", "gps", "select", "measure", "sls", "ft", "fl", "fw",
     "out-null", "sort-object", "where-object", "group-object", "write-output", "write-host",
-    "test-path", "resolve-path", "split-path", "join-path",
+    "test-path", "resolve-path", "split-path", "join-path", "out-string",
 })
-_READ_ONLY_PREFIXES = ("get-", "select-", "measure-", "compare-", "test-")
+_READ_ONLY_PREFIXES = ("get-", "select-", "measure-", "compare-", "test-", "format-")
 _READ_ONLY_GIT = frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files", "blame"})
 # A segment holding any of these can write or run code whatever its first word is.
 _NOT_PLAIN = ("::", ">", "{", "$(", chr(96))
+# `$x = rest`; `$env:X = ...` does not match, so it stays unreviewed.
+_ASSIGN_RHS = re.compile(r"^\$\w+\s*=\s*(.*)$", re.S)
+_LITERAL_RHS = re.compile(r"""^(["'])[^"'$`]*\1$""")
+# `(cmd).Prop`, or the `(cmd` a pipe inside the parentheses leaves behind.
+_WRAPPED = re.compile(r"^\((.*?)\)?(?:\.\w+)*$", re.S)
+_METHOD_CALL = re.compile(r"\.\w+\s*\(")  # (Get-Item x).Delete()
+_VERSION = re.compile(r"""^("[^"]+"|'[^']+'|\S+)\s+--version$""")
 
 
 def is_read_only_segment(segment: str) -> bool:
-    """True for a plain read: a known read-only command with no redirect, script block or
-    static call. Conservative on purpose: unknown means not read-only."""
-    low = segment.strip().lower()
+    """True for a plain read: a known read-only command with no redirect, script block,
+    static or method call, `$x = "literal"`, `$x = (<read>)`, or `<program> --version`.
+    Conservative on purpose: unknown means not read-only."""
+    seg = segment.strip()
+    assign = _ASSIGN_RHS.match(seg)
+    if assign:
+        seg = assign.group(1).strip()
+        if _LITERAL_RHS.match(seg):
+            return True
+    if _METHOD_CALL.search(seg):
+        return False
+    wrapped = _WRAPPED.match(seg) if seg.startswith("(") else None
+    if wrapped:
+        seg = wrapped.group(1).strip()
+        if "(" in seg or ")" in seg:
+            return False
+    low = seg.lower()
     if not low or any(mark in low for mark in _NOT_PLAIN):
         return False
+    if _VERSION.match(low):
+        return True
     tokens = low.split()
     first = tokens[0].strip("&.\"'").replace(chr(92), "/").rsplit("/", 1)[-1].removesuffix(".exe")
     if first == "git":
@@ -569,6 +592,17 @@ def is_read_only_segment(segment: str) -> bool:
     if first == "env" and len(tokens) > 1:
         return False  # `env X` runs X
     return first in READ_ONLY_COMMANDS or first.startswith(_READ_ONLY_PREFIXES)
+
+
+def stays_in_workspace(command: str, cwd: str | None = None) -> bool:
+    """True when every segment is a plain read or a file cmdlet on this workspace's Output/.
+
+    What a session that has read untrusted content may still run unasked (decision D5).
+    """
+    segments = _inline_literal_vars(split_segments(command))
+    return bool(segments) and all(
+        is_read_only_segment(s) or _output_scoped(s, cwd) for s in segments
+    )
 
 
 # File cmdlets the agent uses on its own Output/ work, and how each takes its

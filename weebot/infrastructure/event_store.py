@@ -16,13 +16,23 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from weebot.application.ports.event_store_port import EventStorePort
 
 logger = logging.getLogger(__name__)
+
+
+def _sqlite_utc(moment: datetime) -> str:
+    """*moment* in the text form SQLite's ``CURRENT_TIMESTAMP`` stores (UTC), so they compare.
+
+    A naive datetime is taken as UTC already.
+    """
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC)
+    return moment.strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -379,10 +389,10 @@ class AsyncEventStore(EventStorePort):
             params.append(session_id)
         if start_time:
             query += " AND timestamp >= ?"
-            params.append(start_time.isoformat())
+            params.append(_sqlite_utc(start_time))
         if end_time:
             query += " AND timestamp <= ?"
-            params.append(end_time.isoformat())
+            params.append(_sqlite_utc(end_time))
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
 

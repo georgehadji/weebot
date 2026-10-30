@@ -507,12 +507,13 @@ class TaskRunner:
             return True
         return False
 
-    async def rerun_failed_session(self, session_id: str) -> bool:
+    async def rerun_failed_session(self, session_id: str, flow_factory: FlowFactory) -> bool:
         """Re-enter a permanently-failed session at the last saved state.
 
         Restores the session from the state repo and re-submits it through
-        the original flow factory.  Resets the retry counter so the newly
-        spawned attempt gets a full retry budget.
+        *flow_factory*. The caller builds it, as for ``resume_session``: the run's
+        own factory is dropped when the run ends, and a fresh process never had it.
+        Resets the retry counter so the new attempt gets a full retry budget.
 
         Returns:
             True if the session was found and re-started, False otherwise.
@@ -529,26 +530,21 @@ class TaskRunner:
             )
             return False
 
-        state = self._retries.pop(session_id, None)
-        factory = state.factory if state else None
-        if factory is None:
-            # Try the default PlanActFlow factory builder fallback
-            logger.warning(
-                "rerun_failed_session: no flow factory cached for %s "
-                "— attempting resume with default factory",
-                session_id,
-            )
-            return False
-
         # Clear dead-letter and retry state so the new attempt gets a clean
         # retry budget.
         session = _with_extra(
             session, **{_RETRIES_KEY: self._max_session_retries, _FAILURE_KEY: None}
         )
 
-        await self._start_direct(session, factory)
+        await self._start_direct(session, flow_factory)
         logger.info("Rerun initiated for failed session %s", session_id)
         return True
+
+    async def wait_for(self, session_id: str) -> None:
+        """Return once the session's run, and every retry it starts, has ended."""
+        while (task := self._tasks.get(session_id)) is not None and not task.done():
+            await asyncio.wait({task})
+            await asyncio.sleep(0)  # let _cleanup run, or a retry register its task
 
     async def list_failed_sessions(self) -> dict[str, str]:
         """The dead-letter queue: FAILED sessions that carry a failure reason.

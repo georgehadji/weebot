@@ -34,6 +34,10 @@ class InMemorySteeringAdapter(SteeringPort):
             self._queues[session_id] = asyncio.Queue()
         await self._queues[session_id].put(message)
 
+    async def discard(self, session_id: str) -> None:
+        """Drop the session's queue and any message still in it."""
+        self._queues.pop(session_id, None)
+
     def send_threadsafe(self, session_id: str, message: str) -> None:
         """Thread-safe variant for stdin listeners running in executor."""
         if session_id not in self._queues:

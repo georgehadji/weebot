@@ -16,15 +16,12 @@ from weebot.application.flows._plan_act_wiring import (
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows._iteration_context import IterationContext
 from weebot.application.flows.states.base import FlowState
-from weebot.application.flows.states.planning import PlanningState
-from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.base import AgentStatus
-from weebot.application.flows.flow_router import FlowRouter
+from weebot.application.flows._run_prologue import begin_run
 from weebot.application.flows.collaborators.session_budget import (
     enforce_budget,
     enforce_termination,
 )
-from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.core import cancel_requests
 
@@ -39,7 +36,6 @@ class PlanStuckError(RuntimeError):
     pass
 
 
-from weebot.domain.services.continuation_detector import ContinuationDetector  # noqa: E402
 from weebot.domain.models.event import AgentEvent, ErrorEvent  # noqa: E402
 from weebot.domain.models.plan import Plan  # noqa: E402
 from weebot.domain.models.session import SessionStatus  # noqa: E402
@@ -347,121 +343,7 @@ class PlanActFlow(BaseFlow):
                 yield event
 
     async def _run_states(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        import time as _time
-
-        self._flow_started_at = _time.monotonic()
-        self._log.info(f"PlanActFlow started for session {self._session.id}")
-
-        # ── OTEL tracing: plan_act_iteration span ────────────────────
-        # ARCH-AUDIT-V2 B2 — root span for the full Plan-Act-Reflect loop.
-        # Uses start_span (not start_as_current_span) because the generator
-        # body makes context-manager teardown unreliable.  The span is
-        # ended explicitly at the method's exit point below.
-        # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
-        self._run_span = None
-        if self._tracing_port is not None:
-            from weebot.config.feature_flags import is_enabled
-
-            if is_enabled("OTEL_TRACING_ENABLED"):
-                self._run_span = self._tracing_port.start_span("plan_act_iteration")
-                self._run_span.set_attribute("session.id", self._session.id)
-                trace_id = getattr(self._session, "trace_id", None)
-                if trace_id:
-                    self._run_span.set_attribute("trace_id", trace_id)
-        # Store the first substantive prompt so short follow-ups ("proceed", "yes")
-        # can be enriched with it when a brand-new plan is needed.
-        original_task: str = self._session.context.get("_original_task", "")
-        if not original_task and prompt.strip():
-            original_task = prompt.strip()
-            self._session = self._session.model_copy(
-                update={
-                    "context": self._session.context.model_copy(
-                        update={"original_task": original_task}
-                    )
-                }
-            )
-
-        # ── Lost-in-Compaction: extract session-scoped side constraints ──
-        # Flow-entry seam — covers every real user turn (initial task,
-        # resume, chat) since run() is invoked once per turn. Steering and
-        # product-gate resume text are separate seams (Phase 3 follow-up).
-        if self._sc_extractor is not None and prompt.strip():
-            await self._extract_session_constraints(prompt)
-        # ──────────────────────────────────────────────────────────────
-
-        # Load durable behavioral rules once per flow. hydrate() is
-        # idempotent and self-guarding; this is the only async seam that
-        # runs before the executor builds its system prompt.
-        if self._behavioral_learner is not None:
-            try:
-                await self._behavioral_learner.hydrate()
-            except Exception as exc:
-                logger.warning("Behavioral rule hydration failed: %s", exc)
-
-        # Resolve effective prompt — enrich vague continuations via service
-        effective_prompt = ContinuationDetector.resolve_prompt(
-            user_prompt=prompt, original_task=original_task, event_count=len(self._session.events)
-        )
-
-        # ── Enhancement H1: scope external MCP tools to the current query ────
-        if not hasattr(self, "_tool_assembler"):
-            self._tool_assembler = ToolAssembler(
-                registry=self._tool_registry,
-                mcp_bridge=self._mcp_bridge,
-                native_tool_selector=self._native_tool_selector,
-                llm=self._llm,
-                agent_role=self._agent_role or "admin",
-                logger=self._stdlib_logger,
-            )
-        self._tools = await self._tool_assembler.assemble(
-            effective_prompt=effective_prompt, tools=self._tools, executor=self._summary_executor
-        )
-
-        # ── Resolve initial state via FlowRouter ───────────────────────────
-        initial_state, self._session = FlowRouter.resolve_initial_state(
-            session=self._session,
-            prompt=prompt,
-            extra=self._session.context.extra if self._session.context else {},
-        )
-        if isinstance(initial_state, ExecutingState):
-            # The step handler reloads the plan from the repo, so routing's
-            # changes (an edited plan file, ICM B2) must be saved first.
-            if self._state_repo is not None:
-                await self._state_repo.save_session(self._session)
-            last_plan = self._session.get_last_plan()
-            self._plan = last_plan
-            self.set_state(initial_state)
-        elif isinstance(initial_state, PlanningState):
-            # Record misalignment if user rejected the plan, then re-plan
-            was_rejected = (
-                self._session.context.extra.get("_plan_modification_request")
-                if self._session.context and self._session.context.extra
-                else None
-            )
-            if was_rejected and self._misalignment_journal is not None:
-                await FlowRouter.record_misalignment(
-                    session=self._session, prompt=was_rejected, journal=self._misalignment_journal
-                )
-            self._plan = None
-
-            # ── Product-mode gate: inject ProductGateState before planning ──
-            from weebot.config.feature_flags import PRODUCT_MODE_ENABLED
-
-            if PRODUCT_MODE_ENABLED:
-                from weebot.application.flows.states.product_gate import ProductGateState
-
-                self.set_state(ProductGateState())
-            else:
-                self.set_state(initial_state)
-        else:
-            self.set_state(initial_state)
-        # ────────────────────────────────────────────────────────────────────
-
-        if self._hooks is not None:
-            await self._hooks.execute_hooks(
-                "pre_execute",
-                {"session_id": self._session.id, "prompt": effective_prompt, "plan": None},
-            )
+        effective_prompt = await begin_run(self, prompt)
 
         max_iterations = self._max_iterations
         iteration_count = 0

@@ -351,6 +351,52 @@ class OutboundToolAdapter:
         )
 
 
+# ── After untrusted content (decision D5) ───────────────────────────────────
+
+# Tools that only read, or change nothing outside the agent's own run. Browsers are here
+# because navigating is how they read; EgressGuard judges what they send.
+_READ_ONLY_TOOLS = frozenset(
+    {
+        "web_search", "vane_search", "search_images", "search_history", "web_scraper",
+        "moli_fetch", "spacescraper", "weather", "ocr", "ocr_structured", "screenshot_ocr",
+        "screen_capture", "detect_elements", "browser_inspector", "advanced_browser",
+        "browser_navigator", "camofox_browser", "reasoner", "debate", "mixture_of_agents",
+        "ask_human", "terminate", "todo_write", "audit_session",
+    }
+)
+# Tools with read and write actions: the read ones, by the tool's action argument.
+_READ_ACTIONS: dict[str, frozenset[str]] = {
+    "knowledge": frozenset({"search", "get_note", "list_notes"}),
+    "persistent_memory": frozenset({"read"}),
+    "video_ingest": frozenset({"list_sources"}),
+}
+
+
+def reads_only(tool_name: str, args: Mapping[str, Any]) -> bool:
+    """True when the call reads, or writes only inside this workspace's Output/.
+
+    Anything else asks once untrusted content is in the session: injected text could
+    otherwise delete, overwrite or plant files, or run code, as long as nothing left the
+    machine. An unknown tool is not read-only (fail closed).
+    """
+    if tool_name in _READ_ONLY_TOOLS:
+        return True
+    if tool_name in _READ_ACTIONS:
+        return str(args.get("action", "")) in _READ_ACTIONS[tool_name]
+    if tool_name in SHELL_TOOLS:
+        from weebot.core.approval_policy import stays_in_workspace
+
+        cwd = str(args["working_dir"]) if args.get("working_dir") else None
+        return stays_in_workspace(str(args.get("command", "")), cwd)
+    if tool_name == "file_editor":
+        from weebot.core.approval_policy import _in_output
+
+        return args.get("command") == "view" or _in_output(str(args.get("path", "")))
+    if tool_name.startswith("mcp__"):
+        return not is_outbound_tool(tool_name)
+    return False
+
+
 # ── Chain and decorator ─────────────────────────────────────────────────────
 
 

@@ -144,6 +144,5 @@ async def test_a_rerun_clears_the_failure_reason():
     repo = MemoryRepo()
     runner = TaskRunner(state_repo=repo, max_session_retries=1)
     await _run_to_failure(runner, repo, "rerun")
-    runner._retries["rerun"] = task_runner_module._RetryState(lambda s: ExplodingFlow(s), 0)
-    assert await runner.rerun_failed_session("rerun") is True
+    assert await runner.rerun_failed_session("rerun", lambda s: ExplodingFlow(s)) is True
     assert "failure_reason" not in repo.sessions["rerun"].context.extra

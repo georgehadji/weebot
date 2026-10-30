@@ -85,6 +85,7 @@ async def build_executor_prompt(
     personality: Any | None = None,
     profile_name: str = "",
     skills_used: list[str] | None = None,
+    retrieval_scores: list[float] | None = None,
 ) -> str:
     """Assemble the system prompt from all configured sources.
 
@@ -102,6 +103,7 @@ async def build_executor_prompt(
         personality: Personality module for core personality injection.
         profile_name: Profile name for personality selection.
         skills_used: Filled with the candidate skills injected, so their uses count.
+        retrieval_scores: Filled with the best retrieval score, so a miss records a gap.
 
     Returns:
         Assembled system prompt string, with included sources framed under
@@ -131,6 +133,8 @@ async def build_executor_prompt(
     if "skill_retriever" in sources and skill_retriever is not None:
         try:
             matches = await skill_retriever.retrieve(step_description, top_k=2)
+            if retrieval_scores is not None:
+                retrieval_scores.append(max((m.score for m in matches), default=0.0))
             candidates = 0
             for m in matches:
                 if m.score <= 0.15:

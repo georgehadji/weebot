@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections import deque
-from pathlib import Path
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
@@ -19,6 +17,7 @@ from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
     IterationGuard,
 )
+from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
 from weebot.application.agents.executor._step_setup import build_step_prompts, prime_step
 from weebot.application.agents.executor._tool_batch import ToolBatchRunner
 from weebot.application.agents.executor._turn import next_turn
@@ -56,86 +55,6 @@ logger = logging.getLogger(__name__)
 # `_merge_middleware_result` in `_tool_batch.py`, with the code that calls them
 # (WB-06, phase 4.2).
 
-
-def _load_executor_system_prompt() -> str:
-    """Load the executor system prompt from the package or filesystem.
-
-    Priority: (1) importlib.resources (packaged), (2) filesystem path
-    (source checkout), (3) inline fallback constant.
-    """
-    # 1. Try importlib.resources (works when weebot is installed as a package)
-    with contextlib.suppress(Exception):
-        from importlib.resources import files as _resource_files
-
-        return (
-            _resource_files("weebot.config.prompts")
-            .joinpath("executor_system.txt")
-            .read_text(encoding="utf-8")
-        )
-
-    # 2. Try filesystem path (works in development / source checkout)
-    with contextlib.suppress(Exception):
-        if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
-            return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-
-    # 3. Inline fallback — kept in sync with executor_system.txt
-    return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
-
-
-# EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
-# An inline fallback is kept for environments where the file is not available.
-_EXECUTOR_SYSTEM_PROMPT_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "executor_system.txt"
-)
-
-_EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
-    "You are an execution agent. You have access to tools.\n"
-    "Your job is to execute ONE step from a larger plan. Do not try to complete the entire task in "
-    "one go.\n"
-    "\n"
-    "IMPORTANT RULES:\n"
-    "1. Use tools to execute the CURRENT step only\n"
-    "2. Do NOT call 'terminate' after completing just one step - only call it when the ENTIRE task "
-    "is finished\n"
-    "3. Ask for human input ONLY when you genuinely need missing information and use the ask_human "
-    "tool for that\n"
-    "4. Never ask follow-up questions as plain assistant text when a pause/resume is required\n"
-    "\n"
-    "TOOL SELECTION GUIDELINES:\n"
-    "- For DATA RETRIEVAL (weather, facts, prices, news, definitions), use LIGHTWEIGHT tools "
-    "FIRST:\n"
-    "  * weather → weather/forecast data (fast, no browser needed)\n"
-    "  * web_search → find information, URLs, or quick facts\n"
-    "  * bash (curl) → call APIs directly\n"
-    "- Use advanced_browser ONLY when you need to:\n"
-    "  * Interact with a page (click, fill forms, scroll)\n"
-    "  * Extract JavaScript-rendered content that web_search can't get\n"
-    "  * Take screenshots after navigating\n"
-    "- Do NOT open the browser just to read text you could get from web_search\n"
-    "- If a lightweight tool gets what you need, stop — don't also open the browser\n"
-    "\n"
-    "POWERSHELL SYNTAX RULES (Windows 11):\n"
-    "- Static .NET method calls: [ClassName]::MethodName() — e.g., [Math]::Round(x, 2)\n"
-    "  NOT ::Round(x, 2) which is invalid syntax.\n"
-    "- Format-Table, Format-List, Format-Wide are DISPLAY cmdlets, not disk operations — "
-    "safe to use.\n"
-    "- Get-ChildItem full-disk recursion (-Recurse -ErrorAction SilentlyContinue) on C:\\ takes\n"
-    "  several minutes; use -Depth 2 or -Depth 3 for faster partial scans, then widen if needed.\n"
-    "- PowerShell background jobs (Start-Job) are scoped to the current process and do NOT\n"
-    "  persist across separate powershell.exe invocations. Use single-call approaches instead.\n"
-    "- Long timeout: pass the 'timeout' parameter on the tool call (max 300s).\n"
-    "  Do NOT use Start-Sleep to work around the tool timeout.\n"
-    "\n"
-    "EFFICIENCY:\n"
-    "- Aim to complete each step in 5 tool calls or fewer\n"
-    "- Don't repeat the same tool call with the same arguments — if it didn't work, try a "
-    "DIFFERENT approach\n"
-    "- If you've taken 10+ tool calls on one step, something is wrong — summarize what you "
-    "found and move on\n"
-    "\n"
-    "You will be called repeatedly for each step. Focus only on the current step and wait for the "
-    "next one.\n"
-)
 
 # ── Policy-error-loop detection constants (Fix 5) ──
 _MAX_SAME_ERROR_CLASS = 3
@@ -328,7 +247,7 @@ class ExecutorAgent:
                     return content.prompt_content
             except Exception:
                 pass
-        return _load_executor_system_prompt()
+        return load_executor_system_prompt()
 
     async def _present_tool_output(self, tool_name: str, result: Any) -> str:
         """The text of a tool result as the model sees it: fenced unless the tool is LOCAL.
@@ -726,55 +645,3 @@ class ExecutorAgent:
             return
 
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.COMPLETED)
-
-
-# ── Phase 2 helpers ────────────────────────────────────────────────────────────
-
-
-def _maybe_record_skill_gap(
-    executor: ExecutorAgent, step_description: str, best_score: float
-) -> None:
-    """Record a skill-gap signal when retrieval misses the creation threshold.
-
-    Two output paths:
-    1. Append to ``executor._skill_gaps`` for downstream ``IdeaContract``
-       creation (existing, processed in ``CompletedState``).
-    2. Emit a ``SkillGapDetected`` domain event (new) for lightweight
-       subscribers (misalignment journal, diagnostic logger).
-
-    Never raises — both paths are purely additive.
-    """
-    from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
-    from weebot.config.learning import TAU_CREATE
-
-    if not SKILL_GAP_TRIGGER_ENABLED:
-        return
-    if best_score >= TAU_CREATE:
-        return  # retrieval hit — no gap
-
-    executor._skill_gaps.append({"step": step_description[:200], "score": best_score})
-    logger.debug(
-        "Phase 2: skill gap recorded (score=%.3f < %.3f) for step: %s",
-        best_score,
-        TAU_CREATE,
-        step_description[:80],
-    )
-
-    # Enhancement 5: emit SkillGapDetected domain event for lightweight subscribers
-    try:
-        from weebot.domain.models.event import SkillGapDetected
-
-        event = SkillGapDetected(
-            session_id=getattr(executor, "_current_session_id", "unknown"),
-            step_description=step_description[:200],
-            best_score=best_score,
-        )
-        if executor._event_bus is not None:
-            from weebot.core.background_tasks import get_background_tasks
-
-            get_background_tasks().spawn(
-                executor._event_bus.publish_domain_event(event), name="skill-gap-detected"
-            )
-    except Exception:
-        logger.debug("SkillGapDetected event emission failed (non-blocking)")
-        pass  # event emission must never block the execution loop

@@ -205,12 +205,23 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
                 effective_label = node.label or existing["label"]
                 effective_name = node.name or existing["name"]
+                # The first session owns the node; an empty owner is claimed (D-KG, plan L2).
+                effective_owner = existing["source_session_id"] or node.source_session_id
 
                 conn.execute(
                     """UPDATE kg_nodes
-                       SET label = ?, name = ?, properties = ?, version = ?, updated_at = ?
+                       SET label = ?, name = ?, properties = ?, version = ?, updated_at = ?,
+                           source_session_id = ?
                        WHERE id = ?""",
-                    (effective_label, effective_name, props_json, new_version, now, node.id),
+                    (
+                        effective_label,
+                        effective_name,
+                        props_json,
+                        new_version,
+                        now,
+                        effective_owner,
+                        node.id,
+                    ),
                 )
 
                 # Snapshot the change
@@ -226,7 +237,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                     name=effective_name,
                     properties=node.properties,
                     created_at=datetime.fromisoformat(existing["created_at"]),
-                    source_session_id=node.source_session_id or existing["source_session_id"],
+                    source_session_id=effective_owner,
                     version=new_version,
                 )
             else:

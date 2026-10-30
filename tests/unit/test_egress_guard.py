@@ -150,8 +150,9 @@ class TestTrifectaEscalation:
 
     def test_no_escalation_for_non_egress_tools(self):
         guard = make_guard()
+        # Not python_execute: in a tainted session any code can reach the network (A21).
         d = guard.classify(
-            "python_execute", {"code": "print('hello')"}, untrusted_context_active=True
+            "powershell", {"command": "Get-ChildItem ."}, untrusted_context_active=True
         )
         assert not d.is_egress
         assert not d.requires_approval

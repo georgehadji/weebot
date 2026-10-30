@@ -289,7 +289,12 @@ class PostgreSQLStateRepository(
         )
 
     async def delete_session(self, session_id: str) -> None:
-        await self._execute("DELETE FROM sessions WHERE id = $1", session_id)
+        """Delete the session, with the side-constraints and corrections it recorded."""
+        pool = await self._pool()
+        async with pool.acquire() as conn, conn.transaction():
+            for table in ("session_constraints", "correction_records"):
+                await conn.execute(f"DELETE FROM {table} WHERE session_id = $1", session_id)
+            await conn.execute("DELETE FROM sessions WHERE id = $1", session_id)
 
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
         rows = await self._fetch(

@@ -17,6 +17,7 @@ from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
+from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -75,6 +76,30 @@ async def _ask_about_egress(session_id: str, name: str, args: dict, decision) ->
         return tool_approval.pending_result(request)
     logger.warning("egress_guard: blocked outbound tool call — %s", decision.summary)
     return _egress_blocked_result(name, decision)
+
+
+async def _ask_after_untrusted_content(session_id: str, name: str, args: dict) -> ToolResult | None:
+    """Decision D5: in a session that has read untrusted content, a call that does more than
+    read goes to the approval channel. None means "approved, run it"."""
+    from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
+    from weebot.application.services import tool_approval
+    from weebot.core.approval import call_fingerprint
+
+    request = ToolCallApproval(
+        session_id=session_id,
+        tool_name=name,
+        arguments=dict(args),
+        fingerprint=call_fingerprint(name, args),
+        guard="untrusted_content",
+        reason="this session has read untrusted content, and this call does more than read",
+    )
+    outcome = await tool_approval.current_approval().resolve(request)
+    if outcome is ApprovalOutcome.APPROVED:
+        return None
+    if outcome is ApprovalOutcome.PENDING:
+        return tool_approval.pending_result(request)
+    logger.warning("untrusted_content: blocked %s", name)
+    return tool_approval.denied_result(request)
 
 
 async def _clear_network_use(
@@ -442,7 +467,12 @@ class ToolExecutor:
             # ORCH-2: an outbound action this session already completed is not
             # repeated, and a replay never reaches the approval gate below (the
             # action is not happening again, so there is nothing to approve).
-            if self._effect_ledger is not None and decision.is_egress and self._current_session_id:
+            if (
+                self._effect_ledger is not None
+                and decision.is_egress
+                and not decision.network_only
+                and self._current_session_id
+            ):
                 effect_id = self._effect_id(name, args)
                 prior = await self._effect_ledger.lookup(self._current_session_id, effect_id)
                 if prior is not None:
@@ -479,6 +509,24 @@ class ToolExecutor:
                 )
                 if refused is not None:
                     return refused
+
+        # Decision D5: after untrusted content, a call that does more than read asks, even
+        # when nothing leaves the machine. An egress approval above already covers the call.
+        if not approved_call and self._untrusted_context_active:
+            from weebot.application.services.tool_guards import reads_only, shell_guard_mode
+
+            if not reads_only(name, args):
+                if shell_guard_mode() != "enforce":
+                    logger.warning("untrusted_content would ask: %s", name)
+                else:
+                    refused = await _ask_after_untrusted_content(
+                        self._current_session_id, name, args
+                    )
+                    if refused is not None:
+                        return refused
+                    from weebot.core.approval import call_fingerprint
+
+                    approved_call = call_fingerprint(name, args)
 
         import time as _timer
 
@@ -601,24 +649,9 @@ class ToolExecutor:
             else "Provide a concise summary of what was accomplished."
         )
         self._conversation_buffer.append({"role": "user", "content": summary_prompt})
-        system_prompt = self._system_prompt or _load_executor_system_prompt()
+        system_prompt = self._system_prompt or load_executor_system_prompt()
         messages = [{"role": "system", "content": system_prompt}] + list(self._conversation_buffer)
         response = await self._llm.chat(
             messages=messages, model=self._model, temperature=TEMPERATURE_BALANCED
         )
         yield MessageEvent(role="assistant", message=response.content or "Done.")
-
-
-def _load_executor_system_prompt() -> str:
-    """Load the executor system prompt from package or inline fallback."""
-    import importlib.resources as pkg_resources
-
-    try:
-        return pkg_resources.read_text("weebot.config", "executor_system_prompt.txt")
-    except Exception:
-        return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
-
-
-_EXECUTOR_SYSTEM_PROMPT_FALLBACK = """You are an execution agent. You have access to tools.
-Follow the plan step by step. Execute each step before moving to the next.
-When you complete all steps, report back to the user."""
