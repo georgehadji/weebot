@@ -228,12 +228,12 @@ New providers (Mistral, NVIDIA NIM, OVH) are parked until Groq and Gemini prove 
 | ID | Question | Recommendation | Blocks |
 |---|---|---|---|
 | D2 | Remove the `?token=` WebSocket fallback now? | Yes; the UI no longer uses it | F3 |
-| D3a | Shell default-ASK to enforce? | Yes, if the 12-task batch shows 2 or fewer asks | P1 |
-| D5 | Every non-read-only tool asks after untrusted content is read? | Yes; injection is the main risk this guard closes | P2, P3 |
-| D6 | Apply `.github/rulesets/main.json`? | Yes; Protection Drift fails on `main` today | none |
+| D3a | Shell default-ASK to enforce? | Yes, if the 12-task batch shows 2 or fewer asks. 2026-10-30: in a tainted session it already asks (D5); the global flip waits for the batch, which is billed | P1 |
+| D5 | Every non-read-only tool asks after untrusted content is read? | DECIDED 2026-10-30: yes; `Output/` writes and plain reads stay unasked. P2 and P3 done | P2, P3 |
+| D6 | Apply `.github/rulesets/main.json`? | DECIDED 2026-10-30: yes; the owner runs the POST (an external write the agent may not make) | none |
 | D7 | Draft PR #54 (LuaLaTeX): rebase or close? | Close, or park as a branch | none |
 | D8 | Archive the twelve old plan and summary docs? | Yes, after the referrer report | R3 |
-| D9 | Enforce Windows network-off with a firewall rule? | No; keep it advisory, as documented | P4 |
+| D9 | Enforce Windows network-off with a firewall rule? | DECIDED 2026-10-30: no; it stays advisory, as documented. P4 closed | P4 |
 | D-KG | Who owns a knowledge-graph node seen by two sessions? | The first session; fill only when empty | L2 |
 | D-BEH | What may the behavior panel show, and to whom? | Each principal sees its own sessions; watch only inside the workspace | F2 |
 | D-F | Build, park or drop each backlog spec | One triage pass | wave 8 |
