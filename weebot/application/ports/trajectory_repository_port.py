@@ -56,6 +56,10 @@ class TrajectoryRepositoryPort(ABC):
         """Return (session_id, task_id, trajectory_text, failure_modes_json)
         for trajectories that lack a failure_signature entry."""
 
+    @abstractmethod
+    async def delete_by_session_id(self, session_id: str) -> int:
+        """Delete the session's trajectories and failure signatures (session delete)."""
+
     async def recent_failures(self, limit: int = 200) -> list[TrajectorySummary]:
         """Failed trajectories that recorded their task, newest first (none by default)."""
         return []

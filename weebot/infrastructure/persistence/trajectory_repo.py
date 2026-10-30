@@ -425,6 +425,18 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
             (r["session_id"], r["task_id"], r["trajectory_text"], r["failure_modes"]) for r in rows
         ]
 
+    async def delete_by_session_id(self, session_id: str) -> int:
+        """Delete the session's trajectories and failure signature; returns rows removed."""
+        pool = await self._get_pool()
+        removed = 0
+        async with pool.acquire_write() as conn:
+            for table in ("trajectories", "failure_signatures"):
+                cursor = await conn.execute(
+                    f"DELETE FROM {table} WHERE session_id = ?", (session_id,)
+                )
+                removed += cursor.rowcount
+        return removed
+
     async def close(self):
         if self._pool:
             await self._pool.close()
