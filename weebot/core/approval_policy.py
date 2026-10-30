@@ -571,6 +571,17 @@ def is_read_only_segment(segment: str) -> bool:
     return first in READ_ONLY_COMMANDS or first.startswith(_READ_ONLY_PREFIXES)
 
 
+def stays_in_workspace(command: str, cwd: str | None = None) -> bool:
+    """True when every segment is a plain read or a file cmdlet on this workspace's Output/.
+
+    What a session that has read untrusted content may still run unasked (decision D5).
+    """
+    segments = _inline_literal_vars(split_segments(command))
+    return bool(segments) and all(
+        is_read_only_segment(s) or _output_scoped(s, cwd) for s in segments
+    )
+
+
 # File cmdlets the agent uses on its own Output/ work, and how each takes its
 # positional arguments: "paths" (every one is a path), "path+value" (the first
 # is a path, the rest are content), "path+name" (a path, then a bare new name).
