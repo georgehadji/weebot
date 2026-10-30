@@ -1,6 +1,7 @@
 ---
 status: open
 date: 2026-10-29
+supersedes: plans/master_plan_2026_10_27.md, plans/audit_2026_10_27_fix_plan.md
 note: everything still open after the 2026-10-29 audit, checked against the code on fix/audit-2026-10-29 (89b8121e); eight waves, security and data loss first, decision-gated work after the owner decides, map and docs last; supersedes the open lists in master_plan_2026_10_27.md sections 3-4 and audit_2026_10_29_fix_plan.md section 7
 ---
 

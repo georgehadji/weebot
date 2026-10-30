@@ -1,7 +1,7 @@
 ---
-status: open
+status: superseded
 date: 2026-10-27
-note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 A28 fixed (A28 without the scheduler timezone change; branch fix/audit-track-a2); A26 fixed in all five parts on branch fix/audit-track-a3 with follow-ups on fix/audit-track-a4 (direct media metered, planner deadline, queued probes unbilled, every session listed; the scheduler stays in local time); the rest not started; 2026-10-28 on feat/master-plan-ready: B1 (scripts/prepush_gates.py), B2, A22 note, E2 (effects cards checked), A12 watermark and unique index, W2.1 one authenticator built; 2026-10-29 D4 decided and done on feat/d4-wiring (wave 6 complete, unpushed)
+note: master plan for everything still open after the 2026-10-27 audit work; tracks A to F with order, sizes, owner decisions and done criteria; track A started 2026-10-27: wave 0 repros written for A21 A24 A25 A26 A28, A33 A25 A24 A28 fixed (A28 without the scheduler timezone change; branch fix/audit-track-a2); A26 fixed in all five parts on branch fix/audit-track-a3 with follow-ups on fix/audit-track-a4 (direct media metered, planner deadline, queued probes unbilled, every session listed; the scheduler stays in local time); the rest not started; 2026-10-28 on feat/master-plan-ready: B1 (scripts/prepush_gates.py), B2, A22 note, E2 (effects cards checked), A12 watermark and unique index, W2.1 one authenticator built; 2026-10-29 D4 decided and done on feat/d4-wiring (wave 6 complete, unpushed); 2026-10-30: superseded by remaining_work_plan_2026_10_29.md, which carries every item still open here
 ---
 
 # Master plan: everything still open
