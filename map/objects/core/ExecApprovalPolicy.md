@@ -5,8 +5,8 @@ code: ExecApprovalPolicy, ApprovalMode, CommandRule
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-29
-commit: 265af724
+verified: 2026-10-30
+commit: bb1181cc
 ---
 
 # ExecApprovalPolicy
@@ -33,7 +33,7 @@ Consequences (read from source, not run):
 - "Longest pattern wins" compares string length of the *pattern*, not specificity. Regex rules tend to be long, so they usually beat the short plain-text rules like `"rm "` (`:299`).
 - `Set-Content`, `Copy-Item`, `Move-Item`, `Rename-Item` are only asked about when chained after a separator; standalone they match no rule and are approved (they are in `_DESTRUCTIVE_KEYWORDS`, `:46-62`, but have no standalone rule).
 - The `finance` and `payment` categories have no live caller: the only `evaluate` call that passes a category is `ExecutingState` with `"inbound_mail"` (`weebot/application/flows/states/_execution_gates.py:104`); the tools call `evaluate(command)` without one. Only tests exercise those two.
-- Fixed 2026-10-23 (ADR-013): a confirmation now reaches a human. `GuardedTool` sends an ASK verdict to the approval channel and runs the approved call inside `human_approved_call` (`application/services/tool_guards.py:469-476`, `core/approval.py:143-155`). `bash`, `python_execute` and `powershell` return "requires confirmation" as an error string only outside that block (`tools/bash_tool.py:400-404`, `python_tool.py:170-175`, `powershell_tool.py:165-168`). `ApprovalManager` (`core/approval.py:157`) is now the single-use grant store behind it (`application/services/tool_approval.py:94`).
+- Fixed 2026-10-23 (ADR-013): a confirmation now reaches a human. `GuardedTool` sends an ASK verdict to the approval channel and runs the approved call inside `human_approved_call` (`application/services/tool_guards.py:515-522`, `core/approval.py:143-155`). `bash`, `python_execute` and `powershell` return "requires confirmation" as an error string only outside that block (`tools/bash_tool.py:400-404`, `python_tool.py:170-175`, `powershell_tool.py:165-168`). `ApprovalManager` (`core/approval.py:157`) is now the single-use grant store behind it (`application/services/tool_approval.py:94`).
 
 ## Connected to
 - **Callers:** `BashTool` (`bash_tool.py:146, 397`), `PythonTool` (`python_tool.py:116, 167`), `PowerShellTool` (`powershell_tool.py:161-162`, a new instance per call), `ExecutingState` inbound-mail gate (`weebot/application/flows/states/_execution_gates.py:98-104`; the pause and the answer handling live in FlowRouter, see its card), `SafetyChecker.generate_plan_b` (`core/safety.py:43,64`; no production caller since the gateway gate was deleted, audit A33).
