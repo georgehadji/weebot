@@ -93,3 +93,33 @@ def test_python_execute_is_never_flagged(mode):
 def test_a_read_only_shell_call_is_untouched_in_enforce(mode):
     mode("enforce")
     assert ApprovalPolicyAdapter().check("bash", {"command": "git status"}) is None
+
+
+# D3a batch, 2026-10-30: 19 would-ask lines in 12 runs, all reads. These shapes asked.
+@pytest.mark.parametrize("command", [
+    '$root = "C:/Users/x/Weebot"',
+    "$out = 'C:/Users/x/Weebot/Output/t.txt'",
+    '(Get-FileHash "C:/W/README.md" -Algorithm SHA256).Hash',
+    '$h = (Get-FileHash "C:/W/README.md" -Algorithm SHA256).Hash',
+    '$n = (Get-Content -Path "C:/W/README.md" | Measure-Object -Line).Lines',
+    "Get-ChildItem x | Sort-Object Length | Format-Table -AutoSize",
+    "Get-Process | Format-List",
+    '"C:/W x/.venv/Scripts/python.exe" --version',
+    "python --version",
+])
+def test_reads_the_d3a_batch_flagged_are_not_flagged(command):
+    assert _unmatched(command) == []
+
+
+@pytest.mark.parametrize("command", [
+    "$x = (mytool.exe --go)",
+    '$x = "a$(mytool.exe)"',
+    '$env:PATH = "C:/evil"',
+    "$x = Get-Content a.txt > b.txt",
+    "mytool.exe --version --force",
+    "(mytool.exe --go).Result",
+    "(gci x | Get-Item).Delete()",
+    "(Get-Item x).Delete()",
+])
+def test_assignments_and_version_calls_that_do_more_still_flag(command):
+    assert _unmatched(command) != []
