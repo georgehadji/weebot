@@ -73,6 +73,8 @@ class TelegramAdapter(GatewayAdapter):
         self._running = False
         # Track active sessions: chat_id -> (GatewaySession, flow_session_id)
         self._active_sessions: dict[str, tuple] = {}
+        # One run at a time per chat, as a task, so the poll loop keeps reading (/stop).
+        self._runs: dict[str, asyncio.Task] = {}
 
     async def start(self) -> None:
         self._running = True
@@ -86,6 +88,8 @@ class TelegramAdapter(GatewayAdapter):
             await self._poll_task
         except asyncio.CancelledError:
             pass
+        for chat in list(self._runs):
+            await self._stop_run(chat)
         logger.info("TelegramAdapter stopped")
 
     async def _poll_loop(self) -> None:
@@ -111,13 +115,8 @@ class TelegramAdapter(GatewayAdapter):
                     msg = self._parse_update(update)
                     if msg:
                         response_text = await self._process_message(msg)
-                        await self.send_response(
-                            GatewayResponse(
-                                text=response_text or "Done.",
-                                platform="telegram",
-                                external_id=str(msg.external_id),
-                            )
-                        )
+                        if response_text is not None:  # None: a run started and replies itself
+                            await self._reply(msg.external_id, response_text)
                 except Exception as exc:
                     logger.warning("Error processing Telegram message: %s", exc)
 
@@ -194,8 +193,13 @@ class TelegramAdapter(GatewayAdapter):
             thread_id=thread_id,
         )
 
-    async def _process_message(self, message: GatewayMessage) -> str:
-        """Process a gateway message with session continuity and slash command support."""
+    async def _reply(self, external_id: str, text: str) -> None:
+        await self.send_response(
+            GatewayResponse(text=text or "Done.", platform="telegram", external_id=str(external_id))
+        )
+
+    async def _process_message(self, message: GatewayMessage) -> str | None:
+        """The reply to a message, or None when it started a run that replies when done."""
         text = await self.handle(message)
         if text is None:
             return "Message blocked by safety check."
@@ -221,11 +225,17 @@ class TelegramAdapter(GatewayAdapter):
         if text.startswith("/"):
             cmd_response = self._command_dispatcher.dispatch(text)
             if cmd_response is not None:
-                return self._handle_command_response(cmd_response, key)
+                return await self._handle_command_response(cmd_response, key)
+
+        if text.strip().lower() in ("new session", "start over"):
+            return await self._handle_command_response("OK_NEW_SESSION", key)
+
+        chat = key.composite_key()
+        if chat in self._runs:
+            return "⏳ Still working on your last message. Send /stop to cancel it."
 
         # Resolve or create session
         user_id = f"telegram-{message.external_id}"
-        meta = message.metadata or {}
         gw_session, flow_session_id = await self._flow_resolver.resolve(
             key=key,
             user_id=user_id,
@@ -236,27 +246,36 @@ class TelegramAdapter(GatewayAdapter):
         # Build or reuse the Weebot session and flow
         session = await self._get_or_create_flow_session(flow_session_id, user_id)
 
-        # Check for new/reset in text content
-        text_lower = text.strip().lower()
-        if text_lower in ("/new", "new session", "start over"):
-            # Close current session and create a new one
-            await self._flow_resolver.close(key)
-            gw_session, flow_session_id = await self._flow_resolver.resolve(
-                key=key, user_id=user_id, metadata=meta
-            )
-            session = await self._get_or_create_flow_session(flow_session_id, user_id)
-            # Don't process the command text — just return confirmation
-            return "🔄 Session reset. Starting fresh."
+        task = asyncio.create_task(self._run(session, text, message.external_id))
+        self._runs[chat] = task
+        task.add_done_callback(
+            lambda t: self._runs.pop(chat, None) if self._runs.get(chat) is t else None
+        )
+        return None
 
+    async def _run(self, session: Session, text: str, external_id: str) -> None:
+        """Run the flow and send its last message; a cancel (/stop) still tears tools down."""
         response = ""
-        async with run_scope(
-            session, llm=self._llm, state_repo=self._state_repo, profile_name=self._profile_name
-        ) as flow:
-            async for event in flow.run(text):
-                if getattr(event, "type", "") == "message":
-                    response = getattr(event, "message", "") or response
+        try:
+            async with run_scope(
+                session, llm=self._llm, state_repo=self._state_repo, profile_name=self._profile_name
+            ) as flow:
+                async for event in flow.run(text):
+                    if getattr(event, "type", "") == "message":
+                        response = getattr(event, "message", "") or response
+        except Exception as exc:
+            logger.warning("Telegram run failed for session %s: %s", session.id, exc)
+            return
+        await self._reply(external_id, response or "(no response)")
 
-        return response or "(no response)"
+    async def _stop_run(self, chat: str) -> bool:
+        """Cancel the chat's run and wait for its teardown; False when none was running."""
+        task = self._runs.pop(chat, None)
+        if task is None:
+            return False
+        task.cancel()
+        await asyncio.wait({task})  # not `await task`: that would re-raise its cancel here
+        return True
 
     async def _get_or_create_flow_session(self, flow_session_id: str, user_id: str) -> Session:
         """Get or create a Weebot Session for the given flow session ID.
@@ -275,16 +294,20 @@ class TelegramAdapter(GatewayAdapter):
         session = Session(id=flow_session_id, user_id=user_id, agent_id="telegram-agent")
         return session
 
-    def _handle_command_response(self, cmd_response: str, key: GatewaySessionKey) -> str:
+    async def _handle_command_response(self, cmd_response: str, key: GatewaySessionKey) -> str:
         """Handle special command responses that require action beyond text.
 
         Commands like /new and /reset return special prefixes that instruct
         the adapter to perform actions.
         """
         if cmd_response == "OK_NEW_SESSION" or cmd_response == "OK_RESET_SESSION":
-            return "🔄 Session will be reset on next message."
+            await self._stop_run(key.composite_key())
+            await self._flow_resolver.close(key)
+            return "🔄 Session reset. Starting fresh."
         if cmd_response == "OK_STOP":
-            return "⏹ Task stopped."
+            if await self._stop_run(key.composite_key()):
+                return "⏹ Task stopped."
+            return "Nothing is running."
         if cmd_response.startswith("OK_SET_MODEL:"):
             model = cmd_response.split(":", 1)[1]
             return f"✅ Model set to: {model}"
