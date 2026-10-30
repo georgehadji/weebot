@@ -25,7 +25,7 @@ Format: name — source — status — card
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-25 — [card](infrastructure/Browser.md)
 - Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — stale 2026-10-29 — [card](infrastructure/EventBus.md)
-- Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-29 — [card](infrastructure/EventStore.md)
+- Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-30 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-10-24 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-10-25 — [card](infrastructure/Sandbox.md)
 - SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-10-25 — [card](infrastructure/SQLiteStateRepository.md)
