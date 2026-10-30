@@ -334,23 +334,37 @@ def flow_retry(session_id: str) -> None:
     """
 
     async def _run() -> None:
-        global _container
-        if _container is None:
-            from weebot.interfaces.factories import shared_container
-
-            _container = shared_container()
         from weebot.application.services.task_runner import TaskRunner
+        from weebot.application.use_cases.dispatch_session_input import RunOptions
+        from weebot.config.model_refs import MODEL_BUDGET
+        from weebot.interfaces.factories import build_tools
 
-        runner = _container.get(TaskRunner)
-        ok = await runner.rerun_failed_session(session_id)
-        if ok:
-            console.print(f"[green]Retrying failed session {session_id}[/green]")
-        else:
-            console.print(
-                f"[yellow]Session {session_id} is not FAILED, or was not run by this "
-                f"process: retry works only in the process that ran it (the web "
-                f"server). From the CLI, start it again with 'flow run'.[/yellow]"
+        container = _get_container()
+        session = await _get_state_repo().load_session(session_id)
+        if session is None:
+            console.print(f"[yellow]Session {session_id} not found[/yellow]")
+            return
+        runner = container.get(TaskRunner)
+        opts = RunOptions.from_session(session)
+        tools = await build_tools(role="admin")
+        try:
+            factory = runner.create_plan_act_factory(
+                llm=_cli_llm(opts.model or MODEL_BUDGET),
+                tools=tools,
+                event_bus=container.get(EventBusPort),
+                model=opts.model,
+                ponytail_mode=opts.ponytail_mode,
             )
+            ok = await runner.rerun_failed_session(session_id, factory)
+        except BaseException:
+            await tools.teardown()
+            raise
+        if not ok:
+            await tools.teardown()
+            console.print(f"[yellow]Session {session_id} is not FAILED; nothing to retry[/yellow]")
+            return
+        console.print(f"[green]Retrying failed session {session_id}[/green]")
+        await runner.wait_for(session_id)
 
     _run_async(_run)
 
