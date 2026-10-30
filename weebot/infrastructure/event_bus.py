@@ -229,7 +229,9 @@ class DurableEventBus(EventBusPort):
         try:
             session_id = getattr(event, "session_id", "")  # type: ignore[union-attr]
             if not session_id:
-                session_id = getattr(event, "id", "")  # type: ignore[union-attr]
+                # A global event (presence, health) names no session. Journaling it
+                # under its own id made log_event create a phantom session (plan L3).
+                return
             event_type = getattr(event, "type", type(event).__name__)  # type: ignore[union-attr]
             # mode="json": the store json.dumps the data, and every event has a
             # datetime timestamp, so a plain dump failed every write.

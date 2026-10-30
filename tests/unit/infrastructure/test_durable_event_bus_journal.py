@@ -28,7 +28,7 @@ class _JsonStore:
 async def test_an_agent_event_with_a_timestamp_is_journaled():
     store = _JsonStore()
     bus = DurableEventBus(AsyncEventBus(), store)
-    await bus.publish(MessageEvent(role="user", message="hi"))
+    await bus.publish(MessageEvent(session_id="s1", role="user", message="hi"))
     assert [r[0] for r in store.rows] == ["message"]
 
 
