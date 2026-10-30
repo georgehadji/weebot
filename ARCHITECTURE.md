@@ -64,7 +64,7 @@ live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` 
 
 | # | Item | Severity | Status |
 |---|------|----------|--------|
-| D1 | Root-level stray files (4 remaining) | LOW | `agent_selection`, `failure_recovery`, `tray`, `notifications` deferred to 2027-03-01 |
+| D1 | Root-level stray files | — | CLOSED 2026-10-30: none of the four is left at the `weebot/` root; `tests/unit/interfaces/test_tray.py`, which always skipped, was deleted |
 | D2 | Core framework coupling — `agent.py` LangChain deps | — | CLOSED 2026-10-24: `core/agent.py` deleted (plan 3.5, decision D3) |
 | D3 | `.importlinter` ignore_imports | LOW | Count and target live in `import_exemptions` in `tasks/quality/ceilings.toml` (`scripts/lint_import_exemptions.py`); this table states no number |
 | D4 | `plan_act_flow.py` over its 700-line target | MEDIUM | 2.2.3-2.2.4 preamble/tool-result extraction deferred; needs step-by-step tests |
