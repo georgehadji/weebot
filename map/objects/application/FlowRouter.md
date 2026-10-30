@@ -5,8 +5,8 @@ code: FlowRouter
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-29
-commit: 6c9c50f3
+verified: 2026-10-30
+commit: 9a422252
 ---
 
 # FlowRouter
