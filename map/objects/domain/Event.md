@@ -5,8 +5,8 @@ code: BaseEvent, AgentEvent, DomainEvent (and subclasses)
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-29
-commit: d0fa4540
+verified: 2026-10-30
+commit: 37d5ec35
 ---
 
 # Event
@@ -14,7 +14,7 @@ commit: d0fa4540
 Two separate event families in one file. `BaseEvent` subclasses joined in the `AgentEvent` union are what a flow yields, what `Session.events` stores and what the UI renders. `DomainEvent` subclasses are internal facts published on the event bus (skill edits, costs, constraints) and are never stored in a session.
 
 ## Why this shape
-One union type gives one deserialiser: `TypeAdapter(AgentEvent)` picks the subclass by its `type` literal (`weebot/application/cqrs/event_reconstructor.py:23-28`, the same adapter in `infrastructure/persistence/sqlite_state_repo.py:527-533`). Each subclass fixes `type` as a `Literal`, so the JSON `type` key selects the class. `session_id` on `BaseEvent` is a transport routing id stamped by `SessionScopedEventBus`, not the subject of the event (`weebot/domain/models/event.py:38-45`, `:309-316`).
+One union type gives one deserialiser: `TypeAdapter(AgentEvent)` picks the subclass by its `type` literal (`weebot/application/cqrs/event_reconstructor.py:23-28`, the same adapter in `infrastructure/persistence/sqlite_state_repo.py:532-538`). Each subclass fixes `type` as a `Literal`, so the JSON `type` key selects the class. `session_id` on `BaseEvent` is a transport routing id stamped by `SessionScopedEventBus`, not the subject of the event (`weebot/domain/models/event.py:38-45`, `:309-316`).
 
 ## Shape
 - `BaseEvent` (`:34-45`): `type`, `id` (uuid4), `timestamp` (UTC), `session_id`.
@@ -28,7 +28,7 @@ Consequences (read from source, not run):
 - `ErrorEvent.failure_severity` (`:51`) is never set by a constructor or read; the executing state classifies severity as a plain string instead (`application/agents/executor/_error_handler.py:162`, `weebot/application/flows/states/_step_outcome.py:120-122`). The `FailureSeverity` docstring says "3-tier" over four members (`:14, 20-23`).
 - `PlanStepCompleted` is published for every `StepEvent`, including STARTED and FAILED (`application/flows/event_publisher.py:156-158`: the check is only `event.type == "step"`).
 - `_emit_domain_event` has one home: `event_publisher.py:149`, called at `:76`.
-- `reconstruct_events` logs and drops a dict it cannot parse (`event_reconstructor.py:49-57`); `_row_to_session` turns it into a `MessageEvent(**e)` instead (`sqlite_state_repo.py:552-556`). Two policies for the same failure.
+- `reconstruct_events` logs and drops a dict it cannot parse (`event_reconstructor.py:49-57`); `_row_to_session` turns it into a `MessageEvent(**e)` instead (`sqlite_state_repo.py:557-561`). Two policies for the same failure.
 - The web UI declares 11 event types (`weebot-ui/src/types/events.ts`); `tool_approval`, `product_gate_review`, `thought` and the other backend members have no type in `weebot-ui/src` (grep 2026-10-24). Whether the UI renders them some other way was not checked.
 
 ## Connected to
