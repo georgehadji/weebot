@@ -67,7 +67,7 @@ live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` 
 | D1 | Root-level stray files | — | CLOSED 2026-10-30: none of the four is left at the `weebot/` root; `tests/unit/interfaces/test_tray.py`, which always skipped, was deleted |
 | D2 | Core framework coupling — `agent.py` LangChain deps | — | CLOSED 2026-10-24: `core/agent.py` deleted (plan 3.5, decision D3) |
 | D3 | `.importlinter` ignore_imports | LOW | Count and target live in `import_exemptions` in `tasks/quality/ceilings.toml` (`scripts/lint_import_exemptions.py`); this table states no number |
-| D4 | `plan_act_flow.py` over its 700-line target | MEDIUM | 2.2.3-2.2.4 preamble/tool-result extraction deferred; needs step-by-step tests |
+| D4 | `plan_act_flow.py` over its 700-line target | — | CLOSED 2026-10-30: 654 lines. The once-per-run prologue of `_run_states` (run span, original task, side constraints, rule hydration, tool scoping, initial-state routing) moved to `flows/_run_prologue.py` as `begin_run`; the tool-result handling had already moved out |
 | D5 | `_base.py` over its 650-line target | — | CLOSED 2026-10-30: 647 lines. The preamble was already in `_step_setup.py`; the system-prompt loader moved to `_system_prompt.py` (one loader, shared with `_tool_executor.py`), and the skill-gap recorder to `_step_setup.py`, which calls it again |
 | D6 | `behavior_tracker.py` git ops in core layer | LOW | Extracted to async helper; needs migration to infrastructure/persistence (P4) |
 

@@ -5,8 +5,8 @@ code: Step, StepStatus, ContextScope
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-29
-commit: d0fa4540
+verified: 2026-10-30
+commit: a3d9fe16
 ---
 
 # Step
@@ -29,11 +29,11 @@ Consequences (read from source, not run):
 - `acceptance_criteria` is asked for in the planner prompt (`weebot/config/prompts/planner_system.txt:15, 56`) and parsed (`application/agents/planner.py:343-388`); no Python code reads it afterwards. It reaches a model only if a prompt serialises the whole step.
 - `retry_count` is the one retry budget shared by three gates: failure severity `minor_fix` (`weebot/application/flows/states/_step_outcome.py:123-131`), step validation (`weebot/application/flows/states/_step_outcome.py:211-238`), the evidence audit (`evidence_gate.py:42-49`); review has its own cap on the same field (`application/flows/states/reviewing.py:70, 137`). A step retried by one gate has no retry left for the next.
 - The `minor_fix` retry puts the step back as PENDING through `Plan.replace_step` (`weebot/application/flows/states/_step_outcome.py:129`). The severity is classified from the reconstructed `ErrorEvent` (`weebot/application/flows/states/_step_outcome.py:164-172`); until 2026-10-24 it read raw dicts, so every failure went to UPDATING and the `update_step` call that crashed was never reached (`tests/unit/fixes/test_minor_fix_retry_and_list_projects.py`).
-- `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:582-588`). A new enum member falls back to `full` silently (`_prompt_builder.py:111`).
+- `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:582-588`). A new enum member falls back to `full` silently (`_prompt_builder.py:113`).
 
 ## Connected to
 - **Owned by** `Plan.steps`. **Created by** `PlannerAgent._parse_plan` (`planner.py:333-397`), which also parses `context_scope` with a fallback to FULL (`:340-342`).
-- **Run by** `ExecutorAgent`, which yields `StepEvent` STARTED / FAILED / COMPLETED (`_base.py:473, 644, 640`).
+- **Run by** `ExecutorAgent`, which yields `StepEvent` STARTED / FAILED / COMPLETED (`_base.py:473, 644, 721`).
 - **Status mirrored in** `StepEvent.status` and rebuilt on resume from those events (Session card).
 - **Looks like but is not:** `TodoEvent` (agent self-reported checklist, free-string status, `domain/models/event.py:177-185`). The UI's `StepStatus` (`weebot-ui/src/types/events.ts:7-14`) mirrors the six backend values plus a legacy `error`.
 

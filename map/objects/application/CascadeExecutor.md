@@ -5,8 +5,8 @@ code: CascadeExecutor
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-29
-commit: 83c1f712
+verified: 2026-10-30
+commit: a3d9fe16
 ---
 
 # CascadeExecutor

@@ -5,8 +5,8 @@ code: ExecutorAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-29
-commit: 83c1f712
+verified: 2026-10-30
+commit: a3d9fe16
 ---
 
 # ExecutorAgent
@@ -14,10 +14,10 @@ commit: 83c1f712
 Runs one plan step: builds a system prompt, loops "ask the model, run the tool calls it returns" until the step produces an answer, calls `terminate`, hits a guard, pauses for a human, or runs out of budget. `execute_step` is an async generator of `AgentEvent`s and ends with a `StepEvent` of COMPLETED or FAILED, or returns early after a `WaitForUserEvent`.
 
 ## Why this shape
-Split from a 1,400-line class into collaborators (ADR-007 in `ARCHITECTURE.md`); the model-call logic is `CascadeExecutor`, tool dispatch is `ToolExecutor`, compaction and token counts are `ContextCompressor`, loop limits are `IterationGuard` (`weebot/application/agents/executor/_base.py:232-282, 550-555`); what the loop does with one tool result is in `_step_result_handler.py` (CPL-1). `_base.py` is still 1,225 lines. Each `execute_step` call starts clean: facts, terminate flag and conversation buffer are cleared first (`:601-603`). The container injects `injection_scan`, `effect_ledger`, `cost_meter` and `memory_snapshot` (`:246-254`), so the executor imports no tool.
+Split from a 1,400-line class into collaborators (ADR-007 in `ARCHITECTURE.md`); the model-call logic is `CascadeExecutor`, tool dispatch is `ToolExecutor`, compaction and token counts are `ContextCompressor`, loop limits are `IterationGuard` (`weebot/application/agents/executor/_base.py:151-201, 550-555`); what the loop does with one tool result is in `_step_result_handler.py` (CPL-1). `_base.py` is still 1,225 lines. Each `execute_step` call starts clean: facts, terminate flag and conversation buffer are cleared first (`:601-603`). The container injects `injection_scan`, `effect_ledger`, `cost_meter` and `memory_snapshot` (`:246-254`), so the executor imports no tool.
 
 ## Shape
-`execute_step(plan, step, user_input, session_id)` at `_base.py:530`:
+`execute_step(plan, step, user_input, session_id)` at `_base.py:449`:
 1. Pass the step and session to `ToolExecutor` (approval scope and audit read it there) (`:623`), then emit `StepEvent(STARTED)` (`:625`). Build the system prompt with `build_executor_prompt`, scoped by `step.context_scope` (`:657-670`); the cached user profile is added only for `full`/`creative` scope (`:675-676`). Append `OUTPUT_ROOT` instructions and the persistent-memory snapshot from the injected callable (`:679-693`).
 2. Seed the conversation buffer with goal, step position, last three completed steps and the current step, plus `user_input` on a resume (`:695-727`).
 3. Loop `while self._step_budget.consume()` (`:750`). Per pass: stop with a summary call if the tool-call budget is exhausted (`:752-783`); compress context (`:785`); append session constraints as the last message, never into the evictable buffer (`:795-796`); middleware `before_request` (`:798-806`); `self._cascade.call_with_cascade` (`:810-812`).
