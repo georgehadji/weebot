@@ -17,6 +17,7 @@ from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
+from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -601,24 +602,9 @@ class ToolExecutor:
             else "Provide a concise summary of what was accomplished."
         )
         self._conversation_buffer.append({"role": "user", "content": summary_prompt})
-        system_prompt = self._system_prompt or _load_executor_system_prompt()
+        system_prompt = self._system_prompt or load_executor_system_prompt()
         messages = [{"role": "system", "content": system_prompt}] + list(self._conversation_buffer)
         response = await self._llm.chat(
             messages=messages, model=self._model, temperature=TEMPERATURE_BALANCED
         )
         yield MessageEvent(role="assistant", message=response.content or "Done.")
-
-
-def _load_executor_system_prompt() -> str:
-    """Load the executor system prompt from package or inline fallback."""
-    import importlib.resources as pkg_resources
-
-    try:
-        return pkg_resources.read_text("weebot.config", "executor_system_prompt.txt")
-    except Exception:
-        return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
-
-
-_EXECUTOR_SYSTEM_PROMPT_FALLBACK = """You are an execution agent. You have access to tools.
-Follow the plan step by step. Execute each step before moving to the next.
-When you complete all steps, report back to the user."""

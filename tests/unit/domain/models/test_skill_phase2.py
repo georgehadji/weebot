@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch
 
-# ── _maybe_record_skill_gap ────────────────────────────────────────────────────
+# ── record_skill_gap ────────────────────────────────────────────────────
 
 
 class TestMaybeRecordSkillGap:
@@ -15,35 +15,35 @@ class TestMaybeRecordSkillGap:
         return e
 
     def test_flag_off_no_gap_recorded(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         with patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", False):
-            _maybe_record_skill_gap(executor, "some step", 0.10)
+            record_skill_gap(executor, "some step", 0.10)
 
         assert executor._skill_gaps == []
 
     def test_score_above_threshold_no_gap(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         with (
             patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", True),
             patch("weebot.config.learning.TAU_CREATE", 0.35),
         ):
-            _maybe_record_skill_gap(executor, "some step", 0.50)
+            record_skill_gap(executor, "some step", 0.50)
 
         assert executor._skill_gaps == []
 
     def test_score_below_threshold_gap_recorded(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         with (
             patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", True),
             patch("weebot.config.learning.TAU_CREATE", 0.35),
         ):
-            _maybe_record_skill_gap(executor, "deploy docker image", 0.10)
+            record_skill_gap(executor, "deploy docker image", 0.10)
 
         assert len(executor._skill_gaps) == 1
         gap = executor._skill_gaps[0]
@@ -51,7 +51,7 @@ class TestMaybeRecordSkillGap:
         assert "deploy docker image" in gap["step"]
 
     def test_score_exactly_at_threshold_no_gap(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         with (
@@ -59,12 +59,12 @@ class TestMaybeRecordSkillGap:
             patch("weebot.config.learning.TAU_CREATE", 0.35),
         ):
             # score == TAU_CREATE is a hit, not a miss
-            _maybe_record_skill_gap(executor, "some step", 0.35)
+            record_skill_gap(executor, "some step", 0.35)
 
         assert executor._skill_gaps == []
 
     def test_step_truncated_to_200_chars(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         long_step = "x" * 300
@@ -72,20 +72,20 @@ class TestMaybeRecordSkillGap:
             patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", True),
             patch("weebot.config.learning.TAU_CREATE", 0.35),
         ):
-            _maybe_record_skill_gap(executor, long_step, 0.05)
+            record_skill_gap(executor, long_step, 0.05)
 
         assert len(executor._skill_gaps[0]["step"]) <= 200
 
     def test_multiple_gaps_accumulated(self):
-        from weebot.application.agents.executor._base import _maybe_record_skill_gap
+        from weebot.application.agents.executor._step_setup import record_skill_gap
 
         executor = self._executor_stub()
         with (
             patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", True),
             patch("weebot.config.learning.TAU_CREATE", 0.35),
         ):
-            _maybe_record_skill_gap(executor, "step one", 0.10)
-            _maybe_record_skill_gap(executor, "step two", 0.20)
+            record_skill_gap(executor, "step one", 0.10)
+            record_skill_gap(executor, "step two", 0.20)
 
         assert len(executor._skill_gaps) == 2
 
