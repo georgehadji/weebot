@@ -122,6 +122,9 @@ class SlackAdapter(GatewayAdapter):
         text = await self.handle(msg)
         if text is None:
             return "Message blocked by safety check."
+        reply = await self.handle_ponytail_command(text)
+        if reply is not None:
+            return reply
 
         session_id = flow_session_id("slack", msg.external_id)
         from weebot.domain.models.session import Session

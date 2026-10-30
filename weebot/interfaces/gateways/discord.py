@@ -189,6 +189,9 @@ class DiscordAdapter(GatewayAdapter):
         text = await self.handle(msg)
         if text is None:
             return {"type": 4, "data": {"content": "Message blocked by safety check."}}
+        reply = await self.handle_ponytail_command(text)
+        if reply is not None:
+            return {"type": 4, "data": {"content": reply}}
 
         # Discord drops an interaction not answered within 3 s, and a run takes longer:
         # answer "deferred" now and edit the reply when the run ends (audit R09).

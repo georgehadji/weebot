@@ -14,7 +14,7 @@ commit: 8e6d1cca
 Adapters that take a message from Telegram, Slack, Discord, WhatsApp, Signal or email, run it through a `PlanActFlow`, and send the last assistant message back. Base class `GatewayAdapter` (`weebot/interfaces/gateways/base.py:97`).
 
 ## Why this shape
-One base class holds what every platform needs: the allowlist check `is_authorized` (`base.py:105-137`, deny by default unless `gateway_auth_enabled` is off), `handle` (`:154-160`, returns the text unchanged; the inert safety gate is gone, so the tool guard chain is what judges actions), a `ponytail [mode]` parser and reply (`:162-207`; no adapter calls it) and media extraction from reply text (`:209-276`). Subclasses add only transport: polling or a webhook, signature check, send.
+One base class holds what every platform needs: the allowlist check `is_authorized` (`base.py:105-137`, deny by default unless `gateway_auth_enabled` is off), `handle` (`:154-160`, returns the text unchanged; the inert safety gate is gone, so the tool guard chain is what judges actions), a `ponytail [mode]` parser and reply (`:162-207`; every adapter answers it after its sender check, without starting a run; `tests/unit/fixes/test_gateway_ponytail_command.py`) and media extraction from reply text (`:209-276`). Subclasses add only transport: polling or a webhook, signature check, send.
 
 ## Shape
 
@@ -37,7 +37,7 @@ Consequences (read from source, not run):
 - Email authorizes on the allowlisted `From` address and also requires the mail server to have authenticated that domain (DMARC pass or aligned DKIM pass in the topmost `Authentication-Results` whose authserv-id is trusted: `EMAIL_TRUSTED_AUTHSERV_IDS`, else the IMAP host and, for Gmail, `mx.google.com`; `email.py:40-52, 74-97`; `tests/unit/fixes/test_email_sender_is_authenticated.py`, `test_s5_email_authserv_id.py`).
 - Telegram loads the existing session inside `except Exception: pass` (`telegram.py:288-292`): a load error starts a fresh session with the same id. Each Telegram run is a task per chat (`_runs`, `telegram.py:256-278`), so the poll loop keeps reading; a second message during a run gets a hint to `/stop` instead of a second run (`tests/unit/fixes/test_f1_telegram_session_commands.py`).
 - Slack, Discord, WhatsApp, Signal and email generate a new session id per message (`flow_session_id`, `base.py:56-64`), so no conversation carries over.
-- `handle_ponytail_command` imports `cli.commands.ponytail` (`base.py:176`), an interfaces module depending on the CLI package, and has no caller in the repo (grep, 2026-10-30), so a chat message `ponytail full` is not handled today.
+- `handle_ponytail_command` imports `cli.commands.ponytail` (`base.py:176`), an interfaces module depending on the CLI package, and sets a process-wide mode, so any allowlisted chat sender can change it for everyone.
 
 ## Connected to
 - **Built by** the web lifespan (`WebAPI.md`) and the platform webhook routers. **Uses** `create_flow`/`build_tools` (`CLI.md`), `GatewayAuth` (`weebot/core/gateway_auth.py`), `GatewayFlowResolver` and `IGatewaySessionStorePort` (Telegram only, `main.py:283-293`).
