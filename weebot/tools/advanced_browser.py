@@ -484,7 +484,9 @@ class WebScraperTool(BaseTool):
             from bs4 import BeautifulSoup
 
             async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch(headless=True)
+                from weebot.infrastructure.browser.playwright_adapter import open_chromium
+
+                browser = await open_chromium(playwright.chromium, {"headless": True})
                 page = await browser.new_page()
 
                 # Navigate to URL

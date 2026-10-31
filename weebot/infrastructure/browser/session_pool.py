@@ -242,7 +242,12 @@ class BrowserSessionPool:
             if config.proxy_server:
                 launch_options["proxy"] = {"server": config.proxy_server}
 
-            browser = await browser_type.launch(**launch_options)
+            if browser_type is self._playwright.chromium:
+                from weebot.infrastructure.browser.playwright_adapter import open_chromium
+
+                browser = await open_chromium(browser_type, launch_options)
+            else:
+                browser = await browser_type.launch(**launch_options)
 
             # Create context
             context_options = {
