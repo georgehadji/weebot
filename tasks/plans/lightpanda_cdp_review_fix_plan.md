@@ -1,5 +1,5 @@
 ---
-status: open
+status: done
 date: 2026-10-31
 ---
 
@@ -134,3 +134,11 @@ The new `tests/unit/infrastructure/browser/test_browser_launcher.py` replaces `t
 - Routing `WebScraperTool` through `BrowserPort` to remove both `tools-no-infra` exemptions. It is worth a separate change.
 - A Firefox or WebKit CDP path.
 - Per-session context reuse over a single shared CDP connection. Revisit it only if Step 0 shows Lightpanda allows many contexts per connection.
+
+## Outcome
+
+All seven findings are implemented on `fix/cdp-browser-review`.
+
+Step 0 result, measured on `lightpanda/browser:1.0.2`: `--cdp-max-connections` defaults to 16, and the 17th simultaneous connection gets `503 Too many connections`. A second browser context on one connection is refused. The pool default of 5 therefore fits, and finding 4 needed no behavior change beyond the optional `WEEBOT_BROWSER_CDP_MAX_CONNECTIONS` cap, which stays at 0 (no cap).
+
+One deviation from the design: `web_scraper` imports `open_browser` through `playwright_adapter`, not from `browser_launcher`. A sibling `.importlinter` exemption raised `import_exemptions` above its ceiling, and ceilings do not go up.
