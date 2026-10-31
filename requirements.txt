@@ -12,7 +12,7 @@ pydantic-settings>=2.15.0
 python-dotenv==1.2.4
 import-linter==2.15
 structlog==26.1.0
-prometheus-client>=0.25.0
+prometheus-client>=0.26.0
 
 # Discord Integration
 pynacl>=1.6.2
