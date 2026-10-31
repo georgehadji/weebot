@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-31
-commit: 7d205bb1
+commit: 5fae5eb2
 ---
 
 # Ports
@@ -25,7 +25,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:104-160` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:171` |
 | BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:37` |
-| BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:25` | none |
+| BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:42` | none |
 | CanonicalizerPort | canonicalizer_port.py:18 | ActionCanonicalizer `infrastructure/adapters/action_canonicalizer.py:34` | key `"build_action_canonicalizer"` `di/__init__.py:294` |
 | CheckpointPort | checkpoint_port.py:14 | SQLiteCheckpointStore `infrastructure/persistence/checkpoint_store.py:35` | port `di/_capabilities.py:53` (always bound, for the delete cascade); flows get it only with `WEEBOT_FLOW_CHECKPOINTS` |
 | ClawHubAdapterPort (Protocol) | clawhub_adapter_port.py:19 | ClawHubGitAdapter `infrastructure/adapters/clawhub_adapter.py:20` | none (consumer `application/skills/clawhub_importer.py:85`) |

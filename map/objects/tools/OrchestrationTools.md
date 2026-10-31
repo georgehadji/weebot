@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-31
-commit: 6166004e
+commit: 5fae5eb2
 ---
 
 # Orchestration tools
@@ -60,7 +60,7 @@ Consequences (read from source, not run):
 
 ## If you change this
 **Hits:** every caller that builds sub-agent tools (above), webhook and gateway tool sets, tests `tests/unit/tools/test_dispatch_agents.py`, `tests/unit/test_workflow_orchestrator.py`, `tests/unit/application/test_flow_construction_wiring.py`, `tests/unit/test_reasoner_tool.py`, `tests/unit/test_berb_tool.py`, `tests/unit/fixes/test_f15_tool_dirs_unset.py`, `tests/unit/tools/test_control.py`, `tests/unit/test_scheduler.py`, `tests/unit/test_persistent_memory.py`, `tests/unit/test_memory_metadata_repo.py`, `tests/unit/fixes/test_w55_tool_wiring.py`, `tests/unit/fixes/test_w53_tool_registry_collaborators.py`, `tests/unit/test_di_registries_are_wired.py`, `tests/unit/tools/test_heuristic_router.py`, `tests/unit/tools/test_swarm_injected_agents.py`. No test imports `DebateTool` or `MixtureOfAgentsTool`.
-**Does not hit:** the shell guard set (none of these names is in `GUARDED_TOOLS`; `mixture_of_agents` is wrapped anyway because it matches the outbound patterns, `weebot/config/settings.py:459`); the planner/executor LLM roles.
+**Does not hit:** the shell guard set (none of these names is in `GUARDED_TOOLS`; `mixture_of_agents` is wrapped anyway because it matches the outbound patterns, `weebot/config/settings.py:467`); the planner/executor LLM roles.
 
 ## Surfaces
 The agent's tool list for the roles above; `ask_human` pauses reach the user through the executor; `schedule` jobs reach the scheduler DB.
