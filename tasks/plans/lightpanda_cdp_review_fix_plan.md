@@ -142,3 +142,11 @@ All seven findings are implemented on `fix/cdp-browser-review`.
 Step 0 result, measured on `lightpanda/browser:1.0.2`: `--cdp-max-connections` defaults to 16, and the 17th simultaneous connection gets `503 Too many connections`. A second browser context on one connection is refused. The pool default of 5 therefore fits, and finding 4 needed no behavior change beyond the optional `WEEBOT_BROWSER_CDP_MAX_CONNECTIONS` cap, which stays at 0 (no cap).
 
 One deviation from the design: `web_scraper` imports `open_browser` through `playwright_adapter`, not from `browser_launcher`. A sibling `.importlinter` exemption raised `import_exemptions` above its ceiling, and ceilings do not go up.
+
+## Follow-up: the three items that were out of scope
+
+All three were taken on afterwards, on the same branch.
+
+- **`WebScraperTool` through `BrowserPort`.** The scraper takes the container's `browser_factory` (a fresh adapter per scrape), starts it, reads the page through `navigate`, `wait_for_selector` and `evaluate`, and closes it in a `finally`. It no longer imports Playwright or the launcher. `BrowserPort.navigate` gained an optional `timeout` in seconds. The `playwright_adapter` exemption in `.importlinter` stays: `advanced_browser` and `browser_inspector` still build an adapter themselves when none is injected.
+- **Firefox or WebKit over CDP.** Not possible. Measured against Lightpanda 1.0.2: Firefox gets "CDP connections are only supported by Chromium", WebKit crashes inside Playwright with a `KeyError`, and Playwright's own server protocol (`connect`) times out. What changed instead is the policy: with `WEEBOT_BROWSER_CDP_URL` set, Firefox and WebKit are launch-only like a proxy, so they are refused unless `WEEBOT_BROWSER_CDP_FALLBACK` is on. They used to launch on the host without a word.
+- **One CDP connection shared by pool sessions.** `WEEBOT_BROWSER_CDP_SHARE_CONNECTION` (off by default) makes the pool share one connection through `SharedBrowser`, one context per session, and lifts the connection clamp. Lightpanda allows one context per connection, so with the flag on its second session fails with a clear protocol error. The flag is for endpoints that allow many contexts, such as headless Chrome.

@@ -228,6 +228,13 @@ class WeebotSettings(BaseSettings):
         alias="WEEBOT_BROWSER_CDP_CONNECT_TIMEOUT_MS",
         description="Milliseconds to wait for the CDP endpoint before counting it as down.",
     )
+    # Off by default: Lightpanda allows one browser context per connection, so sharing needs an
+    # endpoint that takes many (for example headless Chrome with --remote-debugging-port).
+    browser_cdp_share_connection: bool = Field(
+        default=False,
+        alias="WEEBOT_BROWSER_CDP_SHARE_CONNECTION",
+        description="Pooled sessions share one CDP connection, one context each.",
+    )
     browser_cdp_max_connections: int = Field(
         default=0,
         alias="WEEBOT_BROWSER_CDP_MAX_CONNECTIONS",

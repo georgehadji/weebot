@@ -40,8 +40,11 @@ def _cdp(url=URL, fallback=False):
     [
         ("chromium", HEADLESS, _cdp(None), False, "launch"),
         ("chromium", {"headless": False, "proxy": {"server": "x"}}, _cdp(None), True, "launch"),
-        ("firefox", HEADLESS, _cdp(), False, "launch"),
-        ("webkit", {"headless": False}, _cdp(), True, "launch"),
+        ("firefox", HEADLESS, _cdp(), False, "refuse"),
+        ("firefox", HEADLESS, _cdp(fallback=True), False, "launch"),
+        ("webkit", {"headless": False}, _cdp(), True, "refuse"),
+        ("webkit", HEADLESS, _cdp(fallback=True), True, "launch"),
+        ("firefox", HEADLESS, _cdp(None), False, "launch"),
         ("chromium", HEADLESS, _cdp(), False, "connect"),
         ("chromium", {"headless": True, "proxy": {"server": "x"}}, _cdp(), False, "refuse"),
         ("chromium", {"headless": True, "proxy": {"server": "x"}}, _cdp(fallback=True), False,
@@ -202,11 +205,32 @@ async def test_launch_only_options_launch_locally_when_opted_in(cdp):
 
 
 @pytest.mark.asyncio
-async def test_other_engines_ignore_cdp(cdp):
+@pytest.mark.parametrize("engine", ["firefox", "webkit"])
+async def test_other_engines_cannot_use_cdp_and_are_refused(cdp, engine):
+    """Playwright's connect_over_cdp is Chromium-only, so they would need a host launch."""
     cdp()
-    bt = _browser_type(name="firefox")
-    assert await bl.open_browser(bt, {"headless": False}) == "launched"
+    bt = _browser_type(name=engine)
+    with pytest.raises(CdpBrowserUnavailable, match=f"{engine}.*Chromium-only"):
+        await bl.open_browser(bt, HEADLESS)
     bt.connect_over_cdp.assert_not_awaited()
+    bt.launch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("engine", ["firefox", "webkit"])
+async def test_other_engines_launch_locally_when_opted_in(cdp, engine):
+    cdp(fallback=True)
+    bt = _browser_type(name=engine)
+    assert await bl.open_browser(bt, HEADLESS) == "launched"
+    bt.connect_over_cdp.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("engine", ["firefox", "webkit"])
+async def test_other_engines_launch_as_before_without_cdp(cdp, engine):
+    cdp(None)
+    bt = _browser_type(name=engine)
+    assert await bl.open_browser(bt, {"headless": False}) == "launched"
 
 
 @pytest.mark.asyncio
@@ -244,6 +268,9 @@ class _FakePlaywright:
         self.chromium = _browser_type("chromium", connect_error)
         self.firefox = _browser_type("firefox")
         self.webkit = _browser_type("webkit")
+
+    async def stop(self):
+        pass
 
 
 def _live_browser():
@@ -295,10 +322,23 @@ async def test_adapter_refuses_a_proxied_config_under_cdp(cdp):
 
 
 @pytest.mark.asyncio
-async def test_adapter_launches_firefox_regardless_of_cdp(cdp):
+async def test_adapter_refuses_firefox_under_cdp(cdp):
     from weebot.application.ports.browser_port import BrowserType
 
     cdp()
+    pw = _FakePlaywright()
+    adapter = _adapter(pw, browser_type=BrowserType.FIREFOX)
+    with pytest.raises(CdpBrowserUnavailable, match="firefox"):
+        await adapter._launch()
+    pw.firefox.launch.assert_not_awaited()
+    pw.chromium.connect_over_cdp.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_adapter_launches_firefox_when_opted_in(cdp):
+    from weebot.application.ports.browser_port import BrowserType
+
+    cdp(fallback=True)
     pw = _FakePlaywright()
     pw.firefox.launch.return_value = _live_browser()
     adapter = _adapter(pw, browser_type=BrowserType.FIREFOX)
@@ -340,8 +380,6 @@ async def test_pool_session_goes_through_the_launcher(cdp):
 
 @pytest.mark.asyncio
 async def test_web_scraper_reports_a_refusal_as_a_tool_error(cdp, monkeypatch):
-    import contextlib
-
     import playwright.async_api as pwapi
 
     from weebot.tools.advanced_browser import WebScraperTool
@@ -349,11 +387,11 @@ async def test_web_scraper_reports_a_refusal_as_a_tool_error(cdp, monkeypatch):
     cdp()
     pw = _FakePlaywright(connect_error=ConnectionRefusedError("refused"))
 
-    @contextlib.asynccontextmanager
-    async def fake_async_playwright():
-        yield pw
+    class _Driver:
+        async def start(self):
+            return pw
 
-    monkeypatch.setattr(pwapi, "async_playwright", fake_async_playwright)
+    monkeypatch.setattr(pwapi, "async_playwright", lambda: _Driver())
     result = await WebScraperTool().execute(url="https://example.com", selector="h1")
     assert result.error and "unavailable" in result.error
     pw.chromium.launch.assert_not_awaited()
@@ -385,3 +423,167 @@ def test_pool_is_untouched_without_a_cap(monkeypatch, url, limit):
     _cap(monkeypatch, url, limit)
     pool = BrowserSessionPool(min_sessions=1, max_sessions=5)
     assert (pool.min_sessions, pool.max_sessions) == (1, 5)
+
+
+# --- one CDP connection shared by the pool -------------------------------------------------
+
+
+def _shared_browser():
+    """A browser whose contexts are cheap: what a CDP endpoint that allows many contexts is."""
+    def _context():
+        return SimpleNamespace(
+            new_page=AsyncMock(return_value=SimpleNamespace()), close=AsyncMock()
+        )
+
+    return SimpleNamespace(
+        new_context=AsyncMock(side_effect=lambda **_: _context()),
+        close=AsyncMock(),
+        is_connected=lambda: True,
+    )
+
+
+@pytest.fixture
+def share(monkeypatch, cdp):
+    from weebot.config.settings import get_settings
+
+    def _set(on=True, *, fallback=False):
+        cdp(fallback=fallback)
+        monkeypatch.setattr(get_settings(), "browser_cdp_share_connection", on, raising=False)
+
+    return _set
+
+
+async def _pool_with(pw):
+    from weebot.infrastructure.browser.session_pool import BrowserSessionPool
+
+    pool = BrowserSessionPool()
+    pool._playwright = pw
+    return pool
+
+
+@pytest.mark.asyncio
+async def test_sessions_share_one_connection_when_enabled(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share()
+    pw = _FakePlaywright()
+    shared = _shared_browser()
+    pw.chromium.connect_over_cdp.return_value = shared
+    pool = await _pool_with(pw)
+
+    a = await pool._create_session(BrowserConfig())
+    b = await pool._create_session(BrowserConfig())
+
+    assert pw.chromium.connect_over_cdp.await_count == 1
+    assert a.browser is b.browser is shared
+    assert shared.new_context.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_closing_a_shared_session_closes_its_context_not_the_connection(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share()
+    pw = _FakePlaywright()
+    shared = _shared_browser()
+    pw.chromium.connect_over_cdp.return_value = shared
+    pool = await _pool_with(pw)
+
+    session = await pool._create_session(BrowserConfig())
+    await session.close()
+    session.context.close.assert_awaited_once()
+    shared.close.assert_not_awaited()
+
+    await pool._shared.close()
+    shared.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pool_close_releases_the_shared_connection(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share()
+    pw = _FakePlaywright()
+    shared = _shared_browser()
+    pw.chromium.connect_over_cdp.return_value = shared
+    pool = await _pool_with(pw)
+    pool._running = True
+    await pool._available.put(await pool._create_session(BrowserConfig()))
+
+    await pool.close()
+    shared.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_each_session_connects_on_its_own_by_default(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share(False)
+    pw = _FakePlaywright()
+    pw.chromium.connect_over_cdp.side_effect = lambda *a, **k: _shared_browser()
+    pool = await _pool_with(pw)
+
+    a = await pool._create_session(BrowserConfig())
+    b = await pool._create_session(BrowserConfig())
+    assert pw.chromium.connect_over_cdp.await_count == 2
+    assert a.browser is not b.browser
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_connection_is_replaced(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share()
+    pw = _FakePlaywright()
+    first, second = _shared_browser(), _shared_browser()
+    pw.chromium.connect_over_cdp.side_effect = [first, second]
+    pool = await _pool_with(pw)
+
+    await pool._create_session(BrowserConfig())
+    first.is_connected = lambda: False
+    session = await pool._create_session(BrowserConfig())
+    assert session.browser is second
+
+
+@pytest.mark.asyncio
+async def test_concurrent_sessions_open_one_connection(share):
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share()
+    pw = _FakePlaywright()
+    pw.chromium.connect_over_cdp.return_value = _shared_browser()
+    pool = await _pool_with(pw)
+
+    import asyncio
+
+    await asyncio.gather(*(pool._create_session(BrowserConfig()) for _ in range(4)))
+    assert pw.chromium.connect_over_cdp.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_requests_that_cannot_use_cdp_are_not_shared(share):
+    """A visible window needs its own local browser; the operator opted in to that."""
+    from weebot.application.ports.browser_port import BrowserConfig
+
+    share(fallback=True)
+    pw = _FakePlaywright()
+    pw.chromium.launch.side_effect = lambda **_: _shared_browser()
+    pool = await _pool_with(pw)
+
+    a = await pool._create_session(BrowserConfig(headless=False))
+    b = await pool._create_session(BrowserConfig(headless=False))
+    assert pw.chromium.launch.await_count == 2
+    assert a.browser is not b.browser
+    pw.chromium.connect_over_cdp.assert_not_awaited()
+
+
+def test_a_shared_connection_needs_no_pool_clamp(monkeypatch):
+    from weebot.config.settings import get_settings
+    from weebot.infrastructure.browser.session_pool import BrowserSessionPool
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "browser_cdp_url", URL, raising=False)
+    monkeypatch.setattr(settings, "browser_cdp_max_connections", 2, raising=False)
+    monkeypatch.setattr(settings, "browser_cdp_share_connection", True, raising=False)
+    pool = BrowserSessionPool(min_sessions=1, max_sessions=5)
+    assert pool.max_sessions == 5

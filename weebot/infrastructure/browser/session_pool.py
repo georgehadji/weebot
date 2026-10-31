@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from weebot.application.ports.browser_port import BrowserConfig, BrowserType
-from weebot.infrastructure.browser.browser_launcher import cdp_connection_cap, open_browser
+from weebot.infrastructure.browser.browser_launcher import (
+    SharedBrowser,
+    cdp_connection_cap,
+    open_browser,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,8 @@ class BrowserSession:
     created_at: float = field(default_factory=time.monotonic)
     last_used: float = field(default_factory=time.monotonic)
     use_count: int = 0
+    # False for a session on a shared CDP connection: closing it ends its context only.
+    owns_browser: bool = True
 
     def is_expired(self, ttl_seconds: float) -> bool:
         """Check if session has exceeded its TTL."""
@@ -49,7 +55,7 @@ class BrowserSession:
             logger.debug(f"Error closing context: {e}")
 
         try:
-            if self.browser:
+            if self.browser and self.owns_browser:
                 await self.browser.close()
         except Exception as e:
             logger.debug(f"Error closing browser: {e}")
@@ -117,6 +123,7 @@ class BrowserSessionPool:
         self._available: asyncio.Queue[BrowserSession] = asyncio.Queue()
         self._in_use: set[BrowserSession] = set()
         self._playwright: Any | None = None
+        self._shared = SharedBrowser()
 
         # Concurrency control
         self._semaphore = asyncio.Semaphore(self.max_sessions)
@@ -249,7 +256,10 @@ class BrowserSessionPool:
             if config.proxy_server:
                 launch_options["proxy"] = {"server": config.proxy_server}
 
-            browser = await open_browser(browser_type, launch_options)
+            browser = await self._shared.acquire(browser_type, launch_options)
+            owns_browser = browser is None
+            if owns_browser:
+                browser = await open_browser(browser_type, launch_options)
 
             # Create context
             context_options = {
@@ -271,6 +281,7 @@ class BrowserSessionPool:
                 context=context,
                 page=page,
                 config=config,
+                owns_browser=owns_browser,
                 created_at=time.monotonic(),
                 last_used=time.monotonic(),
                 use_count=0,
@@ -370,6 +381,11 @@ class BrowserSessionPool:
                 except Exception as e:
                     logger.debug(f"Error closing in-use session: {e}")
             self._in_use.clear()
+
+        try:
+            await self._shared.close()
+        except Exception as e:
+            logger.debug(f"Error closing shared CDP connection: {e}")
 
         # Stop playwright
         if self._playwright:

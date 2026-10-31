@@ -202,12 +202,15 @@ class PlaywrightAdapter(BrowserPort):
 
             self._page = None
 
-    async def navigate(self, url: str, wait_until: str = "networkidle") -> NavigationResult:
+    async def navigate(
+        self, url: str, wait_until: str = "networkidle", timeout: float | None = None
+    ) -> NavigationResult:
         """Navigate to a URL.
 
         Args:
             url: URL to navigate to.
             wait_until: When to consider navigation complete.
+            timeout: Maximum time to wait in seconds; None keeps Playwright's default.
 
         Returns:
             NavigationResult with navigation details.
@@ -235,7 +238,11 @@ class PlaywrightAdapter(BrowserPort):
         t_start = time.monotonic()
 
         try:
-            response = await page.goto(url, wait_until=playwright_wait)
+            response = await page.goto(
+                url,
+                wait_until=playwright_wait,
+                timeout=timeout * 1000 if timeout is not None else None,
+            )
             elapsed_ms = (time.monotonic() - t_start) * 1000
 
             if response:

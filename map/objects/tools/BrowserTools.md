@@ -22,7 +22,7 @@ The tools grew as separate backends, not as one browser with several front ends:
 
 The registry shares one adapter between the two Playwright tools so that `browser_inspector` reads the page that `advanced_browser` opened (`weebot/tools/browser_inspector.py:8-9, 183-186`, `weebot/application/services/tool_registry.py:463-464, 505-513`).
 
-`WEEBOT_BROWSER_CDP_URL` makes every Chromium launch in the Playwright tools connect over CDP to a running browser such as Lightpanda; the adapter, the pool and `web_scraper` all go through `open_browser`, which fails closed: a proxy, `headless=False` or an unreachable endpoint raises `CdpBrowserUnavailable` unless `WEEBOT_BROWSER_CDP_FALLBACK` is on, so the agent's `headless` argument cannot leave the container (`infrastructure/Browser.md`; `tests/unit/infrastructure/browser/test_browser_launcher.py`). Lightpanda has no layout engine, so visibility-based waits (`wait_for_selector`, `wait_for`) can time out against it.
+`WEEBOT_BROWSER_CDP_URL` makes every Chromium launch in the Playwright tools connect over CDP to a running browser such as Lightpanda; the adapter, the pool and (through its own adapter) `web_scraper` all go through `open_browser`, which fails closed: a proxy, `headless=False`, Firefox or WebKit, or an unreachable endpoint raises `CdpBrowserUnavailable` unless `WEEBOT_BROWSER_CDP_FALLBACK` is on, so the agent's `headless` argument cannot leave the container (`infrastructure/Browser.md`; `tests/unit/infrastructure/browser/test_browser_launcher.py`). Lightpanda has no layout engine, so visibility-based waits (`wait_for_selector`, `wait_for`) can time out against it.
 
 ## Shape
 Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_registry.py:26-185`; `weebot/tools/tool_registry.py` only re-exports it).
@@ -30,7 +30,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_regis
 | Tool name | Defined | Backend | Roles |
 |---|---|---|---|
 | `advanced_browser` | `weebot/tools/advanced_browser.py:52` | shared `PlaywrightAdapter`, raw `.page` calls (`weebot/tools/advanced_browser.py:130-141`) | researcher, admin, webhook |
-| `web_scraper` | `weebot/tools/advanced_browser.py:419` | its own `async_playwright()` Chromium per call, obtained through `open_browser` (`weebot/tools/advanced_browser.py:488-490`), `ContentExtractor` (`weebot/tools/advanced_browser.py:503-507`) | researcher, admin |
+| `web_scraper` | `weebot/tools/advanced_browser.py:419` | a fresh `BrowserPort` per call from the injected `browser_factory` (`weebot/tools/advanced_browser.py:464-469, 497`), closed in a `finally`; `ContentExtractor` (`weebot/tools/advanced_browser.py:520-523`) | researcher, admin |
 | `browser_inspector` | `weebot/tools/browser_inspector.py:180` | shared `PlaywrightAdapter` (`weebot/tools/browser_inspector.py:194, 252`), `SomRenderer` (`weebot/tools/browser_inspector.py:376, 406`) | researcher, admin, webhook, designer |
 | `browser_navigator` | `weebot/tools/browser_tool.py:38` | `browser_use.Browser(headless=False)` and `browser_use.Agent` (`weebot/tools/browser_tool.py:25, 35, 96, 170-172`) | none (and never built, see below) |
 | `camofox_browser` | `weebot/tools/camofox_browser.py:198` | its own Node camofox server on 127.0.0.1, over HTTP (`weebot/tools/camofox_browser.py:125-161, 312-334`) | researcher, admin, webhook |
@@ -41,7 +41,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_regis
 **Wiring.**
 - `advanced_browser` and `browser_inspector` get `browser=<one PlaywrightAdapter>` from the `browser_factory` the container wires (`weebot/application/services/tool_registry.py:505-513`, `weebot/application/di/_factories.py:581`); with no factory wired both are skipped. Each `close()` closes that adapter, idempotently (`weebot/tools/advanced_browser.py:132-135`, `weebot/tools/browser_inspector.py:196-199`); `ToolCollection.teardown` calls it (`weebot/application/models/tool_collection.py:147-154`; `tests/unit/fixes/test_teardown_closes_browser.py`).
 - `browser_navigator` is in the LLM-port set (`weebot/application/services/tool_registry.py:458`) but in no role.
-- `BrowserTool` (`weebot/tools/browser_tool.py:38`) does not subclass `BaseTool`, and discovery keeps only `BaseTool` subclasses (`weebot/application/services/tool_registry.py:352-356`). So `browser_navigator` never enters the class map; a name list that asks for it logs "not found in class map" and skips it (`weebot/application/services/tool_registry.py:534`). It was live only through the legacy `RecursiveWeebotAgent`, retired in plan 3.5, so no flow builds it today.
+- `BrowserTool` (`weebot/tools/browser_tool.py:38`) does not subclass `BaseTool`, and discovery keeps only `BaseTool` subclasses (`weebot/application/services/tool_registry.py:352-356`). So `browser_navigator` never enters the class map; a name list that asks for it logs "not found in class map" and skips it (`weebot/application/services/tool_registry.py:538`). It was live only through the legacy `RecursiveWeebotAgent`, retired in plan 3.5, so no flow builds it today.
 - `computer_use` with `require_window` refuses to type when it cannot confirm the active window (`weebot/tools/computer_use.py:211-236`).
 
 **Timeouts.**

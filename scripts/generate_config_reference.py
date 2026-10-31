@@ -197,6 +197,9 @@ CONFIG_SCHEMA: list[dict] = [
              "the container"},
     {"var": "WEEBOT_BROWSER_CDP_CONNECT_TIMEOUT_MS", "type": "int", "default": "5000",
      "desc": "Milliseconds to wait for the CDP endpoint; a failure is remembered for 30 seconds"},
+    {"var": "WEEBOT_BROWSER_CDP_SHARE_CONNECTION", "type": "bool", "default": "false",
+     "desc": "Pooled browser sessions share one CDP connection, one context each. Only for an "
+             "endpoint that allows many contexts per connection (not Lightpanda)"},
     {"var": "WEEBOT_BROWSER_CDP_MAX_CONNECTIONS", "type": "int", "default": "0",
      "desc": "Most CDP connections the browser session pool opens at once (0 = no cap)"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",

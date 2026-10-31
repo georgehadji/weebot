@@ -16,6 +16,7 @@ The module is a functional core with a thin shell:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -39,6 +40,7 @@ class CdpSettings:
     fallback: bool = False
     connect_timeout_ms: int = 5000
     max_connections: int = 0
+    share_connection: bool = False
 
     @classmethod
     def from_settings(cls) -> CdpSettings:
@@ -50,6 +52,7 @@ class CdpSettings:
             fallback=s.browser_cdp_fallback,
             connect_timeout_ms=s.browser_cdp_connect_timeout_ms,
             max_connections=s.browser_cdp_max_connections,
+            share_connection=s.browser_cdp_share_connection,
         )
 
 
@@ -72,11 +75,17 @@ def _launch_only(launch_options: dict[str, Any]) -> list[str]:
 def plan_launch(
     browser_name: str, launch_options: dict[str, Any], cdp: CdpSettings, breaker_open: bool
 ) -> LaunchPlan:
-    """Pure policy. CDP applies to Chromium only; a local launch needs the operator's opt-in."""
-    if not cdp.url or browser_name != "chromium":
+    """Pure policy. A local launch under CDP needs the operator's opt-in.
+
+    Playwright's ``connect_over_cdp`` is Chromium-only, so Firefox and WebKit can only be
+    launched, which makes them launch-only like a proxy.
+    """
+    if not cdp.url:
         return LaunchPlan("launch")
 
     needs_local = _launch_only(launch_options)
+    if browser_name != "chromium":
+        needs_local.insert(0, f"{browser_name} (CDP is Chromium-only)")
     if needs_local:
         reason = f"{', '.join(needs_local)} needs a local browser; WEEBOT_BROWSER_CDP_URL is set"
     elif breaker_open:
@@ -107,7 +116,9 @@ def redact_endpoint(url: str) -> str:
 def cdp_connection_cap() -> int:
     """Most simultaneous CDP connections the endpoint takes; 0 when CDP is off or uncapped."""
     cdp = CdpSettings.from_settings()
-    return max(0, cdp.max_connections) if cdp.url else 0
+    if not cdp.url or cdp.share_connection:  # shared: the whole pool is one connection
+        return 0
+    return max(0, cdp.max_connections)
 
 
 def _new_breaker() -> CircuitBreaker:
@@ -158,3 +169,33 @@ async def open_browser(browser_type: Any, launch_options: dict[str, Any]) -> Any
     if plan.reason:
         logger.debug("Launching %s on the host: %s", name, plan.reason)
     return await browser_type.launch(**launch_options)
+
+
+class SharedBrowser:
+    """One CDP connection reused by every session of a pool, one context per session.
+
+    Opt-in (``WEEBOT_BROWSER_CDP_SHARE_CONNECTION``): the endpoint must allow many contexts
+    per connection. Lightpanda allows one, so it keeps its own connection per session.
+    """
+
+    def __init__(self) -> None:
+        self._browser: Any | None = None
+        self._lock = asyncio.Lock()
+
+    async def acquire(self, browser_type: Any, launch_options: dict[str, Any]) -> Any | None:
+        """The shared browser, or None when this request must get a browser of its own."""
+        cdp = CdpSettings.from_settings()
+        if not cdp.share_connection:
+            return None
+        plan = plan_launch(browser_type.name, launch_options, cdp, breaker_open=False)
+        if plan.mode != "connect":
+            return None  # a launch-only option or another engine: not a plain CDP connection
+        async with self._lock:
+            if self._browser is None or not self._browser.is_connected():
+                self._browser = await open_browser(browser_type, launch_options)
+            return self._browser
+
+    async def close(self) -> None:
+        browser, self._browser = self._browser, None
+        if browser is not None:
+            await browser.close()

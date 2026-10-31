@@ -195,13 +195,16 @@ class BrowserPort(ABC):
         ...
 
     @abstractmethod
-    async def navigate(self, url: str, wait_until: str = "networkidle") -> NavigationResult:
+    async def navigate(
+        self, url: str, wait_until: str = "networkidle", timeout: float | None = None
+    ) -> NavigationResult:
         """Navigate to a URL.
 
         Args:
             url: URL to navigate to.
             wait_until: When to consider navigation complete
                        (load, domcontentloaded, networkidle, commit).
+            timeout: Maximum time to wait in seconds; None keeps the engine default.
 
         Returns:
             NavigationResult with navigation details.
