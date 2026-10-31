@@ -4,8 +4,8 @@ name: Chat gateways
 code: GatewayAdapter and six subclasses
 cluster: interfaces
 universe: live
-status: stale
-verified: 2026-10-31
+status: verified
+verified: 2026-11-01
 commit: 993e7a90
 ---
 

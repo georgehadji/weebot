@@ -5,8 +5,8 @@ code: AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, Ca
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-31
-commit: fe394636
+verified: 2026-11-01
+commit: d3269de6
 ---
 
 # Browser and desktop tools
@@ -59,10 +59,10 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_regis
 - The semaphore is per tool name (`weebot/application/models/tool_collection.py:234-253`). `advanced_browser` and `browser_inspector` can therefore drive the same page at the same time.
 
 ## Guards
-- **Fence and taint.** Each tool declares `output_trust`. `advanced_browser` (`weebot/tools/advanced_browser.py:59`), `web_scraper` (`weebot/tools/advanced_browser.py:422`), `browser_inspector` (`weebot/tools/browser_inspector.py:189`), `browser_navigator` (`weebot/tools/browser_tool.py:44`), `camofox_browser` (`weebot/tools/camofox_browser.py:201`) and `desktop_a11y` (`weebot/tools/desktop_a11y.py:59`) are `EXTERNAL`; `computer_use` (`weebot/tools/computer_use.py:35`) and `screen_capture` (`weebot/tools/screen_tool.py:111`) are `LOCAL`. The decisions are `trust_of`, `must_fence` and `must_taint` (`weebot/core/trust_boundary.py:58-90`). Output of a non-`LOCAL` tool is fenced, errors included (`weebot/application/agents/executor/_base.py:252-274`). A successful `EXTERNAL` call taints the session for egress, but an error does not and neither does an `advanced_browser` read of a `file://` or loopback page (`weebot/application/agents/executor/_tool_executor.py:584-618`). The reviewed set is pinned in `tests/unit/core/test_trust_boundary_registry.py`.
+- **Fence and taint.** Each tool declares `output_trust`. `advanced_browser` (`weebot/tools/advanced_browser.py:59`), `web_scraper` (`weebot/tools/advanced_browser.py:422`), `browser_inspector` (`weebot/tools/browser_inspector.py:189`), `browser_navigator` (`weebot/tools/browser_tool.py:44`), `camofox_browser` (`weebot/tools/camofox_browser.py:201`) and `desktop_a11y` (`weebot/tools/desktop_a11y.py:59`) are `EXTERNAL`; `computer_use` (`weebot/tools/computer_use.py:35`) and `screen_capture` (`weebot/tools/screen_tool.py:111`) are `LOCAL`. The decisions are `trust_of`, `must_fence` and `must_taint` (`weebot/core/trust_boundary.py:58-90`). Output of a non-`LOCAL` tool is fenced, errors included (`weebot/application/agents/executor/_base.py:252-274`). A successful `EXTERNAL` call taints the session for egress, but an error does not and neither does an `advanced_browser` read of a `file://` or loopback page (`weebot/application/agents/executor/_tool_executor.py:596-626`). The reviewed set is pinned in `tests/unit/core/test_trust_boundary_registry.py`.
 - **Egress.** `EgressGuard.classify` runs before each call (`weebot/application/agents/executor/_tool_executor.py:463-466`).
   - Browser tools: `advanced_browser`, `browser_navigator`, `browser_tool` and `computer_use` count as egress only when `action` is one of `submit`, `click_submit`, `navigate_post`, `fill_and_submit`, `form_submit`, `post`, `send_form`, or when the args carry `data`/`body`/`post_data` (`weebot/core/egress_guard.py:175-188, 532-539`). None of these is an action in the `advanced_browser` enum (`weebot/tools/advanced_browser.py:73-94`). `browser_navigator` takes only `task` (`weebot/tools/browser_tool.py:56-64`), and `computer_use` takes none of them (`weebot/tools/computer_use.py:51-67`). Separately, a URL that holds a secret is egress for `advanced_browser`, `browser_inspector` and `web_scraper`, and so are `fill`, `type`, `select` and `evaluate` on `advanced_browser` once the session is tainted (`weebot/core/egress_guard.py:193-196, 444-451`).
-  - `camofox_browser` is egress on `type` only, with an unknown recipient (`weebot/core/egress_guard.py:526-530`). It also refuses private and loopback URLs itself, including names that resolve private after a redirect (`weebot/tools/camofox_browser.py:167-195, 304-310`).
+  - `camofox_browser` is egress on `type` only, with an unknown recipient (`weebot/core/egress_guard.py:700-704`). It also refuses private and loopback URLs itself, including names that resolve private after a redirect (`weebot/tools/camofox_browser.py:167-195, 304-310`).
   - Without a guard, the browser family is refused under enforcement (`weebot/application/agents/executor/_tool_executor.py:333-348, 445-458`).
 
 ## Connected to
