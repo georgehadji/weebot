@@ -89,7 +89,7 @@ pyyaml>=6.0.3
 watchdog==6.0.0
 
 # MCP Server
-mcp==1.28.1
+mcp==2.3.0
 
 # Video ingestion
 youtube-transcript-api>=1.2.4
