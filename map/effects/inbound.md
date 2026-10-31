@@ -2,7 +2,7 @@
 type: effects
 status: verified
 verified: 2026-10-31
-commit: 5fae5eb2
+commit: f238f23a
 ---
 # inbound — what outside this repo points into it
 
@@ -17,6 +17,6 @@ A rename or move of the target breaks the consumer, and no test in the repo catc
 | GitHub Actions `protection-drift.yml` | `.github/rulesets/main.json`, `scripts/check_branch_protection.py` | `.github/workflows/protection-drift.yml:23-25` | — |
 | The UI's server-side proxy | the API at `BACKEND_URL`, else the configured endpoint | `weebot-ui/src/app/api/[[...path]]/route.ts:5` | [WebUI](../objects/interfaces/WebUI.md) |
 | The operator's `.env` (not committed) | read from the start folder by every CLI command | `cli/main.py:61` | [CLI](../objects/interfaces/CLI.md) |
-| MCP server list (`MCP_SERVERS_CONFIG_PATH`, default `config/mcp_servers.json`) | `uvx`, `npx` and hosted MCP servers outside the repo | `weebot/config/settings.py:318` | [MCPServer](../objects/interfaces/MCPServer.md) |
+| MCP server list (`MCP_SERVERS_CONFIG_PATH`, default `config/mcp_servers.json`) | `uvx`, `npx` and hosted MCP servers outside the repo | `weebot/config/settings.py:335` | [MCPServer](../objects/interfaces/MCPServer.md) |
 
 Not inbound: `weebot cron schedule` keeps its jobs in-process (APScheduler), so no OS scheduler holds a path into the repo. State Weebot writes under `~/.weebot/` (cancel markers, dead letters, the dream-scan marker) is outbound.
