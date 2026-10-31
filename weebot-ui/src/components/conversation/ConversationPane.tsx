@@ -95,10 +95,16 @@ export function ConversationPane({
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),
     []
   );
-  const settleDelivery = useCallback(
-    (id: string, delivery: DeliveryState) => setState((prev) => markDelivery(prev, id, delivery)),
-    []
-  );
+  // Mirrors `state` so a settle can report the row's outcome synchronously (see useComposer).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  const settleDelivery = useCallback((id: string, delivery: DeliveryState) => {
+    const known = stateRef.current.eventsById.get(id);
+    setState((prev) => markDelivery(prev, id, delivery));
+    return known?.type === "message" && known.delivery === "sent" ? ("sent" as const) : delivery;
+  }, []);
   const retryRef = useRef<(event: MessageEvent) => void>(undefined);
   const registerRetry = useCallback((fn: (event: MessageEvent) => void) => {
     retryRef.current = fn;

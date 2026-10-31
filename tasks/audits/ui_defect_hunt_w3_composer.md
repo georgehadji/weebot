@@ -150,3 +150,11 @@ At HEAD (before the fixes) the new tests failed as recorded in §3/4: D7 toast 0
 - W3-7: stale failed row after resending from the box (product decision: one recovery path).
 - W3-5: `useComposer` does not reset on an in-place `sessionId` change; safe only while callers key the pane.
 - Backend `sse.py` id (W2-4) unchanged.
+
+## Follow-up: W3-6 fixed
+
+The `it.fails` in `Composer.test.tsx` is now a plain `it`; it failed first (`alert` still present after the 502), passes now.
+
+Fix, smallest form: `onDelivery` now returns the row's resulting state. `ConversationPane.settleDelivery` reads the row through a `stateRef` mirror of `state` and returns `"sent"` when the echo had already settled it (the reducer's `markDelivery` already left such a row `sent`). In `useComposer.deliver`'s catch, a `"sent"` answer dispatches `sent` (phase back to `idle`, no alert, text not handed back) instead of `failed`. The reducer and `lib/composer.ts` needed no change; `Composer.tsx` only widened its `onDelivery` prop type. Other `onDelivery` callers (`retry`) ignore the return value; hook tests that pass `vi.fn()` still type-check.
+
+Backend answer (static read): yes, an echo followed by an error is possible. `POST /sessions/{id}/input` -> `_dispatch_input` -> `TaskRunner.resume_session` persists the message with the client id (`add_user_message(..., message_id=...)`, `save_session`) before `_start_direct`; an exception after that returns a 500 while the message exists. A proxy 502/timeout after the server processed the request gives the same result. So W3-6 is reachable, not only theoretical. Not exercised against a live backend.

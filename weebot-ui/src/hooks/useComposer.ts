@@ -40,8 +40,11 @@ interface UseComposerOptions {
   onSessionCreated: (sessionId: string) => void;
   /** Show the user's message in the timeline immediately (with delivery "sending"). */
   onOptimisticMessage: (event: MessageEvent) => void;
-  /** Report how a send ended so the timeline row can settle or offer a retry. */
-  onDelivery: (id: string, delivery: DeliveryState) => void;
+  /**
+   * Report how a send ended so the timeline row can settle or offer a retry. Returns the row's
+   * resulting state: "sent" if the server's echo had already settled it, whatever was reported.
+   */
+  onDelivery: (id: string, delivery: DeliveryState) => DeliveryState | undefined;
 }
 
 /**
@@ -97,7 +100,8 @@ export function useComposer({
           dispatch({ type: "sent" });
         }
       } catch (e) {
-        onDelivery(clientMsgId, "failed");
+        // An echoed row is delivered (the timeline shows it so): do not claim "Not sent".
+        if (onDelivery(clientMsgId, "failed") === "sent") return dispatch({ type: "sent" });
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
       }
     },

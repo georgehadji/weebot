@@ -40,7 +40,7 @@ interface ComposerProps {
   model?: string;
   onSessionCreated: (sessionId: string) => void;
   onOptimisticMessage: (event: MessageEvent) => void;
-  onDelivery: (id: string, delivery: DeliveryState) => void;
+  onDelivery: (id: string, delivery: DeliveryState) => DeliveryState | undefined;
   /** Receives the function that re-sends a failed message (wired to the timeline's Retry). */
   registerRetry?: (retry: (event: MessageEvent) => void) => void;
   /** Receives the function that replaces the draft (used by the example prompts). */

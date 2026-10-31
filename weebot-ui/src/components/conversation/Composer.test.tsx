@@ -156,7 +156,7 @@ describe("failed x sent (observation, deferred)", () => {
   // The echo proves delivery (the reducer keeps the row "sent"), yet the HTTP error still
   // tells the composer "Not sent" and hands the text back: re-sending it would duplicate it.
   // The hook cannot see the row; the fix crosses useComposer, the pane and the reducer.
-  it.fails("an HTTP error after the server echoed the message does not claim 'Not sent'", async () => {
+  it("an HTTP error after the server echoed the message does not claim 'Not sent'", async () => {
     let fail!: () => void;
     h.input.mockReturnValueOnce(new Promise((_, rej) => (fail = () => rej(new Error("502")))));
     mount();
