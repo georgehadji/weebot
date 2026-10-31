@@ -2,7 +2,7 @@
 type: effects
 status: verified
 verified: 2026-10-31
-commit: fe394636
+commit: 993e7a90
 ---
 # effects/ — if you are changing X, open these cards
 

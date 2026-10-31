@@ -4,9 +4,9 @@ name: Chat gateways
 code: GatewayAdapter and six subclasses
 cluster: interfaces
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 85a51bdd
+commit: 993e7a90
 ---
 
 # Chat gateways
@@ -23,11 +23,11 @@ One base class holds what every platform needs: the allowlist check `is_authoriz
 | `TelegramAdapter` | `gateways/telegram.py:52` | long-poll `getUpdates` (`telegram.py:95-135`) | web lifespan when `telegram_bot_token` is set (`weebot/interfaces/web/main.py:280-306`) | `GatewayFlowResolver` keyed by chat (`telegram.py:167-194, 243-248`); `/new`, `/reset` and "new session" stop the run and close the gateway session, `/stop` cancels the chat's run task (F1, `telegram.py:201-258, 275-282, 301-318`) |
 | `SignalAdapter` | `gateways/signal.py:31` | poll signal-cli REST (`signal.py:64-84`) | lifespan when `signal_account_number` is set (`main.py:309-325`) | new per message (`signal.py:108-111`) |
 | `EmailAdapter` | `gateways/email.py:100` | IMAP poll (`email.py:145-162, 243-298`) | lifespan when IMAP user and password are set (`main.py:327-352`) | new per message (`email.py:199-200`) |
-| `SlackAdapter` | `gateways/slack.py:29` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:34-69`; acks, then spawns the event on the background-task owner, `slack_webhook.py:68`), HMAC plus a 5-minute timestamp window (`slack.py:53-71`) | lazily on first callback (`slack_webhook.py:90-121`) | new per message (`slack.py:129-132`) |
+| `SlackAdapter` | `gateways/slack.py:30` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:34-69`; acks, then spawns the event on the background-task owner, `slack_webhook.py:68`), HMAC plus a 5-minute timestamp window (`slack.py:54-72`) | lazily on first callback (`slack_webhook.py:90-121`) | new per message (`slack.py:130-133`) |
 | `DiscordAdapter` | `gateways/discord.py:38` | `POST /api/gateway/discord/interactions` (`routers/discord_webhook.py:28-59`); answers deferred (type 5) at once, runs the flow in a background task and edits the original reply when it ends (`discord.py:196-203, 205-216, 236-255`, audit R09), Ed25519 plus a 5-minute timestamp window (`discord.py:35, 78-103`) | lazily (`discord_webhook.py:62-95`) | new per message (`discord.py:222-225`) |
-| `WhatsAppAdapter` | `gateways/whatsapp.py:31` | `GET/POST /api/gateway/whatsapp/webhook` (`routers/whatsapp_webhook.py:36-80`; messages are spawned on the background-task owner, `whatsapp_webhook.py:78`), `X-Hub-Signature-256`, fail closed without app secret unless `whatsapp_allow_unsigned_webhooks` (`whatsapp.py:65-92`) | lazily (`whatsapp_webhook.py:98-132`) | new per message (`whatsapp.py:116-120`) |
+| `WhatsAppAdapter` | `gateways/whatsapp.py:32` | `GET/POST /api/gateway/whatsapp/webhook` (`routers/whatsapp_webhook.py:36-80`; messages are spawned on the background-task owner, `whatsapp_webhook.py:78`), `X-Hub-Signature-256`, fail closed without app secret unless `whatsapp_allow_unsigned_webhooks` (`whatsapp.py:66-93`) | lazily (`whatsapp_webhook.py:98-132`) | new per message (`whatsapp.py:117-121`) |
 
-Every adapter runs a message the same way: `async with run_scope(session, llm, state_repo, profile_name) as flow` from `weebot/interfaces/factories.py:251-282`, which builds `build_tools(role="admin")` and a plan-act flow and tears the tools down when the run ends, however it ends (audit R05; `telegram.py:264`, `slack.py:135`, `discord.py:228`, `whatsapp.py:122`, `signal.py:114`, `email.py:203`; `tests/unit/fixes/test_r05_gateways_tear_down.py`). The `llm` each adapter gets is the container's bounded `LLMPort` (`infrastructure/LLMAdapters.md`). Email also drops its own address and automated senders (`email.py:173-179`). The allowlist is edited with `python -m cli.main gateway allowlist ...` (`cli/commands/gateway.py:107-172`).
+Every adapter runs a message the same way: `async with run_scope(session, llm, state_repo, profile_name) as flow` from `weebot/interfaces/factories.py:251-282`, which builds `build_tools(role="admin")` and a plan-act flow and tears the tools down when the run ends, however it ends (audit R05; `telegram.py:264`, `slack.py:136`, `discord.py:228`, `whatsapp.py:123`, `signal.py:114`, `email.py:203`; `tests/unit/fixes/test_r05_gateways_tear_down.py`). The `llm` each adapter gets is the container's bounded `LLMPort` (`infrastructure/LLMAdapters.md`). Email also drops its own address and automated senders (`email.py:173-179`). The allowlist is edited with `python -m cli.main gateway allowlist ...` (`cli/commands/gateway.py:107-172`).
 
 Consequences (read from source, not run):
 - No adapter passes a mediator or event bus to `create_flow`; `build_flow` resolves both from the shared container (`weebot/application/flows/flow_builder.py:114-125`), so a gateway flow can plan (`PlanningState` refuses to run without a mediator, `weebot/application/flows/states/planning.py:95-103`) and its events reach the bus the WebSocket broadcaster listens on (`main.py:216-219`).
