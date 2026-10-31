@@ -5,8 +5,8 @@ code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-30
-commit: d43e1b21
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # Event store
@@ -14,16 +14,16 @@ commit: d43e1b21
 An append-only SQLite journal of events and per-session cost, used for audit, cost reporting and debugging. It is **not** where a session's own event list lives: that is the `events_json` column in the state repository.
 
 ## Why this shape
-Kept apart from session state so event logging is a cheap insert and can fail without affecting a run: `DurableEventBus` journals every event best-effort before fan-out and "never blocks event delivery" (`weebot/infrastructure/event_bus.py:180-199`, journal helpers `:221-262`). Behind `EventStorePort` so tests can use an in-memory store (`application/ports/event_store_port.py:1-8`).
+Kept apart from session state so event logging is a cheap insert and can fail without affecting a run: `DurableEventBus` journals every event best-effort before fan-out and "never blocks event delivery" (`weebot/infrastructure/event_bus.py:180-199`, journal helpers `weebot/infrastructure/event_bus.py:227-283`). Behind `EventStorePort` so tests can use an in-memory store (`application/ports/event_store_port.py:1-8`).
 
 ## Shape
-- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:104`), exported under the old name `EventStore = AsyncEventStore` (`:487-488`); DI imports `EventStore` (`application/di/_factories.py:122-125`).
-- File: `~/.weebot/events.db` by default (`:106`), created on construction (`:107`). Pool: shared `SQLiteConnectionPool`, 3 read connections, WAL (`:111-119`).
-- Tables: `sessions(id, started_at, ended_at, status, user_id, total_cost, total_tokens)` and `events(id, timestamp, session_id, event_type, data_json, cost, model, tokens_used)` with indexes on session, type, timestamp (`:121-158`). Note this `sessions` table is not the state repository's `sessions` table.
+- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:104`), exported under the old name `EventStore = AsyncEventStore` (`event_store.py:542-543`); DI imports `EventStore` (`application/di/_factories.py:122-125`).
+- File: `~/.weebot/events.db` by default (`event_store.py:117`), its folder created on construction (`event_store.py:119`). Pool: shared `SQLiteConnectionPool`, 3 read connections, WAL, opened lazily (`event_store.py:122-130`).
+- Tables: `sessions(id, started_at, ended_at, status, user_id, total_cost, total_tokens)` and `events(id, timestamp, session_id, event_type, data_json, cost, model, tokens_used)` with indexes on session, type, timestamp (and on session status and user) (`event_store.py:132-168`). Note this `sessions` table is not the state repository's `sessions` table.
 - Cost columns are written for one event type only: `DurableEventBus._journal_domain` passes `cost`, `model` and `tokens_used` when the event is `LLMCallCompleted` (W4.1, 2026-10-22), which `CascadeExecutor` raises after each successful executor LLM call. Every other event keeps the defaults (0, "", 0). LLM calls outside the executor cascade (planner, verifier) are not recorded.
-- `log_event` (`:161`) in one write transaction: inserts a session row if missing, inserts the event, adds `cost` and `tokens_used` to the session totals; returns the new event id (`:176-195`).
+- `log_event` (`event_store.py:172`) in one write transaction: inserts a session row if missing, inserts the event, adds `cost` and `tokens_used` to the session totals; returns the new event id (`event_store.py:185-206`).
 - `get_cost_window(window_hours)` sums the `llm_call_completed` rows by model: the one cost query (W4.2).
-- Also: `get_session_events`, `get_cost_summary`, `query_recent_events` (used by DreamerAgent per the port docstring), `start_session`/`end_session`, `export_session`, `delete_session`, `cleanup_old_sessions(days=30)`, `get_stats` (`:197-449`).
+- Also: `get_session_events`, `get_cost_summary`, `query_recent_events` (used by DreamerAgent per the port docstring), `start_session`/`end_session`, `export_session`, `delete_session`, `cleanup_old_sessions(days=30)`, `get_stats` (`event_store.py:208-504`).
 - `delete_session` exists so a deleted session's journal does not survive: the port docstring says `DurableEventBus` journals every agent event here (`event_store_port.py`, `delete_session` doc).
 
 ## Connected to

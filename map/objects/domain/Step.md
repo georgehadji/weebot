@@ -5,8 +5,8 @@ code: Step, StepStatus, ContextScope
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-30
-commit: a3d9fe16
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # Step
@@ -14,14 +14,14 @@ commit: a3d9fe16
 One unit of work inside a `Plan`: an id, a description, a status and a result. `StepStatus` is its lifecycle; `ContextScope` says which prompt sources the executor loads for it.
 
 ## Why this shape
-A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:21, 116-123`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`:38-50`).
+A step is a value, not an entity: the flow replaces it inside the plan (`Plan.replace_step`, `Plan.update_step_status`) instead of mutating it. `UNVERIFIED` exists because "the executor did not error" and "the evidence supports completion" are different facts (`weebot/domain/models/plan.py:21, 116-123`). `ContextScope` is the ICM stage-scoped context idea: a shell step does not need the user profile (`weebot/domain/models/plan.py:51-63`).
 
 ## Shape
-- `StepStatus` (`:10-16`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:473`, default at `domain/models/event.py:65`); plans use `RUNNING`.
-- `ContextScope` (`:38-50`): `full` (default), `minimal`, `skill`, `creative`.
-- `Step` fields (`:56-75`): `id`, `description`, `status`, `result`, `retry_count` (cap 1), `acceptance_criteria`, `evidence_refs`, `context_scope`.
-- `is_done()` (`:77-78`): COMPLETED **or FAILED**. UNVERIFIED is not done, so `Plan.get_next_step` returns it again.
-- `mark_running`, `mark_completed`, `mark_failed`, `mark_unverified` (`:80-110`), `is_blocked` (`:112-121`).
+- `StepStatus` (`weebot/domain/models/plan.py:15-21`): `pending`, `running`, `started`, `completed`, `failed`, `unverified`. `STARTED` appears only on `StepEvent` (`application/agents/executor/_base.py:473`, default at `domain/models/event.py:65`); plans use `RUNNING`.
+- `ContextScope` (`weebot/domain/models/plan.py:51-63`): `full` (default), `minimal`, `skill`, `creative`.
+- `Step` fields (`weebot/domain/models/plan.py:69-88`): `id`, `description`, `status`, `result`, `retry_count` (cap 1), `acceptance_criteria`, `evidence_refs`, `context_scope`.
+- `is_done()` (`weebot/domain/models/plan.py:90-91`): COMPLETED **or FAILED**. UNVERIFIED is not done, so `Plan.get_next_step` returns it again.
+- `mark_running`, `mark_completed`, `mark_failed`, `mark_unverified` (`weebot/domain/models/plan.py:97-127`), `is_blocked` (`weebot/domain/models/plan.py:129-139`).
 
 Consequences (read from source, not run):
 - The four `mark_*` methods and `is_blocked` have no caller in `weebot/`, `cli/` or `tests/` (grep 2026-10-24; the `mark_running`/`mark_failed` hits are the legacy `Task` in `domain/legacy_models.py`). The flow sets status through `Plan.update_step_status` and `model_copy` instead (`weebot/application/flows/states/executing.py:234`, `weebot/application/flows/states/_step_outcome.py:186, 291`, `weebot/application/flows/states/evidence_gate.py:42-56`).
@@ -32,7 +32,7 @@ Consequences (read from source, not run):
 - `ContextScope` values are copied as plain strings into `_SCOPE_SOURCES` (`application/agents/executor/_prompt_builder.py:16-19`); the executor passes `.value` (`_base.py:582-588`). A new enum member falls back to `full` silently (`_prompt_builder.py:113`).
 
 ## Connected to
-- **Owned by** `Plan.steps`. **Created by** `PlannerAgent._parse_plan` (`planner.py:333-397`), which also parses `context_scope` with a fallback to FULL (`:340-342`).
+- **Owned by** `Plan.steps`. **Created by** `PlannerAgent._parse_plan` (`planner.py:333-397`), which also parses `context_scope` with a fallback to FULL (`weebot/application/agents/planner.py:346-349`).
 - **Run by** `ExecutorAgent`, which yields `StepEvent` STARTED / FAILED / COMPLETED (`_base.py:473, 644, 721`).
 - **Status mirrored in** `StepEvent.status` and rebuilt on resume from those events (Session card).
 - **Looks like but is not:** `TodoEvent` (agent self-reported checklist, free-string status, `domain/models/event.py:177-185`). The UI's `StepStatus` (`weebot-ui/src/types/events.ts:7-14`) mirrors the six backend values plus a legacy `error`.

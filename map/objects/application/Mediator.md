@@ -5,8 +5,8 @@ code: Mediator
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # Mediator
@@ -14,24 +14,24 @@ commit: 8e6d1cca
 A dispatcher that maps a command or query *type* to one registered handler and runs the call through a chain of pipeline behaviors. States do not call agents; they `send` a command and the handler does the work. `send(command)` returns a `CommandResult`; `query(query)` returns a `QueryResult`.
 
 ## Why this shape
-Decouples the flow states from the agents and persistence they trigger (`weebot/application/cqrs/mediator.py:53-58`). Failures never raise out of `send`: any handler exception is logged with its `ErrorClassifier` category and becomes `CommandResult.fail(error, error_code=<exception class name>)` (`:238-250`), so callers check `result.success`. Commands and queries are frozen Pydantic models with `extra="forbid"` (`weebot/application/cqrs/base.py:39, 62`).
+Decouples the flow states from the agents and persistence they trigger (`weebot/application/cqrs/mediator.py:53-58`). Failures never raise out of `send`: any handler exception is logged with its `ErrorClassifier` category and becomes `CommandResult.fail(error, error_code=<exception class name>)` (`mediator.py:239-250`), so callers check `result.success`. Commands and queries are frozen Pydantic models with `extra="forbid"` (`weebot/application/cqrs/base.py:39, 62`).
 
 ## Shape
-- `Mediator(tracer=None)` (`:81-95`): `_command_handlers` and `_query_handlers`, one handler per type; registering twice raises `ValueError` (`:100-130`); `unregister_*` exists (`:132-148`). With no tracer, requests run inside no-op spans (`:28-38, 97-98`).
-- `degraded` maps a part that failed to build to its error; `build_mediator` sets `"tools"` when the admin tool set fails (`:93-95`, `weebot/application/di/__init__.py:558`), and `/health` reports it as `agent_tools` (`weebot/interfaces/web/routers/health.py:187-194`).
-- `send` (`:196-211`) raises `TypeError` for a `Query`, then wraps `_send_inner` in a tracing span `command.<Name>`. A missing handler returns `HANDLER_NOT_REGISTERED` instead of raising (`:218-222`). A handler may return a bare value, which is wrapped with `CommandResult.ok` (`:235-237`).
-- `query` (`:252-265`) raises `TypeError` for a `Command`; otherwise the same, but a missing handler and every exception become `QueryResult.fail(...)` and a `None` result becomes `QueryResult.not_found()` (`:267-295`).
-- Pipeline: behaviors run in insertion order, each calling `next` (`_execute_with_pipeline`, `:170-194`). Adding behaviors is "NOT thread-safe — call at startup only" (`:150-159`).
+- `Mediator(tracer=None)` (`mediator.py:81-95`): `_command_handlers` and `_query_handlers`, one handler per type; registering twice raises `ValueError` (`mediator.py:100-130`); `unregister_*` exists (`mediator.py:132-148`). With no tracer, requests run inside no-op spans (`mediator.py:28-38, 97-98`).
+- `degraded` maps a part that failed to build to its error; `build_mediator` sets `"tools"` when the admin tool set fails (`mediator.py:93-95`, `weebot/application/di/__init__.py:558`), and `/health` reports it as `agent_tools` (`weebot/interfaces/web/routers/health.py:187-196`).
+- `send` (`mediator.py:196-211`) raises `TypeError` for a `Query`, then wraps `_send_inner` in a tracing span `command.<Name>`. A missing handler returns `HANDLER_NOT_REGISTERED` instead of raising (`mediator.py:218-222`). A handler may return a bare value, which is wrapped with `CommandResult.ok` (`mediator.py:235-237`).
+- `query` (`mediator.py:252-265`) raises `TypeError` for a `Command`; otherwise the same, but a missing handler and every exception become `QueryResult.fail(...)` and a `None` result becomes `QueryResult.not_found()` (`mediator.py:267-295`).
+- Pipeline: behaviors run in insertion order, each calling `next` (`_execute_with_pipeline`, `mediator.py:170-194`). Adding behaviors is "NOT thread-safe — call at startup only" (`mediator.py:150-159`).
 
-What exists (2026-10-30):
+What exists (2026-10-31):
 - Commands: `CreatePlanCommand`, `ExecuteStepCommand`, `UpdatePlanCommand`, `SummarizeCommand`, `ProcessMessageCommand` (`weebot/application/cqrs/commands.py:19-99`); the live mediator also counts candidate-skill uses (`RecordSkillUseCommand`) and, with an LLM and a trajectory repository, extracts failure signatures. The `commands/` package shadows that module and loads it by file path to re-export them (`weebot/application/cqrs/commands/__init__.py:16-45`). SkillOpt and Self-Harness commands are registered only by `register_skillopt_handlers` (`weebot/application/cqrs/handlers/__init__.py:192-294`).
 - Queries: `GetActiveSessionsQuery`, `GetPlanVisualizationQuery`, `GetCostSummaryQuery` (`weebot/application/cqrs/queries.py:22, 38, 47`); `ClusterFailurePatternsQuery` is SkillOpt-only (`cqrs/commands/failure_signature_commands.py:56`).
-- Behaviors: `ValidationBehavior`, `LoggingBehavior`, `TelemetryBehavior`, `SavePolicyBehavior` added in that order by `Container.build_mediator` (`di/__init__.py:522-527`); a validation gate behavior is added only for the SkillOpt flow (`weebot/application/di/_skillopt.py:50-52`).
-- Default registration: `register_default_handlers` (`handlers/__init__.py:86`). With an `llm`, plan, execute, update and `ProcessMessageCommand` handlers get the LLM (`:128-147`); with `llm=None` only the three plan commands get validation-only handlers (`:148-151`). `SummarizeCommand` is registered only with an `llm` (`:152-153`); `ScoreTrajectoryCommand` only if scoring port and trajectory builder exist (`:158-176`). `RecordSkillUseCommand` needs a skill store (`:178-182`). The three operations-console queries are always registered (`:185-189`).
+- Behaviors: `ValidationBehavior`, `LoggingBehavior`, `TelemetryBehavior`, `SavePolicyBehavior` added in that order by `Container.build_mediator` (`weebot/application/di/__init__.py:522-527`); a validation gate behavior is added only for the SkillOpt flow (`weebot/application/di/_skillopt.py:50-52`).
+- Default registration: `register_default_handlers` (`weebot/application/cqrs/handlers/__init__.py:86`). With an `llm`, plan, execute, update and `ProcessMessageCommand` handlers get the LLM (`weebot/application/cqrs/handlers/__init__.py:128-147`); with `llm=None` only the three plan commands get validation-only handlers (`weebot/application/cqrs/handlers/__init__.py:148-151`). `SummarizeCommand` is registered only with an `llm` (`weebot/application/cqrs/handlers/__init__.py:152-153`); `ScoreTrajectoryCommand` only if scoring port and trajectory builder exist (`weebot/application/cqrs/handlers/__init__.py:158-176`). `RecordSkillUseCommand` needs a skill store (`weebot/application/cqrs/handlers/__init__.py:178-182`). The three operations-console queries are always registered (`weebot/application/cqrs/handlers/__init__.py:185-189`).
 
 ## Connected to
-- **Built and owned by** the DI Container (`Container.build_mediator`, `di/__init__.py:516-608`), as a singleton per container.
-- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:243`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:71`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:334`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:227`).
+- **Built and owned by** the DI Container (`Container.build_mediator`, `weebot/application/di/__init__.py:516-608`), as a singleton per container.
+- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:243`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:71`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:334`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`weebot/interfaces/web/routers/ops_router.py:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:227`).
 - **Handlers that build agents:** `CreatePlanHandler` builds PlannerAgent, `ExecuteStepHandler` builds ExecutorAgent through the container's executor factory, `UpdatePlanHandler` builds PlannerAgent, `SummarizeHandler` builds ExecutorAgent (see those cards).
 - **Looks like but is not:** the event bus (`EventBusPort`, publishes events, no handler per type); `MiddlewareChain` inside `ExecutorAgent` (wraps LLM requests, not commands).
 
