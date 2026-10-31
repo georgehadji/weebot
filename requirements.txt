@@ -75,7 +75,7 @@ anyio==4.15.1
 
 # Web search & image search
 ddgs>=9.16.0
-duckduckgo-search>=7.0
+duckduckgo-search>=8.1.1
 
 # Utilities
 pyyaml>=6.0.3
