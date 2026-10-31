@@ -52,7 +52,7 @@ Format: name — source — status — card
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — verified 2026-10-29 — [card](tools/BuiltinSkills.md)
 - ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — verified 2026-10-30 — [card](tools/ExecTools.md)
 - Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — verified 2026-10-31 — [card](tools/IntegrationTools.md)
-- Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — verified 2026-10-30 — [card](tools/MediaTools.md)
+- Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — verified 2026-10-31 — [card](tools/MediaTools.md)
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — verified 2026-10-31 — [card](tools/OrchestrationTools.md)
 - Personas (AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter) — `weebot/agents/parser.py` — verified 2026-10-31 — [card](tools/Personas.md)
 - RoleBasedToolRegistry — `weebot/application/services/tool_registry.py` — verified 2026-10-31 — [card](tools/RoleBasedToolRegistry.md)

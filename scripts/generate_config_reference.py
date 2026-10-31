@@ -187,6 +187,9 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},
+    {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",
+     "desc": "CDP endpoint of a running browser to connect to instead of launching Chromium, "
+             "e.g. Lightpanda on http://127.0.0.1:9222 (proxied configs still launch)"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
      "desc": "Largest request body the web API accepts (413 above it)"},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",

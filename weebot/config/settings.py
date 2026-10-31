@@ -209,6 +209,14 @@ class WeebotSettings(BaseSettings):
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
     sandbox_allow_network: bool = False  # env: SANDBOX_ALLOW_NETWORK
 
+    # A running CDP browser to connect to instead of launching Chromium, e.g. Lightpanda
+    # (`docker run -d -p 127.0.0.1:9222:9222 lightpanda/browser`). Unset: launch as before.
+    browser_cdp_url: str | None = Field(
+        default=None,
+        alias="WEEBOT_BROWSER_CDP_URL",
+        description="CDP endpoint of a browser to connect to (e.g. http://127.0.0.1:9222).",
+    )
+
     # Tool guard chain (application/services/tool_guards.py). "observe" only
     # records what the chain would decide; "enforce" refuses DENY and asks a
     # human on ASK. ICM fix plan W3.1; flipped to enforce at W3.7 (2026-10-23)
