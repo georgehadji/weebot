@@ -12,6 +12,9 @@ import { api, ActiveSession, openSocket } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ENDPOINTS } from "@/lib/endpoints";
 import type { StepStatus } from "@/types/events";
+import { useRemote } from "@/hooks/useRemote";
+import { remoteData } from "@/types/remote";
+import { StateView } from "@/components/common/StateView";
 
 interface OpsMetrics {
   total_sessions: number;
@@ -50,16 +53,21 @@ const HEALTH_TEXT: Record<string, string> = {
 };
 
 // recharts only matters once the cost tab is opened; keep it out of the first load.
+type OpsHealth = { status: string; components: { name: string; status: string }[]; timestamp: string };
+// Module-level so useRemote gets a stable loader; each source fails on its own.
+const loadHealth = () => api.health.check() as Promise<OpsHealth>;
+const loadMetrics = () => api.dashboard.metrics() as Promise<OpsMetrics>;
+
 const CostChart = dynamic(() => import("@/components/dashboard/CostChart").then((m) => m.CostChart), {
   ssr: false,
   loading: () => <Skeleton className="h-64 w-full" aria-label="Loading chart" />,
 });
 
 export default function OpsPage() {
-  const [health, setHealth] = useState<{ status: string; components: { name: string; status: string }[]; timestamp: string } | null>(null);
-  const [metrics, setMetrics] = useState<OpsMetrics | null>(null);
+  const { state: healthState, reload: reloadHealth } = useRemote(loadHealth, 10000);
+  const { state: metricsState, reload: reloadMetrics } = useRemote(loadMetrics, 10000);
+  const metrics = remoteData(metricsState);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Live log stream via global WebSocket
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -107,21 +115,6 @@ export default function OpsPage() {
   }, [logs]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [healthData, metricsData] = await Promise.all([
-          api.health.check(),
-          api.dashboard.metrics(),
-        ]);
-        setHealth(healthData);
-        setMetrics(metricsData);
-      } catch {
-        // backend may not be running
-      } finally {
-        setLoading(false);
-      }
-    };
-
     const fetchActiveSessions = async () => {
       try {
         const result = await api.ops.activeSessions(20);
@@ -131,36 +124,12 @@ export default function OpsPage() {
       }
     };
 
-    fetchData();
     fetchActiveSessions();
 
-    const interval = setInterval(() => {
-      fetchData();
-      fetchActiveSessions();
-    }, 10000);
+    const interval = setInterval(fetchActiveSessions, 10000);
 
     return () => clearInterval(interval);
   }, []);
-
-  const realMetrics = metrics
-    ? {
-        activeSessions: metrics.active_sessions,
-        totalSessions: metrics.total_sessions,
-        avgResponseTime: metrics.avg_response_time,
-        cpuUsage: metrics.cpu_usage,
-        memoryUsage: metrics.memory_usage,
-        dbSize: metrics.db_size,
-        requestsPerMinute: metrics.requests_per_minute,
-      }
-    : {
-        activeSessions: 0,
-        totalSessions: 0,
-        avgResponseTime: 0,
-        cpuUsage: 0,
-        memoryUsage: 0,
-        dbSize: "0 MB",
-        requestsPerMinute: 0,
-      };
 
   const dailyCosts = metrics?.daily_costs || [];
   const modelUsage = metrics?.model_usage || [];
@@ -194,7 +163,21 @@ export default function OpsPage() {
               <CardTitle>System Metrics</CardTitle>
             </CardHeader>
             <CardContent>
-              <MetricsPanel metrics={realMetrics} />
+              <StateView state={metricsState} errorTitle="Couldn't load metrics" loadingLabel="Loading metrics" onRetry={reloadMetrics}>
+                {(m) => (
+                  <MetricsPanel
+                    metrics={{
+                      activeSessions: m.active_sessions,
+                      totalSessions: m.total_sessions,
+                      avgResponseTime: m.avg_response_time,
+                      cpuUsage: m.cpu_usage,
+                      memoryUsage: m.memory_usage,
+                      dbSize: m.db_size,
+                      requestsPerMinute: m.requests_per_minute,
+                    }}
+                  />
+                )}
+              </StateView>
             </CardContent>
           </Card>
 
@@ -204,35 +187,33 @@ export default function OpsPage() {
                 <CardTitle>Health Status</CardTitle>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <p className="text-muted-foreground">Loading...</p>
-                ) : health ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          HEALTH_DOT[health.status] ?? "bg-status-error"
-                        }`}
-                      />
-                      <span className="font-medium capitalize">{health.status}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {health.components?.map((c) => (
+                <StateView state={healthState} errorTitle="Failed to load health status" loadingLabel="Loading health" onRetry={reloadHealth}>
+                  {(health) => (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
                         <div
-                          key={c.name}
-                          className="flex items-center justify-between text-sm p-2 rounded bg-muted"
-                        >
-                          <span>{c.name}</span>
-                          <span className={HEALTH_TEXT[c.status] ?? "text-status-error-fg"}>
-                            {c.status}
-                          </span>
-                        </div>
-                      ))}
+                          className={`w-3 h-3 rounded-full ${
+                            HEALTH_DOT[health.status] ?? "bg-status-error"
+                          }`}
+                        />
+                        <span className="font-medium capitalize">{health.status}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {health.components?.map((c) => (
+                          <div
+                            key={c.name}
+                            className="flex items-center justify-between text-sm p-2 rounded bg-muted"
+                          >
+                            <span>{c.name}</span>
+                            <span className={HEALTH_TEXT[c.status] ?? "text-status-error-fg"}>
+                              {c.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <p className="text-status-error-fg">Failed to load health status</p>
-                )}
+                  )}
+                </StateView>
               </CardContent>
             </Card>
 
@@ -390,7 +371,9 @@ export default function OpsPage() {
 
 function PlanVizTab() {
   const [sessionId, setSessionId] = useState("");
+  // The id travels with the plan: the title names what was loaded, not what is being typed.
   const [planData, setPlanData] = useState<{
+    id: string;
     nodes: { id: string; description: string; status: StepStatus }[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -400,11 +383,14 @@ function PlanVizTab() {
     if (!sessionId.trim()) return;
     setLoading(true);
     setError(null);
+    setPlanData(null); // a failed load must not leave the previous session's plan on screen
+    const id = sessionId.trim();
     try {
-      const result = await api.ops.planViz(sessionId.trim());
+      const result = await api.ops.planViz(id);
       if (result.ok) {
         const plan = result.data.plan;
         setPlanData({
+          id,
           nodes: (plan?.nodes ?? []).map((n) => ({
             id: n.id,
             description: n.label,
@@ -445,7 +431,7 @@ function PlanVizTab() {
         {error && <p className="text-sm text-status-error-fg">{error}</p>}
 
         {planData ? (
-          <LazyPlanVisualizer steps={planData.nodes} title={`Plan for ${sessionId}`} />
+          <LazyPlanVisualizer steps={planData.nodes} title={`Plan for ${planData.id}`} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Enter a session ID above to visualize its execution plan.

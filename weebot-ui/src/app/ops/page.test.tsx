@@ -108,7 +108,7 @@ describe("/ops Plan Visualization tab (W5 R6)", () => {
     expect(screen.getByText("Session not found")).toBeTruthy();
   });
 
-  it.fails("KNOWN DEFECT (budget): the title names the loaded session, not the text being typed", async () => {
+  it("the title names the loaded session, not the text being typed", async () => {
     vi.stubGlobal("fetch", backend({ "/sessions/a/plan-viz": () => json(plan("a")) }));
     await openPlanTab();
     await loadPlan("a");
@@ -117,7 +117,7 @@ describe("/ops Plan Visualization tab (W5 R6)", () => {
     expect(screen.getByTestId("plan").textContent).toBe("Plan for a");
   });
 
-  it.fails("KNOWN DEFECT (budget): a failed load does not leave the previous session's plan on screen", async () => {
+  it("a failed load does not leave the previous session's plan on screen", async () => {
     vi.stubGlobal(
       "fetch",
       backend({
@@ -133,7 +133,7 @@ describe("/ops Plan Visualization tab (W5 R6)", () => {
 });
 
 describe("/ops overview with the backend down (W5 R4)", () => {
-  it.fails("KNOWN DEFECT (budget): metrics are not presented as measured zeros", async () => {
+  it("metrics are not presented as measured zeros", async () => {
     render(<OpsPage />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -142,7 +142,7 @@ describe("/ops overview with the backend down (W5 R4)", () => {
     expect(screen.queryAllByText("0%", { selector: "div.text-2xl" })).toHaveLength(0);
   });
 
-  it.fails("KNOWN DEFECT (budget): a metrics failure does not discard a healthy /health answer", async () => {
+  it("a metrics failure does not discard a healthy /health answer", async () => {
     vi.stubGlobal("fetch", backend({ "/health": () => json({ status: "healthy", components: [], timestamp: "t" }) }));
     render(<OpsPage />);
     await act(async () => {

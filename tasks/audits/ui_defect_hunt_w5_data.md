@@ -337,3 +337,12 @@ run this wave).
 ## Follow-up (2026-10-31)
 
 D10 is fixed: the delete route publishes a `session_presence` frame with status `deleted` (`weebot/interfaces/web/routers/sessions.py`, `tests/unit/fixes/test_d10_delete_tells_the_rail.py`), and `useSessionList` drops that row. The `it.fails` pin in `src/app/sessions/page.test.tsx` is now a plain test.
+
+## Follow-up: R4 and R6b fixed
+
+`/ops` health and metrics now load through `useRemote` + `StateView` (one hook per source, so one failing
+endpoint no longer discards the other; metrics and health show a skeleton, an error banner with Retry, or the
+data, never measured zeros). The plan tab holds `{id, nodes}` together, so the title names the loaded
+session, and a load clears the previous plan first, so a failed load leaves none on screen. The four
+`it.fails("KNOWN DEFECT (budget)")` tests are now plain `it(...)`; the active-sessions poll and the live socket
+are unchanged. Not done: active sessions still use `useState` (swallowed errors), outside R4/R6b.
