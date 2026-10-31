@@ -37,7 +37,12 @@ export function ResponsivePanel({
       </div>
       {!isDesktop && (
         <Dialog open={open} onOpenChange={onOpenChange}>
-          <DialogSheet side={side} aria-label={label}>
+          <DialogSheet
+            side={side}
+            aria-label={label}
+            // A link to the current path does not navigate away, so dismiss on activation.
+            onClick={(e) => (e.target as Element).closest("a") && onOpenChange(false)}
+          >
             {children}
           </DialogSheet>
         </Dialog>

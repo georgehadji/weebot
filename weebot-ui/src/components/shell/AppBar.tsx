@@ -107,7 +107,11 @@ export function AppBar() {
       </div>
 
       <Dialog open={menuOpen} onOpenChange={(open) => setMenuPath(open ? pathname : null)}>
-        <DialogContent className="top-16 -translate-y-0 gap-3 sm:max-w-sm">
+        {/* A link to the page the operator is already on does not change the path, so close on click. */}
+        <DialogContent
+          className="top-16 -translate-y-0 gap-3 sm:max-w-sm"
+          onClick={(e) => (e.target as Element).closest("a") && setMenuPath(null)}
+        >
           <DialogTitle>Menu</DialogTitle>
           <nav aria-label="Primary" className="flex flex-col gap-1">
             {NAV_LINKS.map(({ href, label }) => (

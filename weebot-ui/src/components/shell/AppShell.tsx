@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { paletteOpen, setPaletteOpen } = useShell();
 
   useRegisterCommands([
-    { id: "nav.new-session", title: "New conversation", shortcut: "⌘N", run: () => router.push("/") },
+    { id: "nav.new-session", title: "New conversation", run: () => router.push("/") },
     { id: "nav.sessions", title: "Go to Sessions", run: () => router.push("/sessions") },
     { id: "nav.ops", title: "Go to Ops", run: () => router.push("/ops") },
     { id: "nav.models", title: "Go to Models", run: () => router.push("/models") },

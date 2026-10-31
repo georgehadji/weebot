@@ -84,7 +84,7 @@ Format: date — record — note
 - 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 - 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 
-## reference (84)
+## reference (86)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
@@ -121,8 +121,10 @@ Format: date — record — note
 - 2026-10-25 — [Frontend Defect Hunt — Wave 0 Baseline & Test Harness](audits/ui_defect_hunt_baseline.md)
 - 2026-10-25 — [Wave 1 — Transport & Live-State Integrity](audits/ui_defect_hunt_w1_transport.md)
 - 2026-10-31 — [Wave 2 — Conversation Timeline & Projection](audits/ui_defect_hunt_w2_timeline.md)
+- 2026-10-31 — [Wave 3 — Composer & Send Path](audits/ui_defect_hunt_w3_composer.md)
 - 2026-10-31 — [Wave 4 — API client, proxy & credentials](audits/ui_defect_hunt_w4_api.md)
 - 2026-10-31 — [Wave 5 — Data Surfaces & Polling](audits/ui_defect_hunt_w5_data.md)
+- 2026-10-31 — [Wave 6 - Shell, Providers & Navigation](audits/ui_defect_hunt_w6_shell.md)
 - 2026-10-31 — [Wave 7 - Primitives & Design Contracts](audits/ui_defect_hunt_w7_primitives.md)
 - 2026-06-10 — [Weebot Architecture Audit — EGFV Protocol v2.0](audits/weebot_architecture_audit_2026-06-10.md)
 - 2026-06-30 — [Weebot Architecture Audit — EGFV Protocol v2.0](audits/weebot_architecture_audit_v2.md)

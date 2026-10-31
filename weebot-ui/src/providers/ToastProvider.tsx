@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +50,8 @@ const VARIANT_CLASS: Record<ToastVariant, string> = {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // A counter, not crypto.randomUUID: that is undefined on a plain-http (non-secure) origin.
+  const nextId = useRef(0);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -57,7 +59,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const toast = useCallback(
     (input: ToastInput) => {
-      const id = crypto.randomUUID();
+      const id = `toast-${nextId.current++}`;
       const entry: Toast = {
         id,
         title: input.title,
