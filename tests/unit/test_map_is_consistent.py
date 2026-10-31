@@ -267,3 +267,23 @@ def test_the_citation_check_covers_effects_cards():
     """The effects cards cite lines too, and the drift check never opened them."""
     cards = _load("check_map_citations")._cards()
     assert any(p.parent.name == "effects" for p in cards)
+
+
+
+# Bare `:N` citations (2026-10-31): the shorthand for "same file as before" cannot be checked.
+# The drift check never read them, yet --fix restamped the card to HEAD, so a bare number into
+# a file that moved went wrong while the card claimed it held at HEAD. Resolving them by the
+# nearest earlier citation was measured wrong (past the end of the file) for 91 of 978, so a
+# verified card must write the file path in every citation.
+def test_a_verified_card_with_a_bare_citation_is_broken(tmp_path, monkeypatch):
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    card.write_text(card.read_text().replace(
+        "`f` is at `weebot/mod.py:3`.\n", "`f` is at `weebot/mod.py:3`; it returns at `:4`.\n"))
+    assert any("bare citation" in p and "`:4`" in p for p in cm.broken_citations())
+
+
+def test_a_full_citation_is_not_mistaken_for_a_bare_one(tmp_path, monkeypatch):
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    card.write_text(card.read_text().replace(
+        "`weebot/mod.py:3`.", "`weebot/mod.py:3`, `weebot/mod.py:4`, and port `localhost:8000`."))
+    assert not any("bare citation" in p for p in cm.broken_citations())

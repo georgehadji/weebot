@@ -5,8 +5,8 @@ code: PlanActFlow
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # PlanActFlow
@@ -14,25 +14,25 @@ commit: 8e6d1cca
 The runner for one agent turn. It owns the current `FlowState`, the `Session` and the `Plan`, and loops "execute state, check stop conditions" until the session completes, fails, waits for a human, or hits the iteration cap. `run(prompt)` is an async generator that yields `AgentEvent`s.
 
 ## Why this shape
-The state machine was pulled out into state classes (see FlowState) and the start-state choice into FlowRouter, so what remains here is wiring plus the loop. The file is 654 lines (was 996); `ARCHITECTURE.md:70` lists D4 (its size) as closed on 2026-10-30, after the once-per-run prologue moved to `_run_prologue.py`. The budget and termination logic left for `collaborators/session_budget.py` (plan 5). Construction takes a `PlanActFlowConfig`; the constructor is a dozen lines (`weebot/application/flows/plan_act_flow.py:59-80`) because the three jobs it used to do inline now live in `weebot/application/flows/_plan_act_wiring.py` -- the legacy keyword names at `:43`, `config_from_legacy` at `:89`, the port wiring at `:118` and the agent composition at `:212`. The legacy keywords are still accepted and are provably the config's fields (`tests/unit/application/flows/test_the_flow_is_built_from_its_config.py`).
+The state machine was pulled out into state classes (see FlowState) and the start-state choice into FlowRouter, so what remains here is wiring plus the loop. The file is 654 lines (was 996); `ARCHITECTURE.md:70` lists D4 (its size) as closed on 2026-10-30, after the once-per-run prologue moved to `_run_prologue.py`. The budget and termination logic left for `collaborators/session_budget.py` (plan 5). Construction takes a `PlanActFlowConfig`; the constructor is a dozen lines (`weebot/application/flows/plan_act_flow.py:59-76`) because the three jobs it used to do inline now live in `weebot/application/flows/_plan_act_wiring.py` -- the legacy keyword names at `_plan_act_wiring.py:43`, `config_from_legacy` at `_plan_act_wiring.py:89`, the port wiring at `_plan_act_wiring.py:118` and the agent composition at `_plan_act_wiring.py:212`. The legacy keywords are still accepted and are provably the config's fields (`tests/unit/application/flows/test_the_flow_is_built_from_its_config.py`).
 
 ## Shape
-`run()` at `plan_act_flow.py:334` binds the session id to every log record, seeds the session cost meter (`:337-341`), then delegates to `_run_states` (`:345`), which starts with `begin_run` (`:346`). `begin_run` is the once-per-run prologue in `weebot/application/flows/_run_prologue.py:26`, in order:
-1. Open the `plan_act_iteration` tracing span when OTEL tracing is enabled (`_run_prologue.py:33-49`). Remember the first non-empty prompt as `original_task` (`:51-61`).
-2. Extract session-scoped constraints if an extractor is wired (`:66-67`); hydrate behavioral rules (`:70-78`).
-3. `ContinuationDetector.resolve_prompt` turns vague follow-ups ("yes") into a full prompt (`:80-82`).
-4. Assemble tools for this query via `ToolAssembler` (`:85-96`).
-5. `FlowRouter.resolve_initial_state` picks the start state (`:99-103`). For `ExecutingState` the session is saved first (the step handler reloads the plan from the repo) and the last plan becomes `_plan` (`:104-111`). For `PlanningState` a rejected plan is recorded in the misalignment journal (`:112-124`), and with `PRODUCT_MODE_ENABLED` `ProductGateState` runs first (`:126-133`).
-6. `pre_execute` hooks (`:138-142`).
+`run()` at `plan_act_flow.py:334` binds the session id to every log record, seeds the session cost meter (`plan_act_flow.py:339-341`), then delegates to `_run_states` (`plan_act_flow.py:345`), which starts with `begin_run` (`plan_act_flow.py:346`). `begin_run` is the once-per-run prologue in `weebot/application/flows/_run_prologue.py:26`, in order:
+1. Open the `plan_act_iteration` tracing span when OTEL tracing is enabled (`_run_prologue.py:33-49`). Remember the first non-empty prompt as `original_task` (`_run_prologue.py:51-61`).
+2. Extract session-scoped constraints if an extractor is wired (`_run_prologue.py:66-67`); hydrate behavioral rules (`_run_prologue.py:70-78`).
+3. `ContinuationDetector.resolve_prompt` turns vague follow-ups ("yes") into a full prompt (`_run_prologue.py:80-82`).
+4. Assemble tools for this query via `ToolAssembler` (`_run_prologue.py:85-96`).
+5. `FlowRouter.resolve_initial_state` picks the start state (`_run_prologue.py:99-103`). For `ExecutingState` the session is saved first (the step handler reloads the plan from the repo) and the last plan becomes `_plan` (`_run_prologue.py:104-111`). For `PlanningState` a rejected plan is recorded in the misalignment journal (`_run_prologue.py:112-124`), and with `PRODUCT_MODE_ENABLED` `ProductGateState` runs first (`_run_prologue.py:126-133`).
+6. `pre_execute` hooks (`_run_prologue.py:138-142`).
 
-Then the loop in `plan_act_flow.py`, `while iteration_count <= max_iterations` (`:377`):
-7. Per iteration: a `flow cancel` request fails the session and ends the loop (`:379-383`); composable termination conditions can jump to `CompletedState` (`enforce_termination`, `:397-398`); with a cost meter, `enforce_budget` can end the run as `BUDGET_EXCEEDED` or pause it for approval (`:401-407`; both in `collaborators/session_budget.py`); the harness block is re-resolved for the configured model and pushed to the summary executor (`:411-427`); the state runs with the turn prompt, which is emptied once any state yields a non-error event (`:433-445`).
-8. `PlanStuckError` yields `ErrorEvent(error_code="PLAN_STUCK")` and ends (`:446-469`). The counter `_similar_plan_count` is bumped in `_snapshot_plan` against `_MAX_SIMILAR_PLANS = 3` (`:541-575`).
-9. Stops when session status is COMPLETED, WAITING or FAILED (`:472-476`), or flow status is IDLE (`:479-480`). Then `post_execute` hooks (`:484-496`) and decomposition signals (`:499`). If the cap was exceeded, yields `ErrorEvent("Max iterations ...")` (`:501-502`).
+Then the loop in `plan_act_flow.py`, `while iteration_count <= max_iterations` (`plan_act_flow.py:377`):
+7. Per iteration: a `flow cancel` request fails the session and ends the loop (`plan_act_flow.py:379-383`); composable termination conditions can jump to `CompletedState` (`enforce_termination`, `plan_act_flow.py:397-398`); with a cost meter, `enforce_budget` can end the run as `BUDGET_EXCEEDED` or pause it for approval (`plan_act_flow.py:401-407`; both in `collaborators/session_budget.py`); the harness block is re-resolved for the configured model and pushed to the summary executor (`plan_act_flow.py:411-427`); the state runs with the turn prompt, which is emptied once any state yields a non-error event (`plan_act_flow.py:433-445`).
+8. `PlanStuckError` yields `ErrorEvent(error_code="PLAN_STUCK")` and ends (`plan_act_flow.py:446-469`). The counter `_similar_plan_count` is bumped in `_snapshot_plan` against `_MAX_SIMILAR_PLANS = 3` (`plan_act_flow.py:541-575`).
+9. Stops when session status is COMPLETED, WAITING or FAILED (`plan_act_flow.py:472-476`), or flow status is IDLE (`plan_act_flow.py:479-480`). Then `post_execute` hooks (`plan_act_flow.py:484-496`) and decomposition signals (`plan_act_flow.py:499`). If the cap was exceeded, yields `ErrorEvent("Max iterations ...")` (`plan_act_flow.py:501-502`).
 
-Executors: the flow builds `_summary_executor` from its settings (`_plan_act_wiring.py:269`); steps run on `ExecuteStepHandler`'s executor, which receives the flow's settings through `step_execution_context()` (ADR-015) (`plan_act_flow.py:605-614`). `record_step_usage` adds each step's token usage and skill gaps, and `token_usage` sums them with the summary executor's own (`:596-620`).
+Executors: the flow builds `_summary_executor` from its settings (`_plan_act_wiring.py:269`); steps run on `ExecuteStepHandler`'s executor, which receives the flow's settings through `step_execution_context()` (ADR-015) (`plan_act_flow.py:605-614`). `record_step_usage` adds each step's token usage and skill gaps, and `token_usage` sums them with the summary executor's own (`plan_act_flow.py:596-620`).
 
-Other members: `set_state` (`:291-332`) records per-state duration metrics, updates `status` from the state's class attribute, and opens a tracing span; `_pause_for_user` (`:227-235`) delegates to `collaborators/user_pause.py`; plan undo/redo (`:578-595`).
+Other members: `set_state` (`plan_act_flow.py:291-332`) records per-state duration metrics, updates `status` from the state's class attribute, and opens a tracing span; `_pause_for_user` (`plan_act_flow.py:227-235`) delegates to `collaborators/user_pause.py`; plan undo/redo (`plan_act_flow.py:578-595`).
 
 ## Connected to
 - **Uses:** `FlowRouter`, `FlowState` subclasses, `PlannerAgent` (`_plan_act_wiring.py:233`), `ExecutorAgent` (`self._summary_executor`), `Mediator` and `StateRepositoryPort` (assigned by `wire_ports`, `_plan_act_wiring.py:130-131`), `ToolAssembler`, `ContinuationDetector`.

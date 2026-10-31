@@ -5,8 +5,8 @@ code: FlowState
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 9a422252
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # FlowState
@@ -25,11 +25,11 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 
 | From | To |
 |---|---|
-| Planning | Summarizing (no steps, `planning.py:293`); Critiquing (`:321`); `next_state_after_plan()` (`:324`) |
-| Critiquing | `next_state_after_plan()` (`critiquing.py:54, 59`); Premortem (`:109,115,123`); Planning (`:133`) |
+| Planning | Summarizing (no steps, `planning.py:293`); Critiquing (`planning.py:342`); `next_state_after_plan()` (`planning.py:345`) |
+| Critiquing | `next_state_after_plan()` (`critiquing.py:54, 59`); Premortem (`critiquing.py:109,115,123`); Planning (`critiquing.py:133`) |
 | Premortem | `next_state_after_plan()` (`premortem.py:48, 56, 90`) |
 | `next_state_after_plan()` | `ExecutingState` if `settings.plan_review_enabled` is false, else `PlanReviewState` (`base.py:125-135`) |
-| PlanReview | Executing (`plan_review.py:68,80`); otherwise sets WAITING and `plan_pending_approval` and pauses (`:94,106`) |
+| PlanReview | Executing (`plan_review.py:68,80`); otherwise sets WAITING and `plan_pending_approval` and pauses (`plan_review.py:94,106`) |
 | ProductGate | Planning (`product_gate.py:102,108,215`) |
 | Executing | Verifying, Updating, Executing, Planning (`executing.py:104`; the evidence gate, `evidence_gate.py:51,57`, sends Executing or Updating); Reviewing when `_code_reviewer` is set, the step is a code step and `retry_count < _MAX_REVIEW_RETRIES_GATE` (`weebot/application/flows/states/_step_outcome.py:383-403`) |
 | Reviewing | Executing, Updating (`reviewing.py:66-164`) |
@@ -43,7 +43,7 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 ## Connected to
 - **Owned by** `PlanActFlow` (`_state`). **Entry state** chosen by FlowRouter.
 - **Pause flags:** executing, plan_review and product_gate write the flags FlowRouter reads.
-- Looks like but is not: `AgentState` in `weebot/domain/legacy_models.py:189` (a legacy enum; its docstring maps it to `AgentStatus`, `:19`). Use `AgentStatus` from `states/base.py`.
+- Looks like but is not: `AgentState` in `weebot/domain/legacy_models.py:189` (a legacy enum; its docstring maps it to `AgentStatus`, `weebot/domain/legacy_models.py:19`). Use `AgentStatus` from `states/base.py`.
 - Outside importers of `flows.states`: only docstring or comment mentions in `cqrs/handlers/summarize_handler.py`, `cqrs/handlers/update_plan_handler.py`, `services/tool_approval.py`, `core/background_tasks.py`, `domain/legacy_models.py` (grep; not checked whether they import at runtime).
 
 ## If you change this

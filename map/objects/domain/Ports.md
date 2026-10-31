@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-31
-commit: 7d205bb1
+commit: 85a51bdd
 ---
 
 # Ports
@@ -14,10 +14,10 @@ commit: 7d205bb1
 The interfaces (ABCs and a few `Protocol`s) that the application layer depends on and the infrastructure layer implements. One file per port in `weebot/application/ports/`: 64 `.py` files (62 `*_port.py`), 70 interface classes counting `EventBusPort` (count 2026-10-30).
 
 ## Why this shape
-Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:139-407`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
+Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:139-407`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `weebot/domain/ports.py:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
 
 ## Shape
-`ports/__init__.py` re-exports only `LLMPort`, `StateRepositoryPort` and `EventBusPort` (`:3-7`). "DI" says how `Container.configure_defaults` resolves it: **port** = registered under the port class; **key** = registered under a string or concrete class; **none** = no `register` call. Main implementation: the first subclass found by `class X(...Port)`; Protocols match by structure, so there is none to grep.
+`ports/__init__.py` re-exports only `LLMPort`, `StateRepositoryPort` and `EventBusPort` (`weebot/application/ports/__init__.py:3-7`). "DI" says how `Container.configure_defaults` resolves it: **port** = registered under the port class; **key** = registered under a string or concrete class; **none** = no `register` call. Main implementation: the first subclass found by `class X(...Port)`; Protocols match by structure, so there is none to grep.
 
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
@@ -49,7 +49,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | MemoryPort | memory_port.py:8 | FileSystemMemoryAdapter `infrastructure/persistence/filesystem_memory.py:29` | key `FileSystemMemoryAdapter` `di/__init__.py:174` |
 | MetricsPort | metrics_port.py:11 | PrometheusMetricsAdapter `infrastructure/observability/prometheus_adapter.py:15` | key `PrometheusMetricsAdapter` `di/__init__.py:229` |
 | MisalignmentJournalPort | misalignment_journal_port.py:10 | SQLiteMisalignmentJournal `infrastructure/persistence/sqlite_misalignment_journal.py:46` | key `"misalignment_journal"` `di/_learning.py:32` |
-| NotificationPort / NotificationSubscriber | notification_port.py:115, 211 | WindowsToastAdapter `infrastructure/notifications/windows_toast.py:18`, WindowsToastSubscriber `:188` (the Telegram, Slack and log channels in `notifications.py` do not subclass it) | none |
+| NotificationPort / NotificationSubscriber | notification_port.py:115, 211 | WindowsToastAdapter `infrastructure/notifications/windows_toast.py:18`, WindowsToastSubscriber `weebot/infrastructure/notifications/windows_toast.py:188` (the Telegram, Slack and log channels in `notifications.py` do not subclass it) | none |
 | OptimizationTarget | optimization_target_port.py:20 | HarnessOptimizationTarget `application/services/harness_optimization_target.py:30` | key `"harness_optimization_target"` `di/_skillopt.py:30` |
 | OptimizerPort | optimizer_port.py:25 | OptimizerAgent `application/agents/optimizer_agent.py:46` | key `"optimizer_port"` `di/_skillopt.py:23` |
 | PlanCriticPort | plan_critic_port.py:11 | PlanCriticService `application/services/plan_critic.py:39` | none |
@@ -84,7 +84,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | VectorStorePort | vector_store_port.py:16 | NumpyVectorStore `infrastructure/adapters/numpy_vector_store.py:19` | none |
 | WorkspaceSnapshotPort | workspace_snapshot_port.py:85 | LocalWorkspaceSnapshotAdapter `infrastructure/adapters/workspace_snapshot_adapter.py:71` | key `"workspace_snapshots"` `di/__init__.py:205` |
 
-Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
+Not interfaces: `hook_context_types.py` (TypedDicts, `weebot/application/ports/hook_context_types.py:14-105`).
 
 Consequences (read from source, not run):
 - Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-30): `CanonicalizerPort`, `DesktopPort`, `OptimizationTarget`, `PlanCriticPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:304` names it in a comment). They document a seam nobody depends on.

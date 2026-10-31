@@ -5,8 +5,8 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 85a51bdd
 ---
 
 # BashGuard
@@ -14,14 +14,14 @@ commit: 8e6d1cca
 A regex scanner that rates a command string SAFE, SUSPICIOUS, DANGEROUS or BLOCKED. It decides nothing by itself: each tool that runs shell or code, and the `GuardedTool` chain around it, reads the rating and chooses what to do with it. Inside the tools only BLOCKED stops a command; in the chain (default mode `enforce`) BLOCKED is refused and DANGEROUS asks a human.
 
 ## Why this shape
-Pure core-layer code with no infrastructure imports; metrics and hooks are injected (`weebot/core/bash_guard.py:427-439`, `on_security_event`; the hook registry is a module global, `:24-29`). It is fail-closed on its own breakage: a BLOCKED or DANGEROUS pattern that fails to compile makes every `evaluate` return BLOCKED instead of "clean" (`:454-484, 523-535`). The source says built-in patterns are pinned to compile by a test, so the risk is for `custom_patterns` (`:469-474`).
+Pure core-layer code with no infrastructure imports; metrics and hooks are injected (`weebot/core/bash_guard.py:427-439`, `on_security_event`; the hook registry is a module global, `bash_guard.py:24-29`). It is fail-closed on its own breakage: a BLOCKED or DANGEROUS pattern that fails to compile makes every `evaluate` return BLOCKED instead of "clean" (`bash_guard.py:454-484, 523-535`). The source says built-in patterns are pinned to compile by a test, so the risk is for `custom_patterns` (`bash_guard.py:469-474`).
 
 ## Shape
-- `RiskLevel` enum: safe, suspicious, dangerous, blocked (`:32-38`). `SafetyCheck(pattern, risk_level, description, suggestion)` is a frozen record (`:41-48`).
-- Rule tables, 55 patterns in six groups: `DESTRUCTIVE_PATTERNS` (rm variants, `curl|bash`, redirects into system dirs), `SYSTEM_PATTERNS` (systemctl, chmod 777, mkfs, dd, `python -c`, `reg add/delete`, `format X:`), `CREDENTIAL_PATTERNS`, `NETWORK_PATTERNS`, `ATTACK_PATTERNS` (fork bomb, base64 into an interpreter, obfuscated `__import__`), `WINDOWS_PATTERNS` (`Invoke-Expression`, `iex`, `-EncodedCommand`, `Remove-Item -Recurse -Force`, `shutdown`) (`:72-425`). Compiled case-insensitively (`:458`).
-- `evaluate(command)` (`:507`): `_normalize` first (tabs, escaped spaces, `rm` flag variants like `-fr`, `--recursive --force` all become `rm -rf`, `:486-505`), then every matching pattern becomes a `SafetyCheck`; the highest level wins (`:560-578`). The callback fires for any non-safe result and never raises (`:581-586`). An empty command is SAFE with a named `<empty>` check, not an empty list (`:537-554`).
-- Helpers: `is_safe`, `is_blocked`, `requires_approval` (SUSPICIOUS or DANGEROUS), `get_risk_description`, `format_check_results` (`:590-661`).
-- Some commands match twice at different levels (`curl ... | bash` is BLOCKED at `:115-121` and DANGEROUS at `:237-242`); the maximum applies.
+- `RiskLevel` enum: safe, suspicious, dangerous, blocked (`bash_guard.py:32-38`). `SafetyCheck(pattern, risk_level, description, suggestion)` is a frozen record (`bash_guard.py:41-48`).
+- Rule tables, 55 patterns in six groups: `DESTRUCTIVE_PATTERNS` (rm variants, `curl|bash`, redirects into system dirs), `SYSTEM_PATTERNS` (systemctl, chmod 777, mkfs, dd, `python -c`, `reg add/delete`, `format X:`), `CREDENTIAL_PATTERNS`, `NETWORK_PATTERNS`, `ATTACK_PATTERNS` (fork bomb, base64 into an interpreter, obfuscated `__import__`), `WINDOWS_PATTERNS` (`Invoke-Expression`, `iex`, `-EncodedCommand`, `Remove-Item -Recurse -Force`, `shutdown`) (`bash_guard.py:72-425`). Compiled case-insensitively (`bash_guard.py:458`).
+- `evaluate(command)` (`bash_guard.py:507`): `_normalize` first (tabs, escaped spaces, `rm` flag variants like `-fr`, `--recursive --force` all become `rm -rf`, `bash_guard.py:486-505`), then every matching pattern becomes a `SafetyCheck`; the highest level wins (`bash_guard.py:560-578`). The callback fires for any non-safe result and never raises (`bash_guard.py:581-586`). An empty command is SAFE with a named `<empty>` check, not an empty list (`bash_guard.py:537-554`).
+- Helpers: `is_safe`, `is_blocked`, `requires_approval` (SUSPICIOUS or DANGEROUS), `get_risk_description`, `format_check_results` (`bash_guard.py:590-661`).
+- Some commands match twice at different levels (`curl ... | bash` is BLOCKED at `bash_guard.py:115-121` and DANGEROUS at `bash_guard.py:237-242`); the maximum applies.
 
 ## How the tools use it (the part that matters)
 | Tool | Gates, in order | Source |
@@ -35,7 +35,7 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 Consequences (read from source, not run):
 - Inside the tools, DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`; `get_risk_description` says DANGEROUS needs "explicit approval", and only the `GuardedTool` chain asks (`tool_guards.py:89-115`). A bare `BashTool()` has no such gate.
 - `bash`, `powershell` and `python_execute` from the registry (`application/services/tool_registry.py:539-541`, flows pass `include_egress=False` because `ToolExecutor` gates egress) are wrapped in `GuardedTool`; the MCP server wraps `bash` and `python_execute` (`weebot/mcp/server.py:392`). Default mode is `enforce` since W3.7 (`weebot/config/settings.py:216-220`); `observe` only logs the verdict and the tools' own gates decide (`tool_guards.py:11-18`).
-- The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:376-377`). It is a report only, spawned through `core/background_tasks.py` (`:365-381`); nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:27-29`).
+- The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:376-377`). It is a report only, spawned through `core/background_tasks.py` (`bash_tool.py:365-381`); nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:27-29`).
 - The `powershell` tool itself skips BashGuard, although the root `CLAUDE.md` rule says every shell command goes through `bash_guard.py`: its `Invoke-Expression`, `iex`, `-EncodedCommand` and `Remove-Item -Recurse -Force` rules reach it only through `GuardedTool` (`tests/unit/fixes/test_f01_powershell_skips_bash_guard.py`); built bare, only `ExecApprovalPolicy` and the encoded-command validator apply.
 - `CommandSecurityAnalyzer.analyze` returns early only on DANGEROUS from layers 1-3 and otherwise returns the layer 4 verdict alone (`tools/bash_security.py:308-318`). Layers 1-3 can only return SAFE or DANGEROUS, so nothing is dropped today; a future SUSPICIOUS rule in those layers would be. See its own card.
 
