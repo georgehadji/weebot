@@ -5,8 +5,8 @@ code: weebot-ui (Next.js app router)
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 7d205bb1
 ---
 
 # Web UI
@@ -36,10 +36,10 @@ Backend calls:
 - `/ops` opens a socket to `{ws}` (with `openSocket`) for its log view (`weebot-ui/src/app/ops/page.tsx:37-41, 68-84`).
 
 Consequences (read from source, not run):
-- The proxy forwards from the Next server, so the backend sees a loopback client. `authenticate` admits a loopback caller as anonymous when no key is configured (`weebot/interfaces/web/auth.py:239`), and `require_mutation_identity` lets an anonymous loopback caller mutate unless `WEEBOT_BEHIND_PROXY` is on, which is off by default (`auth.py:55-64, 279-292`; `.env.example:189`). The Docker image binds the Next server on `0.0.0.0:3000` (`weebot-ui/Dockerfile:41-44`). `npm run dev` / `start` bind loopback only (F45), but with no `WEEBOT_API_KEY` and that flag off, any client that reaches port 3000 of the Docker image gets loopback rights on `/api/*`.
+- The proxy forwards from the Next server, so the backend sees a loopback client. `authenticate` admits a loopback caller as anonymous when no key is configured (`weebot/interfaces/web/auth.py:236`), and `require_mutation_identity` lets an anonymous loopback caller mutate unless `WEEBOT_BEHIND_PROXY` is on, which is off by default (`auth.py:55-64, 276-289`; `.env.example:189`). The Docker image binds the Next server on `0.0.0.0:3000` (`weebot-ui/Dockerfile:41-44`). `npm run dev` / `start` bind loopback only (F45), but with no `WEEBOT_API_KEY` and that flag off, any client that reaches port 3000 of the Docker image gets loopback rights on `/api/*`.
 - The proxy parses every response as JSON (`route.ts:45`): SSE (`/api/chat/stream`, `/api/events/stream`) and text (`/api/health/prometheus`) come back as `null` through it. The SSE fallback avoids this only because it fetches `ENDPOINTS.api` directly.
 - `/ops` "live log" listens on `/ws`, which only receives events without a `session_id` (`weebot/interfaces/web/event_broadcaster.py:37-43`), so it shows presence events, not session activity.
-- Socket keys travel as the `bearer.<key>` subprotocol, not the query string: every socket opens through `openSocket` (`EventStreamProvider.tsx:189, 268`, `useBehavior.ts:74`, `weebot-ui/src/app/ops/page.tsx:69`, `weebot-ui/src/hooks/useWebSocketDebug.ts:44`). The backend still accepts the deprecated `?token=` and logs it (`weebot/interfaces/web/auth.py:76-102`). The SSE fallback sends `X-API-Key` (`EventStreamProvider.tsx:128-131`).
+- Socket keys travel as the `bearer.<key>` subprotocol, not the query string: every socket opens through `openSocket` (`EventStreamProvider.tsx:189, 268`, `useBehavior.ts:74`, `weebot-ui/src/app/ops/page.tsx:69`, `weebot-ui/src/hooks/useWebSocketDebug.ts:44`). The backend refuses a `?token=` (decision D2, `weebot/interfaces/web/auth.py:76-99`). The SSE fallback sends `X-API-Key` (`EventStreamProvider.tsx:128-131`).
 - `next.config.mjs:23-28` also rewrites `/api/:path*` to a hard-coded `http://localhost:8000`, a second routing rule beside the route handler that ignores `BACKEND_URL`.
 - Backend endpoints with no UI caller: all of `/api/chat/*`, `/api/sessions/search`, `/api/sessions/{id}/steer`, `/api/sessions/{id}/resume` (`api.sessions.resume` is defined, unused), `/api/ponytail/*`, `/api/models/available`, `/api/health/ready` and `/live` (defined in `api.ts:182-183`, unused), behavior `watch/*`, `report/*`, `session/{id}`, `self-knowledge/regenerate`, `/api/webhook/run` (machine caller).
 

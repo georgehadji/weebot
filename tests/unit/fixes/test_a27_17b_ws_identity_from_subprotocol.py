@@ -41,8 +41,9 @@ def test_a_subprotocol_key_gives_the_same_principal_as_the_header():
     assert via_socket == via_header != "anonymous"
 
 
-def test_the_query_token_gives_a_principal_on_a_socket_only():
-    assert auth.get_current_user_id(_ws(query=f"token={KEY}")) != "anonymous"
+def test_the_query_token_gives_no_principal():
+    # Decision D2 (2026-10-31): ?token= is refused on a socket too.
+    assert auth.get_current_user_id(_ws(query=f"token={KEY}")) == "anonymous"
     http_with_query = HTTPConnection({"type": "http", "headers": [], "client": ("1.1.1.1", 1),
                                       "query_string": f"token={KEY}".encode(), "path": "/"})
     assert auth.get_current_user_id(http_with_query) == "anonymous"

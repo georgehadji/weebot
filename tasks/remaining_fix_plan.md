@@ -2,6 +2,7 @@
 status: open
 date: 2026-10-23
 note: F28 type-safe mediator dispatch; container_construction ceiling still 8
+outcome: park (2026-10-31, owner decision D-F): F28 (type-safe mediator dispatch) is held by the container_construction ratchet; build when the mediator next changes
 ---
 
 # Plan: fix everything still open

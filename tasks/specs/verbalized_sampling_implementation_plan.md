@@ -1,7 +1,8 @@
 ---
-status: open
+status: done
 date: 2026-06-30
 note: VerbalizedSampler shipped but has no caller; phases 1-7 not wired
+outcome: drop (2026-10-31, owner decision D-F): the sampler had no caller since 2026-06-30 and was deleted (sampler, prompt, models, tests)
 ---
 
 # Verbalized Sampling — Implementation Plan

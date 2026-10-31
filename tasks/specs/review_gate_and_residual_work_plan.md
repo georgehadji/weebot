@@ -2,6 +2,7 @@
 status: open
 date: 2026-09-05
 note: A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
+outcome: park (2026-10-31, owner decision D-F): A3 needs the owner to register a GitHub App; the main ruleset now enforces PRs and checks
 ---
 
 # Review Gate & Residual Work — Execution Plan

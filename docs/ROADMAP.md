@@ -589,8 +589,8 @@ Phase 4* ✅ Observability Implemented
 - **System Knowledge Map:** `docs/SYSTEM_KNOWLEDGE_MAP.md` ← new v2
 - **Priority Issues Analysis:** `docs/PRIORITY_ISSUES_ANALYSIS.md` ← new v2
 - **Resilience & Deployment:** `docs/RESILIENCE_AND_DEPLOYMENT.md` ← new
-- **Production Summary:** `docs/FINAL_PRODUCTION_SUMMARY.md`
-- **Security Fixes:** `docs/SECURITY_FIXES_SUMMARY.md`
+- **Production Summary:** `docs/archive/FINAL_PRODUCTION_SUMMARY.md`
+- **Security Fixes:** `docs/archive/SECURITY_FIXES_SUMMARY.md`
 - **Multi-Agent README:** `weebot/core/README_MULTI_AGENT.md`
 
 ---

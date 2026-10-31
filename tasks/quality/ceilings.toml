@@ -101,7 +101,8 @@ blocking_io_in_async = 0
 # 69 -> 64 with wave 6 G4: the unwired observability modules were deleted.
 # 64 -> 62 with wave 6 G5: the QMD MCP client, RAG engine and query expander were deleted.
 # 62 -> 60 with wave 6 G7: osworld sandbox, zotero, literature and the old summary were deleted.
-print_in_production = 60
+# 60 -> 59 with D-F: the verbalized sampler (one docstring print) was deleted.
+print_in_production = 59
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was

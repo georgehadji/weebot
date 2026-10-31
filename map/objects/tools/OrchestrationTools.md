@@ -5,8 +5,8 @@ code: DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, Mixtu
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 7d205bb1
 ---
 
 # Orchestration tools
@@ -45,7 +45,7 @@ Wiring, read from source:
 - `ScheduleTool` refuses inside a cron job (`schedule_tool.py:110-121`). A `command` job is accepted (`:129-145`) but `SchedulingManager` raises `NotImplementedError` when it runs (`weebot/scheduling/scheduler.py:455-460`).
 
 Consequences (read from source, not run):
-- `build_tools` fills a missing `llm_port` from the shared container (`interfaces/factories.py:335-340`), so the web session router (`interfaces/web/routers/sessions.py:345`), the webhook router and the gateways, which reach `build_tools` through `run_scope` (`interfaces/factories.py:252-267`; `interfaces/web/routers/webhook.py:135`; e.g. `interfaces/gateways/discord.py:217`) and pass none, still get a flow factory; the CLI runner passes its own (`interfaces/cli/agent_runner.py:93-95`). The sub-agent tools stay dead but listed only when the container resolves no `LLMPort`, `StateRepositoryPort` or `EventBusPort` (`interfaces/factories.py:290-301`). MCP scoping rebuilds the collection with `llm_port` but no `flow_factory` (`application/flows/mcp_scope.py:84-86`), so `dispatch_parallel_tasks` and `workflow_orchestrator` fail and `debate`'s inner dispatcher returns an error after the scoped rebuild.
+- `build_tools` fills a missing `llm_port` from the shared container (`interfaces/factories.py:335-340`), so the web session router (`interfaces/web/routers/sessions.py:345`), the webhook router and the gateways, which reach `build_tools` through `run_scope` (`interfaces/factories.py:252-267`; `interfaces/web/routers/webhook.py:135`; e.g. `interfaces/gateways/discord.py:220`) and pass none, still get a flow factory; the CLI runner passes its own (`interfaces/cli/agent_runner.py:93-95`). The sub-agent tools stay dead but listed only when the container resolves no `LLMPort`, `StateRepositoryPort` or `EventBusPort` (`interfaces/factories.py:290-301`). MCP scoping rebuilds the collection with `llm_port` but no `flow_factory` (`application/flows/mcp_scope.py:84-86`), so `dispatch_parallel_tasks` and `workflow_orchestrator` fail and `debate`'s inner dispatcher returns an error after the scoped rebuild.
 - Fixed 2026-10-23 (F49): `dispatch_parallel_tasks` and `workflow_orchestrator` no longer call a `save_sync` that never existed inside `except Exception: pass`. The sub-agent flow saves its own session through the flow factory's `state_repo` (`dispatch_agents.py:192`, `workflow_orchestrator.py:245`).
 - `workflow_orchestrator` makes a new `asyncio.Semaphore(max_parallel)` inside each task call (`workflow_orchestrator.py:156`), so it limits nothing; the real cap is `max_parallel_agents` (`:182`).
 - `swarm` collects `bus_insights` from the swarm bus (`swarm.py:150-154`) and never passes them to the synthesizer (`:156`).

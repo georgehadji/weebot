@@ -41,7 +41,7 @@
 
 ### Intended Architecture
 
-The declared target (evidenced by `ARCHITECTURE_REMEDIATION_PLAN.md`, `docs/adr/`, and `test_architecture_fitness.py`) is:
+The declared target (evidenced by `docs/archive/ARCHITECTURE_REMEDIATION_PLAN.md`, `docs/adr/`, and `test_architecture_fitness.py`) is:
 
 ```
 Interfaces → Infrastructure → Application → Domain

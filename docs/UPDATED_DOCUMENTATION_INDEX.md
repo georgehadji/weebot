@@ -22,8 +22,8 @@
 | Έγγραφο | Status | Περιγραφή |
 |---------|--------|-----------|
 | `BASH_SECURITY_FIX_ANALYSIS.md` | ✅ Νέο | Dev/Adversary analysis + stress tests |
-| `BASH_SECURITY_FIX_SUMMARY.md` | ✅ Νέο | Implementation summary |
-| `SECURITY_FIXES_SUMMARY.md` | ✅ Ισχύει | Commit a34110f fixes documented |
+| `docs/archive/BASH_SECURITY_FIX_SUMMARY.md` | ✅ Νέο | Implementation summary |
+| `docs/archive/SECURITY_FIXES_SUMMARY.md` | ✅ Ισχύει | Commit a34110f fixes documented |
 | `SECURITY_MODULE.md` | ✅ Ενημερωμένο | Security module + BashTool integration |
 
 ### Έγγραφα QMD Integration
@@ -43,10 +43,10 @@
 
 | Έγγραφο | Status | Σημείωση |
 |---------|--------|----------|
-| `PROJECT_COMPLETE.md` | ⚠️ Outdated | Προηγούμενη φάση, χρήσιμο για ιστορικό |
-| `IMPLEMENTATION_SUMMARY.md` | ⚠️ Outdated | Προηγούμενη φάση |
+| `docs/archive/PROJECT_COMPLETE.md` | ⚠️ Outdated | Προηγούμενη φάση, χρήσιμο για ιστορικό |
+| `docs/archive/IMPLEMENTATION_SUMMARY.md` | ⚠️ Outdated | Προηγούμενη φάση |
 | `SETUP_INSTRUCTIONS.md` | ✅ Ισχύει | Setup guide |
-| `SETUP_SUMMARY.md` | ✅ Ισχύει | Quick setup |
+| `docs/archive/SETUP_SUMMARY.md` | ✅ Ισχύει | Quick setup |
 
 ---
 
@@ -67,7 +67,7 @@
 1. `docs/PHASE2_IMPLEMENTATION_SUMMARY.md` — Συνοπτική περιγραφή Phase 2
 2. `docs/PHASE2_IMPLEMENTATION_CHECKLIST.md` — Checklist υλοποίησης
 3. `docs/BASH_SECURITY_FIX_ANALYSIS.md` — Ανάλυση security fix
-4. `docs/BASH_SECURITY_FIX_SUMMARY.md` — Συνοπτικό security fix
+4. `docs/archive/BASH_SECURITY_FIX_SUMMARY.md` — Συνοπτικό security fix
 
 ### Αρχεία που Ενημερώθηκαν
 

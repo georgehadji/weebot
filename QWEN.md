@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Development & Testing**:
   - First-time setup: `python -m venv .venv`, activate, `pip install -r requirements.txt`, `cp .env.example .env` and set at least one provider key (e.g. `OPENROUTER_API_KEY`), then verify with `python -m cli.main health` and `python run.py --diagnostic`
   - Install dependencies: `pip install -r requirements.txt`
-  - Run all tests: `pytest tests/ -v`
+  - Run all tests: `pytest tests/ -v`; in parallel (pytest-xdist, about 6x faster): `pytest tests/ -n auto` (`make test`; `make test-serial` runs them one at a time)
   - Run specific test file: `pytest tests/unit/test_activity_stream.py -v`
   - Run single test: `pytest tests/unit/test_activity_stream.py::TestClass::test_name -v`
   - Default pytest run skips `@pytest.mark.external` tests (`-m "not external"` in addopts, `--strict-markers` on); run them with `WEEBOT_TEST_LIVE=1` (`make test-live`, billed LLM calls)

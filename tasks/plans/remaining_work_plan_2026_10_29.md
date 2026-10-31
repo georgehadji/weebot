@@ -96,7 +96,7 @@ Work that waits on an owner decision comes after the owner decides. Structural d
     User text in `evidence_span` and `original_output` stays, and orphan trajectories keep feeding skill optimisation.
   - **Fix:** a `delete_by_session_id` on each store. Register each in `_session_stores()` (`interfaces/web/dependencies.py:28-42`), and clear steering in `DeleteSession`.
   - **Test:** one session written to every store, then deleted, leaves no row behind.
-- **L2. Knowledge-graph node owner** (`sqlite_knowledge_graph.py:206-211`, `postgresql/knowledge_graph.py:97-104`), S, needs decision D-KG.
+- **L2. Knowledge-graph node owner** (`sqlite_knowledge_graph.py:206-211`, `postgresql/knowledge_graph.py:97-104`), S, needs decision D-KG. DONE (6532eae5, wave 2; `tests/unit/fixes/test_l2_kg_node_owner.py`).
   - **Problem:** re-saving a node never updates `source_session_id`. Deleting session A can remove a node session B relies on, and a node first written with `''` is never claimed.
   - **Recommendation:** fill only when empty (`COALESCE(NULLIF(old, ''), new)`). A node-to-session join table is the full fix (L) and is not needed now.
 - **L3. Presence events become phantom sessions** (`infrastructure/event_bus.py:224-228`, `_journal_agent`), S.
@@ -120,7 +120,7 @@ Work that waits on an owner decision comes after the owner decides. Structural d
     - each run becomes a tracked task per chat, so the poll loop keeps reading;
     - `/stop` cancels that task, inside `run_scope`, so the tools still tear down.
   - **Test:** `/new` then "hi" starts a fresh session; `/stop` mid-run cancels it.
-- **F2. Behavior router ownership and `watch/start?directory=`** (`interfaces/web/routers/behavior_router.py`), S-M, needs decision D-BEH.
+- **F2. Behavior router ownership and `watch/start?directory=`** (`interfaces/web/routers/behavior_router.py`), S-M, needs decision D-BEH. DONE 2026-10-31 (6032de3d): session routes and sockets check ownership, recent actions and `/ws` drop other principals' sessions, `watch/start` only inside `WORKSPACE_ROOT`.
   - **Problem:**
     - Any authenticated caller reads any session's behavior data.
     - Any caller can stop another session's tracker.
@@ -129,7 +129,7 @@ Work that waits on an owner decision comes after the owner decides. Structural d
     - Confine `directory` to the workspace root with `is_relative_to`.
     - Call `verify_session_ownership` on the session routes.
     - Keep `/trust` and `/report` global, since they are aggregate.
-- **F3. A17: drop `?token=` on WebSockets** (`interfaces/web/auth.py:96-102`), S, needs decision D2.
+- **F3. A17: drop `?token=` on WebSockets** (`interfaces/web/auth.py:96-102`), S, needs decision D2. DONE 2026-10-31 (f7d4abf5).
   - **Fix:** delete the fallback and flip the test that pins it, once no client uses it. The UI already sends the subprotocol.
 
 ### Wave 4: guards that wait on owner decisions
@@ -177,7 +177,7 @@ Run these only after the owner decides. Each one makes the agent ask more often.
     - interfaces: CLI, chat gateways, MCP server, web API, web UI;
     - tools: base tool, browser, exec, integration, media, orchestration, web;
     - processes: flow turn, model cascade, session persistence, guard chain.
-- **R3. Docs archive** (needs D8), S after approval. Twelve files are still in `docs/`:
+- **R3. Docs archive** (needs D8), S after approval. Twelve files are still in `docs/`: DONE 2026-10-31 (50ae1719): the remediation plan in `docs/` is archived as `ARCHITECTURE_REMEDIATION_PLAN_V2_8.md`, since the archive already held a different file of that name.
   - `ARCHITECTURE_ENHANCEMENT_PLAN.md`;
   - `ARCHITECTURE_EXCELLENCE_PLAN.md`;
   - `ARCHITECTURE_REMEDIATION_PLAN.md` and `_V2.md`;
@@ -188,9 +188,16 @@ Run these only after the owner decides. Each one makes the agent ask more often.
 
   Make the referrer report first, then copy, verify and remove.
 - **R4. Plan statuses.** DONE 2026-10-30 (8e6d1cca). Mark `audit_2026_10_29_fix_plan.md` done and update `master_plan_2026_10_27.md`, then run `scripts/gen_tasks_index.py`. Trim the `ARCHITECTURE.md` debt table after wave 5. S.
-- **R5. pytest-xdist trial** (optional). Try it on a branch, and keep it only if few tests share state. M.
+- **R5. pytest-xdist trial** (optional). Try it on a branch, and keep it only if few tests share state. M. DONE 2026-10-31 (18ceaed3): 6928 passed, 0 failed, 69 s against about 440 s; `make test` runs `-n auto`.
 
-### Wave 7: live checks (each needs the owner's OK; some are billed)
+### Wave 7: live checks (each needs the owner's OK; some are billed) 
+
+**Run 2026-10-31:**
+- Groq (`free/groq/openai/gpt-oss-120b`) and Gemini (`free/gemini/gemini-2.5-flash`): a JSON reply and a tool call each, all correct, under 1 s.
+- Telegram R10: a rejected token stops polling at once; an unreachable API backs off (3 calls in 12 s, growing gaps).
+- Not runnable: the `TELEGRAM_BOT_TOKEN` (getMe 404) and `DISCORD_BOT_TOKEN` (`/users/@me` 401) in `.env` are rejected, so R09 and F1 wait for valid tokens and a person to message the bot.
+- Billed `flow run`: `OPENROUTER_API_KEY` answers 401 "API key expired", so every OpenRouter call fell back to DeepSeek-direct. The planner override (`planner: openai/gpt-6-luna` in `.weebot/role_models.json`) could not be served, so R17 waits for a renewed key. The run's step was honestly verifiable, so it did not exercise R06.
+- Modal: not run; the `modal` package is not installed and it needs a Modal account.
 
 - Discord (R09) with the owner's application.
 - Telegram (R10, and F1 once built) with a bot token.
@@ -230,16 +237,16 @@ New providers (Mistral, NVIDIA NIM, OVH) are parked until Groq and Gemini prove 
 
 | ID | Question | Recommendation | Blocks |
 |---|---|---|---|
-| D2 | Remove the `?token=` WebSocket fallback now? | Yes; the UI no longer uses it | F3 |
+| D2 | Remove the `?token=` WebSocket fallback now? | DECIDED 2026-10-31: yes; F3 done | F3 |
 | D3a | Shell default-ASK to enforce? | Not yet. 2026-10-30 batch: 19 would-ask lines in 12 runs (threshold 2), all false positives; 12/12 tasks correct. 13 are `$x = "literal"` assignments, 3 are reads the rule list lacks (`Get-FileHash`, `Format-Table`, `<exe> --version`), 1 is a read assigned to a variable, 2 run an agent-written script under `Output/`. Those read shapes now count as reads (fae7c211). Rerun: 12 lines, 12/12 correct, none of the old shapes. Left: 8 script blocks or subexpressions (`if (...) {...}`, `ForEach-Object {...}`, `"$(...)"`), 1 `python -c`, 1 `Add-Type`, 1 `Compress-Archive` into `Output/`, 1 script run. A regex cannot judge script blocks or inline code, so stay `observe`: enforce would add about one prompt per task. In a tainted session it already asks (D5) | P1 |
 | D5 | Every non-read-only tool asks after untrusted content is read? | DECIDED 2026-10-30: yes; `Output/` writes and plain reads stay unasked. P2 and P3 done | P2, P3 |
 | D6 | Apply `.github/rulesets/main.json`? | DECIDED 2026-10-30: yes; the owner runs the POST (an external write the agent may not make) | none |
-| D7 | Draft PR #54 (LuaLaTeX): rebase or close? | Close, or park as a branch | none |
-| D8 | Archive the twelve old plan and summary docs? | Yes, after the referrer report | R3 |
+| D7 | Draft PR #54 (LuaLaTeX): rebase or close? | DECIDED 2026-10-31: park (close the PR, keep `claude/session-n4trou`); the close is an external write the owner makes | none |
+| D8 | Archive the twelve old plan and summary docs? | DECIDED 2026-10-31: yes; R3 done | R3 |
 | D9 | Enforce Windows network-off with a firewall rule? | DECIDED 2026-10-30: no; it stays advisory, as documented. P4 closed | P4 |
-| D-KG | Who owns a knowledge-graph node seen by two sessions? | The first session; fill only when empty | L2 |
-| D-BEH | What may the behavior panel show, and to whom? | Each principal sees its own sessions; watch only inside the workspace | F2 |
-| D-F | Build, park or drop each backlog spec | One triage pass | wave 8 |
+| D-KG | Who owns a knowledge-graph node seen by two sessions? | DECIDED: the first session; fill only when empty; L2 done | L2 |
+| D-BEH | What may the behavior panel show, and to whom? | DECIDED 2026-10-31: as recommended; F2 done | F2 |
+| D-F | Build, park or drop each backlog spec | DECIDED 2026-10-31: 1 build (UI defect hunt W2-W8), 11 park, 4 drop; each outcome is in its record's `outcome:` frontmatter | wave 8 |
 
 ## 5. Done means
 
