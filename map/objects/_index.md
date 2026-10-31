@@ -7,7 +7,7 @@ Format: name — source — status — card
 ## domain
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-30 — [card](domain/Event.md)
 - Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-30 — [card](domain/Plan.md)
-- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-30 — [card](domain/Ports.md)
+- Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-31 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-30 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-30 — [card](domain/Step.md)
 
@@ -31,11 +31,11 @@ Format: name — source — status — card
 - SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — verified 2026-10-30 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
-- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-30 — [card](interfaces/ChatGateways.md)
+- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-31 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — verified 2026-10-30 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-10-30 — [card](interfaces/MCPServer.md)
-- Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-30 — [card](interfaces/WebAPI.md)
-- Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — verified 2026-10-30 — [card](interfaces/WebUI.md)
+- Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-31 — [card](interfaces/WebAPI.md)
+- Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — verified 2026-10-31 — [card](interfaces/WebUI.md)
 
 ## core
 - ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-10-30 — [card](core/ApprovalManager.md)
@@ -53,7 +53,7 @@ Format: name — source — status — card
 - ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — verified 2026-10-30 — [card](tools/ExecTools.md)
 - Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — verified 2026-10-30 — [card](tools/IntegrationTools.md)
 - Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — verified 2026-10-30 — [card](tools/MediaTools.md)
-- Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — verified 2026-10-30 — [card](tools/OrchestrationTools.md)
+- Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — verified 2026-10-31 — [card](tools/OrchestrationTools.md)
 - Personas (AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter) — `weebot/agents/parser.py` — verified 2026-10-24 — [card](tools/Personas.md)
 - RoleBasedToolRegistry — `weebot/application/services/tool_registry.py` — verified 2026-10-30 — [card](tools/RoleBasedToolRegistry.md)
 - WebTools (WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool, ImageSearchTool, KnowledgeTool, SearchHistoryTool, WeatherTool, OCRTool, StructuredOCRTool) — `weebot/tools/web_search.py` — verified 2026-10-30 — [card](tools/WebTools.md)

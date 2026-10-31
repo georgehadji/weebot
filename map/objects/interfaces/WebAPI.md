@@ -5,8 +5,8 @@ code: create_app, lifespan
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 7d205bb1
 ---
 
 # Web API (FastAPI)
@@ -36,7 +36,7 @@ Per-route auth lives in `weebot/interfaces/web/auth.py`: routes stamp and filter
 | `/api/ponytail` | `routers/ponytail.py:16` | GET `/mode`, POST `/mode/{mode}` | POST `require_mutation_identity` |
 | root | `main.py:609-620` | GET `/metrics`, GET `/` (test HTML) | |
 
-WebSockets: `/ws` (`main.py:623-645`) and `/ws/sessions/{id}` (`:647-684`), both through `_websocket_auth` (`:694-698`), which awaits the one rule `authenticate` (`weebot/interfaces/web/auth.py:201-239`) used by the HTTP middleware and the routes too: `X-API-Key`, `Authorization: Bearer`, subprotocol `bearer.<key>`, then deprecated `?token=` with a warning, resolved through the key store in store mode; no legacy key means a keyless caller gets in only from loopback. The handshake is answered with the marker subprotocol `weebot.v1`, never the key (`auth.py:32-33, 42-48`). The session socket also checks ownership (`:657-670`), and identity is read from the same places (`auth.py:76-102`), so a browser socket is not anonymous. `WebSocketEventBroadcaster` sends an event to its session's sockets, and only events without a `session_id` to `/ws` (`weebot/interfaces/web/event_broadcaster.py:37-43`).
+WebSockets: `/ws` (`main.py:623-645`) and `/ws/sessions/{id}` (`:647-684`), both through `_websocket_auth` (`:694-698`), which awaits the one rule `authenticate` (`weebot/interfaces/web/auth.py:198-236`) used by the HTTP middleware and the routes too: `X-API-Key`, `Authorization: Bearer`, subprotocol `bearer.<key>` (a `?token=` is refused, decision D2), resolved through the key store in store mode; no legacy key means a keyless caller gets in only from loopback. The handshake is answered with the marker subprotocol `weebot.v1`, never the key (`auth.py:32-33, 42-48`). The session socket also checks ownership (`:657-670`), and identity is read from the same places (`auth.py:76-99`), so a browser socket is not anonymous. `WebSocketEventBroadcaster` sends an event to its session's sockets, and only events without a `session_id` to `/ws` (`weebot/interfaces/web/event_broadcaster.py:37-43`).
 
 Sessions: `/run` builds tools and a `TaskRunner` plan-act factory with the app's bus and steering (`routers/sessions.py:301-364`); `/input` and `/resume` go through `dispatch_session_input` (`:272-298, 406-436, 439-479`).
 
@@ -46,8 +46,8 @@ Consequences (read from source, not run):
 - `/api/webhook/run` continues a stored session only when its `user_id` is `webhook`, else 404 (F57, `routers/webhook.py:113-123`); it runs under `DenyApproval`, since a webhook caller cannot answer a prompt (`:133-141`).
 - Fixed (W2.1, 2026-10-28): store-mode principal keys pass the HTTP middleware and open sockets; both used to compare only against `weebot_api_key` (`tests/unit/fixes/test_w21_one_authenticator.py`).
 - `/api/costs/summary` has no tenant filter (`routers/ops_router.py:85-102`). Fixed (F58): `/api/sessions/search` keeps only the caller's sessions (`routers/sessions.py:154-161`), `/api/dashboard/metrics` counts only the caller's (`routers/dashboard.py:37-38`), `/api/events/stream` forwards only events of the caller's sessions (`routers/sse.py:52-72`).
-- `watch/start` starts a file watcher on any existing directory the caller names, once `require_mutation_identity` passes (`routers/behavior_router.py:138-160`).
-- The behavior sockets use the same `authenticate` rule through `_ws_authorized` (`behavior_router.py:249-253`); neither checks session ownership.
+- `watch/start` starts a file watcher only on an existing folder inside `WORKSPACE_ROOT`, for a session the caller owns, once `require_mutation_identity` passes; a refusal does not echo the path (`routers/behavior_router.py:180-205`).
+- The behavior sockets use the same `authenticate` rule through `_ws_authorized` (`behavior_router.py:305-309`). The session routes and the session socket check ownership through `_require_owner` (`:98-100`; the socket closes 4003), and `/ws` sends each client only its own sessions' events (`:276-281`). `/trust` and `/report` stay global (decision D-BEH).
 - Silent swallow: `cancel` falls back on `except (KeyError, Exception)` with no log (`routers/sessions.py:255-258`).
 - Slack and WhatsApp callbacks spawn their work on the background-task owner (`routers/slack_webhook.py:68`, `routers/whatsapp_webhook.py:78`), which the lifespan drains at shutdown (`main.py:380-382`).
 - `/app` static mount looks for `weebot-ui/dist` (`main.py:687-689`); the UI builds `output: 'standalone'` (`weebot-ui/next.config.mjs:12`), so the mount is inert.
