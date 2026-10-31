@@ -74,7 +74,7 @@ opentelemetry-exporter-otlp-proto-http==1.45.1
 anyio==4.15.1
 
 # Web search & image search
-ddgs>=9.16.0
+ddgs>=9.16.1
 duckduckgo-search>=7.0
 
 # Utilities
