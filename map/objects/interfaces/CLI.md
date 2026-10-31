@@ -5,8 +5,8 @@ code: cli (click group), AgentRunner, interfaces.factories
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 6166004e
 ---
 
 # CLI
@@ -52,8 +52,8 @@ Groups registered at `cli/main.py:710-749`:
 Consequences (read from source, not run):
 - `pyproject.toml:26` declares `weebot = "cli.main:_wrap_main"`, the wrapper `cli/main.py:147` defines and also runs under `__main__` (`cli/main.py:757-758`).
 - `flow run` and `flow resume` build `AgentRunner` with the container's bus (`cli/commands/flow.py:139, 198`), so the flow publishes events and domain events; the runner publishes only events the flow yielded without emitting (`_was_emitted`, `weebot/interfaces/cli/agent_runner.py:43-45, 243-244`).
-- `flow cancel` first tries its own process: `TaskRunner.cancel_session` looks in the in-memory `_tasks` (`weebot/application/services/task_runner.py:497-507`), empty in a fresh CLI. Otherwise, for a RUNNING, WAITING or PENDING session, it files a cross-process cancel request and marks a non-RUNNING session FAILED (F77, `cli/commands/flow.py:296-319`).
-- `flow retry` builds a PlanActFlow factory the way the web router does, passes it to `rerun_failed_session` and waits for the run with `TaskRunner.wait_for` (`cli/commands/flow.py:327-369`, `task_runner.py:510-541, 543-548`). Before L5 (2026-10-30) the rerun looked for a cached factory that `_cleanup` had already dropped, so it always failed.
+- `flow cancel` first tries its own process: `TaskRunner.cancel_session` looks in the in-memory `_tasks` (`weebot/application/services/task_runner.py:498-508`), empty in a fresh CLI. Otherwise, for a RUNNING, WAITING or PENDING session, it files a cross-process cancel request and marks a non-RUNNING session FAILED (F77, `cli/commands/flow.py:296-319`).
+- `flow retry` builds a PlanActFlow factory the way the web router does, passes it to `rerun_failed_session` and waits for the run with `TaskRunner.wait_for` (`cli/commands/flow.py:327-369`, `task_runner.py:511-542, 543-548`). Before L5 (2026-10-30) the rerun looked for a cached factory that `_cleanup` had already dropped, so it always failed.
 - `flow undo` rebuilds a flow whose `PlanHistory` starts empty (`weebot/application/flows/_plan_act_wiring.py:174`), so `undo()` returns None and the command always prints "Nothing to undo" (`weebot/application/services/plan_history.py:55-56`). It also omits `state_repo` (`agent_runner.py:338-348`).
 - `_cached` swallows every exception with no log (`factories.py:45-53`); so does `_get_flow_factory` (`:318-319`). A missing collaborator turns into `None` silently. The sub-agent factory builds `PlanActFlow` with `tools=None` and no mediator, and returns `None` when the shared state repo or bus is missing (`:285-319`).
 - `cron-agent` `_load_jobs` moves an unreadable jobs file aside as `cron_jobs.json.corrupt-<time>`, logs and prints it, then returns `{}`, so the next save does not overwrite the old jobs (F77, `cli/commands/cron_agent.py:35-48`).
@@ -61,7 +61,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Uses** the DI container (`application/DIContainer.md`), `PlanActFlow` (`application/PlanActFlow.md`), `RoleBasedToolRegistry` via `build_tools`, `SQLiteStateRepository` and the event store (`infrastructure/`).
-- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:343-345, 457-470`, `routers/webhook.py:135`, through `run_scope`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:262-281`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:737`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
+- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:358-360, 457-470`, `routers/webhook.py:135`, through `run_scope`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:262-281`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:737`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
 - **Looks like but is not:** `run.py` (legacy REPL, also on `shared_container`, `run.py:146-153`); the MCP server (`MCPServer.md`); `cli mcp`, which edits the MCP client's server list.
 
 ## If you change this
