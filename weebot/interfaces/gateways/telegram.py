@@ -218,6 +218,10 @@ class TelegramAdapter(GatewayAdapter):
                 f"python -m cli.main gateway allowlist add --platform telegram --id {message.external_id}"
             )
 
+        reply = await self.handle_ponytail_command(text)
+        if reply is not None:
+            return reply
+
         # Build session key from message metadata
         key = self._build_session_key(message)
 

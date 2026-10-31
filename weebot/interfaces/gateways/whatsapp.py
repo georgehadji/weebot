@@ -106,6 +106,9 @@ class WhatsAppAdapter(GatewayAdapter):
         text = await self.handle(message)
         if text is None:
             return "Message blocked by safety check."
+        reply = await self.handle_ponytail_command(text)
+        if reply is not None:
+            return reply
 
         from weebot.domain.models.session import Session
         from weebot.interfaces.factories import run_scope

@@ -33,7 +33,21 @@ updates:
         update-types:
           - "version-update:semver-minor"
           - "version-update:semver-major"
-    # Group minor/patch bumps into single PRs to reduce noise
+      # Majors blocked by another package's pin (checked 2026-10-30). Retest when the
+      # blocker moves:
+      # - anthropic 2.x: browser-use 0.11.13 needs <1.0, and even 0.13.14 needs <2.0 (PR #86).
+      # - openai 3.x: browser-use 0.11.13 needs <3.0; 0.13.14 allows <4.0 (PR #90).
+      # - uuid-utils 1.x: langchain-core 1.6.13 needs <1.0; 1.7.3 drops the cap (PR #91).
+      - dependency-name: "anthropic"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "openai"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "uuid-utils"
+        update-types:
+          - "version-update:semver-major"
+    # Group bumps into single PRs to reduce noise; majors get their own group
     groups:
       python-minor-patch:
         patterns:
@@ -41,6 +55,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      python-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   # ── Node.js (npm) ────────────────────────────────────────────────
   - package-ecosystem: "npm"

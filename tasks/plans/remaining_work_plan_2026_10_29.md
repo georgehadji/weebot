@@ -1,6 +1,7 @@
 ---
 status: open
 date: 2026-10-29
+supersedes: plans/master_plan_2026_10_27.md, plans/audit_2026_10_27_fix_plan.md
 note: everything still open after the 2026-10-29 audit, checked against the code on fix/audit-2026-10-29 (89b8121e); eight waves, security and data loss first, decision-gated work after the owner decides, map and docs last; supersedes the open lists in master_plan_2026_10_27.md sections 3-4 and audit_2026_10_29_fix_plan.md section 7
 ---
 
@@ -164,10 +165,10 @@ Run these only after the owner decides. Each one makes the agent ask more often.
 
 ### Wave 6: repository, map and docs
 
-- **R1. Dependabot config** (`.github/dependabot.yml`), S. Add a `python-major` group, and ignore majors for anthropic and openai (blocked by `browser-use==0.11.13`) and uuid-utils (blocked by `langchain-core`).
+- **R1. Dependabot config** (`.github/dependabot.yml`), S. DONE 2026-10-30 (8e6d1cca): rechecked on PyPI; anthropic 2.x is still blocked even by browser-use 0.13.14 (`<2.0`), openai 3.x waits on a browser-use upgrade, uuid-utils 1.x on langchain-core 1.7. Add a `python-major` group, and ignore majors for anthropic and openai (blocked by `browser-use==0.11.13`) and uuid-utils (blocked by `langchain-core`).
   - **The six blocked PRs:** #86, #90, #91, #83, #79, #13.
   - **Retest:** each is retested only when its blocker moves. `browser-use` is now at 0.13.14 on PyPI, so retest whether it still pins `anthropic<1.0` and `openai<3.0`.
-- **R2. 30 stale map cards**, M-L. Re-read each against the code, restore `verified` and restamp. Do it after waves 1-5, which move the code they cite. The drift check skips stale cards, so its 0 hides them.
+- **R2. 30 stale map cards**, M-L. DONE 2026-10-30 (9f66403d): all 30 verified at 8e6d1cca. Found on the way: `handle_ponytail_command` (`interfaces/gateways/base.py:162`) had no caller, so the chat command did nothing; fixed 2026-10-30, every gateway now answers it after its sender check. Re-read each against the code, restore `verified` and restamp. Do it after waves 1-5, which move the code they cite. The drift check skips stale cards, so its 0 hides them.
   - **Areas:**
     - application: DI container, mediator, plan-act flow;
     - core guards: bash guard, command analyzer, egress guard;
@@ -186,7 +187,7 @@ Run these only after the owner decides. Each one makes the agent ask more often.
   - `PROJECT_COMPLETE.md`.
 
   Make the referrer report first, then copy, verify and remove.
-- **R4. Plan statuses.** Mark `audit_2026_10_29_fix_plan.md` done and update `master_plan_2026_10_27.md`, then run `scripts/gen_tasks_index.py`. Trim the `ARCHITECTURE.md` debt table after wave 5. S.
+- **R4. Plan statuses.** DONE 2026-10-30 (8e6d1cca). Mark `audit_2026_10_29_fix_plan.md` done and update `master_plan_2026_10_27.md`, then run `scripts/gen_tasks_index.py`. Trim the `ARCHITECTURE.md` debt table after wave 5. S.
 - **R5. pytest-xdist trial** (optional). Try it on a branch, and keep it only if few tests share state. M.
 
 ### Wave 7: live checks (each needs the owner's OK; some are billed)

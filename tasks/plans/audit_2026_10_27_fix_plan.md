@@ -1,7 +1,7 @@
 ---
-status: open
+status: superseded
 date: 2026-10-27
-note: built on fix/audit-wave-1: A01 A02 A04 A05 A06 A07 A08 A09 A10 A12 A13 A14 A15 A16 A17 A18 A19 A20 (observe mode) A22 A23 A31 A32 A33 A34, the Discord replay, rate-limit order and WebSocket identity parts of A27; A11 deferred (needs a product call); wave 0 repro written (strict xfail) for A21, A24 A25 A26 and A28 fixed (A26 on fix/audit-track-a3, follow-ups on fix/audit-track-a4) (A28 keeps cron triggers in local time); the rest of waves 2-6 not started; D1 built, D3a built in observe mode, D3b advisory, D4 research in d4_wiring_research_2026_10_27.md
+note: built on fix/audit-wave-1: A01 A02 A04 A05 A06 A07 A08 A09 A10 A12 A13 A14 A15 A16 A17 A18 A19 A20 (observe mode) A22 A23 A31 A32 A33 A34, the Discord replay, rate-limit order and WebSocket identity parts of A27; A11 deferred (needs a product call); wave 0 repro written (strict xfail) for A21, A24 A25 A26 and A28 fixed (A26 on fix/audit-track-a3, follow-ups on fix/audit-track-a4) (A28 keeps cron triggers in local time); the rest of waves 2-6 not started; D1 built, D3a built in observe mode, D3b advisory, D4 research in d4_wiring_research_2026_10_27.md; 2026-10-30: superseded by remaining_work_plan_2026_10_29.md, which carries every item still open here
 ---
 
 # Plan: fix the findings of the 2026-10-27 whole-repo audit

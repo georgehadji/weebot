@@ -1,7 +1,7 @@
 ---
-status: open
+status: done
 date: 2026-10-29
-note: plan for the 24 findings of the 2026-10-29 whole-repo audit (R01-R20 numbered in the report, R21-R24 the four smaller ones it named); five waves, injection boundary first; owner decided 2026-10-29: D-R1 and D-R3 as recommended, D-R2 option A (planner uses its configured models); wave 1 started on fix/audit-2026-10-29
+note: plan for the 24 findings of the 2026-10-29 whole-repo audit (R01-R20 numbered in the report, R21-R24 the four smaller ones it named); five waves, injection boundary first; owner decided 2026-10-29: D-R1 and D-R3 as recommended, D-R2 option A (planner uses its configured models); wave 1 started on fix/audit-2026-10-29; 2026-10-30: done; R01-R24 landed in PRs 105 and 106, and section 7's open items moved to remaining_work_plan_2026_10_29.md
 ---
 
 # Plan: fix the findings of the 2026-10-29 whole-repo audit
