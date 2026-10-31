@@ -32,6 +32,10 @@ _CITE = re.compile(
 # `--fix` rewrites a citation whose cited text is gone to `path:[stale N]`, keeping the old number
 # where a person can see it and where no line check can mistake it for a current citation.
 _STALE_MARK = re.compile(r"`([^`\s]+):\[stale ([^\]]*)\]")
+# A bare `:N` ("the file cited before"). Nothing can check it: the drift check reads only
+# `path:N`, yet `--fix` restamps the card, so a bare number into a moved file went wrong while
+# the card claimed HEAD. Guessing the file was measured wrong too often, so it is rejected.
+_BARE = re.compile(r"`(:\d[\d, -]*)`")
 
 
 def _tracked() -> list[str]:
@@ -73,6 +77,9 @@ def broken_citations() -> list[str]:
             problems.append(
                 f"{rel}: unresolved stale citation {mark.group(1)}:[stale {mark.group(2)}]"
             )
+        for bare in _BARE.finditer(text):
+            line = text.count("\n", 0, bare.start()) + 1
+            problems.append(f"{rel}:{line}: bare citation `{bare.group(1)}`: write the file path")
         for m in _CITE.finditer(text):
             path, first, last = m.group(1), m.group(2), m.group(5) or m.group(4)
             resolved = _resolve(path, tracked, tracked_set)

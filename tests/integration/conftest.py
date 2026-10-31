@@ -7,11 +7,14 @@ from pathlib import Path
 
 
 def pytest_configure(config) -> None:
-    """Load .env into os.environ before any test collection.
+    """Load .env into os.environ before collection, for live runs only (WEEBOT_TEST_LIVE=1).
 
-    This runs before the test module's _load_dotenv(), so real-API
-    tests can access keys via os.getenv() without race conditions.
+    Real-API tests then read keys with os.getenv(). It used to load on every run that
+    collected this folder, which put the developer's .env (free-provider roles, keys) into
+    every unit test of the run.
     """
+    if os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() not in ("1", "true", "yes"):
+        return
     load_env_file(Path(__file__).resolve().parent.parent.parent / ".env")
 
 
