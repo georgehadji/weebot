@@ -216,6 +216,30 @@ class WeebotSettings(BaseSettings):
         alias="WEEBOT_BROWSER_CDP_URL",
         description="CDP endpoint of a browser to connect to (e.g. http://127.0.0.1:9222).",
     )
+    # Fail closed: with the CDP url set, an unreachable endpoint or a launch-only option
+    # (proxy, headless=False) is an error, not a silent Chromium on the host.
+    browser_cdp_fallback: bool = Field(
+        default=False,
+        alias="WEEBOT_BROWSER_CDP_FALLBACK",
+        description="Launch Chromium on the host when the CDP browser is down or cannot serve.",
+    )
+    browser_cdp_connect_timeout_ms: int = Field(
+        default=5000,
+        alias="WEEBOT_BROWSER_CDP_CONNECT_TIMEOUT_MS",
+        description="Milliseconds to wait for the CDP endpoint before counting it as down.",
+    )
+    # Off by default: Lightpanda allows one browser context per connection, so sharing needs an
+    # endpoint that takes many (for example headless Chrome with --remote-debugging-port).
+    browser_cdp_share_connection: bool = Field(
+        default=False,
+        alias="WEEBOT_BROWSER_CDP_SHARE_CONNECTION",
+        description="Pooled sessions share one CDP connection, one context each.",
+    )
+    browser_cdp_max_connections: int = Field(
+        default=0,
+        alias="WEEBOT_BROWSER_CDP_MAX_CONNECTIONS",
+        description="Most CDP connections the session pool opens at once (0 = no cap).",
+    )
 
     # Tool guard chain (application/services/tool_guards.py). "observe" only
     # records what the chain would decide; "enforce" refuses DENY and asks a

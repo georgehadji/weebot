@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-10-31
-commit: ff808eb3
+commit: fe394636
 ---
 
 # MCP server
@@ -30,7 +30,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Uses** the DI container, `BashTool` / `PythonExecuteTool` and the guard chain (`tools/ExecTools.md`, `tools/BaseTool.md`), the event store for `weebot://costs` (`infrastructure/EventStore.md`), the scheduler.
-- **Looks like but is not:** the MCP *client* in `weebot/infrastructure/mcp/` (`MCPClientManager`, `MCPToolkitAdapter`), which connects Weebot to other servers. That client is built by `_create_mcp_client` (`weebot/application/di/_factories.py:404-456`), is empty unless `WEEBOT_ENABLE_X_MCP` is on (`weebot/application/di/_factories.py:420-421`), and reads `mcp_servers_config_path` (`weebot/config/settings.py:301-304`, default None; the repo ships `config/mcp_servers.json`). Its tools reach flows through `build_tools` (`weebot/interfaces/factories.py:105-137, 144-161`); `python -m cli.main mcp ...` (`cli/commands/mcp.py`) edits that client's list. Also not the tool list in `RoleBasedToolRegistry`, which the server does not use.
+- **Looks like but is not:** the MCP *client* in `weebot/infrastructure/mcp/` (`MCPClientManager`, `MCPToolkitAdapter`), which connects Weebot to other servers. That client is built by `_create_mcp_client` (`weebot/application/di/_factories.py:404-456`), is empty unless `WEEBOT_ENABLE_X_MCP` is on (`weebot/application/di/_factories.py:420-421`), and reads `mcp_servers_config_path` (`weebot/config/settings.py:325-328`, default None; the repo ships `config/mcp_servers.json`). Its tools reach flows through `build_tools` (`weebot/interfaces/factories.py:105-137, 144-161`); `python -m cli.main mcp ...` (`cli/commands/mcp.py`) edits that client's list. Also not the tool list in `RoleBasedToolRegistry`, which the server does not use.
 
 ## If you change this
 **Hits:** MCP clients' tool and resource catalog, tests `tests/unit/interfaces/test_mcp_server.py`, `tests/unit/interfaces/test_run_mcp.py`, `tests/unit/interfaces/test_dynamic_mcp_tools_are_callable.py`, `tests/unit/mcp/test_mcp_auth.py`, `tests/unit/mcp/test_d47_sse_transport_auth.py`, `tests/unit/mcp/test_mcp_tool_guards.py`, `tests/unit/mcp/test_resources.py`, `tests/unit/mcp/test_sanitize.py`, `tests/unit/fixes/test_f13_run_mcp_key_check.py`, `tests/unit/fixes/test_ssot_version.py`, `tests/unit/fixes/test_w42_one_cost_query.py`, `tests/unit/core/test_the_redactor_is_safe_to_wire.py`, `tests/unit/test_acr_p4.py`, `tests/unit/test_mcp_config_loader.py`.

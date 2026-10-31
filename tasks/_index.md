@@ -39,7 +39,7 @@ Format: date — record — note
 - 2026-08-10 — [LongHorizon-Harness → weebot: analysis and enhancement plan](specs/longhorizon_harness_weebot_analysis.md) — superseded by [LongHorizon-Harness → weebot: implementation plan](specs/longhorizon_harness_implementation_plan.md)
 - 2026-06-30 — [Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers](specs/ssot_constants_remediation_plan.md) — superseded by [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — folded into phase 3.2 of its successor
 
-## done (42)
+## done (43)
 
 - 2026-10-25 — [Wave 0 — Instruments, Baseline, and Census (COMPLETE)](audits/defect_hunt_v71_w0_complete.md)
 - 2026-07-21 — [CI Stabilization & Architecture-Debt Remediation Plan](ci-stabilization-plan.md)
@@ -47,6 +47,7 @@ Format: date — record — note
 - 2026-10-29 — [Plan: fix the findings of the 2026-10-29 whole-repo audit](plans/audit_2026_10_29_fix_plan.md) — plan for the 24 findings of the 2026-10-29 whole-repo audit (R01-R20 numbered in the report, R21-R24 the four smaller ones it named); five waves, injection boundary first; owner decided 2026-10-29: D-R1 and D-R3 as recommended, D-R2 option A (planner uses its configured models); wave 1 started on fix/audit-2026-10-29; 2026-10-30: done; R01-R24 landed in PRs 105 and 106, and section 7's open items moved to remaining_work_plan_2026_10_29.md
 - 2026-06-28 — [Bug Fix Plan — B4 & B5](plans/bug_fix_b4_b5_plan.md)
 - 2026-06-28 — [Fix Plan — Docker & CI Gaps (Audit Findings)](plans/docker_fixes_plan.md)
+- 2026-10-31 — [Lightpanda CDP browser: fixes for the 7 review findings on PR 126](plans/lightpanda_cdp_review_fix_plan.md)
 - 2026-06-28 — [Weebot Enhancement Roadmap — Based on "Fundamentals of Building Autonomous LLM Agents"](plans/paper_enhancement_roadmap.md)
 - 2026-06-28 — [Fix Plan — VideoGenTool Audit Defects (D1–D3) + Improvements (I1–I4)](plans/video_gen_tool_fixes.md)
 - 2026-06-28 — [YouTube Video Download Support — Implementation Plan](plans/youtube_download_plan.md)

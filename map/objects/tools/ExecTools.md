@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-30
-commit: 8e6d1cca
+commit: fe394636
 ---
 
 # ExecTools
@@ -42,7 +42,7 @@ Consequences (read from source, not run):
 - Comment says tool-level overrides use `set_config(ToolConfig)` (`weebot/tools/file_editor.py:13-14`); `StrReplaceEditorTool` has no `set_config`.
 
 ## Connected to
-- **Built by** `RoleBasedToolRegistry` (sandbox and `set_config` wiring, `weebot/application/services/tool_registry.py:446-527`), the MCP server, which wraps `bash` and `python_execute` with the egress guard included (`weebot/mcp/server.py:383-392`).
+- **Built by** `RoleBasedToolRegistry` (sandbox and `set_config` wiring, `weebot/application/services/tool_registry.py:446-531`), the MCP server, which wraps `bash` and `python_execute` with the egress guard included (`weebot/mcp/server.py:383-392`).
 - **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:346, 388`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:35`); `load_fs_permission_checker` (`weebot/application/services/fs_permission_policy.py:33`).
 - **Runs on** the Sandbox card's `SandboxPort`.
 - **Looks like but is not:** the guard chain (live).

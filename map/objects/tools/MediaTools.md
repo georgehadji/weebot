@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-31
-commit: 5fae5eb2
+commit: fe394636
 ---
 
 # Media tools
@@ -33,7 +33,7 @@ Roles: `weebot/application/services/tool_registry.py:26-185`.
 Path guards: every model-chosen output path goes through `write_target` (`weebot/core/output_path.py:73`): inside the project, never a protected name (`.env`, SSH keys, anything under `.git`) or an executable type, and only the media types the tool produces (audit R14). `image_gen` and `video_gen` check it before any branch runs and keep the checked absolute path (`weebot/tools/image_gen_tool.py:918`, `weebot/tools/video_gen_tool.py:396`; `_sanitize_output_path` `image_gen_tool.py:799`, `video_gen_tool.py:212`); `youtube_download` (`weebot/tools/youtube_download_tool.py:279`), `voice_output` (`weebot/tools/voice_output_tool.py:90`) and `video_ingest` `export_jsonl` (`weebot/tools/video_ingest_tool.py:338`) do the same; `remotion_video` accepts only a `project` matching `^[a-z0-9][a-z0-9_-]{0,48}$` and a composition id, and builds every path itself under `Output/remotion` (`weebot/tools/remotion_video.py:48-49, 105-106, 160-189`), passing the child only `_ENV_KEYS` (`weebot/tools/remotion_video.py:114-115`).
 
 Consequences (read from source, not run):
-- `image_gen`, `video_gen` are paid per call and match `WEEBOT_OUTBOUND_TOOL_PATTERNS` (`weebot/config/settings.py:461-474`), so the guard chain wraps them and they always ask (see the BaseTool card). `remotion_video`, `video_ingest` and the voice tools match no pattern.
+- `image_gen`, `video_gen` are paid per call and match `WEEBOT_OUTBOUND_TOOL_PATTERNS` (`weebot/config/settings.py:502-515`), so the guard chain wraps them and they always ask (see the BaseTool card). `remotion_video`, `video_ingest` and the voice tools match no pattern.
 - `youtube_download` passes a model-chosen `js_runtime` executable path to yt-dlp (`weebot/tools/youtube_download_tool.py:386-392`). The built-in skill `youtube-download` names it (`weebot/skills/builtin/youtube-download/SKILL.md:9, 15-21`), but only `researcher` and `admin` have it.
 - `image_gen`'s raster branch opens an `aiohttp.ClientSession` it never uses (`weebot/tools/image_gen_tool.py:955-965`).
 - `video_ingest` and `youtube_download` declare `OutputTrust.EXTERNAL`, so their output is fenced and taints the session (`weebot/tools/video_ingest_tool.py:187`, `weebot/tools/youtube_download_tool.py:92`); the other five tools are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
