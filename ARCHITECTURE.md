@@ -19,7 +19,7 @@ that date that the header's own measurement contradicts (the 2026-10-24 audit sc
 *later* code 4/10, and the 2026-10-25 audit after the wave-2 plan scored it 7/10). Scores
 live in the audit records: `tasks/specs/arch_audit_2026_10_remediation_plan.md` and
 `tasks/specs/arch_audit_2026_10_wave2_remediation_plan.md` (WB-05).
-**Remediation plan:** ARCHITECTURE_REMEDIATION_PLAN.md
+**Remediation plan:** `docs/archive/ARCHITECTURE_REMEDIATION_PLAN.md`
 **ExecutorAgent:** 1,414 lines → 803 lines (−43%), 4 collaborators extracted
 
 ### Completed Changes

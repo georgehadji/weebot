@@ -33,7 +33,7 @@
    - Runtime assumptions verification
    - Stability threshold τ analysis
 
-4. **`BASH_SECURITY_FIX_SUMMARY.md`** (350 lines)
+4. **`docs/archive/BASH_SECURITY_FIX_SUMMARY.md`** (350 lines)
    - Implementation summary
    - Fix path evaluation (3 paths)
    - Defense architecture (4 layers)
@@ -75,7 +75,7 @@
   - `workflow_orchestrator.py`: UNKNOWN → VERIFIED (15+ tests)
   - `agent_factory.py`: HYPOTHESIS → VERIFIED (tool validation fixed)
 
-### 3. `docs/FINAL_PRODUCTION_SUMMARY.md` ✅
+### 3. `docs/archive/FINAL_PRODUCTION_SUMMARY.md` ✅
 
 **Αλλαγές:**
 - Restructured for Phase 2 completion
@@ -137,13 +137,13 @@ After:  94+ tests (added 69+ Phase 2 + security)
 1. **Quick Start:** `README.md`
 2. **Architecture:** `SYSTEM_KNOWLEDGE_MAP.md`
 3. **Phase 2 Details:** `PHASE2_IMPLEMENTATION_SUMMARY.md`
-4. **Security:** `BASH_SECURITY_FIX_SUMMARY.md`
+4. **Security:** `docs/archive/BASH_SECURITY_FIX_SUMMARY.md`
 
 ### Για DevOps
 
 1. **Deployment:** `RESILIENCE_AND_DEPLOYMENT.md`
 2. **Production:** `PRODUCTION_DEPLOYMENT_GUIDE.md`
-3. **Monitoring:** `FINAL_PRODUCTION_SUMMARY.md`
+3. **Monitoring:** `docs/archive/FINAL_PRODUCTION_SUMMARY.md`
 
 ### Για Contributors
 
@@ -157,7 +157,7 @@ After:  94+ tests (added 69+ Phase 2 + security)
 
 - [x] ROADMAP.md updated
 - [x] SYSTEM_KNOWLEDGE_MAP.md updated
-- [x] FINAL_PRODUCTION_SUMMARY.md updated
+- [x] docs/archive/FINAL_PRODUCTION_SUMMARY.md updated
 - [x] README.md updated
 - [x] Phase 2 documentation complete
 - [x] Security documentation complete
