@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-map-drift lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui lint-unused-locals lint-bandit-b110 lint-agent-json-parsing check-arch check
+.PHONY: help install test test-serial test-live gen-entry-twins lint-entry-twins gen-map-index lint-map lint-map-drift lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction lint-module-cycles lint-import-exemptions lint-ruff lint-long-functions lint-ui lint-unused-locals lint-bandit-b110 lint-agent-json-parsing check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -14,6 +14,7 @@ help:
 	@echo "Available targets:"
 	@echo "  install       Install dependencies"
 	@echo "  test          Run all tests (excludes external/live-network tests)"
+	@echo "  test-serial   Run the tests one at a time (no xdist)"
 	@echo "  test-live     Run tests including external/live, billed LLM calls"
 	@echo "  lint-imports  Run import-linter architecture checks"
 	@echo "  check-arch    Run all architecture verification gates"
@@ -33,6 +34,9 @@ install:
 	pip install import-linter
 
 test:
+	pytest tests/ -q --tb=short -m "not external" -n auto
+
+test-serial:
 	pytest tests/ -v --tb=short -m "not external"
 
 test-live:
