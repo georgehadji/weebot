@@ -31,8 +31,8 @@ SECRET_KEYS: tuple[str, ...] = (
 # key, then `:` or `=`, then a value; the key may be quoted (`"password": ...` in JSON) and
 # so may the value, which then runs to its closing quote and may hold spaces.
 KEY_VALUE_RE = re.compile(
-    r"""(?P<key>(?:%s)["']?)(?P<sep>\s*[:=]\s*)(?P<value>"[^"]*"|'[^']*'|[^\s"'&|;]+)"""
-    % "|".join(SECRET_KEYS),
+    r"""(?P<key>(?:""" + "|".join(SECRET_KEYS) + r""")["']?)(?P<sep>\s*[:=]\s*)"""
+    r"""(?P<value>"[^"]*"|'[^']*'|[^\s"'&|;]+)""",
     re.IGNORECASE,
 )
 

@@ -437,7 +437,7 @@ class ExecApprovalPolicy:
         moved = after_directory_change(segments)
         decisions = [
             self._evaluate_segment(segment, chained, cwd, after_cd=after_cd)
-            for segment, after_cd in zip(segments, moved)
+            for segment, after_cd in zip(segments, moved, strict=True)
         ]
         worst = max(decisions, key=lambda d: d.rank, default=_NO_MATCH)
         # `&` is a separator, so a built command name (`& ("Invoke-" + "Expression")`) is only
@@ -481,7 +481,7 @@ class ExecApprovalPolicy:
         segments = _inline_literal_vars(split_segments(command))
         chained = len(segments) > 1
         return [
-            s for s, after_cd in zip(segments, after_directory_change(segments))
+            s for s, after_cd in zip(segments, after_directory_change(segments), strict=True)
             if not self._evaluate_segment(s, chained, cwd, after_cd=after_cd).matched
             and not is_read_only_segment(s)
         ]
@@ -649,7 +649,7 @@ def stays_in_workspace(command: str, cwd: str | None = None) -> bool:
     segments = _inline_literal_vars(split_segments(command))
     return bool(segments) and all(
         is_read_only_segment(s) or (not after_cd and _output_scoped(s, cwd))
-        for s, after_cd in zip(segments, after_directory_change(segments))
+        for s, after_cd in zip(segments, after_directory_change(segments), strict=True)
     )
 
 
