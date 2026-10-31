@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-10-31
-commit: f238f23a
+commit: fe394636
 ---
 
 # Browser adapter and session pool

@@ -2,7 +2,7 @@
 type: effects
 status: verified
 verified: 2026-10-31
-commit: f238f23a
+commit: fe394636
 ---
 # inbound — what outside this repo points into it
 

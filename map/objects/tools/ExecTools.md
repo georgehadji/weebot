@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-10-30
-commit: 8e6d1cca
+commit: fe394636
 ---
 
 # ExecTools
