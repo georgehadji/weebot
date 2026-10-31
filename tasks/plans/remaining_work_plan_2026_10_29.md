@@ -225,6 +225,8 @@ Run these only after the owner decides. Each one makes the agent ask more often.
 - `defect_hunt_v7_1_execution_plan.md` (round 2);
 - `icm_fix_plan.md` and `remaining_fix_plan.md` (F28 mediator dispatch).
 
+**UI defect hunt (the one build outcome): DONE 2026-10-31 on `fix/ui-defect-hunt`.** W2-W8 ran; 34 defects fixed across W1-W7, plus three backend fixes it surfaced (SSE drop-notice id, a `deleted` presence frame on delete, presence frames only to their owner). Verdict and five proposed consolidations: `tasks/audits/ui_defect_hunt_w8_seams.md`. The browser gates are still blocked on this host.
+
 Never audited, and worth one audit each before new work lands there:
 
 - the `weebot-ui` frontend;
