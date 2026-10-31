@@ -1,7 +1,8 @@
 ---
-status: open
+status: done
 date: 2026-09-06
 note: only passes P1-P2 run (audits/static_defect_audit_v3.md); P3-P11 not run
+outcome: drop (2026-10-31, owner decision D-F): the 2026-10-27 and 2026-10-29 whole-repo audits covered the same ground
 ---
 
 # Applying the Precision Defect Auditor (V3) to the weebot backend

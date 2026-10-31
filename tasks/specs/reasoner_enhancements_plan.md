@@ -1,7 +1,8 @@
 ---
-status: open
+status: done
 date: 2026-06-10
 note: phase 6 parallel pre-router (AgentPreRouter) never built
+outcome: drop (2026-10-31, owner decision D-F): the model cascade and ACR router already route each step; a second pre-router would overlap them
 ---
 
 # Reasoner-Inspired Enhancements — Implementation Plan

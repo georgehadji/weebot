@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (23)
+## open (19)
 
 - 2026-10-25 — [Defect Hunt V7.1 — Final Summary Report](audits/defect_hunt_v71_final_summary.md)
 - 2026-10-25 — [Wave 1 — Security and Trust Boundary](audits/defect_hunt_v71_w1_security.md)
@@ -24,12 +24,8 @@ Format: date — record — note
 - 2026-06-30 — [Implementation Plan — "Code as Agent Harness" Enhancements & Fixes](specs/code_as_harness_implementation_plan.md) — phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
 - 2026-10-25 — [Autonomous Defect-Hunt (V7.1) — Whole-Backend Execution Plan, Round 2](specs/defect_hunt_v7_1_execution_plan.md)
 - 2026-06-15 — [Memento-Skills → weebot: Deployment-Time Learning Implementation Plan](specs/memento_skills_implementation_plan.md) — phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
-- 2026-06-10 — [Reasoner-Inspired Enhancements — Implementation Plan](specs/reasoner_enhancements_plan.md) — phase 6 parallel pre-router (AgentPreRouter) never built
 - 2026-09-05 — [Review Gate & Residual Work — Execution Plan](specs/review_gate_and_residual_work_plan.md) — A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
-- 2026-06-10 — [Auto-Evolve Back-End: 6 Enhancements (SkillClaw-Inspired)](specs/skillclaw_auto_evolve_plan.md) — none of the 6 enhancements built
-- 2026-09-06 — [Applying the Precision Defect Auditor (V3) to the weebot backend](specs/static_defect_audit_v3_execution_plan.md) — only passes P1-P2 run (audits/static_defect_audit_v3.md); P3-P11 not run
 - 2026-10-25 — [Autonomous Defect-Hunt V7.1 — the whole frontend (`weebot-ui`)](specs/ui_defect_hunt_v71_execution_plan.md) — V7.1 defect-hunt program for the whole frontend (weebot-ui). Phase 0 executed and measured on 2026-10-25; W0 (harness + baseline) and W1 (transport) executed the same day — see tasks/audits/ui_defect_hunt_baseline.md and ui_defect_hunt_w1_transport.md. W2–W8 not started.
-- 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 - 2026-06-30 — [WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted](specs/weebot_unified_implementation_plan.md) — P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
 
 ## superseded (9)
@@ -44,7 +40,7 @@ Format: date — record — note
 - 2026-08-10 — [LongHorizon-Harness → weebot: analysis and enhancement plan](specs/longhorizon_harness_weebot_analysis.md) — superseded by [LongHorizon-Harness → weebot: implementation plan](specs/longhorizon_harness_implementation_plan.md)
 - 2026-06-30 — [Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers](specs/ssot_constants_remediation_plan.md) — superseded by [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — folded into phase 3.2 of its successor
 
-## done (37)
+## done (41)
 
 - 2026-10-25 — [Wave 0 — Instruments, Baseline, and Census (COMPLETE)](audits/defect_hunt_v71_w0_complete.md)
 - 2026-07-21 — [CI Stabilization & Architecture-Debt Remediation Plan](ci-stabilization-plan.md)
@@ -75,14 +71,18 @@ Format: date — record — note
 - 2026-06-13 — [Multi-Agent Patterns Integration Plan](specs/multiagent_patterns_integration_plan.md)
 - 2026-06-17 — [Spec: Vision-in-the-Loop for Computer-Use / Browser Agents](specs/picoagents_vision_in_loop_spec.md)
 - 2026-08-05 — [Pre-Existing Architecture Debt — Remediation Plan](specs/pre_existing_architecture_debt_plan.md)
+- 2026-06-10 — [Reasoner-Inspired Enhancements — Implementation Plan](specs/reasoner_enhancements_plan.md) — phase 6 parallel pre-router (AgentPreRouter) never built
 - 2026-06-10 — [Video Ingestion & Rule Extraction Skill — Implementation Plan](specs/reify_skill_plan.md)
 - 2026-09-06 — [Residual defect closure plan](specs/residual_defect_closure_plan.md)
 - 2026-06-13 — [Residual Fixes Plan](specs/residual_fixes_plan.md)
 - 2026-06-13 — [Code Review Fixes Plan — 2026-06-12](specs/review_fixes_plan.md)
 - 2026-08-19 — [Side-Constraint Integrity — Implementation Plan](specs/side_constraint_integrity_plan.md)
+- 2026-06-10 — [Auto-Evolve Back-End: 6 Enhancements (SkillClaw-Inspired)](specs/skillclaw_auto_evolve_plan.md) — none of the 6 enhancements built
+- 2026-09-06 — [Applying the Precision Defect Auditor (V3) to the weebot backend](specs/static_defect_audit_v3_execution_plan.md) — only passes P1-P2 run (audits/static_defect_audit_v3.md); P3-P11 not run
 - 2026-08-20 — [Test-Suite & Evidence-Gate Repair Plan](specs/test_suite_and_evidence_gate_repair_plan.md)
 - 2026-06-10 — [Tool Handling Enhancements — Implementation Plan](specs/tool_enhancements_plan.md)
 - 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
+- 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 
 ## reference (80)
 

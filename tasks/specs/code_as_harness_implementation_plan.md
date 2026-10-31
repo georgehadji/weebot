@@ -2,6 +2,7 @@
 status: open
 date: 2026-06-30
 note: phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
+outcome: park (2026-10-31, owner decision D-F): the misalignment journal covers phase 1; 2-4 wait for evidence it is needed
 ---
 
 # Implementation Plan — "Code as Agent Harness" Enhancements & Fixes

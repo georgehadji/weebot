@@ -2,6 +2,7 @@
 status: open
 date: 2026-07-21
 note: LLM drafting, TeX Live image, CLI/Web wiring missing
+outcome: park (2026-10-31, owner decision D-F): no current use; the LuaLaTeX PR (#54) is parked with it
 ---
 
 # Plan: Greek Scientific Book Generation via LaTeX

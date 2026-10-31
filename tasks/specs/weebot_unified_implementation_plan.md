@@ -2,6 +2,7 @@
 status: open
 date: 2026-06-30
 note: P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
+outcome: park (2026-10-31, owner decision D-F): plugin platform, Environment port, ACP bridge and credential pool have no current consumer
 ---
 
 # WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted

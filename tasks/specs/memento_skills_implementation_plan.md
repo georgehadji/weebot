@@ -2,6 +2,7 @@
 status: open
 date: 2026-06-15
 note: phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
+outcome: park (2026-10-31, owner decision D-F): semantic retrieval needs an embedding backend, and llama-cpp is not installed
 ---
 
 # Memento-Skills → weebot: Deployment-Time Learning Implementation Plan

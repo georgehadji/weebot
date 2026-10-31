@@ -2,6 +2,7 @@
 status: open
 date: 2026-10-23
 note: F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
+outcome: park (2026-10-31, owner decision D-F): its open items moved to remaining_fix_plan.md
 ---
 
 # Plan: fix the findings recorded in the map cards

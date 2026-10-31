@@ -3,6 +3,7 @@ status: open
 date: 2026-08-13
 note: phases 5-8 not built (retrieval, preservation check, filter_context, memory-quality job)
 supersedes: specs/agentic_memory_agemem_weebot_analysis.md
+outcome: park (2026-10-31, owner decision D-F): phases 1-4 cover the live memory paths; 5-8 wait for a measured retrieval problem
 ---
 
 # Memory subsystem repair plan (AgeMem-derived)

@@ -2,6 +2,7 @@
 status: open
 date: 2026-08-03
 note: phase 3 mechanism selection and phase 4 L1.5 instrumentation not built
+outcome: park (2026-10-31, owner decision D-F): research feature with no user asking for it
 ---
 
 # Bilevel Autoresearch → weebot: Implementation Plan

@@ -2,6 +2,7 @@
 status: open
 date: 2026-10-25
 note: V7.1 defect-hunt program for the whole frontend (weebot-ui). Phase 0 executed and measured on 2026-10-25; W0 (harness + baseline) and W1 (transport) executed the same day — see tasks/audits/ui_defect_hunt_baseline.md and ui_defect_hunt_w1_transport.md. W2–W8 not started.
+outcome: build (2026-10-31, owner decision D-F): the frontend was never audited past W1; W2-W8 are the next audit work
 ---
 
 # Autonomous Defect-Hunt V7.1 — the whole frontend (`weebot-ui`)
