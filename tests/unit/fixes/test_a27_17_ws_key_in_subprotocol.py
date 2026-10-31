@@ -1,13 +1,11 @@
 """A17: the UI sent the API key as ?token=, and uvicorn logs the query string.
 
 The key now travels in the Sec-WebSocket-Protocol header as `bearer.<key>`, next to the
-marker `weebot.v1`; the server echoes the marker, never the key. ?token= still works for one
-release (decision D2) and logs a deprecation warning.
+marker `weebot.v1`; the server echoes the marker, never the key. ?token= worked for one
+release; decision D2 (2026-10-31) removed it, so a key in the query string is refused.
 """
 
 from __future__ import annotations
-
-import logging
 
 import pytest
 from fastapi import FastAPI
@@ -48,8 +46,8 @@ def test_a_client_that_offers_only_the_bearer_protocol_still_connects(client):
         assert ws.accepted_subprotocol == f"bearer.{KEY}"
 
 
-def test_the_query_token_still_works_and_warns(client, caplog):
-    with caplog.at_level(logging.WARNING):
-        with client.websocket_connect(f"/behavior/ws?token={KEY}") as ws:
-            assert ws.receive_json()["type"] == "connected"
-    assert any("deprecated" in r.getMessage().lower() for r in caplog.records)
+def test_the_query_token_is_refused(client):
+    with pytest.raises(WebSocketDisconnect) as refused:
+        with client.websocket_connect(f"/behavior/ws?token={KEY}"):
+            pass
+    assert refused.value.code == 4001

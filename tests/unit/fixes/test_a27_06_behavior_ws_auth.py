@@ -57,8 +57,9 @@ def test_no_key_and_a_loopback_client_is_accepted(path, _settings):
 @pytest.mark.parametrize("path", PATHS)
 def test_a_wrong_token_is_refused_and_the_right_one_accepted(path, _settings):
     _settings("sekret-key-for-test")
-    assert _closed_with_4001(_client(), path + "?token=nope")
-    with _client().websocket_connect(path + "?token=sekret-key-for-test") as ws:
+    assert _closed_with_4001(_client(), path, subprotocols=["bearer.nope"])
+    assert _closed_with_4001(_client(), path + "?token=sekret-key-for-test")  # D2: no ?token=
+    with _client().websocket_connect(path, subprotocols=["bearer.sekret-key-for-test"]) as ws:
         assert ws.receive_json()["type"] == "connected"
 
 

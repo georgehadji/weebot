@@ -77,7 +77,7 @@ def _presented_key(conn: HTTPConnection) -> str:
     """The API key a caller presented, from wherever its transport can carry one.
 
     Any connection: the X-API-Key header, else an Authorization Bearer. WebSocket also: a
-    `bearer.<key>` subprotocol (what a browser can send), or the deprecated ?token=.
+    `bearer.<key>` subprotocol (what a browser can send). ?token= is refused (D2).
     Browsers cannot set headers on a WebSocket, so reading only X-API-Key made every
     browser socket anonymous.
     """
@@ -93,13 +93,10 @@ def _presented_key(conn: HTTPConnection) -> str:
     for proto in _offered_protocols(conn):
         if proto.startswith("bearer."):
             return proto[len("bearer."):]
-    token = conn.query_params.get("token") or ""
-    if token:
-        logger.warning(
-            "WebSocket key sent as ?token= (deprecated, the key lands in access logs). "
-            "Offer the subprotocol bearer.<key> instead."
-        )
-    return token
+    if conn.query_params.get("token"):
+        # Decision D2 (2026-10-31): the key in the query string lands in access logs.
+        logger.warning("WebSocket ?token= refused; offer the subprotocol bearer.<key>")
+    return ""
 
 
 def _derived_principal(api_key: str) -> str:
@@ -305,6 +302,11 @@ async def current_principal(request: Request) -> str:
     new session was stamped anonymous and its owner then got 404 on it.
     """
     return await _resolve_user(request)
+
+
+def ownership_enforced() -> bool:
+    """Whether session ownership is checked (``WEEBOT_ENFORCE_SESSION_OWNERSHIP``, default on)."""
+    return _enforce_ownership()
 
 
 def _enforce_ownership() -> bool:
