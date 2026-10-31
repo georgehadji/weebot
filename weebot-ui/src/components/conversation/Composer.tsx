@@ -99,7 +99,8 @@ export function Composer({
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // isComposing: Enter confirms an IME candidate (Greek tonos, CJK, ...), it must not send.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Safari reports that Enter after compositionend with isComposing false but keyCode 229.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       submit();
     }
