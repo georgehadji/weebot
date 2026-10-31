@@ -187,6 +187,8 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},
+    {"var": "WEEBOT_ALLOWED_HOSTS", "type": "str", "default": "",
+     "desc": "Extra Host names the web API accepts from a loopback caller, comma separated. localhost, 127.0.0.1 and [::1] are always allowed; any other Host from a loopback peer gets 421 (DNS-rebinding guard). Set it when a reverse proxy on this machine forwards a public name"},
     {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",
      "desc": "CDP endpoint of a running browser to connect to instead of launching Chromium, "
              "e.g. Lightpanda on http://127.0.0.1:9222. Fails closed: a proxy or headless=False "

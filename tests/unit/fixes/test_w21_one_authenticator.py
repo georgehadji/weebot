@@ -70,7 +70,7 @@ def test_the_middleware_accepts_a_bearer_header(monkeypatch):
 
 def test_a_configured_key_still_refuses_a_keyless_loopback_caller(monkeypatch):
     app = _app(monkeypatch, weebot_api_key="legacy-key")
-    client = TestClient(_wrap_app(app, "127.0.0.1", 1234))
+    client = TestClient(_wrap_app(app, "127.0.0.1", 1234), base_url="http://localhost")
     assert client.get("/api/sessions").status_code == 401
 
 

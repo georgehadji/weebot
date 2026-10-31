@@ -14,7 +14,6 @@ Supports two auth modes (``WEEBOT_AUTH_MODE``):
 from __future__ import annotations
 
 import hashlib
-import hmac
 import logging
 import os
 
@@ -23,11 +22,13 @@ from starlette.requests import HTTPConnection
 
 from weebot.application.ports.api_key_port import ApiKeyPort
 from weebot.core.api_key_crypto import lookup_hash, verify_key
+from weebot.core.net_trust import LOOPBACK_PEERS
+from weebot.core.secret_compare import safe_equals
 from weebot.interfaces.web.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
-_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+_LOOPBACK = LOOPBACK_PEERS  # one loopback set, shared with the host guard
 
 # Offered by the UI next to `bearer.<key>`; the server echoes this, never the key.
 WS_PROTOCOL = "weebot.v1"
@@ -178,7 +179,7 @@ def get_current_user_id(request: Request) -> str:
             # every caller is anonymous, and require_mutation_identity keeps
             # mutations to loopback.
             return "anonymous"
-        if hmac.compare_digest(api_key, legacy_key):
+        if safe_equals(api_key, legacy_key):
             return _derived_principal(api_key)
         return "anonymous"
 
@@ -186,7 +187,7 @@ def get_current_user_id(request: Request) -> str:
     # Callers that need real principal resolution should use the async version.
     legacy_key = _get_legacy_api_key()
     api_key = _presented_key(request)
-    if api_key and legacy_key and hmac.compare_digest(api_key, legacy_key):
+    if api_key and legacy_key and safe_equals(api_key, legacy_key):
         logger.warning(
             "Auth via legacy WEEBOT_API_KEY (deprecated). "
             "Set WEEBOT_AUTH_MODE=store and issue per-principal keys."
@@ -222,7 +223,7 @@ async def _authenticate(conn: HTTPConnection, key: str, legacy_key: str | None) 
             principal = await _principal_from_key(key, keys)
             if principal is not None:
                 return principal
-        if legacy_key and hmac.compare_digest(key, legacy_key):
+        if legacy_key and safe_equals(key, legacy_key):
             if store_mode:
                 logger.warning(
                     "Auth via legacy WEEBOT_API_KEY (deprecated). "

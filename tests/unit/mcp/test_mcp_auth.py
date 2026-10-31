@@ -42,13 +42,18 @@ class TestAPIKeyTokenVerifier:
         assert await verifier.verify_token("wrong") is None
 
     async def test_verifier_uses_compare_digest(self) -> None:
+        """The compare is constant-time. safe_equals encodes first, so digest sees bytes."""
         verifier = _APIKeyTokenVerifier("secret")
         with patch("hmac.compare_digest") as mock_compare:
             mock_compare.return_value = True
             result = await verifier.verify_token("secret")
 
-        mock_compare.assert_called_once_with("secret", "secret")
+        mock_compare.assert_called_once_with(b"secret", b"secret")
         assert isinstance(result, AccessToken)
+
+    async def test_verifier_rejects_a_non_ascii_token_without_raising(self) -> None:
+        verifier = _APIKeyTokenVerifier("secret")
+        assert await verifier.verify_token("é") is None
 
 
 class TestMCPSSECLI:

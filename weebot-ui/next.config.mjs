@@ -20,16 +20,10 @@ const nextConfig = {
     root: __dirname,
   },
 
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
-      },
-      // Note: WebSocket rewrites don't work well in Next.js dev mode
-      // Use direct ws://localhost:8000 connection in the app
-    ];
-  },
+  // No `rewrites()` for /api: a rewrite runs before the dynamic route handler in
+  // src/app/api/[[...path]]/route.ts, which would skip its cross-site and Host checks and
+  // ignore BACKEND_URL. That handler is the one proxy. WebSockets do not go through it: the
+  // app connects straight to ws://localhost:8000.
   // Re-enable StrictMode after fixing useWebSocket effect cleanup
   reactStrictMode: true,
 };
