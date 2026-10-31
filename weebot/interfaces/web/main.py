@@ -632,7 +632,9 @@ def create_app() -> FastAPI:
 
         logger.info("WebSocket /ws connection from %s", client_host)
 
-        await manager.connect(websocket)
+        from weebot.interfaces.web.auth import current_principal
+
+        await manager.connect(websocket, principal=await current_principal(websocket))
         try:
             while True:
                 data = await websocket.receive_text()

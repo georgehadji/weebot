@@ -48,3 +48,48 @@ describe("the /api proxy", () => {
     expect((await response).status).toBe(200);
   });
 });
+
+// W4 (D5): the proxy answered every upstream with `response.json()`, so a non-JSON body
+// became `null`, and a 204 (which cannot carry a body) made NextResponse.json throw and
+// the handler answer 503 "Failed to connect" for a request that succeeded.
+describe("the /api proxy preserves the upstream response", () => {
+  const get = (upstream: Response) => {
+    vi.stubGlobal("fetch", vi.fn(async () => upstream));
+    return GET(new NextRequest("http://localhost:3000/api/sessions"), ctx);
+  };
+
+  it("D5: a 204 stays a 204 with no body", async () => {
+    const res = await get(new Response(null, { status: 204 }));
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+  });
+
+  it("D5: a text/plain body (Prometheus metrics) is not rewritten to null", async () => {
+    const res = await get(
+      new Response("weebot_up 1\n", { status: 200, headers: { "content-type": "text/plain" } }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    expect(await res.text()).toBe("weebot_up 1\n");
+  });
+
+  it("D5: a non-JSON error body keeps its status and text", async () => {
+    const res = await get(new Response("Bad Gateway", { status: 502 }));
+    expect(res.status).toBe(502);
+    expect(await res.text()).toBe("Bad Gateway");
+  });
+
+  it("no-regression: a JSON body and its status pass through byte for byte", async () => {
+    const res = await get(
+      new Response('{"detail":"nope"}', { status: 404, headers: { "content-type": "application/json" } }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ detail: "nope" });
+  });
+
+  it("no-regression: an unreachable backend is still a 503", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    const res = await GET(new NextRequest("http://localhost:3000/api/sessions"), ctx);
+    expect(res.status).toBe(503);
+  });
+});

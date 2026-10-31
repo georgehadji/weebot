@@ -42,9 +42,13 @@ async function handler(
         : undefined,
     });
 
-    const data = await response.json().catch(() => null);
-    
-    return NextResponse.json(data, { status: response.status });
+    // Relay the upstream bytes: a 204 cannot carry a body, and not every route is JSON.
+    const body = [204, 205, 304].includes(response.status) ? null : await response.arrayBuffer();
+    const contentType = response.headers.get("content-type");
+    return new NextResponse(body, {
+      status: response.status,
+      headers: contentType ? { "content-type": contentType } : undefined,
+    });
   } catch (error) {
     console.error("API proxy error:", error);
     return NextResponse.json(

@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from weebot.application.ports.event_publisher_port import EventPublisherPort
-from weebot.domain.models.event import AgentEvent
+from weebot.domain.models.event import AgentEvent, SessionPresenceEvent
 from .websocket import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -39,11 +39,22 @@ class WebSocketEventBroadcaster(EventPublisherPort):
             if session_id:
                 await self._manager.broadcast_to_session(session_id, event_dict)
             else:
-                # Broadcast to global connections if no session_id
-                await self._manager.broadcast_global(event_dict)
+                # Broadcast to global connections if no session_id; a presence frame goes
+                # only to its session's owner, unless ownership is not enforced.
+                await self._manager.broadcast_global(
+                    event_dict, only_principal=self._presence_owner(event)
+                )
 
         except Exception as e:
             logger.error(f"Failed to broadcast event: {e}")
+
+    @staticmethod
+    def _presence_owner(event: AgentEvent) -> str | None:
+        from weebot.interfaces.web.auth import ownership_enforced
+
+        if isinstance(event, SessionPresenceEvent) and event.owner_user_id and ownership_enforced():
+            return event.owner_user_id
+        return None
 
     def _event_to_dict(self, event: AgentEvent) -> dict[str, Any]:
         """Convert AgentEvent to a JSON-safe dictionary.

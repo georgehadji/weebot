@@ -5,8 +5,8 @@ code: Session, SessionStatus, SessionContext, Fact, FactSource
 cluster: domain
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 6166004e
 ---
 
 # Session
@@ -39,7 +39,7 @@ Consequences (read from source, not run):
 ## Connected to
 - **Owns** `events` (Event card) and `SessionContext`/`Fact`. **Indexes with** `SessionMemory` (`weebot/domain/services/session_memory.py:11`).
 - **Persisted by** `StateRepositoryPort` / `SQLiteStateRepository` (`_row_to_session`, `sqlite_state_repo.py:540-579`); see that card.
-- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:256, 380`), `FlowRouter` (`flow_router.py:75-100, 171-194`), the flow states, `TaskRunner` (`application/services/task_runner.py:338, 367-369, 384-395`; when the flow persists its own session, the runner writes once at the end from the flow's copy, audit A25), CQRS handlers (`execute_step_handler.py:77-83`, `update_plan_handler.py:40-74`, `plan_queries.py:30`, `create_plan_handler.py:44-122`; `active_queries.py` lists sessions and reads counts from `session_activity` without loading events), `MemoryCompactor` (`memory_compactor.py:79`), `MetaAnalysisState` (`meta_analysis.py:82`).
+- **Read and replaced by** `PlanActFlow` (`plan_act_flow.py:256, 380`), `FlowRouter` (`flow_router.py:75-100, 171-194`), the flow states, `TaskRunner` (`application/services/task_runner.py:339, 368-370, 384-395`; when the flow persists its own session, the runner writes once at the end from the flow's copy, audit A25), CQRS handlers (`execute_step_handler.py:77-83`, `update_plan_handler.py:40-74`, `plan_queries.py:30`, `create_plan_handler.py:44-122`; `active_queries.py` lists sessions and reads counts from `session_activity` without loading events), `MemoryCompactor` (`memory_compactor.py:79`), `MetaAnalysisState` (`meta_analysis.py:82`).
 - **Looks like but is not:** `GatewaySession` (`domain/models/gateway_session.py:101`), a chat-gateway mapping; legacy `Project` (`domain/legacy_models.py:125`); a flow (`PlanActFlow`).
 
 ## If you change this

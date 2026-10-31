@@ -34,6 +34,9 @@ const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
   notification: NotificationRow,
 } as unknown as Partial<Record<AgentEvent["type"], RowComponent>>;
 
+/** Whether the registry draws anything for this event (the rest are deliberately not rows). */
+export const isRendered = (event: AgentEvent) => event.type in EVENT_REGISTRY;
+
 function EventRendererImpl({
   event,
   onRetry,

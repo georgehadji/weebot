@@ -178,6 +178,7 @@ class TaskRunner:
                     about_session_id=session.id,
                     status=session.status.value,
                     title=session.title or "",
+                    owner_user_id=session.user_id or "",
                 )
             )
         except Exception:

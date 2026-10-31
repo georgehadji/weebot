@@ -5,8 +5,8 @@ code: Container
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 6166004e
 ---
 
 # DI Container
@@ -20,7 +20,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 - State: `_bindings` (type or string key to factory) and `_singletons` (key to instance) (`:97-98`).
 - `register`, `register_instance`, `get` (`:102-122`): `get` returns the singleton, else calls the factory once and caches it; no binding raises `KeyError("No binding registered for X")`.
 - `_maybe_get` and `_maybe_get_str` swallow `KeyError` and return `None` (`:639-650`).
-- `configure_defaults(db_path, default_model)` (`:139-407`): 56 `self.register(...)` calls in the file (state repo, event bus, tracing, LLM, sandbox, Mediator, task runner, event store, tool repo, `ApiKeyPort`, `WeebotSettings` and `ToolConfig` (`:145-146`), many string-keyed items such as `"skill_retriever"`, `"personality"`, `"mcp_client"`, `"tool_registry"` (`:401`)), then `configure_knowledge_graph` and `configure_learning` (`:405-407`). `create_flow` is a builder over `flows/flow_builder.py:build_flow` (`_create_flow_callable`, `:262-281`). Typed keys `LLM_POOL` and `SESSION_COST_METER` come from `weebot/application/di/keys.py:43-44`; the `string_di_keys` ratchet (`tasks/quality/ceilings.toml:406`) counts the string keys left.
+- `configure_defaults(db_path, default_model)` (`:139-407`): 56 `self.register(...)` calls in the file (state repo, event bus, tracing, LLM, sandbox, Mediator, task runner, event store, tool repo, `ApiKeyPort`, `WeebotSettings` and `ToolConfig` (`:145-146`), many string-keyed items such as `"skill_retriever"`, `"personality"`, `"mcp_client"`, `"tool_registry"` (`:401`)), then `configure_knowledge_graph` and `configure_learning` (`:405-407`). `create_flow` is a builder over `flows/flow_builder.py:build_flow` (`_create_flow_callable`, `:262-281`). Typed keys `LLM_POOL` and `SESSION_COST_METER` come from `weebot/application/di/keys.py:43-44`; the `string_di_keys` ratchet (`tasks/quality/ceilings.toml:407`) counts the string keys left.
 - `step_executor(model, session, context, ...)` builds the `ExecutorAgent` that runs one plan step: container singletons first, then every field of the flow's `StepExecutionContext` via `context.executor_kwargs()` (ADR-015, F25) (`:465-515`); it also wires the pool, effect ledger, cost meter, memory snapshot and `ACR_ROUTER` (`:501-510`).
 - `build_mediator` (`:516-608`): adds `ValidationBehavior`, `LoggingBehavior`, `TelemetryBehavior`, `SavePolicyBehavior` (`:522-527`); builds the admin `ToolCollection` from `RoleBasedToolRegistry` (`application/services/tool_registry.py`) and on failure logs a warning, runs **tool-less** and records `mediator.degraded["tools"]` (`:529-559`); resolves `ScoringPort` by type (`:560-567`); defines `_executor_factory`, which calls `step_executor` (`:579`); calls `register_default_handlers` (`:593-607`).
 - `build_flow_registry` registers `plan_act` and `chat` flows (`:411-457`); `build_scheduler` (`:459`), `build_chat_flow` (`:610`), `build_hyper_agent_flow` (`:723`). `build_agent_runner` is gone (plan 3.7): flow assembly lives in `flow_builder.py`, which the container reaches without importing `interfaces`.
@@ -30,7 +30,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 ## Connected to
 - **Creates:** the Mediator (`_create_mediator` calls `build_mediator`, `weebot/application/di/_factories.py:175-176`), every flow, the step executor, and the ports' adapters.
 - **Shared root:** `weebot/interfaces/factories.py:56-73` (`shared_container()`, one configured container per process; `reset_shared_container` at `:75-83`), used by the web lifespan (`weebot/interfaces/web/main.py:188-190`) and the CLI (`cli/main.py:76-88`).
-- **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:338`): `weebot/interfaces/factories.py:69`, `cli/commands/flow.py:405`, `cli/commands/harness.py:102, 143, 311, 410`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
+- **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:339`): `weebot/interfaces/factories.py:69`, `cli/commands/flow.py:405`, `cli/commands/harness.py:102, 143, 311, 410`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
 - **Checked by:** `scripts/lint_di_wiring.py` (`make lint-di-wiring`) and `tests/unit/test_architecture_fitness.py`.
 - **Looks like but is not:** a framework container; there is no scope, no auto-wiring, no constructor injection. It is looked up by hand.
 

@@ -325,6 +325,8 @@ class SessionPresenceEvent(BaseEvent):
     title: str = Field(default="")
     step_count: int = Field(default=0)
     steps_completed: int = Field(default=0)
+    # The session's owner: the global channel sends the frame only to their rails.
+    owner_user_id: str = Field(default="")
 
 
 # ── AgentEvent union ───────────────────────────────────────────────

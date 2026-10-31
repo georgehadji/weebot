@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer } from "react";
 import { api } from "@/lib/api";
 import { composerReducer, initialComposerState } from "@/lib/composer";
+import { useToast } from "@/providers/ToastProvider";
 import { DeliveryState, MessageEvent } from "@/types/events";
 
 function draftKey(sessionId: string | null): string {
@@ -39,8 +40,11 @@ interface UseComposerOptions {
   onSessionCreated: (sessionId: string) => void;
   /** Show the user's message in the timeline immediately (with delivery "sending"). */
   onOptimisticMessage: (event: MessageEvent) => void;
-  /** Report how a send ended so the timeline row can settle or offer a retry. */
-  onDelivery: (id: string, delivery: DeliveryState) => void;
+  /**
+   * Report how a send ended so the timeline row can settle or offer a retry. Returns the row's
+   * resulting state: "sent" if the server's echo had already settled it, whatever was reported.
+   */
+  onDelivery: (id: string, delivery: DeliveryState) => DeliveryState | undefined;
 }
 
 /**
@@ -55,6 +59,7 @@ export function useComposer({
   onDelivery,
 }: UseComposerOptions) {
   const key = draftKey(sessionId);
+  const { toast } = useToast();
   const [state, dispatch] = useReducer(composerReducer, "", initialComposerState);
 
   // Read after hydration: the server render cannot see sessionStorage, and reading it in the
@@ -80,6 +85,11 @@ export function useComposer({
             // The session exists, so a retry would create a second one. Open it instead: the
             // page shows its real status and the run controls.
             console.warn("[Composer] starting the run failed; opening the session anyway", e);
+            toast({
+              title: "Task created but not started",
+              description: e instanceof Error ? e.message : "Unknown error",
+              variant: "error",
+            });
           }
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
@@ -90,11 +100,12 @@ export function useComposer({
           dispatch({ type: "sent" });
         }
       } catch (e) {
-        onDelivery(clientMsgId, "failed");
+        // An echoed row is delivered (the timeline shows it so): do not claim "Not sent".
+        if (onDelivery(clientMsgId, "failed") === "sent") return dispatch({ type: "sent" });
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
       }
     },
-    [sessionId, model, onDelivery, onSessionCreated]
+    [sessionId, model, onDelivery, onSessionCreated, toast]
   );
 
   const submit = useCallback(() => {
@@ -117,11 +128,13 @@ export function useComposer({
   /** Re-send a message whose delivery failed; it keeps its row (same id) in the timeline. */
   const retry = useCallback(
     (event: MessageEvent) => {
+      if (state.phase === "sending") return; // one send in flight at a time, as submit
+      dispatch({ type: "retry" });
       if (state.draft === event.message) dispatch({ type: "edit", draft: "" });
       onDelivery(event.id, "sending");
       void deliver(event.message, event.id);
     },
-    [state.draft, onDelivery, deliver]
+    [state.draft, state.phase, onDelivery, deliver]
   );
 
   const edit = useCallback((draft: string) => dispatch({ type: "edit", draft }), []);

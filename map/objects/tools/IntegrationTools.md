@@ -5,8 +5,8 @@ code: AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemToo
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-30
-commit: 8e6d1cca
+verified: 2026-10-31
+commit: 6166004e
 ---
 
 # Integration tools
@@ -38,7 +38,7 @@ Consequences (read from source, not run):
 - `.weebot/skills/apify-scraper/SKILL.md` lists exactly the ten preset names and `APIFY_API_KEY` (lines 5-6, 19-28), matching `weebot/tools/apify_presets.py` and `weebot/interfaces/factories.py:373`. Its `requires_env` key is not read by `SkillRegistry`, which takes `env` from `metadata` (`weebot/application/skills/skill_registry.py:158`), so the skill counts as ready without the key.
 
 ## Connected to
-- **Built by** `build_tools` (`weebot/interfaces/factories.py:322`), callers `weebot/interfaces/cli/agent_runner.py:93`, `weebot/interfaces/web/routers/sessions.py:345, 470`, `cli/commands/flow.py:349`, `weebot/application/use_cases/dispatch_session_input.py:102, 126`, and `run_scope` (`weebot/interfaces/factories.py:252-267`), which the webhook (`weebot/interfaces/web/routers/webhook.py:135`) and the gateways (`interfaces/gateways/*.py`) use. Native ones also by `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`).
+- **Built by** `build_tools` (`weebot/interfaces/factories.py:322`), callers `weebot/interfaces/cli/agent_runner.py:93`, `weebot/interfaces/web/routers/sessions.py:360, 485`, `cli/commands/flow.py:349`, `weebot/application/use_cases/dispatch_session_input.py:102, 126`, and `run_scope` (`weebot/interfaces/factories.py:252-267`), which the webhook (`weebot/interfaces/web/routers/webhook.py:135`) and the gateways (`interfaces/gateways/*.py`) use. Native ones also by `RoleBasedToolRegistry` (card `tools/RoleBasedToolRegistry.md`).
 - **Gated by** `EgressGuard`, the guard chain (`GuardedTool`), the trust boundary; cards `core/EgressGuard.md`, `core/ExecApprovalPolicy.md`.
 - **Looks like but is not:** `MCPToolRegistryBridge` (`weebot/application/services/mcp_tool_registry_bridge.py`), which only adds MCP names to roles; `weebot/mcp/server.py`, Weebot's own MCP server.
 

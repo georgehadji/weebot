@@ -8,12 +8,12 @@ Format: name — source — status — card
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — verified 2026-10-30 — [card](domain/Event.md)
 - Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-10-30 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — verified 2026-10-31 — [card](domain/Ports.md)
-- Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-30 — [card](domain/Session.md)
+- Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — verified 2026-10-31 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-30 — [card](domain/Step.md)
 
 ## application
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-10-30 — [card](application/CascadeExecutor.md)
-- DI Container (Container) — `weebot/application/di/__init__.py` — verified 2026-10-30 — [card](application/DIContainer.md)
+- DI Container (Container) — `weebot/application/di/__init__.py` — verified 2026-10-31 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-30 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-30 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-10-30 — [card](application/FlowState.md)
@@ -24,7 +24,7 @@ Format: name — source — status — card
 
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — verified 2026-10-30 — [card](infrastructure/Browser.md)
-- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-30 — [card](infrastructure/EventBus.md)
+- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-10-31 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — verified 2026-10-30 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — verified 2026-10-30 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox, ModalSandboxBackend) — `weebot/infrastructure/sandbox/factory.py` — verified 2026-10-30 — [card](infrastructure/Sandbox.md)
@@ -32,7 +32,7 @@ Format: name — source — status — card
 
 ## interfaces
 - Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-10-31 — [card](interfaces/ChatGateways.md)
-- CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — verified 2026-10-30 — [card](interfaces/CLI.md)
+- CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — verified 2026-10-31 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-10-30 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — verified 2026-10-31 — [card](interfaces/WebAPI.md)
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — verified 2026-10-31 — [card](interfaces/WebUI.md)
@@ -44,14 +44,14 @@ Format: name — source — status — card
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — verified 2026-10-30 — [card](core/EgressGuard.md)
 - ExecApprovalPolicy (approval modes and rules) (ExecApprovalPolicy, ApprovalMode, CommandRule) — `weebot/core/approval_policy.py` — verified 2026-10-30 — [card](core/ExecApprovalPolicy.md)
 - Model cascade config (model_cascade_config.py) (select_model_by_tokens, estimate_cost, LONG_CONTEXT_TOKENS) — `weebot/core/model_cascade_config.py` — verified 2026-10-23 — [card](core/ModelCascadeConfig.md)
-- WeebotSettings — `weebot/config/settings.py` — verified 2026-10-29 — [card](core/WeebotSettings.md)
+- WeebotSettings — `weebot/config/settings.py` — verified 2026-10-31 — [card](core/WeebotSettings.md)
 
 ## tools
 - BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — verified 2026-10-30 — [card](tools/BaseTool.md)
 - Browser and desktop tools (AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool) — `weebot/tools/advanced_browser.py` — verified 2026-10-30 — [card](tools/BrowserTools.md)
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — verified 2026-10-29 — [card](tools/BuiltinSkills.md)
 - ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — verified 2026-10-30 — [card](tools/ExecTools.md)
-- Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — verified 2026-10-30 — [card](tools/IntegrationTools.md)
+- Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — verified 2026-10-31 — [card](tools/IntegrationTools.md)
 - Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — verified 2026-10-30 — [card](tools/MediaTools.md)
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — verified 2026-10-31 — [card](tools/OrchestrationTools.md)
 - Personas (AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter) — `weebot/agents/parser.py` — verified 2026-10-24 — [card](tools/Personas.md)

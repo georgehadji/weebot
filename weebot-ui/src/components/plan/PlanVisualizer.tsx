@@ -8,7 +8,6 @@ import ReactFlow, {
   Controls,
   MiniMap,
   useNodesState,
-  useEdgesState,
   NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -128,7 +127,8 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
   }, [steps]);
 
   const [nodes, setNodes] = useNodesState(initialNodes);
-  const [edges] = useEdgesState(initialEdges);
+  // Derived, not state: seeding useEdgesState once froze the edges at the first plan drawn.
+  const edges = initialEdges;
 
   // Update nodes when steps change
   useEffect(() => {

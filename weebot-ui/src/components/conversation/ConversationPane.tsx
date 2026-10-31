@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Composer, SessionLifecycleStatus } from "./Composer";
-import { EventRenderer } from "./EventRenderer";
+import { EventRenderer, isRendered } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
 import { RunControls } from "./RunControls";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
@@ -27,6 +27,7 @@ import {
   getDisplayItems,
   initialSessionViewState,
   markDelivery,
+  mergeHistory,
   sessionReducer,
   SessionViewState,
 } from "@/lib/session-reducer";
@@ -82,7 +83,7 @@ export function ConversationPane({
         const missed = events.filter((e) => !seen.has(e.id));
         if (missed.length === 0) return;
         missed.forEach((e) => seen.add(e.id));
-        setState((prev) => missed.reduce(sessionReducer, prev));
+        setState((prev) => mergeHistory(prev, events));
       })
       .catch((e) => console.warn("[Conversation] could not refresh events", e));
     return () => {
@@ -94,10 +95,16 @@ export function ConversationPane({
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),
     []
   );
-  const settleDelivery = useCallback(
-    (id: string, delivery: DeliveryState) => setState((prev) => markDelivery(prev, id, delivery)),
-    []
-  );
+  // Mirrors `state` so a settle can report the row's outcome synchronously (see useComposer).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  const settleDelivery = useCallback((id: string, delivery: DeliveryState) => {
+    const known = stateRef.current.eventsById.get(id);
+    setState((prev) => markDelivery(prev, id, delivery));
+    return known?.type === "message" && known.delivery === "sent" ? ("sent" as const) : delivery;
+  }, []);
   const retryRef = useRef<(event: MessageEvent) => void>(undefined);
   const registerRetry = useCallback((fn: (event: MessageEvent) => void) => {
     retryRef.current = fn;
@@ -108,7 +115,9 @@ export function ConversationPane({
   }, []);
   const onRetry = useCallback((event: MessageEvent) => retryRef.current?.(event), []);
 
-  const items = getDisplayItems(state);
+  // Events with no row (title, plan, …) are not timeline rows: they must not hide the empty state
+  // or inflate the "new" count.
+  const items = getDisplayItems(state).filter((i) => i.kind === "gap" || isRendered(i.event));
   const { viewportRef, sentinelRef, atBottom, unseen, scrollToBottom } = useStickToBottom(items.length);
   const isRunning = status === "running";
 

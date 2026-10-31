@@ -17,6 +17,7 @@ export interface ComposerState {
 export type ComposerAction =
   | { type: "edit"; draft: string }
   | { type: "submit" }
+  | { type: "retry" }
   | { type: "sent" }
   | { type: "failed"; error: string; text: string };
 
@@ -37,6 +38,9 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
     case "submit":
       // The text leaves the box the moment it is sent; typing the next message is allowed.
       return canSubmit(state) ? { draft: "", phase: "sending", error: null } : state;
+    case "retry":
+      // Re-sending a failed row is a send like any other: the box says so and the stale error goes.
+      return state.phase === "sending" ? state : { ...state, phase: "sending", error: null };
     case "sent":
       return state.phase === "sending" ? { ...state, phase: "idle" } : state;
     case "failed":

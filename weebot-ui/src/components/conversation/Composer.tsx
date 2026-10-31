@@ -40,7 +40,7 @@ interface ComposerProps {
   model?: string;
   onSessionCreated: (sessionId: string) => void;
   onOptimisticMessage: (event: MessageEvent) => void;
-  onDelivery: (id: string, delivery: DeliveryState) => void;
+  onDelivery: (id: string, delivery: DeliveryState) => DeliveryState | undefined;
   /** Receives the function that re-sends a failed message (wired to the timeline's Retry). */
   registerRetry?: (retry: (event: MessageEvent) => void) => void;
   /** Receives the function that replaces the draft (used by the example prompts). */
@@ -99,7 +99,8 @@ export function Composer({
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // isComposing: Enter confirms an IME candidate (Greek tonos, CJK, ...), it must not send.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Safari reports that Enter after compositionend with isComposing false but keyCode 229.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       submit();
     }

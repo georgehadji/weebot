@@ -34,7 +34,16 @@ export function authHeaders(): Record<string, string> {
  * `?token=`, which uvicorn writes to its access log.
  */
 export function openSocket(url: string, apiKey: string | null = _getApiKey()): WebSocket {
-  return apiKey ? new WebSocket(url, ["weebot.v1", `bearer.${apiKey}`]) : new WebSocket(url);
+  if (!apiKey) return new WebSocket(url);
+  try {
+    return new WebSocket(url, ["weebot.v1", `bearer.${apiKey}`]);
+  } catch {
+    // A subprotocol must be an RFC 7230 token; a key with "/" or "=" is refused by the
+    // constructor. Degrade to an unauthenticated socket (the server closes it) rather than
+    // throw out of an effect and take the page down; REST and SSE still carry the header.
+    console.warn("API key cannot be sent as a WebSocket subprotocol; opening without it");
+    return new WebSocket(url);
+  }
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
@@ -47,38 +56,39 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     mergedHeaders["X-API-Key"] = apiKey;
   }
 
+  // Only a failure of fetch() itself is "cannot connect": matching the message text
+  // masked backend details containing "connect"/"fetch" and missed Safari's "Load failed".
+  let response: Response;
   try {
-    const response = await fetch(`${getApiBase()}${path}`, {
+    response = await fetch(`${getApiBase()}${path}`, {
       ...options,
       headers: {
         ...mergedHeaders,
         ...(options?.headers as Record<string, string> | undefined),
       },
     });
-
-    if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}`;
-      try {
-        const error = await response.json();
-        errorMessage = error.detail || error.error || errorMessage;
-      } catch {
-        errorMessage = response.statusText || errorMessage;
-      }
-      throw new Error(errorMessage);
-    }
-
-    return response.json();
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.includes("fetch") || error.message.includes("connect")) {
-        throw new Error(
-          "Cannot connect to backend. Make sure the backend server is running:\n\npython -m weebot.interfaces.web.main"
-        );
-      }
-      throw error;
-    }
-    throw new Error("Unknown error occurred");
+  } catch {
+    throw new Error(
+      "Cannot connect to backend. Make sure the backend server is running:\n\npython -m weebot.interfaces.web.main"
+    );
   }
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`;
+    try {
+      const error = await response.json();
+      // FastAPI's 422 detail is a list of {msg}; a bare String() of it is "[object Object]".
+      const detail = Array.isArray(error.detail)
+        ? error.detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join("; ")
+        : error.detail;
+      errorMessage = detail || error.error || errorMessage;
+    } catch {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
 }
 
 export interface PlanVizData {

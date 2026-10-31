@@ -15,13 +15,19 @@ export function useRemote<T>(load: () => Promise<T>, pollMs?: number) {
 
   useEffect(() => {
     let cancelled = false;
-    const run = () =>
-      load().then(
+    let started = 0;
+    let applied = 0; // a response older than one already shown is dropped: the newest wins
+    const run = () => {
+      const id = ++started;
+      return load().then(
         (data) => {
-          if (!cancelled) setState({ status: "ready", data });
+          if (cancelled || id < applied) return;
+          applied = id;
+          setState({ status: "ready", data });
         },
         (err: unknown) => {
-          if (cancelled) return;
+          if (cancelled || id < applied) return;
+          applied = id;
           const message = err instanceof Error ? err.message : "Something went wrong";
           setState((prev) => ({
             status: "error",
@@ -30,6 +36,7 @@ export function useRemote<T>(load: () => Promise<T>, pollMs?: number) {
           }));
         }
       );
+    };
     void run();
     const timer = pollMs ? setInterval(run, pollMs) : undefined;
     return () => {
