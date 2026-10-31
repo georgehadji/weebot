@@ -65,22 +65,39 @@ export default function OpsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  const [wsLive, setWsLive] = useState(false);
+
   useEffect(() => {
-    const ws = openSocket(getWsBase());
-    ws.onmessage = (evt) => {
-      try {
-        const data = JSON.parse(evt.data);
-        const entry: LogEntry = {
-          timestamp: data.timestamp || new Date().toISOString(),
-          type: data.type || "event",
-          raw: JSON.stringify(data),
-        };
-        setLogs((prev) => [...prev.slice(-199), entry]);
-      } catch {
-        // ignore non-JSON frames
-      }
+    let disposed = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let ws: WebSocket;
+    const connect = () => {
+      ws = openSocket(getWsBase());
+      ws.onopen = () => setWsLive(true);
+      ws.onclose = () => {
+        setWsLive(false);
+        if (!disposed) retry = setTimeout(connect, 3000);
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data);
+          const entry: LogEntry = {
+            timestamp: data.timestamp || new Date().toISOString(),
+            type: data.type || "event",
+            raw: JSON.stringify(data),
+          };
+          setLogs((prev) => [...prev.slice(-199), entry]);
+        } catch {
+          // ignore non-JSON frames
+        }
+      };
     };
-    return () => ws.close();
+    connect();
+    return () => {
+      disposed = true;
+      clearTimeout(retry);
+      ws.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -322,8 +339,10 @@ export default function OpsPage() {
               <div className="flex items-center justify-between">
                 <CardTitle>Live Event Stream</CardTitle>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-status-live animate-pulse" />
-                  <span className="text-xs text-muted-foreground">WebSocket connected</span>
+                  <div className={`w-2 h-2 rounded-full ${wsLive ? "bg-status-live animate-pulse" : "bg-status-idle"}`} />
+                  <span className="text-xs text-muted-foreground">
+                    {wsLive ? "WebSocket connected" : "Connecting…"}
+                  </span>
                   {logs.length > 0 && (
                     <button
                       onClick={() => setLogs([])}
