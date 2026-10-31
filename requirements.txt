@@ -114,7 +114,7 @@ pytest-timeout==2.4.0
 # Parallel test runs (`make test`, `-n auto`); trial 2026-10-31: 6928 passed, 0 failed, 69 s vs 440 s.
 pytest-xdist==3.8.0
 # Property-based testing for the backup/restore round-trip invariant (phase B3).
-hypothesis>=6.170.8
+hypothesis>=6.170.12
 
 # Linting (drives test_no_b006_violations in test_architecture_fitness.py)
 # Pinned, not ranged: `ruff_violations` in tasks/quality/ceilings.toml is an exact
