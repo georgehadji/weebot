@@ -56,7 +56,7 @@ describe("W6 C6: a toast holds still while hovered OR focused", () => {
   afterEach(() => vi.useRealTimers());
 
   // VERIFIED, unfixed (W6 fix budget spent): flip to `it` once hover and focus are separate flags.
-  it.fails("the pointer leaving does not start the clock while keyboard focus is inside", () => {
+  it("the pointer leaving does not start the clock while keyboard focus is inside", () => {
     setup("success");
     const toast = screen.getByRole("status");
     const action = screen.getByText("Undo");

@@ -51,7 +51,9 @@ function PaletteBody({ onClose }: Pick<CommandPaletteProps, "onClose">) {
     return commands.filter((c) => c.title.toLowerCase().includes(q));
   }, [commands, query]);
 
-  const active = filtered[activeIndex];
+  // Clamped here too: the registry can shrink under the highlight.
+  const index = Math.max(0, Math.min(activeIndex, filtered.length - 1));
+  const active = filtered[index];
 
   useEffect(() => {
     if (active) document.getElementById(optionId(active.id))?.scrollIntoView({ block: "nearest" });
@@ -81,10 +83,10 @@ function PaletteBody({ onClose }: Pick<CommandPaletteProps, "onClose">) {
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault();
-              setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+              setActiveIndex(Math.min(index + 1, filtered.length - 1));
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
-              setActiveIndex((i) => Math.max(i - 1, 0));
+              setActiveIndex(Math.max(index - 1, 0));
             } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
               run(active);
@@ -106,12 +108,12 @@ function PaletteBody({ onClose }: Pick<CommandPaletteProps, "onClose">) {
               key={command.id}
               id={optionId(command.id)}
               role="option"
-              aria-selected={i === activeIndex}
+              aria-selected={i === index}
               onClick={() => run(command)}
               onMouseEnter={() => setActiveIndex(i)}
               className={cn(
                 "flex w-full cursor-pointer items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors",
-                i === activeIndex ? "bg-agent/15 text-foreground" : "text-muted-foreground hover:bg-surface-3"
+                i === index ? "bg-agent/15 text-foreground" : "text-muted-foreground hover:bg-surface-3"
               )}
             >
               <span>{command.title}</span>

@@ -53,7 +53,7 @@ describe("W6 R5: ThemeProvider hydrates without a mismatch", () => {
 
   // VERIFIED, unfixed (W6: fix exceeds the 15-line cap, see audit): flip to `it` once the first
   // client render stops reading localStorage.
-  it.fails("a stored light theme hydrates cleanly and ends up light", async () => {
+  it("a stored light theme hydrates cleanly and ends up light", async () => {
     const { host, errors } = await hydrateWithStored("light");
     expect(errors).toEqual([]);
     expect(host.textContent).toBe("light");

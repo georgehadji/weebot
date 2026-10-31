@@ -27,7 +27,7 @@ describe("W6 D14: the highlighted index addresses an existing option", () => {
   });
 
   // VERIFIED, unfixed (W6 fix budget spent): flip to `it` when the index is clamped.
-  it.fails("when the registry shrinks under the highlight, an option is still active and Enter runs it", () => {
+  it("when the registry shrinks under the highlight, an option is still active and Enter runs it", () => {
     render(<CommandPalette open onClose={() => {}} />);
     fireEvent.keyDown(input(), { key: "ArrowDown" });
     fireEvent.keyDown(input(), { key: "ArrowDown" }); // highlight "c" (index 2)
@@ -50,7 +50,7 @@ describe("W6 D14: the highlighted index addresses an existing option", () => {
     expect(ran).toEqual([]);
   });
 
-  it.fails("ArrowUp after a shrink moves from the visible highlight, not the stale index", () => {
+  it("ArrowUp after a shrink moves from the visible highlight, not the stale index", () => {
     render(<CommandPalette open onClose={() => {}} />);
     fireEvent.keyDown(input(), { key: "ArrowDown" });
     fireEvent.keyDown(input(), { key: "ArrowDown" });

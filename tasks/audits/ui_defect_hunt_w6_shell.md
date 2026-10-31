@@ -360,3 +360,11 @@ cd ..
 .venv/Scripts/python scripts/lint_ui_debt.py                               # 6 counters at ceiling
 .venv/Scripts/python scripts/check_ui_contrast.py                          # 58 token pairs meet 4.5:1
 ```
+
+## Follow-up: G3/D14, G6, G8 fixed
+
+The three `it.fails` pins are now `it` and pass. Each failed against the old code first.
+
+- **G3/D14** `CommandPalette.tsx`: `index = clamp(activeIndex, 0, filtered.length - 1)` drives `active`, the arrow handlers and `aria-selected`/class.
+- **G6** `ToastProvider.tsx`: `held` is now `hovered || focused` (two flags).
+- **G8** `ThemeProvider.tsx`: `useSyncExternalStore(subscribe, readStoredTheme, () => "dark")`. localStorage is the source of truth, the server snapshot is dark, so hydration matches and React then re-renders to light with no mismatch. Persistence moved from the effect into `setTheme`/`toggleTheme`; the effect only writes the `dark` class and `data-theme`. The `layout.tsx` init script is unchanged (it reads the same key and default). Chosen over the report's DOM-class snapshot because it needs no change to the existing dark/unset hydration tests. O6 (two writers of the class: init script and effect) remains.
