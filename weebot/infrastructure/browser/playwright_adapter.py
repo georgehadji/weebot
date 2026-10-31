@@ -18,25 +18,9 @@ from weebot.application.ports.browser_port import (
     ElementInfo,
     NavigationResult,
 )
+from weebot.infrastructure.browser.browser_launcher import open_browser
 
 logger = logging.getLogger(__name__)
-
-
-async def open_chromium(chromium: Any, launch_options: dict[str, Any]) -> Any:
-    """Connect to WEEBOT_BROWSER_CDP_URL (e.g. Lightpanda) when set, else launch Chromium.
-
-    A proxy is a launch option, so a proxied config always launches. An unreachable CDP
-    endpoint falls back to a launch, so the browser tools keep working without it.
-    """
-    from weebot.config.settings import get_settings
-
-    url = get_settings().browser_cdp_url
-    if url and "proxy" not in launch_options:
-        try:
-            return await chromium.connect_over_cdp(url)
-        except Exception as exc:
-            logger.warning("CDP browser at %s unreachable (%s); launching Chromium", url, exc)
-    return await chromium.launch(**launch_options)
 
 
 class PlaywrightAdapter(BrowserPort):
@@ -142,10 +126,7 @@ class PlaywrightAdapter(BrowserPort):
         if self._config.proxy_server:
             launch_options["proxy"] = {"server": self._config.proxy_server}
 
-        if browser_type is self._playwright.chromium:
-            self._browser = await open_chromium(browser_type, launch_options)
-        else:
-            self._browser = await browser_type.launch(**launch_options)
+        self._browser = await open_browser(browser_type, launch_options)
 
         # Build context options
         context_options: dict[str, Any] = {

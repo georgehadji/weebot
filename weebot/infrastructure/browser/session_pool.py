@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from weebot.application.ports.browser_port import BrowserConfig, BrowserType
+from weebot.infrastructure.browser.browser_launcher import cdp_connection_cap, open_browser
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,12 @@ class BrowserSessionPool:
         """
         self.min_sessions = max(1, min_sessions)
         self.max_sessions = max(self.min_sessions, max_sessions)
+        # Each pooled session is its own CDP connection; the endpoint (Lightpanda) has a limit.
+        cap = cdp_connection_cap()
+        if cap and self.max_sessions > cap:
+            logger.info("Browser pool limited to %d sessions by the CDP connection cap", cap)
+            self.max_sessions = cap
+            self.min_sessions = min(self.min_sessions, cap)
         self.session_ttl = session_ttl
         self.idle_timeout = idle_timeout
         self.headless = headless
@@ -242,12 +249,7 @@ class BrowserSessionPool:
             if config.proxy_server:
                 launch_options["proxy"] = {"server": config.proxy_server}
 
-            if browser_type is self._playwright.chromium:
-                from weebot.infrastructure.browser.playwright_adapter import open_chromium
-
-                browser = await open_chromium(browser_type, launch_options)
-            else:
-                browser = await browser_type.launch(**launch_options)
+            browser = await open_browser(browser_type, launch_options)
 
             # Create context
             context_options = {

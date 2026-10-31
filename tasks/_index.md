@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (18)
+## open (19)
 
 - 2026-10-25 — [Defect Hunt V7.1 — Final Summary Report](audits/defect_hunt_v71_final_summary.md)
 - 2026-10-25 — [Wave 1 — Security and Trust Boundary](audits/defect_hunt_v71_w1_security.md)
@@ -14,6 +14,7 @@ Format: date — record — note
 - 2026-10-25 — [Wave 3 — Flow Engine and State Machine](audits/defect_hunt_v71_w3_flows.md)
 - 2026-10-23 — [Plan: fix the findings recorded in the map cards](icm_fix_plan.md) — F20, F22-F28, F32-F35 ordering moved to remaining_fix_plan.md; see its open list
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
+- 2026-10-31 — [Lightpanda CDP browser: fixes for the 7 review findings on PR 126](plans/lightpanda_cdp_review_fix_plan.md)
 - 2026-10-29 — [Plan: everything still open after the 2026-10-29 audit](plans/remaining_work_plan_2026_10_29.md) — everything still open after the 2026-10-29 audit, checked against the code on fix/audit-2026-10-29 (89b8121e); eight waves, security and data loss first, decision-gated work after the owner decides, map and docs last; supersedes the open lists in master_plan_2026_10_27.md sections 3-4 and audit_2026_10_29_fix_plan.md section 7
 - 2026-10-23 — [Plan: fix everything still open](remaining_fix_plan.md) — F28 type-safe mediator dispatch; container_construction ceiling still 8
 - 2026-07-21 — [Plan: Greek Scientific Book Generation via LaTeX](scientific-book-latex-plan.md) — LLM drafting, TeX Live image, CLI/Web wiring missing

@@ -22,7 +22,7 @@ The tools grew as separate backends, not as one browser with several front ends:
 
 The registry shares one adapter between the two Playwright tools so that `browser_inspector` reads the page that `advanced_browser` opened (`weebot/tools/browser_inspector.py:8-9, 183-186`, `weebot/application/services/tool_registry.py:463-464, 505-513`).
 
-`WEEBOT_BROWSER_CDP_URL` makes every Chromium launch in the Playwright tools connect over CDP to a running browser such as Lightpanda; the adapter, the pool and `web_scraper` all go through `open_chromium`, which falls back to a launch with a warning when the endpoint is unreachable and always launches for a proxied config (`infrastructure/Browser.md`; `tests/unit/infrastructure/browser/test_cdp_browser.py`). Lightpanda has no layout engine, so visibility-based waits (`wait_for_selector`, `wait_for`) can time out against it.
+`WEEBOT_BROWSER_CDP_URL` makes every Chromium launch in the Playwright tools connect over CDP to a running browser such as Lightpanda; the adapter, the pool and `web_scraper` all go through `open_browser`, which fails closed: a proxy, `headless=False` or an unreachable endpoint raises `CdpBrowserUnavailable` unless `WEEBOT_BROWSER_CDP_FALLBACK` is on, so the agent's `headless` argument cannot leave the container (`infrastructure/Browser.md`; `tests/unit/infrastructure/browser/test_browser_launcher.py`). Lightpanda has no layout engine, so visibility-based waits (`wait_for_selector`, `wait_for`) can time out against it.
 
 ## Shape
 Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_registry.py:26-185`; `weebot/tools/tool_registry.py` only re-exports it).
@@ -30,7 +30,7 @@ Roles come from `DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_regis
 | Tool name | Defined | Backend | Roles |
 |---|---|---|---|
 | `advanced_browser` | `weebot/tools/advanced_browser.py:52` | shared `PlaywrightAdapter`, raw `.page` calls (`weebot/tools/advanced_browser.py:130-141`) | researcher, admin, webhook |
-| `web_scraper` | `weebot/tools/advanced_browser.py:419` | its own `async_playwright()` Chromium per call, obtained through `open_chromium` (`weebot/tools/advanced_browser.py:486-489`), `ContentExtractor` (`weebot/tools/advanced_browser.py:503-507`) | researcher, admin |
+| `web_scraper` | `weebot/tools/advanced_browser.py:419` | its own `async_playwright()` Chromium per call, obtained through `open_browser` (`weebot/tools/advanced_browser.py:488-490`), `ContentExtractor` (`weebot/tools/advanced_browser.py:503-507`) | researcher, admin |
 | `browser_inspector` | `weebot/tools/browser_inspector.py:180` | shared `PlaywrightAdapter` (`weebot/tools/browser_inspector.py:194, 252`), `SomRenderer` (`weebot/tools/browser_inspector.py:376, 406`) | researcher, admin, webhook, designer |
 | `browser_navigator` | `weebot/tools/browser_tool.py:38` | `browser_use.Browser(headless=False)` and `browser_use.Agent` (`weebot/tools/browser_tool.py:25, 35, 96, 170-172`) | none (and never built, see below) |
 | `camofox_browser` | `weebot/tools/camofox_browser.py:198` | its own Node camofox server on 127.0.0.1, over HTTP (`weebot/tools/camofox_browser.py:125-161, 312-334`) | researcher, admin, webhook |

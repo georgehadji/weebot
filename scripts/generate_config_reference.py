@@ -189,7 +189,16 @@ CONFIG_SCHEMA: list[dict] = [
              "so they need an API key"},
     {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",
      "desc": "CDP endpoint of a running browser to connect to instead of launching Chromium, "
-             "e.g. Lightpanda on http://127.0.0.1:9222 (proxied configs still launch)"},
+             "e.g. Lightpanda on http://127.0.0.1:9222. Fails closed: a proxy or headless=False "
+             "is refused unless WEEBOT_BROWSER_CDP_FALLBACK is on"},
+    {"var": "WEEBOT_BROWSER_CDP_FALLBACK", "type": "bool", "default": "false",
+     "desc": "Launch Chromium on the host when the CDP browser is down or cannot serve a request "
+             "(proxy, headless=False). Off: those calls fail, so pages never render outside "
+             "the container"},
+    {"var": "WEEBOT_BROWSER_CDP_CONNECT_TIMEOUT_MS", "type": "int", "default": "5000",
+     "desc": "Milliseconds to wait for the CDP endpoint; a failure is remembered for 30 seconds"},
+    {"var": "WEEBOT_BROWSER_CDP_MAX_CONNECTIONS", "type": "int", "default": "0",
+     "desc": "Most CDP connections the browser session pool opens at once (0 = no cap)"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
      "desc": "Largest request body the web API accepts (413 above it)"},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",

@@ -484,9 +484,10 @@ class WebScraperTool(BaseTool):
             from bs4 import BeautifulSoup
 
             async with async_playwright() as playwright:
-                from weebot.infrastructure.browser.playwright_adapter import open_chromium
+                # Through playwright_adapter: its tools-no-infra exemption already covers this edge.
+                from weebot.infrastructure.browser.playwright_adapter import open_browser
 
-                browser = await open_chromium(playwright.chromium, {"headless": True})
+                browser = await open_browser(playwright.chromium, {"headless": True})
                 page = await browser.new_page()
 
                 # Navigate to URL
