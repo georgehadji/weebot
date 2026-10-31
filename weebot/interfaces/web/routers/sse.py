@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -94,8 +96,12 @@ async def stream_events(request: Request):
 
                 dropped = queue.take_dropped_count()
                 if dropped > 0:
+                    # Its own id: the UI dedupes by id, and dropped every later notice (W2-4).
                     gap_data = {
+                        "id": f"drop-{uuid.uuid4().hex}",
                         "type": "notification",
+                        "session_id": getattr(event, "session_id", "") or "",
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "text": f"{dropped} event(s) dropped — client fell behind",
                     }
                     yield {"event": "notification", "data": json.dumps(gap_data)}
