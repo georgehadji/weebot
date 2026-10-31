@@ -32,9 +32,14 @@ export function useSessionList() {
 
   // Presence deltas are applied at read time rather than copied into
   // `sessions`, so an update that lands before the REST seed isn't lost.
+  // A "deleted" frame (the delete route sends one, D10) removes the row.
   const liveSessions = useMemo(
     () =>
-      sessions && presence.size > 0 ? sessions.map((s) => applyPresence(s, presence.get(s.id))) : sessions,
+      sessions && presence.size > 0
+        ? sessions
+            .filter((s) => presence.get(s.id)?.status !== "deleted")
+            .map((s) => applyPresence(s, presence.get(s.id)))
+        : sessions,
     [sessions, presence]
   );
 
@@ -44,7 +49,8 @@ export function useSessionList() {
   useEffect(() => {
     if (!sessions) return;
     const known = new Set(sessions.map((s) => s.id));
-    for (const id of presence.keys()) {
+    for (const [id, update] of presence) {
+      if (update.status === "deleted") continue;
       if (!known.has(id) && !asked.current.has(id)) {
         asked.current.add(id);
         reload();

@@ -333,3 +333,7 @@ grep -n "status" weebot/interfaces/web/routers/health.py            # healthy/de
 
 Not run: `next build` (reserved by the caller), `make lint-ui` and `scripts/lint_ui_debt.py` (no Python
 run this wave).
+
+## Follow-up (2026-10-31)
+
+D10 is fixed: the delete route publishes a `session_presence` frame with status `deleted` (`weebot/interfaces/web/routers/sessions.py`, `tests/unit/fixes/test_d10_delete_tells_the_rail.py`), and `useSessionList` drops that row. The `it.fails` pin in `src/app/sessions/page.test.tsx` is now a plain test.
