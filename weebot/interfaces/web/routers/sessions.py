@@ -223,19 +223,21 @@ async def delete_session(
     results = await DeleteSession(task_runner, orch).execute(session_id)
 
     logger.info("Deleted session %s (results: %s)", session_id, results)
-    await _publish_deleted(http_request, session_id)
+    await _publish_deleted(http_request, session_id, session.user_id or "")
 
     return {"message": f"Session {session_id} deleted", "results": results}
 
 
-async def _publish_deleted(http_request: Request, session_id: str) -> None:
+async def _publish_deleted(http_request: Request, session_id: str, owner: str) -> None:
     """Tell every session rail the row is gone: the rail updates only from presence (D10)."""
     from weebot.application.ports.event_bus_port import EventBusPort
     from weebot.domain.models.event import SessionPresenceEvent
 
     try:
         bus = http_request.app.state.container.get(EventBusPort)
-        await bus.publish(SessionPresenceEvent(about_session_id=session_id, status="deleted"))
+        await bus.publish(SessionPresenceEvent(
+            about_session_id=session_id, status="deleted", owner_user_id=owner
+        ))
     except Exception:
         logger.warning("Could not publish the deletion of session %s", session_id, exc_info=True)
 
