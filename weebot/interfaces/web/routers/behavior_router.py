@@ -10,10 +10,12 @@ from concurrent.futures import Future
 from datetime import UTC, datetime
 from datetime import date as _date
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from weebot.core.behavior_reporting import BehaviorReporter, SelfKnowledgeGenerator
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.config.settings import WORKSPACE_ROOT
+from weebot.core.behavior_reporting import BehaviorReporter, LedgerEntry, SelfKnowledgeGenerator
 from weebot.core.behavior_tracker import (
     BehaviorEvent,
     BehaviorTracker,
@@ -22,7 +24,13 @@ from weebot.core.behavior_tracker import (
     get_tracker,
     stop_tracker,
 )
-from weebot.interfaces.web.auth import accepted_subprotocol, require_mutation_identity
+from weebot.interfaces.web.auth import (
+    accepted_subprotocol,
+    current_principal,
+    ownership_enforced,
+    require_mutation_identity,
+    verify_session_ownership,
+)
 from weebot.interfaces.web.websocket import fan_out
 
 logger = logging.getLogger(__name__)
@@ -77,6 +85,34 @@ class OverrideRequest(BaseModel):
 reporter = BehaviorReporter()
 
 
+# Each principal sees its own sessions (decision D-BEH); /trust and /report stay aggregate.
+async def _session_owner(conn, session_id: str) -> str | None:
+    """The user_id of *session_id*, or None when the state repo does not know it."""
+    container = getattr(getattr(getattr(conn, "app", None), "state", None), "container", None)
+    if container is None or not session_id:
+        return None
+    session = await container.get(StateRepositoryPort).load_session(session_id)
+    return getattr(session, "user_id", None)
+
+
+async def _require_owner(conn, session_id: str) -> None:
+    """404 unless the caller owns *session_id* (or nobody does)."""
+    await verify_session_ownership(conn, await _session_owner(conn, session_id))
+
+
+async def _owned(conn, entries: list[LedgerEntry]) -> list[LedgerEntry]:
+    """The entries whose session the caller owns, one ownership lookup per session."""
+    allowed: dict[str, bool] = {}
+    for entry in entries:
+        if entry.session_id not in allowed:
+            try:
+                await _require_owner(conn, entry.session_id)
+                allowed[entry.session_id] = True
+            except HTTPException:
+                allowed[entry.session_id] = False
+    return [e for e in entries if allowed[e.session_id]]
+
+
 @router.get("/trust", response_model=TrustScoreResponse)
 async def get_trust():
     """Get current trust score."""
@@ -99,9 +135,13 @@ async def get_date_report(date: _date):
 
 
 @router.get("/recent", response_model=list[BehaviorEventResponse])
-async def get_recent_actions(count: int = 10, session_id: str | None = None):
-    """Get recent actions."""
-    entries = reporter.get_recent_actions(count, session_id)
+async def get_recent_actions(request: Request, count: int = 10, session_id: str | None = None):
+    """Get recent actions of the caller's sessions."""
+    if session_id:
+        await _require_owner(request, session_id)
+        entries = reporter.get_recent_actions(count, session_id)
+    else:
+        entries = (await _owned(request, reporter.get_recent_actions(max(count, 100))))[:count]
 
     return [
         BehaviorEventResponse(
@@ -118,8 +158,9 @@ async def get_recent_actions(count: int = 10, session_id: str | None = None):
 
 
 @router.get("/session/{session_id}", response_model=SessionSummaryResponse)
-async def get_session_summary(session_id: str):
+async def get_session_summary(session_id: str, request: Request):
     """Get summary for a specific session."""
+    await _require_owner(request, session_id)
     return reporter.get_session_summary(session_id)
 
 
@@ -136,13 +177,17 @@ async def mark_override(request: OverrideRequest):
 
 
 @router.post("/watch/start", dependencies=[Depends(require_mutation_identity)])
-async def start_watching(session_id: str, directory: str):
-    """Start behavior tracking for a session."""
+async def start_watching(session_id: str, directory: str, request: Request):
+    """Start behavior tracking for a session, on a folder inside the workspace."""
     from pathlib import Path
 
+    await _require_owner(request, session_id)
     watch_path = Path(directory).resolve()
-    if not watch_path.exists():
-        raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
+    # The path is not echoed: it would tell a caller what exists outside the workspace.
+    if not watch_path.is_relative_to(WORKSPACE_ROOT) or not watch_path.is_dir():
+        raise HTTPException(
+            status_code=400, detail="directory must be an existing folder inside the workspace"
+        )
 
     # Check if already tracking
     existing = get_tracker(session_id)
@@ -161,8 +206,9 @@ async def start_watching(session_id: str, directory: str):
 
 
 @router.post("/watch/stop", dependencies=[Depends(require_mutation_identity)])
-async def stop_watching(session_id: str):
+async def stop_watching(session_id: str, request: Request):
     """Stop behavior tracking for a session."""
+    await _require_owner(request, session_id)
     tracker = get_tracker(session_id)
     if tracker:
         tracker.stop()
@@ -173,8 +219,9 @@ async def stop_watching(session_id: str):
 
 
 @router.get("/watch/status")
-async def get_watch_status(session_id: str):
+async def get_watch_status(session_id: str, request: Request):
     """Get tracker status for a session."""
+    await _require_owner(request, session_id)
     tracker = get_tracker(session_id)
     if tracker:
         return tracker.get_stats()
@@ -201,6 +248,8 @@ async def regenerate_self_knowledge():
 # WebSocket for real-time behavior events
 # Store active WebSocket connections (with lock for concurrent access)
 _ws_connections: list[WebSocket] = []
+# The principal each /ws client authenticated as; events go only to the session's owner.
+_ws_principals: dict[WebSocket, str] = {}
 _ws_lock = asyncio.Lock()
 _WS_MAX_MSG_SIZE = 1024 * 100  # 100 KB max incoming JSON
 # How long one client may take to accept a broadcast before it is dropped.
@@ -223,6 +272,13 @@ async def broadcast_event(event: BehaviorEvent):
         if not _ws_connections:
             return
         connections = list(_ws_connections)
+
+    if ownership_enforced():
+        owner = await _session_owner(connections[0], event.session_id)
+        if owner:
+            connections = [ws for ws in connections if _ws_principals.get(ws, owner) == owner]
+        if not connections:
+            return
 
     message = {
         "type": f"file.{event.event_type}",
@@ -260,9 +316,11 @@ async def behavior_websocket(websocket: WebSocket):
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
+    principal = await current_principal(websocket)
     await websocket.accept(subprotocol=accepted_subprotocol(websocket))
     async with _ws_lock:
         _ws_connections.append(websocket)
+        _ws_principals[websocket] = principal
 
     logger.info(f"Behavior WebSocket connected: {websocket.client}")
 
@@ -298,7 +356,7 @@ async def behavior_websocket(websocket: WebSocket):
 
                 elif message.get("action") == "get_recent":
                     count = message.get("count", 10)
-                    entries = reporter.get_recent_actions(count)
+                    entries = await _owned(websocket, reporter.get_recent_actions(count))
                     await websocket.send_json(
                         {
                             "type": "recent.actions",
@@ -332,6 +390,7 @@ async def behavior_websocket(websocket: WebSocket):
         async with _ws_lock:
             if websocket in _ws_connections:
                 _ws_connections.remove(websocket)
+            _ws_principals.pop(websocket, None)
 
 
 @router.websocket("/ws/session/{session_id}")
@@ -339,6 +398,12 @@ async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
     if not await _ws_authorized(websocket):
         await websocket.close(code=4001, reason="Unauthorized")
+        return
+
+    try:
+        await _require_owner(websocket, session_id)
+    except HTTPException:
+        await websocket.close(code=4003, reason="Forbidden")
         return
 
     await websocket.accept(subprotocol=accepted_subprotocol(websocket))
