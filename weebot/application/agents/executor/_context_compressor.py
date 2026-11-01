@@ -11,6 +11,8 @@ import logging
 from typing import Any
 from collections import deque
 
+from weebot.application.services.context_tokenizer import ContextTokenizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,8 +84,7 @@ class ContextCompressor:
         if not conversation:
             return
 
-        # Crude estimate: 4 chars per token
-        estimated_tokens = sum(len(str(m.get("content", ""))) // 4 for m in conversation)
+        estimated_tokens = ContextTokenizer().estimate_messages_tokens(conversation)
 
         if estimated_tokens < self._context_window * 0.75:
             return
