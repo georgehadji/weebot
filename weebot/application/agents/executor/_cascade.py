@@ -409,18 +409,16 @@ class CascadeExecutor:
                     ),
                     timeout=effective,
                 )
-            # Meter here, before the reply is judged: the provider bills an empty reply
-            # too, and it used to reach no meter (audit F14).
-            # `hasattr(resp, "usage")` was vacuous -- usage is a declared field, so it is
-            # always present -- and four adapters set it to None when a provider omits it,
-            # making `.get` raise. The adapters use `getattr(response, "usage", None)`.
+            # Meter before the reply is judged: an empty reply that carries usage is billed
+            # too (audit F14). Usage is declared but four adapters set it to None, so no `.get`.
             _usage = (getattr(resp, "usage", None) or {}) if resp else {}
             _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
             _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
             _cached = int(_usage.get("cached_tokens", 0) or 0)
-            if resp:
+            answered = bool(resp and (resp.content or resp.tool_calls))
+            if answered or _prompt_tokens or _completion_tokens:
                 await self._call_completed(model_id, _prompt_tokens, _completion_tokens, _cached)
-            if resp and (resp.content or resp.tool_calls):
+            if answered:
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
                 logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
