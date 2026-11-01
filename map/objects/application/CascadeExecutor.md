@@ -4,9 +4,9 @@ name: CascadeExecutor
 code: CascadeExecutor
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-11-01
-commit: 4f76c44f
+commit: 8861bdd8
 ---
 
 # CascadeExecutor
@@ -17,15 +17,15 @@ Makes one LLM call for `ExecutorAgent` by trying several models in a fixed order
 Cost and availability: try cheap or probable models first, spend more only on failure. Extracted from the old executor so LLM-calling logic is separate from step orchestration (`weebot/application/agents/executor/_cascade.py:1-6`). Several comments in the file record bugs that shaped it (probes billed but discarded, pool slot taken inside the timeout, rescue call outside the pool); keep those behaviours when editing.
 
 ## Shape
-`call_with_cascade` at `_cascade.py:525`. Candidate models come from `get_model_cascade_for_role(agent_role)` plus the model provider's choice for the step (`_cascade.py:556-567`).
+`call_with_cascade` at `_cascade.py:523`. Candidate models come from `get_model_cascade_for_role(agent_role)` plus the model provider's choice for the step (`_cascade.py:554-565`).
 
-1. **Credit filter** (`_cascade.py:598-607`): `build_cascade_plan` (`weebot/core/cascade_plan.py:29-50`) puts the pinned model (`flow run --model`), role primary, ACR list, task model and role fallback 1 in phase 1, de-duplicated, then dropped past the soft cost limit if PREMIUM (`_within_budget`, `_cascade.py:509-522`). If remaining OpenRouter credit is under `OPENROUTER_MIN_CREDIT_USD` (default 0.10 USD) OpenRouter-only models are dropped; unknown credit means no filtering (`_cascade.py:64-85, 188-217`).
-2. **Phase 1, hedged probes** (`_cascade.py:610-687`): one candidate runs with a 90 s timeout; the next starts when it fails or after `_HEDGE_DELAY_S` (20 s) without an answer. Waits for the first *success* (not first finish), then cancels the rest in a `finally`, bills a cancelled probe that had sent its request, and gives the cancellations 5 s to land (`_cascade.py:650-681`). Costs: a cancelled non-streamed request still bills, which is why probes are no longer all started at once.
-3. **Phase 2, sequential** (`_cascade.py:688-702`): every role-list entry from the third on, in order, then `MODEL_CASCADE_TIER4` last (`weebot/core/cascade_plan.py:44-50`), each 60 s, skipping tripped, already-probed and server-error models. The `_TIER3_MODEL` constant is only the default when a role cascade has fewer than three entries, so the method's docstring ("tier3 → tier4", `_cascade.py:528`) is not literally what runs.
-4. **Live rescue** (`_cascade.py:704-717`): only if fast-fail was detected and every first error classifies as a missing model (`ErrorCategory.MODEL_UNAVAILABLE`: a standalone 404 or a model-not-found message). Picks, among paid tool-capable models (free only if no paid), the cheapest catalog-priced one with at least 128k context, unpriced last, and calls it inside the LLM pool with a 30 s timeout (`_cascade.py:726-801`, ranking `_cascade.py:764-768`).
-5. Otherwise raises `AllModelsTrippedError` (`_cascade.py:719-722`).
+1. **Credit filter** (`_cascade.py:596-605`): `build_cascade_plan` (`weebot/core/cascade_plan.py:29-50`) puts the pinned model (`flow run --model`), role primary, ACR list, task model and role fallback 1 in phase 1, de-duplicated, then dropped past the soft cost limit if PREMIUM (`_within_budget`, `_cascade.py:507-520`). If remaining OpenRouter credit is under `OPENROUTER_MIN_CREDIT_USD` (default 0.10 USD) OpenRouter-only models are dropped; unknown credit means no filtering (`_cascade.py:64-85, 188-217`).
+2. **Phase 1, hedged probes** (`_cascade.py:608-685`): one candidate runs with a 90 s timeout; the next starts when it fails or after `_HEDGE_DELAY_S` (20 s) without an answer. Waits for the first *success* (not first finish), then cancels the rest in a `finally`, bills a cancelled probe that had sent its request, and gives the cancellations 5 s to land (`_cascade.py:648-679`). Costs: a cancelled non-streamed request still bills, which is why probes are no longer all started at once.
+3. **Phase 2, sequential** (`_cascade.py:686-700`): every role-list entry from the third on, in order, then `MODEL_CASCADE_TIER4` last (`weebot/core/cascade_plan.py:44-50`), each 60 s, skipping tripped, already-probed and server-error models. The `_TIER3_MODEL` constant is only the default when a role cascade has fewer than three entries, so the method's docstring ("tier3 → tier4", `_cascade.py:526`) is not literally what runs.
+4. **Live rescue** (`_cascade.py:702-715`): only if fast-fail was detected and every first error classifies as a missing model (`ErrorCategory.MODEL_UNAVAILABLE`: a standalone 404 or a model-not-found message). Picks, among paid tool-capable models (free only if no paid), the cheapest catalog-priced one with at least 128k context, unpriced last, and calls it inside the LLM pool with a 30 s timeout (`_cascade.py:722-797`, ranking `_cascade.py:762-766`).
+5. Otherwise raises `AllModelsTrippedError` (`_cascade.py:717-720`).
 
-Per-attempt rules (`_cascade_try_chat_unpooled`, `_cascade.py:357-498`): a tripped model is skipped and recorded CIRCUIT_OPEN; 401/403/404-class errors (`ErrorClassifier.should_fail_fast`) are suppressed, do **not** count toward the breaker and exclude the model for the rest of the run; other errors bump the breaker and server errors also exclude the model; success resets the breaker and records latency, tokens and estimated cost. Usage is metered as soon as `chat` returns, so an empty reply that carries usage is billed to the meter too, and then counts as a breaker failure (`_cascade.py:412-422, 444-455`). Once a fast-fail error is seen, remaining timeouts shrink to 15 s (`_cascade.py:387, 589-594`).
+Per-attempt rules (`_cascade_try_chat_unpooled`, `_cascade.py:357-496`): a tripped model is skipped and recorded CIRCUIT_OPEN; 401/403/404-class errors (`ErrorClassifier.should_fail_fast`) are suppressed, do **not** count toward the breaker and exclude the model for the rest of the run; other errors bump the breaker and server errors also exclude the model; success resets the breaker and records latency, tokens and estimated cost. Usage is metered as soon as `chat` returns, so an empty reply that carries usage is billed to the meter too, and then counts as a breaker failure (`_cascade.py:412-420, 442-453`). Once a fast-fail error is seen, remaining timeouts shrink to 15 s (`_cascade.py:387, 587-592`).
 
 Breaker numbers: logged at 3 failures (`_cascade.py:73`), tripped at 5 (`_cascade.py:72`).
 
@@ -35,7 +35,7 @@ Pool: `_cascade_try_chat` takes a pool slot *before* the latency clock and outsi
 
 ## Connected to
 - **Owned by** `ExecutorAgent` (`_base.py:169-188`), which passes `model_provider=self._resolve_model_for_step`, `llm_pool`, `provider_account`, and `on_success` = the context compressor's token tracker.
-- **Telemetry:** `ModelCascadeTracker` and optional ACR router record every `CascadeDecision` (`_cascade.py:221-245`). The tracker is an in-memory ring buffer owned by each `ExecutorAgent` (`_base.py:185`); the DI `"cascade_tracker"` binding is not passed to executors, and the Mediator path builds an executor per step, so nothing aggregates decisions across steps (see Event store card, cost views); the cost estimate feeds the number `mcp/resources.py` publishes (`_cascade.py:435-437`, published at `weebot/mcp/resources.py:273`).
+- **Telemetry:** `ModelCascadeTracker` and optional ACR router record every `CascadeDecision` (`_cascade.py:221-245`). The tracker is an in-memory ring buffer owned by each `ExecutorAgent` (`_base.py:185`); the DI `"cascade_tracker"` binding is not passed to executors, and the Mediator path builds an executor per step, so nothing aggregates decisions across steps (see Event store card, cost views); the cost estimate feeds the number `mcp/resources.py` publishes (`_cascade.py:433-435`, published at `weebot/mcp/resources.py:273`).
 - **Config:** tier constants and the one role table (`ROLE_MODEL_CONFIG`, read through `get_model_cascade_for_role`) come from `weebot/config/model_refs.py` (`_cascade.py:25, 59-61, 552`). `weebot/core/model_cascade_config.py` supplies only `estimate_cost` (`_cascade.py:14`), read from the catalog (see its card).
 - **Looks like but is not:** the adapter-level resilience in `weebot/infrastructure/adapters/llm/` (retries, its own breakers); this cascade sits above it.
 

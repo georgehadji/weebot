@@ -12,7 +12,7 @@ Format: name — source — status — card
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — verified 2026-10-31 — [card](domain/Step.md)
 
 ## application
-- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — verified 2026-11-01 — [card](application/CascadeExecutor.md)
+- CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — stale 2026-11-01 — [card](application/CascadeExecutor.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — verified 2026-10-31 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — verified 2026-10-31 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-10-31 — [card](application/FlowRouter.md)

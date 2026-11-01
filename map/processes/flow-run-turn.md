@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-11-01
-commit: 4f76c44f
+commit: 8861bdd8
 consumes:
   - ../objects/interfaces/CLI.md
   - ../objects/application/DIContainer.md
@@ -61,7 +61,7 @@ produces:
 
 Consequences (read from source, not run):
 - A termination condition does not skip `CompletedState`: it sets it with the reason and the state runs on the same pass (`session_budget.py:111-117`; `completed.py:169-170`). Since R06 the session ends FAILED unless `Plan.outcome()` is SUCCEEDED (`completed.py:173-186, 318`), so a turn cut short by a cap with steps still pending ends FAILED (INCOMPLETE), not COMPLETED.
-- `--model` reaches the planner command (`planning.py:247`), the step command (`_step_run.py:75`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:605-614`; `weebot/application/models/step_execution_context.py:31`; `_base.py:182`; `weebot/application/agents/executor/_cascade.py:603`).
+- `--model` reaches the planner command (`planning.py:247`), the step command (`_step_run.py:75`) and, as `pinned_model`, the executor's cascade, which tries it first (`plan_act_flow.py:605-614`; `weebot/application/models/step_execution_context.py:31`; `_base.py:182`; `weebot/application/agents/executor/_cascade.py:601`).
 - The step handler reads the plan from the database (`execute_step_handler.py:77-83`), not from the flow; the prologue saves the routed session, with any applied plan-file edit, before the first step (`_run_prologue.py:104-108`).
 
 ## If you change this
