@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error -- plain ESM config, no type declarations
 import nextConfig from "../../next.config.mjs";
 
 // A `rewrites()` entry for /api/* runs before the dynamic route handler in
