@@ -59,7 +59,7 @@ class UpdatePlanCommand(Command):
     reason: str = ""
     model: str = ""
     failure_context: str = Field(
-        default="", description="Why the step failed, passed to the planner so it does not repeat it"
+        default="", description="Why the step failed; the planner gets it to avoid repeating it"
     )
     last_step_id: str | None = Field(
         default=None, description="The step to replan around; None means the last finished step"
