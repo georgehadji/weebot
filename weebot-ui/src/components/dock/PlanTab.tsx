@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { LazyPlanVisualizer } from "@/components/plan/LazyPlanVisualizer";
+import { PlanChecklist } from "@/components/plan/PlanChecklist";
 import { api } from "@/lib/api";
 import type { StepStatus } from "@/types/events";
 
@@ -73,9 +73,5 @@ export function PlanTab({ sessionId }: PlanTabProps) {
     );
   }
 
-  return (
-    <div className="p-2">
-      <LazyPlanVisualizer steps={nodes} />
-    </div>
-  );
+  return <PlanChecklist steps={nodes} />;
 }
