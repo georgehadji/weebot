@@ -258,6 +258,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await scheduler.start()
     app.state.scheduler = scheduler
 
+    # ── Sessions a stopped process left RUNNING ─────────────────
+    # Nothing runs them, and a message sent to one would be steered into a flow that does not
+    # exist. FAILED with a reason lets the composer resume them at the first unfinished step.
+    try:
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
+
+        await container.get(TaskRunnerPort).interrupt_orphans()
+    except Exception as exc:
+        logger.warning("Interrupted-session check failed: %s", exc)
+
     # ── Restore circuit breaker state ──────────────────────────
     try:
         import importlib as _il

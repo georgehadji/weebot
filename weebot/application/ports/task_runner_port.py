@@ -41,6 +41,13 @@ class TaskRunnerPort(Protocol):
         """Start a session immediately as a background task."""
         ...
 
+    async def interrupt_orphans(self) -> list[str]:
+        """Mark RUNNING sessions that nothing runs as FAILED, so they can be resumed.
+
+        For startup, when a process that stopped left its sessions RUNNING. Returns their ids.
+        """
+        ...
+
     async def resume_session(
         self,
         session_id: str,
