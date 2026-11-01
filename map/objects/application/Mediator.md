@@ -5,8 +5,8 @@ code: Mediator
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-01
+commit: 4f76c44f
 ---
 
 # Mediator
@@ -24,7 +24,7 @@ Decouples the flow states from the agents and persistence they trigger (`weebot/
 - Pipeline: behaviors run in insertion order, each calling `next` (`_execute_with_pipeline`, `mediator.py:170-194`). Adding behaviors is "NOT thread-safe — call at startup only" (`mediator.py:150-159`).
 
 What exists (2026-10-31):
-- Commands: `CreatePlanCommand`, `ExecuteStepCommand`, `UpdatePlanCommand`, `SummarizeCommand`, `ProcessMessageCommand` (`weebot/application/cqrs/commands.py:19-99`); the live mediator also counts candidate-skill uses (`RecordSkillUseCommand`) and, with an LLM and a trajectory repository, extracts failure signatures. The `commands/` package shadows that module and loads it by file path to re-export them (`weebot/application/cqrs/commands/__init__.py:16-45`). SkillOpt and Self-Harness commands are registered only by `register_skillopt_handlers` (`weebot/application/cqrs/handlers/__init__.py:192-294`).
+- Commands: `CreatePlanCommand`, `ExecuteStepCommand`, `UpdatePlanCommand`, `SummarizeCommand`, `ProcessMessageCommand` (`weebot/application/cqrs/commands.py:19-100`); the live mediator also counts candidate-skill uses (`RecordSkillUseCommand`) and, with an LLM and a trajectory repository, extracts failure signatures. The `commands/` package shadows that module and loads it by file path to re-export them (`weebot/application/cqrs/commands/__init__.py:16-45`). SkillOpt and Self-Harness commands are registered only by `register_skillopt_handlers` (`weebot/application/cqrs/handlers/__init__.py:192-294`).
 - Queries: `GetActiveSessionsQuery`, `GetPlanVisualizationQuery`, `GetCostSummaryQuery` (`weebot/application/cqrs/queries.py:22, 38, 47`); `ClusterFailurePatternsQuery` is SkillOpt-only (`cqrs/commands/failure_signature_commands.py:56`).
 - Behaviors: `ValidationBehavior`, `LoggingBehavior`, `TelemetryBehavior`, `SavePolicyBehavior` added in that order by `Container.build_mediator` (`weebot/application/di/__init__.py:522-527`); a validation gate behavior is added only for the SkillOpt flow (`weebot/application/di/_skillopt.py:50-52`).
 - Default registration: `register_default_handlers` (`weebot/application/cqrs/handlers/__init__.py:86`). With an `llm`, plan, execute, update and `ProcessMessageCommand` handlers get the LLM (`weebot/application/cqrs/handlers/__init__.py:128-147`); with `llm=None` only the three plan commands get validation-only handlers (`weebot/application/cqrs/handlers/__init__.py:148-151`). `SummarizeCommand` is registered only with an `llm` (`weebot/application/cqrs/handlers/__init__.py:152-153`); `ScoreTrajectoryCommand` only if scoring port and trajectory builder exist (`weebot/application/cqrs/handlers/__init__.py:158-176`). `RecordSkillUseCommand` needs a skill store (`weebot/application/cqrs/handlers/__init__.py:178-182`). The three operations-console queries are always registered (`weebot/application/cqrs/handlers/__init__.py:185-189`).

@@ -5,8 +5,8 @@ code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-01
+commit: 4f76c44f
 ---
 
 # SQLiteStateRepository
@@ -18,7 +18,7 @@ The port declares 11 methods (`save_session`, `save_session_if_unchanged`, `crea
 
 ## Shape
 - File: `DB_SESSIONS_PATH` by default (`sqlite_state_repo.py:89`), which is `WEEBOT_SESSIONS_DB` or `./weebot_sessions.db` (`weebot/config/settings.py:22`); the actual path comes from `DatabaseRouterPort.get_db_path("sessions")` (`sqlite_state_repo.py:119`). Pool: `get_or_create_pool(path, max_read_connections=5, enable_wal=True)` (`sqlite_state_repo.py:120`). `_ensure_schema` creates tables `sessions`, `pending_opportunities`, `behavioral_rules`, `memory_metadata`, `plan_templates`, `workflow_templates`, `commitments`, `correction_records`, `session_constraints`, plus the FTS5 table via `ensure_fts5_table` (`sqlite_state_repo.py:154-293`).
-- A session is **one row**: `events_json` holds every event as JSON and `context_json` the context (`sqlite_state_repo.py:158-168`). `SessionQueries.save` drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:35`), never the last `plan` event, and logs one warning (`_session_queries.py:97-138`); the ceiling lives only there.
+- A session is **one row**: `events_json` holds every event as JSON and `context_json` the context (`sqlite_state_repo.py:158-168`). `SessionQueries.save` drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:39`), never the last `plan` event, and logs one warning (`_session_queries.py:97-138`); the ceiling lives only there.
 - `save_session` (`sqlite_state_repo.py:303`) does three separate write transactions in this order: the session row (`sqlite_state_repo.py:330`), then, in `_index_saved_session` (`sqlite_state_repo.py:344`), commitments extracted from assistant messages (failure is logged, session still saved, `sqlite_state_repo.py:363-390`; a per-instance `_commitments_scanned` watermark skips events already scanned, `sqlite_state_repo.py:367-382`), then FTS5 indexing of events (`sqlite_state_repo.py:392-458`).
 - `save_session_if_unchanged` (`sqlite_state_repo.py:333-342`) is one guarded UPDATE on `updated_at` (`_session_queries.py:59-80`), runs the same `_index_saved_session` after a win, and returns False when the row moved; the compaction job uses it (`weebot/scheduling/default_jobs.py:95`). `create_session` (`sqlite_state_repo.py:297-301`) is load-then-save under a per-process lock, so a second replica could race it.
 - FTS5 index: `_fts5_indexed` is a **per-instance, in-memory** watermark of how many events of each session were indexed (`sqlite_state_repo.py:96-97`). A fresh repository starts from zero and, for a session it has not seen, clears that session's index rows and re-indexes everything (replace, not append, `sqlite_state_repo.py:413-433`). The watermark advances only as far as indexing succeeded (`sqlite_state_repo.py:455-458`).

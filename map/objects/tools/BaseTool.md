@@ -6,7 +6,7 @@ cluster: tools
 universe: live
 status: verified
 verified: 2026-11-01
-commit: d3269de6
+commit: 4f76c44f
 ---
 
 # BaseTool
@@ -24,7 +24,7 @@ The tool contract. `BaseTool` is what every agent tool subclasses, `ToolResult` 
   - `to_params()` skips hidden tools and tools that failed `check_health()` once it has run, and lets the contract loader extend descriptions (`tool_collection.py:176-193`).
   - `canonical_args(name, args)` returns the arguments as `execute` will run them; the executor's effect ledger keys on it (`tool_collection.py:112-128`).
   - `resolve_name(name)` (`tool_collection.py:195`): exact name, else fuzzy match; the executor calls it once, before any guard, so checks and dispatch see the same tool (audit R24).
-  - `execute(_name, **kwargs)` (`tool_collection.py:205`): canonical names only, an unknown one is an error (`tool_collection.py:206-210`); refuse an unhealthy tool (`tool_collection.py:212-220`); canonicalizer may block or rewrite args (`tool_collection.py:222-232`); cache lookup (`tool_collection.py:238-244`); per-tool semaphore when `max_concurrent > 0` (`tool_collection.py:246-253`); a model-supplied `_max_retries` is dropped (`tool_collection.py:258`); run; stamp `execution_time_ms`, `retry_count`, `tool_name` (`tool_collection.py:271-279`); truncate output over `MAX_TOOL_OUTPUT_CHARS` (20 000, `weebot/config/constants.py:85`) by the tool's strategy (`weebot/application/models/tool_collection.py:281-291`, `_truncate` `tool_collection.py:23-52`); cache store on success (`tool_collection.py:303-305`).
+  - `execute(_name, **kwargs)` (`tool_collection.py:205`): canonical names only, an unknown one is an error (`tool_collection.py:206-210`); refuse an unhealthy tool (`tool_collection.py:212-220`); canonicalizer may block or rewrite args (`tool_collection.py:222-232`); cache lookup (`tool_collection.py:238-244`); per-tool semaphore when `max_concurrent > 0` (`tool_collection.py:246-253`); a model-supplied `_max_retries` is dropped (`tool_collection.py:258`); run; stamp `execution_time_ms`, `retry_count`, `tool_name` (`tool_collection.py:271-279`); truncate output over `MAX_TOOL_OUTPUT_CHARS` (20 000, `weebot/config/constants.py:89`) by the tool's strategy (`weebot/application/models/tool_collection.py:281-291`, `_truncate` `tool_collection.py:23-52`); cache store on success (`tool_collection.py:303-305`).
   - Exceptions: logged with traceback (`tool_collection.py:311`); non-retryable ones return an error result at once (`tool_collection.py:313-323`); `OSError`, `TimeoutError`, `ConnectionError` retry up to `DEFAULT_MAX_RETRIES` = 2 with capped backoff (`tool_collection.py:86-87, 335-347`).
   - `teardown()` shuts down an `apify_service` attribute (looking through a `GuardedTool` to `.inner`) and calls every tool's `close()` (`tool_collection.py:130-154`).
 

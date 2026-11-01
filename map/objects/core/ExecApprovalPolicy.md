@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-11-01
-commit: d3269de6
+commit: 4f76c44f
 ---
 
 # ExecApprovalPolicy
