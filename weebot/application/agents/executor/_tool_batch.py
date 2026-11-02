@@ -95,6 +95,8 @@ class BatchOutcome:
     """The mutable half of a batch: what the caller's loop must react to."""
 
     abort_step: bool = False
+    paused: bool = False
+    """The step stopped for a human (an approval or a question), so it has not finished."""
     loop_error: str | None = None
     step_result: str = ""
     terminate: bool = False
@@ -225,6 +227,7 @@ class ToolBatchRunner:
             if paused:
                 outcome.events.extend(paused)
                 outcome.abort_step = True
+                outcome.paused = True
                 return
 
         if tool_name == "terminate":

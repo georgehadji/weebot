@@ -70,6 +70,16 @@ EXECUTABLE_SUFFIXES: frozenset[str] = frozenset({
 })
 
 
+def is_protected_path(path: str | Path) -> bool:
+    """True for a path no tool may write: ``.env``, SSH keys, anything under ``.git``.
+
+    One rule for ``write_target`` and ``PathValidator`` (audit F4). Case-insensitive, since
+    Windows is, and it accepts either separator.
+    """
+    parts = [p.lower() for p in str(path).replace("\\", "/").split("/") if p]
+    return bool(parts) and (".git" in parts or parts[-1] in PROTECTED_BASENAMES)
+
+
 def write_target(path: str, *, suffixes: frozenset[str] | None = None) -> str:
     """The absolute path a tool may write *path* to; ValueError says why it may not.
 
@@ -81,8 +91,7 @@ def write_target(path: str, *, suffixes: frozenset[str] | None = None) -> str:
     target = Path(output_path(path)).resolve(strict=False)
     if not target.is_relative_to(_PROJECT_ROOT):
         raise ValueError(f"Path escapes the workspace (project root): {path}")
-    parts = [p.lower() for p in target.relative_to(_PROJECT_ROOT).parts]
-    if target.name.lower() in PROTECTED_BASENAMES or ".git" in parts:
+    if is_protected_path(target.relative_to(_PROJECT_ROOT)):
         raise ValueError(f"Refusing to write a protected file: {path}")
     suffix = target.suffix.lower()
     if suffix in EXECUTABLE_SUFFIXES:

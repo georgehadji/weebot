@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ENDPOINTS } from "@/lib/endpoints";
-import { isForeignMutation } from "@/lib/proxy-guard";
+import { isForeignMutation, isUntrustedHost } from "@/lib/proxy-guard";
 
 const API_BASE = process.env.BACKEND_URL || ENDPOINTS.api;
 
@@ -12,6 +12,12 @@ async function handler(
   const path = pathSegments?.join("/") || "";
   const url = new URL(request.url);
   const searchParams = url.search;
+
+  // DNS rebinding: a page whose domain re-resolves to 127.0.0.1 looks same-origin, but its Host
+  // is not ours. Only enforced against a local backend, which is the one that trusts loopback.
+  if (isUntrustedHost(request.headers.get("host") ?? url.host, API_BASE, process.env.WEEBOT_ALLOWED_HOSTS ?? "")) {
+    return NextResponse.json({ error: "Host not allowed" }, { status: 421 });
+  }
 
   // A page on another origin must not be able to drive the backend through us.
   if (isForeignMutation(request.method, request.headers, url.host)) {

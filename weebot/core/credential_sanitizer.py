@@ -18,18 +18,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# `key=value`, `key: value` and the JSON `"key": "value"` forms go through
+# `secret_redaction.redact_key_values`, the one home for the key list (audit F28).
 _CREDENTIAL_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # password=value / password: value / passwd=value
-    (
-        re.compile(r"(password|passwd|pwd|secret)\s*([=:])\s*\S+", re.IGNORECASE),
-        r"\1\2***REDACTED***",
-    ),
-    # API keys: key=sk-... / api_key=abc123...
-    (re.compile(r"(api[_-]?key|apikey|token)\s*[=:]\s*\S+", re.IGNORECASE), r"\1=***REDACTED***"),
     # OpenAI / Anthropic key patterns (sk-..., sk-ant-...)
     (re.compile(r"(sk-[a-zA-Z0-9_-]{20,})"), "***REDACTED-API-KEY***"),
-    # Colon-separated password only (no =, already handled above)
-    (re.compile(r"password\s*:\s*\S+", re.IGNORECASE), "password: ***REDACTED***"),
     # JWT tokens (eyJ...). The per-segment minimum used to be 20, which made
     # redaction depend on the header's length rather than on it being a JWT:
     # `{"alg":"HS256"}` encodes to 17 characters after `eyJ` and leaked, while
@@ -136,6 +129,9 @@ def sanitize(text: str) -> str:
     Wiring it before that was understood would have shipped a log-corruption
     bug on the same commit as a security fix.
     """
+    from weebot.core.secret_redaction import redact_key_values
+
+    text = redact_key_values(text, "***REDACTED***")
     for pattern, replacement in _CREDENTIAL_PATTERNS:
         text = pattern.sub(replacement, text)
     try:
@@ -178,6 +174,10 @@ def sanitize_event(event: Any) -> Any:
 
 def has_credentials(text: str) -> bool:
     """Return True if *text* appears to contain credentials."""
+    from weebot.core.secret_redaction import KEY_VALUE_RE
+
+    if KEY_VALUE_RE.search(text):
+        return True
     for pattern, _replacement in _CREDENTIAL_PATTERNS:
         if pattern.search(text):
             return True

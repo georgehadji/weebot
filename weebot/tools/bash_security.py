@@ -28,6 +28,7 @@ from enum import Enum
 
 from weebot.core.encoded_command import LONG_FORM as ENCODED_LONG_FORM
 from weebot.core.encoded_command import SHORT_FORM as ENCODED_SHORT_FORM
+from weebot.core.shell_segments import has_dynamic_command_name, strip_escapes
 
 
 class CommandRiskLevel(Enum):
@@ -183,7 +184,7 @@ LAYER2_RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "l2.fetch-pipe-run",
-        r"\b(download|fetch|get-content|get).*\s+.*\s+.*\|\s*\b(execute|run|start|bash|sh|zsh)\b",
+        r"\b(download|fetch|get-content|get)\b[^|\n]*\|\s*\b(execute|run|start|bash|sh|zsh)\b",
         _D,
         2,
         "fetch piped to an executor",
@@ -238,6 +239,9 @@ _DECODED_SHELL = re.compile(
 )
 
 # ── Layer 4: structure ──────────────────────────────────────────────────────
+# Past this the command is refused, not skipped: the rules are regexes that run on the
+# event loop, and skipping them would be fail-open (audit F17).
+MAX_ANALYZED_COMMAND_CHARS = 8192
 MAX_CHAIN_OPERATORS = 5  # non-PowerShell commands
 MAX_CHAIN_OPERATORS_POWERSHELL = 20  # PowerShell pipelines are normal
 _POWERSHELL_CMDLET = re.compile(
@@ -307,14 +311,28 @@ class CommandSecurityAnalyzer:
 
     def analyze(self, command: str) -> SecurityAssessment:
         """Perform multi-layer security analysis."""
-        for layer in (
-            self._layer1_pattern_analysis,
-            self._layer2_behavioral_analysis,
-            self._layer3_entropy_analysis,
-        ):
-            assessment = layer(command)
-            if assessment.risk_level == CommandRiskLevel.DANGEROUS:
-                return assessment
+        if len(command) > MAX_ANALYZED_COMMAND_CHARS:
+            return SecurityAssessment(
+                risk_level=CommandRiskLevel.DANGEROUS,
+                layer_triggered=1,
+                reason=(
+                    f"Command too long to analyse ({len(command)} characters, "
+                    f"limit {MAX_ANALYZED_COMMAND_CHARS})"
+                ),
+                details={"rule": "l1.too-long", "length": len(command)},
+            )
+        # PowerShell drops a backtick inside a word, so `Invoke-Ex`pression` is read against
+        # its plain spelling as well (audit F29).
+        plain = strip_escapes(command)
+        for text in dict.fromkeys((command, plain)):
+            for layer in (
+                self._layer1_pattern_analysis,
+                self._layer2_behavioral_analysis,
+                self._layer3_entropy_analysis,
+            ):
+                assessment = layer(text)
+                if assessment.risk_level == CommandRiskLevel.DANGEROUS:
+                    return assessment
         return self._layer4_semantic_analysis(command)
 
     @staticmethod
@@ -388,6 +406,13 @@ class CommandSecurityAnalyzer:
 
     def _layer4_semantic_analysis(self, command: str) -> SecurityAssessment:
         """Validate command structure."""
+        if has_dynamic_command_name(command):
+            return SecurityAssessment(
+                risk_level=CommandRiskLevel.SUSPICIOUS,
+                layer_triggered=4,
+                reason="Command name built at run time",
+                details={"rule": "l4.dynamic-command-name"},
+            )
         stripped = command.strip()
         if not re.search(r"[;&]", command) and any(
             re.match(p, stripped, re.IGNORECASE) for p in SAFE_POWERSHELL_PIPELINES

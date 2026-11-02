@@ -5,8 +5,8 @@ code: BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureO
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-30
-commit: fe394636
+verified: 2026-11-01
+commit: d3269de6
 ---
 
 # ExecTools
@@ -43,7 +43,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `RoleBasedToolRegistry` (sandbox and `set_config` wiring, `weebot/application/services/tool_registry.py:446-531`), the MCP server, which wraps `bash` and `python_execute` with the egress guard included (`weebot/mcp/server.py:383-392`).
-- **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:346, 388`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:35`); `load_fs_permission_checker` (`weebot/application/services/fs_permission_policy.py:33`).
+- **Gated by** the BashGuard, CommandSecurityAnalyzer and ExecApprovalPolicy cards (`weebot/core/bash_guard.py`, `weebot/tools/bash_security.py`, `weebot/core/approval_policy.py:353, 395`); `PathValidator` (`weebot/infrastructure/security/security_validators.py:35`); `load_fs_permission_checker` (`weebot/application/services/fs_permission_policy.py:33`).
 - **Runs on** the Sandbox card's `SandboxPort`.
 - **Looks like but is not:** the guard chain (live).
 

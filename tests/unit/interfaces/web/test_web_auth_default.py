@@ -80,7 +80,8 @@ class TestFailClosedMiddleware:
 
     def test_fail_closed_loopback_no_key(self, monkeypatch):
         app = _create_app_with_mocks(monkeypatch, weebot_api_key=None, web_require_auth=True)
-        client = TestClient(_wrap_app(app, "127.0.0.1", 1234))
+        # A loopback peer must also name a local Host, or the host guard refuses it (421).
+        client = TestClient(_wrap_app(app, "127.0.0.1", 1234), base_url="http://localhost")
         response = client.get("/api/sessions")
         assert response.status_code in (200, 404)
         assert response.status_code != 503

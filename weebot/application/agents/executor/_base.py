@@ -484,6 +484,7 @@ class ExecutorAgent:
         step_result = ""
         loop_error: str | None = None
         abort_step = False
+        paused = False  # stopped for a human: the step has not finished
         thought_iteration = 0
 
         # ── Tier 1.3: TrajectoryMonitor — reset per-step windows, preserve cross-step ──
@@ -559,12 +560,14 @@ class ExecutorAgent:
             if outcome.loop_error:
                 loop_error = outcome.loop_error
             abort_step = outcome.abort_step
+            paused = outcome.paused
             if abort_step:
                 break
 
         # Delegate to extracted step-completion handler
         async for event in self._handle_step_completion(
             abort_step=abort_step,
+            paused=paused,
             loop_error=loop_error,
             step_result=step_result,
             recent_tool_signatures=list(guard.state.recent_tool_signatures),
@@ -603,6 +606,7 @@ class ExecutorAgent:
     async def _handle_step_completion(
         self,
         abort_step: bool,
+        paused: bool,
         loop_error: str | None,
         step_result: str,
         recent_tool_signatures: list,
@@ -610,7 +614,15 @@ class ExecutorAgent:
         tool_calls_succeeded: int,
         step: Step,
     ):
-        """Handle post-execution step completion: success, failure, stuck, or hollow."""
+        """Handle post-execution step completion: success, failure, stuck, or hollow.
+
+        A step that stopped for a human (a tool approval or a question) has not finished: it
+        reports neither completed nor failed. `Session.get_last_plan` rebuilds step statuses from
+        these events, so a "completed" here made the flow skip the step on resume and the approved
+        call never ran.
+        """
+        if paused:
+            return
         if (
             not abort_step
             and loop_error is None

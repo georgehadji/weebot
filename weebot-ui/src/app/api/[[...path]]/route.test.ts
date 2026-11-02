@@ -93,3 +93,30 @@ describe("the /api proxy preserves the upstream response", () => {
     expect(res.status).toBe(503);
   });
 });
+
+// DNS rebinding: a page on evil.test whose domain re-resolves to 127.0.0.1 reaches this proxy
+// with Host: evil.test, and the browser sends it as same-origin. The backend trusts loopback.
+describe("the /api proxy and a foreign Host", () => {
+  const rebound = (handler: typeof POST, method: string, headers: Record<string, string>) => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const req = new NextRequest("http://evil.test:3000/api/sessions", {
+      method,
+      headers: { host: "evil.test:3000", ...headers },
+      body: method === "GET" ? undefined : "{}",
+    });
+    return { fetchMock, response: handler(req, ctx) };
+  };
+
+  it("refuses a same-origin POST that carries a foreign Host", async () => {
+    const { fetchMock, response } = rebound(POST, "POST", { "sec-fetch-site": "same-origin" });
+    expect((await response).status).toBe(421);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a GET too, because rebinding reads data", async () => {
+    const { fetchMock, response } = rebound(GET, "GET", {});
+    expect((await response).status).toBe(421);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
