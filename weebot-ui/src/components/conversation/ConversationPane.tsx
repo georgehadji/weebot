@@ -13,9 +13,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { Composer, SessionLifecycleStatus } from "./Composer";
 import { EventRenderer, isRendered } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
@@ -159,7 +160,7 @@ export function ConversationPane({
                         <button
                           type="button"
                           onClick={() => setDraftRef.current?.(prompt)}
-                          className="rounded-full border bg-surface-2 px-3 py-1.5 text-xs transition-colors hover:bg-surface-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                          className="focus-ring rounded-full border bg-surface-2 px-3 py-1.5 text-xs transition-colors hover:bg-surface-3 pointer-coarse:min-h-11"
                         >
                           {prompt}
                         </button>
@@ -196,7 +197,7 @@ export function ConversationPane({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-surface-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-surface-3 focus-ring pointer-coarse:min-h-11"
           >
             <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             Jump to latest
@@ -210,9 +211,9 @@ export function ConversationPane({
       {status === "failed" && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-2 border-t bg-status-waiting/10 px-3 py-2 text-xs"
+          className="flex flex-wrap items-center gap-2 border-t bg-status-error/10 px-3 py-2 text-xs"
         >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-waiting-fg" aria-hidden="true" />
+          <StatusBadge status="failed" variant="icon" />
           <p className="min-w-0 flex-1 text-muted-foreground">
             {failureReason || "This run stopped before finishing."}
           </p>

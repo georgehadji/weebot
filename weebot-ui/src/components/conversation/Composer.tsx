@@ -176,11 +176,25 @@ export function Composer({
             Sending…
           </span>
         )}
-        <label
-          className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
-          title="Auto mode: run without stopping for approvals, gates, or questions"
+        {/* Visible while on: Auto skips approvals, which a hover-only title hid from touch users. */}
+        <span
+          id="composer-auto-hint"
+          className={cn("ml-auto text-xs text-status-waiting-fg", !autoMode && "sr-only")}
         >
-          <Switch checked={autoMode} onCheckedChange={writeAutoMode} aria-label="Auto mode" />
+          Runs without approvals, gates or questions
+        </span>
+        <label
+          className={cn(
+            "flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground pointer-coarse:min-h-11",
+            !autoMode && "ml-auto"
+          )}
+        >
+          <Switch
+            checked={autoMode}
+            onCheckedChange={writeAutoMode}
+            aria-label="Auto mode"
+            aria-describedby="composer-auto-hint"
+          />
           Auto
         </label>
       </div>
@@ -194,15 +208,15 @@ export function Composer({
           rows={1}
           aria-label="Message weebot"
           aria-invalid={state.phase === "failed" || undefined}
-          aria-describedby="composer-hint"
+          aria-describedby={state.phase === "failed" && state.error ? "composer-error composer-hint" : "composer-hint"}
           className="max-h-40 min-h-11 flex-1 resize-none overflow-y-auto bg-surface-1"
         />
         <Button onClick={submit} disabled={!canSubmit(state)} size="icon" aria-label="Send message">
-          <Send className="h-4 w-4" />
+          <Send className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
       {state.phase === "failed" && state.error && (
-        <p role="alert" className="mt-1 text-xs text-status-error-fg">
+        <p id="composer-error" role="alert" className="mt-1 text-xs text-status-error-fg">
           Not sent: {state.error}. Your message is back in the box.
         </p>
       )}

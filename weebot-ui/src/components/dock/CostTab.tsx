@@ -7,40 +7,30 @@
  * "what is this running me."
  */
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { StateView } from "@/components/common/StateView";
+import { useRemote } from "@/hooks/useRemote";
 import { api, CostSummaryData } from "@/lib/api";
 
+// Module-level so useRemote gets a stable loader; `ok: false` means no summary, not a failure.
+const loadSummary = () => api.ops.costSummary(24).then((result) => (result.ok ? result.data : null));
+
 export function CostTab() {
-  const [summary, setSummary] = useState<CostSummaryData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { state, reload } = useRemote(loadSummary);
+  return (
+    <StateView
+      state={state}
+      loadingLabel="Loading costs"
+      errorTitle="Couldn't load costs"
+      onRetry={reload}
+      isEmpty={(summary) => summary === null}
+      empty={<p className="p-4 text-xs text-muted-foreground">No cost data available.</p>}
+    >
+      {(summary) => summary && <CostSummary summary={summary} />}
+    </StateView>
+  );
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    api.ops
-      .costSummary(24)
-      .then((result) => {
-        if (!cancelled && result.ok) setSummary(result.data);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center py-8">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!summary) {
-    return <p className="p-4 text-xs text-muted-foreground">No cost data available.</p>;
-  }
+function CostSummary({ summary }: { summary: CostSummaryData }) {
 
   // The API is intentionally treated as untrusted at this UI boundary: a
   // partially upgraded backend must show a useful empty value, never take

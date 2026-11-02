@@ -63,6 +63,8 @@
   --color-oat: hsl(var(--p-oat-300));
   /* Clay that reaches 4.5:1 as text on the ivory/card surfaces (see --primary-text). */
   --color-primary-text: hsl(var(--primary-text));
+  /* Fill of a control that is on (checked switch); reaches 3:1 against the surfaces. */
+  --color-control-on: hsl(var(--control-on));
 
   --border-color-strong: hsl(var(--border-strong));
 
@@ -107,6 +109,15 @@
 
 @utility font-mono-console {
   font-family: var(--font-mono);
+}
+
+/* The one keyboard focus indicator. An outline, not a ring: it composes with shadows and its
+   offset shows the real surface behind it (a ring-offset painted #fff in the dark theme). */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid hsl(var(--ring)); /* @theme inline emits no --color-ring variable */
+    outline-offset: 2px;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -195,8 +206,10 @@
     --destructive: 4.8 51.6% 42.9%; /* #A63E35 — Anthropic error, darkened for AA on ivory */
     --destructive-foreground: var(--p-ink-50);
     --border: var(--p-ink-200);
-    --input: var(--p-ink-250);
-    --ring: var(--p-clay-500);
+    /* --input, --ring and --control-on are non-text UI: 3:1 on every surface (check_ui_contrast.py) */
+    --input: var(--p-ink-500);
+    --ring: var(--p-clay-700);
+    --control-on: var(--p-clay-700);
     --radius: 0.5rem;
 
     /* surfaces — warm elevation steps below the white card */
@@ -253,8 +266,9 @@
     --destructive: 4.8 52.9% 36.7%; /* #8F342C */
     --destructive-foreground: var(--p-ink-50);
     --border: var(--p-ink-750);
-    --input: var(--p-ink-750);
+    --input: var(--p-ink-500);
     --ring: var(--p-ink-400);
+    --control-on: var(--p-clay-500);
 
     --surface-1: var(--p-ink-900);
     --surface-2: var(--p-ink-850);
