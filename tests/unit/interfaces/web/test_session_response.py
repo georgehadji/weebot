@@ -71,6 +71,7 @@ def test_the_list_route_asks_the_store_once_for_every_session():
     repo.count_sessions = AsyncMock(return_value=2)
     store = MagicMock()
     store.count_events = AsyncMock(return_value={"a": 7, "b": 0})
+    store.models_used = AsyncMock(return_value={"a": ["openai/gpt-x"], "b": []})
     container = MagicMock()
     container.get = MagicMock(
         side_effect=lambda port: {StateRepositoryPort: repo, EventStorePort: store}[port]
@@ -82,7 +83,8 @@ def test_the_list_route_asks_the_store_once_for_every_session():
     body = TestClient(app).get("/sessions").json()
 
     store.count_events.assert_awaited_once_with(["a", "b"])
-    assert [(s["id"], s["title"], s["event_count"]) for s in body["sessions"]] == [
-        ("a", "first job", 7),
-        ("b", "Named", 0),
+    store.models_used.assert_awaited_once_with(["a", "b"])
+    assert [(s["id"], s["title"], s["event_count"], s["models"]) for s in body["sessions"]] == [
+        ("a", "first job", 7, ["openai/gpt-x"]),
+        ("b", "Named", 0, []),
     ]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterSessions, normalizeForSearch } from "./sessions";
+import { filterSessions, modelsLabel, normalizeForSearch } from "./sessions";
 import { Session } from "@/types/events";
 
 const session = (id: string, title: string | undefined, prompt = ""): Session => ({
@@ -46,5 +46,16 @@ describe("filterSessions", () => {
   it("requires every word, in any order", () => {
     expect(filterSessions(all, "tax billing").map((s) => s.id)).toEqual(["2"]);
     expect(filterSessions(all, "tax weather")).toEqual([]);
+  });
+});
+
+describe("modelsLabel", () => {
+  it("keeps the short name of each model in order", () => {
+    expect(modelsLabel(["openrouter/anthropic/claude-x", "gpt-5"])).toBe("claude-x, gpt-5");
+  });
+
+  it("is empty for a session with no models or an older backend", () => {
+    expect(modelsLabel([])).toBe("");
+    expect(modelsLabel(undefined)).toBe("");
   });
 });

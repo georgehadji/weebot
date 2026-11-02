@@ -151,6 +151,8 @@ export interface Session {
   created_at: string;
   updated_at: string;
   event_count: number;
+  /** Models the session's LLM calls used, first use first (EventStorePort.models_used). */
+  models?: string[];
 }
 
 /** One agent role: its built-in model cascade, the user's pick, and the model tried first. */

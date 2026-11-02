@@ -33,7 +33,9 @@ class MemoryEventStore(EventStorePort):
         self.rows: list[dict[str, Any]] = []
 
     async def log_event(self, session_id, event_type, data, cost=0.0, model="", tokens_used=0):
-        self.rows.append({"session_id": session_id, "event_type": event_type, "data": data})
+        self.rows.append(
+            {"session_id": session_id, "event_type": event_type, "data": data, "model": model}
+        )
         return len(self.rows)
 
     async def get_session_events(self, session_id, event_type=None):
@@ -44,6 +46,14 @@ class MemoryEventStore(EventStorePort):
 
     async def count_events(self, session_ids):  # pragma: no cover - unused
         return {sid: sum(r["session_id"] == sid for r in self.rows) for sid in session_ids}
+
+    async def models_used(self, session_ids):
+        models = {sid: [] for sid in session_ids}
+        for r in self.rows:
+            seen = models.get(r["session_id"])
+            if r["model"] and seen is not None and r["model"] not in seen:
+                seen.append(r["model"])
+        return models
 
     async def get_cost_summary(self, session_id):  # pragma: no cover - unused
         return {}
