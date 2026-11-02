@@ -31,6 +31,7 @@ from weebot.config.constants import (
 from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.audit import VerificationStatus
 from weebot.domain.models.event import VerificationEvent
+from weebot.models.structured_output import VerifierScores, extract_json_text
 
 _log = logging.getLogger(__name__)
 
@@ -305,11 +306,10 @@ class VerifyingState(FlowState):
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_BRIEF,
             )
-            scores = json.loads(response.content or "{}")
-            return {
-                axis: max(1, min(5, int(scores.get(axis, VERIFICATION_SCORE_MIN))))
-                for axis in VERIFICATION_AXES
-            }, True
+            # Parse, do not default: a reply missing an axis is a scorer that did not
+            # run, and the except below turns the ValidationError into ran=False.
+            parsed = VerifierScores.model_validate_json(extract_json_text(response.content or ""))
+            return parsed.model_dump(), True
         except Exception:
             # A broken scorer must not block live execution — but it also
             # must not read as a pass. Returning the passing threshold used

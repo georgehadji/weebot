@@ -325,38 +325,8 @@ class SessionPresenceEvent(BaseEvent):
     title: str = Field(default="")
     step_count: int = Field(default=0)
     steps_completed: int = Field(default=0)
-
-
-# ── AgentEvent union ───────────────────────────────────────────────
-
-AgentEvent = Union[
-    ErrorEvent,
-    PlanEvent,
-    StepEvent,
-    ToolEvent,
-    MessageEvent,
-    TitleEvent,
-    DoneEvent,
-    WaitForUserEvent,
-    NotificationEvent,
-    ThoughtEvent,
-    SteeringEvent,
-    CanonicalizationEvent,
-    TrajectoryDiagnosisEvent,
-    VerificationEvent,
-    TodoEvent,
-    PlanReviewEvent,
-    ToolApprovalEvent,
-    ProductGateReviewEvent,
-    ProductDecisionEvent,
-    SessionPresenceEvent,
-    # Published on the bus by scheduled jobs and health checks; without them here
-    # a journaled or bridged copy could not be rebuilt (D4).
-    SessionStalenessEvent,
-    MemoryPressureEvent,
-    ScheduledJobEvent,
-    LLMHealthEvent,
-]
+    # The session's owner: the global channel sends the frame only to their rails.
+    owner_user_id: str = Field(default="")
 
 
 class DomainEvent(BaseModel):
@@ -582,3 +552,42 @@ class SessionConstraintRevoked(DomainEvent):
     type: str = "session_constraint_revoked"
     session_id: str
     text: str
+
+
+# ── AgentEvent union ───────────────────────────────────────────────
+
+AgentEvent = Union[
+    ErrorEvent,
+    PlanEvent,
+    StepEvent,
+    ToolEvent,
+    MessageEvent,
+    TitleEvent,
+    DoneEvent,
+    WaitForUserEvent,
+    NotificationEvent,
+    ThoughtEvent,
+    SteeringEvent,
+    CanonicalizationEvent,
+    TrajectoryDiagnosisEvent,
+    VerificationEvent,
+    TodoEvent,
+    PlanReviewEvent,
+    ToolApprovalEvent,
+    ProductGateReviewEvent,
+    ProductDecisionEvent,
+    SessionPresenceEvent,
+    # Published on the bus by scheduled jobs and health checks; without them here
+    # a journaled or bridged copy could not be rebuilt (D4).
+    SessionStalenessEvent,
+    MemoryPressureEvent,
+    ScheduledJobEvent,
+    LLMHealthEvent,
+    # Domain events a flow yields instead of publishing: `Flow.emit` appends every
+    # yielded event to `Session.events`, and that list is this union, so a stored
+    # copy of one of these could never be reloaded without a member here — one
+    # correction-pattern event made its whole session unopenable.
+    CorrectionPatternDetected,
+    SkillEditAccepted,
+    SkillEditRejected,
+]

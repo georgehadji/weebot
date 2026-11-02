@@ -1,6 +1,8 @@
 # Core Framework
 fastapi==0.161.1
 uvicorn[standard]==0.54.0
+# Imported directly by weebot/interfaces/web/routers/chat_router.py and sse.py.
+sse-starlette==3.6.0
 # langchain_core is imported directly (infrastructure/llm/langchain_adapter.py);
 # the langchain meta-package itself is not.
 langchain-core==1.6.13

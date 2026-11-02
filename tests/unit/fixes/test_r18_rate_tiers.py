@@ -29,6 +29,15 @@ from weebot.interfaces.web.rate_limit import _get_tier
         ("POST", "/api/flow/run", "expensive"),
         ("POST", "/api/webhook/run", "webhook"),
         ("GET", "/api/health", "unlimited"),
+        # Only the exact probe paths AuthMiddleware leaves public are unlimited. The rest of
+        # /api/health/* needs a key, so a wrong key there must reach the failure budget.
+        ("GET", "/api/health/live", "unlimited"),
+        ("GET", "/api/health/prometheus", "unlimited"),
+        ("GET", "/api/health/status", "read"),
+        ("GET", "/api/health/ready", "read"),
+        ("GET", "/api/health/metrics", "read"),
+        ("GET", "/api/health/", "read"),
+        ("GET", "/api/healthz", "read"),
     ],
 )
 def test_tier_by_method_and_path(method, path, tier):

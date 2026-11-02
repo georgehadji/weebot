@@ -438,6 +438,9 @@ class SchedulingManager:
             return
 
         self._running_jobs.add(job_id)
+        # Bound before the try: a BaseException other than the ones caught below still
+        # reaches the finally, which must record an end rather than read an unbound name.
+        outcome: tuple[bool, str | None] = (False, "interrupted")
         try:
             # Update status
             await self._record_run_start(job_id, datetime.now(UTC))
@@ -463,7 +466,11 @@ class SchedulingManager:
             else:
                 raise ValueError(f"Job {job_id} has neither callable_name nor command")
 
-            outcome: tuple[bool, str | None] = (True, None)
+            outcome = (True, None)
+
+        except asyncio.CancelledError:
+            outcome = (False, "cancelled")
+            raise
 
         except Exception as exc:
             logger.error("Job execution failed: %s: %s", job_id, exc)
@@ -471,7 +478,8 @@ class SchedulingManager:
 
         finally:
             self._running_jobs.discard(job_id)
-            await self._record_run_end(job_id, *outcome)
+            # Shielded so the cancel that brought us here does not also cancel the write.
+            await asyncio.shield(self._record_run_end(job_id, *outcome))
 
     async def _record_run_start(self, job_id: str, started: datetime) -> None:
         """Mark the row running. Touches only its run columns: a whole-row save of the

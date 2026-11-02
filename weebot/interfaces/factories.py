@@ -190,6 +190,7 @@ async def route_and_create_flow(
     state_repo: StateRepositoryPort | None = None,
     steering=None,
     profile_name: str | None = None,
+    execution_mode=None,
 ) -> tuple[BaseFlow, TaskRoute]:
     """Route *query* through *router*, then create the appropriate flow.
 
@@ -209,6 +210,7 @@ async def route_and_create_flow(
         steering=steering,
         task_route=task_route,
         profile_name=profile_name,
+        execution_mode=execution_mode,
     )
     return flow, task_route
 
@@ -226,6 +228,7 @@ def create_flow(
     steering=None,
     task_route: TaskRoute | None = None,
     profile_name: str | None = None,
+    execution_mode=None,
 ) -> BaseFlow:
     """Factory for creating agent flows (the assembly lives in ``flow_builder.build_flow``).
 
@@ -245,6 +248,7 @@ def create_flow(
         steering=steering,
         task_route=task_route,
         profile_name=profile_name,
+        execution_mode=execution_mode,
     )
 
 

@@ -4,9 +4,9 @@ name: Ports
 code: weebot/application/ports/*_port.py
 cluster: domain
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 7d205bb1
+commit: db304f26
 ---
 
 # Ports
@@ -14,18 +14,18 @@ commit: 7d205bb1
 The interfaces (ABCs and a few `Protocol`s) that the application layer depends on and the infrastructure layer implements. One file per port in `weebot/application/ports/`: 64 `.py` files (62 `*_port.py`), 70 interface classes counting `EventBusPort` (count 2026-10-30).
 
 ## Why this shape
-Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:139-407`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
+Dependency inversion: application code types against the port, and an adapter is chosen at one place, the DI container (`weebot/application/di/__init__.py:139-407`). The layer contracts in `.importlinter` and `tests/unit/test_architecture_fitness.py` enforce the direction. They live in `application/`, not `domain/`, because most of them carry application types (events, plans, tool results). A second, smaller port set lives in `weebot/domain/ports.py` (`IModelProvider`, `IRepository`, `INotifier`, `ITool`, `EventPublisher`, `PlanTemplateStore`, `CommitmentStore`, `weebot/domain/ports.py:10-118`), and `state_roles_port.py` re-exports two of them (`application/ports/state_roles_port.py:19`).
 
 ## Shape
-`ports/__init__.py` re-exports only `LLMPort`, `StateRepositoryPort` and `EventBusPort` (`:3-7`). "DI" says how `Container.configure_defaults` resolves it: **port** = registered under the port class; **key** = registered under a string or concrete class; **none** = no `register` call. Main implementation: the first subclass found by `class X(...Port)`; Protocols match by structure, so there is none to grep.
+`ports/__init__.py` re-exports only `LLMPort`, `StateRepositoryPort` and `EventBusPort` (`weebot/application/ports/__init__.py:3-7`). "DI" says how `Container.configure_defaults` resolves it: **port** = registered under the port class; **key** = registered under a string or concrete class; **none** = no `register` call. Main implementation: the first subclass found by `class X(...Port)`; Protocols match by structure, so there is none to grep.
 
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
-| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:182` (factory `di/_factories.py:246`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:112-118`) |
-| ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:104-160` | none |
+| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:182` (factory `di/_factories.py:246`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:113-119`) |
+| ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:[stale 104-160]` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:171` |
 | BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:37` |
-| BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:25` | none |
+| BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:26` | none |
 | CanonicalizerPort | canonicalizer_port.py:18 | ActionCanonicalizer `infrastructure/adapters/action_canonicalizer.py:34` | key `"build_action_canonicalizer"` `di/__init__.py:294` |
 | CheckpointPort | checkpoint_port.py:14 | SQLiteCheckpointStore `infrastructure/persistence/checkpoint_store.py:35` | port `di/_capabilities.py:53` (always bound, for the delete cascade); flows get it only with `WEEBOT_FLOW_CHECKPOINTS` |
 | ClawHubAdapterPort (Protocol) | clawhub_adapter_port.py:19 | ClawHubGitAdapter `infrastructure/adapters/clawhub_adapter.py:20` | none (consumer `application/skills/clawhub_importer.py:85`) |
@@ -38,7 +38,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | EventStorePort | event_store_port.py:16 | AsyncEventStore `infrastructure/event_store.py:104` | port `di/__init__.py:176` |
 | FileStoragePort | file_storage_port.py:14 | LocalFileStorageAdapter `infrastructure/adapters/file_storage_adapter.py:18` | port `di/__init__.py:196` |
 | IGatewaySessionStorePort (Protocol) / AbstractGatewaySessionStore | gateway_session_store_port.py:15, 67 | SQLiteGatewaySessionStore `infrastructure/persistence/gateway_session_store.py:40` | port `di/__init__.py:179` |
-| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:83`, `models/plan_act_flow_config.py:191`) |
+| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:83`, `models/plan_act_flow_config.py:199`) |
 | IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:192`, `di/_factories.py:289-298` |
 | JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:44, 102` | ModelJudge built by `harness baseline --judge` (`cli/commands/harness.py:417`) |
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |
@@ -49,7 +49,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | MemoryPort | memory_port.py:8 | FileSystemMemoryAdapter `infrastructure/persistence/filesystem_memory.py:29` | key `FileSystemMemoryAdapter` `di/__init__.py:174` |
 | MetricsPort | metrics_port.py:11 | PrometheusMetricsAdapter `infrastructure/observability/prometheus_adapter.py:15` | key `PrometheusMetricsAdapter` `di/__init__.py:229` |
 | MisalignmentJournalPort | misalignment_journal_port.py:10 | SQLiteMisalignmentJournal `infrastructure/persistence/sqlite_misalignment_journal.py:46` | key `"misalignment_journal"` `di/_learning.py:32` |
-| NotificationPort / NotificationSubscriber | notification_port.py:115, 211 | WindowsToastAdapter `infrastructure/notifications/windows_toast.py:18`, WindowsToastSubscriber `:188` (the Telegram, Slack and log channels in `notifications.py` do not subclass it) | none |
+| NotificationPort / NotificationSubscriber | notification_port.py:115, 211 | WindowsToastAdapter `infrastructure/notifications/windows_toast.py:18`, WindowsToastSubscriber `weebot/infrastructure/notifications/windows_toast.py:188` (the Telegram, Slack and log channels in `notifications.py` do not subclass it) | none |
 | OptimizationTarget | optimization_target_port.py:20 | HarnessOptimizationTarget `application/services/harness_optimization_target.py:30` | key `"harness_optimization_target"` `di/_skillopt.py:30` |
 | OptimizerPort | optimizer_port.py:25 | OptimizerAgent `application/agents/optimizer_agent.py:46` | key `"optimizer_port"` `di/_skillopt.py:23` |
 | PlanCriticPort | plan_critic_port.py:11 | PlanCriticService `application/services/plan_critic.py:39` | none |
@@ -84,7 +84,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | VectorStorePort | vector_store_port.py:16 | NumpyVectorStore `infrastructure/adapters/numpy_vector_store.py:19` | none |
 | WorkspaceSnapshotPort | workspace_snapshot_port.py:85 | LocalWorkspaceSnapshotAdapter `infrastructure/adapters/workspace_snapshot_adapter.py:71` | key `"workspace_snapshots"` `di/__init__.py:205` |
 
-Not interfaces: `hook_context_types.py` (TypedDicts, `:14-105`).
+Not interfaces: `hook_context_types.py` (TypedDicts, `weebot/application/ports/hook_context_types.py:14-105`).
 
 Consequences (read from source, not run):
 - Ports with an implementation but no consumer typed against them; the only file outside `ports/` that names them is the implementation (grep 2026-10-30): `CanonicalizerPort`, `DesktopPort`, `OptimizationTarget`, `PlanCriticPort`, `SelfImprovementPort`, `StreamingLLMPort` (only `infrastructure/adapters/non_streaming_llm_adapter.py`; `application/strategies/llm_pool.py:304` names it in a comment). They document a seam nobody depends on.

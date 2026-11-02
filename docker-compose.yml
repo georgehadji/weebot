@@ -83,6 +83,11 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - XAI_API_KEY=${XAI_API_KEY:-}
+      # The UI container reaches this API over the compose bridge, never from loopback, so
+      # without a key every /api call is refused (503). BEHIND_PROXY stops the API from
+      # treating the proxy's own address as proof of identity.
+      - WEEBOT_API_KEY=${WEEBOT_API_KEY:-}
+      - WEEBOT_BEHIND_PROXY=1
       - BROWSER_HEADLESS=true
       - WEEBOT_BACKUP_DIR=${WEEBOT_BACKUP_DIR:-}
       - WEEBOT_BACKUP_RETENTION_DAYS=${WEEBOT_BACKUP_RETENTION_DAYS:-30}

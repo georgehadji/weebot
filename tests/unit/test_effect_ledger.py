@@ -33,7 +33,9 @@ class MemoryEventStore(EventStorePort):
         self.rows: list[dict[str, Any]] = []
 
     async def log_event(self, session_id, event_type, data, cost=0.0, model="", tokens_used=0):
-        self.rows.append({"session_id": session_id, "event_type": event_type, "data": data})
+        self.rows.append(
+            {"session_id": session_id, "event_type": event_type, "data": data, "model": model}
+        )
         return len(self.rows)
 
     async def get_session_events(self, session_id, event_type=None):
@@ -44,6 +46,14 @@ class MemoryEventStore(EventStorePort):
 
     async def count_events(self, session_ids):  # pragma: no cover - unused
         return {sid: sum(r["session_id"] == sid for r in self.rows) for sid in session_ids}
+
+    async def models_used(self, session_ids):
+        models = {sid: [] for sid in session_ids}
+        for r in self.rows:
+            seen = models.get(r["session_id"])
+            if r["model"] and seen is not None and r["model"] not in seen:
+                seen.append(r["model"])
+        return models
 
     async def get_cost_summary(self, session_id):  # pragma: no cover - unused
         return {}
@@ -77,11 +87,19 @@ class FakeTools:
         return SimpleNamespace(output_trust=OutputTrust.LOCAL)
 
 
+class _LedgerGuard(EgressGuard):
+    """These tests are about the ledger, not taint: a send must not taint the session and
+    block the next one. (F20 taints after a networked shell call; that has its own tests.)"""
+
+    def uses_network(self, tool_name, args) -> bool:
+        return False
+
+
 def _guard(approved: bool = True) -> EgressGuard:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = Path(f.name)
     path.write_text(json.dumps({"api.example.com": 0.0} if approved else {}))
-    return EgressGuard(allowlist=RecipientAllowlist(path))
+    return _LedgerGuard(allowlist=RecipientAllowlist(path))
 
 
 def _executor(store, tools=None, step="step-2", description="Send the weekly report", guard=None):

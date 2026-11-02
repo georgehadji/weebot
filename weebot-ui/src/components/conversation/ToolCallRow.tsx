@@ -25,6 +25,9 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
   const result = event.result ?? "";
   const truncated = !showAll && result.length > RESULT_PREVIEW_CHARS;
   const preview = argsPreview(args);
+  // Don't cut a surrogate pair in half: the orphan half renders as U+FFFD.
+  const lastCode = result.charCodeAt(RESULT_PREVIEW_CHARS - 1);
+  const cut = lastCode >= 0xd800 && lastCode <= 0xdbff ? RESULT_PREVIEW_CHARS - 1 : RESULT_PREVIEW_CHARS;
 
   const copy = async () => {
     try {
@@ -40,7 +43,7 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
     <div className={failed ? "rounded-lg border border-status-error/40 bg-surface-2 text-sm" : "rounded-lg border bg-surface-2 text-sm"}>
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-3"
+        className="focus-ring flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-3"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -56,7 +59,7 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
           {preview || event.function_name}
         </span>
         {isCalling ? (
-          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-status-live-fg" aria-label="Running" />
+          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-status-live-fg" role="img" aria-label="Running" />
         ) : failed ? (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-status-error-fg">
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -95,12 +98,12 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
                 aria-label="Tool result"
                 className="max-h-64 overflow-auto rounded bg-surface-1 p-2 font-mono text-xs"
               >
-                {truncated ? result.slice(0, RESULT_PREVIEW_CHARS) : result}
+                {truncated ? result.slice(0, cut) : result}
               </pre>
               {truncated && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Showing {RESULT_PREVIEW_CHARS.toLocaleString()} of {result.length.toLocaleString()} characters.{" "}
-                  <button className="underline underline-offset-2" onClick={() => setShowAll(true)}>
+                  Showing {cut.toLocaleString()} of {result.length.toLocaleString()} characters.{" "}
+                  <button type="button" className="focus-ring rounded-sm underline underline-offset-2" onClick={() => setShowAll(true)}>
                     Show all
                   </button>
                 </p>

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { api } from "@/lib/api";
 import { useRemote } from "./useRemote";
 import { useSessionPresence } from "./useSessionPresence";
+import { useEventStreamContext } from "@/providers/EventStreamProvider";
 import { Session, SessionPresenceEvent } from "@/types/events";
 import { Remote, remoteData } from "@/types/remote";
 
@@ -23,18 +24,36 @@ export function applyPresence(session: Session, update?: SessionPresenceEvent): 
   return { ...session, status: update.status as Session["status"], title };
 }
 
+const SETTLED = new Set(["waiting", "completed", "failed"]);
+
 const loadSessions = () => api.sessions.list({ limit: "100" }).then((data) => data.sessions);
 
 export function useSessionList() {
   const { state, reload } = useRemote(loadSessions);
   const presence = useSessionPresence();
+  const { streamEpoch } = useEventStreamContext();
   const sessions = remoteData(state);
+
+  // Presence is not replayed to a reconnecting socket. After the backend restarts,
+  // the seed loaded while it was down (or before the last status change) is stale,
+  // so one refetch per presence connection keeps the rail truthful.
+  const lastEpoch = useRef(streamEpoch);
+  useEffect(() => {
+    if (streamEpoch === lastEpoch.current) return;
+    lastEpoch.current = streamEpoch;
+    reload();
+  }, [streamEpoch, reload]);
 
   // Presence deltas are applied at read time rather than copied into
   // `sessions`, so an update that lands before the REST seed isn't lost.
+  // A "deleted" frame (the delete route sends one, D10) removes the row.
   const liveSessions = useMemo(
     () =>
-      sessions && presence.size > 0 ? sessions.map((s) => applyPresence(s, presence.get(s.id))) : sessions,
+      sessions && presence.size > 0
+        ? sessions
+            .filter((s) => presence.get(s.id)?.status !== "deleted")
+            .map((s) => applyPresence(s, presence.get(s.id)))
+        : sessions,
     [sessions, presence]
   );
 
@@ -44,12 +63,29 @@ export function useSessionList() {
   useEffect(() => {
     if (!sessions) return;
     const known = new Set(sessions.map((s) => s.id));
-    for (const id of presence.keys()) {
+    for (const [id, update] of presence) {
+      if (update.status === "deleted") continue;
       if (!known.has(id) && !asked.current.has(id)) {
         asked.current.add(id);
         reload();
         return;
       }
+    }
+  }, [sessions, presence, reload]);
+
+  // Models come from the event store, not presence: when a run settles, refetch once so the
+  // rail shows the models it used.
+  const settled = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sessions) return;
+    for (const s of sessions) {
+      const status = presence.get(s.id)?.status;
+      if (!status || !SETTLED.has(status) || status === s.status) continue;
+      const key = `${s.id}:${status}`;
+      if (settled.current.has(key)) continue;
+      settled.current.add(key);
+      reload();
+      return;
     }
   }, [sessions, presence, reload]);
 

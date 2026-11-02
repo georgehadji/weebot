@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from weebot.config.settings import WORKSPACE_ROOT
-from weebot.core.output_path import PROTECTED_BASENAMES
+from weebot.core.output_path import PROTECTED_BASENAMES, is_protected_path
 
 
 class ValidationResult(Enum):
@@ -58,6 +58,12 @@ class PathValidator:
     # regardless of suffix rules.  Basename match beats extension allowlist.
     # One list with the write rule for tools (weebot/core/output_path.py).
     DENIED_BASENAMES: set[str] = set(PROTECTED_BASENAMES)
+
+    # The only extensionless names a tool may create (a hook or a script has none).
+    SUFFIXLESS_CREATE_NAMES: frozenset[str] = frozenset({
+        "readme", "license", "notice", "changelog", "makefile", "dockerfile",
+        ".gitignore", ".dockerignore",
+    })
 
     # Extensions allowed for file CREATION (read-operations still use ALLOWED_EXTENSIONS)
     ALLOWED_CREATE_EXTENSIONS: set[str] = {
@@ -208,12 +214,28 @@ class PathValidator:
                         matched_pattern=pattern.pattern,
                     )
 
-        # Check for denied basenames (applies to ALL operations)
-        if input_path.name in self.DENIED_BASENAMES:
+        # Protected files and anything under .git (applies to ALL operations); the one rule
+        # write_target uses. Checked below the workspace so a checkout inside a ".git" folder
+        # is not refused wholesale.
+        in_workspace = input_path.relative_to(self.workspace)
+        if is_protected_path(in_workspace):
             return ValidationReport(
                 result=ValidationResult.DANGEROUS_PATTERN,
-                message=f"Access denied: {input_path.name} is a protected file",
+                message=f"Access denied: {in_workspace.as_posix()} is a protected file",
                 matched_pattern=input_path.name,
+            )
+
+        # A new file with no extension skips the extension rules below, so it needs a name.
+        # (A dotfile such as ".gitkeep" has no suffix; it is listed with the extensions.)
+        name = input_path.name.lower()
+        if allow_create and not input_path.suffix and (
+            name not in self.SUFFIXLESS_CREATE_NAMES and name not in self.ALLOWED_CREATE_EXTENSIONS
+        ):
+            return ValidationReport(
+                result=ValidationResult.DANGEROUS_PATTERN,
+                message="A new file with no extension must be README, LICENSE, Makefile, "
+                "Dockerfile or a known dotfile",
+                sanitized_value=str(input_path.with_suffix(".txt")),
             )
 
         # Check file extension if it's a file path

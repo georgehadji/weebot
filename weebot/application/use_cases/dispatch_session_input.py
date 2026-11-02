@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RunOptions:
-    """How a session runs: its model and ponytail mode (audit R20).
+    """How a session runs: its model, ponytail mode and execution mode (audit R20).
 
     ``/run`` and ``/input`` both build it from the session, so neither drops a choice
     the session was created with. A model sent with the request wins over the stored one.
@@ -40,12 +40,21 @@ class RunOptions:
 
     model: str | None = None
     ponytail_mode: str | None = None
+    execution_mode: str | None = None
 
     @classmethod
-    def from_session(cls, session: Session, override_model: str | None = None) -> RunOptions:
+    def from_session(
+        cls,
+        session: Session,
+        override_model: str | None = None,
+        override_execution_mode: str | None = None,
+    ) -> RunOptions:
         return cls(
             model=override_model or session.context.get("model") or None,
             ponytail_mode=session.context.get("ponytail_mode") or None,
+            execution_mode=override_execution_mode
+            or session.context.get("execution_mode")
+            or None,
         )
 
 
@@ -68,6 +77,7 @@ class SessionInputContext:
     build_tools: Callable[[], Awaitable[object]]
     build_chat_flow: Callable[[Session, str | None], object]
     model: str | None = None  # the request's model; overrides the session's
+    execution_mode: str | None = None  # "auto" | "interactive"; overrides the session's
     client_msg_id: str | None = None
 
 
@@ -79,23 +89,39 @@ class SessionInputResult:
     verb: str  # "start" | "resume" | "steer" | "chat"
 
 
-def _with_prompt(session: Session, text: str, model: str | None) -> Session:
+def _with_prompt(
+    session: Session, text: str, model: str | None, execution_mode: str | None = None
+) -> Session:
     """Return a copy of *session* with ``context.last_prompt`` (and optionally
-    ``context.model``) set — ``SessionContext`` is a typed Pydantic model, not
-    a plain dict, so this goes through its own copy/``__setitem__`` rather
-    than a ``{**session.context, ...}`` spread (which raises ``TypeError``:
+    ``context.model`` / ``context.execution_mode``) set — ``SessionContext`` is a typed
+    Pydantic model, not a plain dict, so this goes through its own copy/``__setitem__``
+    rather than a ``{**session.context, ...}`` spread (which raises ``TypeError``:
     ``BaseModel`` doesn't support ``**`` unpacking without a ``keys()`` method).
     """
     new_context = session.context.model_copy(deep=True)
     new_context["last_prompt"] = text
     if model:
         new_context["model"] = model
+    if execution_mode:
+        new_context["execution_mode"] = execution_mode
+    return session.model_copy(update={"context": new_context})
+
+
+def _with_execution_mode(session: Session, execution_mode: str | None) -> Session:
+    """Return a copy of *session* with ``context.execution_mode`` set (no-op when unset).
+
+    Unrelated fields are left alone: resuming must not rewrite the plan's original prompt.
+    """
+    if not execution_mode:
+        return session
+    new_context = session.context.model_copy(deep=True)
+    new_context["execution_mode"] = execution_mode
     return session.model_copy(update={"context": new_context})
 
 
 async def _start_task(ctx: SessionInputContext) -> SessionInputResult:
     """PENDING/FAILED → treat *text* as the task prompt and start PlanActFlow."""
-    session = _with_prompt(ctx.session, ctx.text, ctx.model)
+    session = _with_prompt(ctx.session, ctx.text, ctx.model, ctx.execution_mode)
     await ctx.state_repo.save_session(session)
 
     opts = RunOptions.from_session(session)
@@ -108,6 +134,7 @@ async def _start_task(ctx: SessionInputContext) -> SessionInputResult:
             model=opts.model,
             ponytail_mode=opts.ponytail_mode,
             steering=ctx.steering,
+            execution_mode=opts.execution_mode,
         )
         session = await ctx.task_runner.start_session(session, factory)
     except Exception:
@@ -122,6 +149,12 @@ async def _resume(ctx: SessionInputContext) -> SessionInputResult:
     This used to store the answer and set RUNNING without running anything, so
     a web plan review or tool approval never moved on (found in plan B2c).
     """
+    # A mode chosen on this turn sticks, so the rest of the plan keeps it.
+    if ctx.execution_mode:
+        session = _with_execution_mode(ctx.session, ctx.execution_mode)
+        await ctx.state_repo.save_session(session)
+        ctx.session = session
+
     opts = RunOptions.from_session(ctx.session, ctx.model)
     tools = await ctx.build_tools()
     try:
@@ -132,6 +165,7 @@ async def _resume(ctx: SessionInputContext) -> SessionInputResult:
             model=opts.model,
             ponytail_mode=opts.ponytail_mode,
             steering=ctx.steering,
+            execution_mode=opts.execution_mode,
         )
         session = await ctx.task_runner.resume_session(
             ctx.session.id, ctx.text, factory, message_id=ctx.client_msg_id
@@ -155,7 +189,7 @@ async def _chat(ctx: SessionInputContext) -> SessionInputResult:
     is flow-agnostic (it only calls ``flow.run(session.context["last_prompt"])``),
     so a ChatFlow factory works the same way a PlanActFlow factory does.
     """
-    session = _with_prompt(ctx.session, ctx.text, ctx.model)
+    session = _with_prompt(ctx.session, ctx.text, ctx.model, ctx.execution_mode)
     await ctx.state_repo.save_session(session)
 
     model = RunOptions.from_session(session).model

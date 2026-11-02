@@ -8,7 +8,6 @@ import ReactFlow, {
   Controls,
   MiniMap,
   useNodesState,
-  useEdgesState,
   NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -37,33 +36,33 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
   const getIcon = () => {
     switch (step.status) {
       case "completed":
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+        return <CheckCircle2 className="h-5 w-5 text-status-live-fg" />;
       case "running":
       case "started":
-        return <Loader2 className="h-5 w-5 text-yellow-500 animate-spin" />;
+        return <Loader2 className="h-5 w-5 text-status-waiting-fg animate-spin" />;
       case "error":
       case "failed":
-        return <XCircle className="h-5 w-5 text-red-500" />;
+        return <XCircle className="h-5 w-5 text-status-error-fg" />;
       case "unverified":
-        return <AlertTriangle className="h-5 w-5 text-yellow-600" />;
+        return <AlertTriangle className="h-5 w-5 text-status-waiting-fg" />;
       default:
-        return <Circle className="h-5 w-5 text-gray-400" />;
+        return <Circle className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
   const getBorderColor = () => {
     switch (step.status) {
       case "completed":
-        return "border-green-500";
+        return "border-status-live";
       case "running":
       case "started":
       case "unverified":
-        return "border-yellow-500";
+        return "border-status-waiting";
       case "error":
       case "failed":
-        return "border-red-500";
+        return "border-status-error";
       default:
-        return "border-gray-300";
+        return "border-border-strong";
     }
   };
 
@@ -107,10 +106,10 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
           style: {
             stroke:
               step.status === "completed"
-                ? "#22c55e"
+                ? "hsl(var(--status-live))"
                 : step.status === "running"
-                ? "#eab308"
-                : "#9ca3af",
+                ? "hsl(var(--status-waiting))"
+                : "hsl(var(--status-idle))",
           },
         });
       }
@@ -128,7 +127,8 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
   }, [steps]);
 
   const [nodes, setNodes] = useNodesState(initialNodes);
-  const [edges] = useEdgesState(initialEdges);
+  // Derived, not state: seeding useEdgesState once froze the edges at the first plan drawn.
+  const edges = initialEdges;
 
   // Update nodes when steps change
   useEffect(() => {
@@ -167,10 +167,13 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
         fitView
         attributionPosition="bottom-right"
       >
-        <Background />
-        <Controls />
+        <Background color="hsl(var(--border))" gap={16} />
+        <Controls className="[&>button]:border-border [&>button]:bg-card [&>button]:text-foreground [&>button:hover]:bg-accent" />
         <MiniMap
+          nodeColor="hsl(var(--primary))"
           nodeStrokeWidth={3}
+          maskColor="hsl(var(--background) / 0.6)"
+          style={{ background: "hsl(var(--surface-2))" }}
           zoomable
           pannable
         />

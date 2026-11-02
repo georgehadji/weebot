@@ -36,6 +36,10 @@ class PrioritizedSession:
 
 _RETRIES_KEY = "retries_remaining"
 _FAILURE_KEY = "failure_reason"
+_INTERRUPTED_REASON = (
+    "interrupted: the server stopped while this session was running. "
+    "Send a message to resume it at the first unfinished step."
+)
 
 
 def _with_extra(session: Session, **values: object) -> Session:
@@ -178,6 +182,7 @@ class TaskRunner:
                     about_session_id=session.id,
                     status=session.status.value,
                     title=session.title or "",
+                    owner_user_id=session.user_id or "",
                 )
             )
         except Exception:
@@ -540,6 +545,46 @@ class TaskRunner:
         logger.info("Rerun initiated for failed session %s", session_id)
         return True
 
+    async def interrupt_orphans(self) -> list[str]:
+        """Mark RUNNING sessions that no task here runs as FAILED, so they can be resumed.
+
+        A run is an asyncio task inside this process. When the process stops, the database
+        still says RUNNING, nothing runs the session, and a message sent to it is steered into
+        a flow that does not exist. Called once at startup. FAILED with a reason puts the session
+        in the dead-letter list, and the composer's FAILED path then resumes it at the first
+        unfinished step (FlowRouter reads the saved plan).
+
+        shortcut: assumes this process is the only one running sessions on this database. A live
+        run in a second process is marked FAILED here until its next save puts RUNNING back;
+        upgrade to an owner pid or heartbeat on the session if that is ever a real setup.
+
+        Returns the ids it marked.
+        """
+        orphans: list[str] = []
+        offset, page = 0, 100
+        while True:
+            # Ids only: a listed session may come without its events, so each one is loaded
+            # whole before it is changed.
+            batch = await self._state_repo.list_sessions(
+                status=SessionStatus.RUNNING.value, limit=page, offset=offset
+            )
+            orphans.extend(s.id for s in batch if s.id not in self._tasks)
+            if len(batch) < page:
+                break
+            offset += page
+        marked: list[str] = []
+        for session_id in orphans:
+            async with self._lock_for(session_id):
+                session = await self._state_repo.load_session(session_id)
+                if session is None or session.status != SessionStatus.RUNNING:
+                    continue
+                session = _with_extra(session, **{_FAILURE_KEY: _INTERRUPTED_REASON})
+                await self._state_repo.save_session(session.set_status(SessionStatus.FAILED))
+                marked.append(session_id)
+        if marked:
+            logger.warning("Marked %d interrupted session(s) FAILED: %s", len(marked), marked)
+        return marked
+
     async def wait_for(self, session_id: str) -> None:
         """Return once the session's run, and every retry it starts, has ended."""
         while (task := self._tasks.get(session_id)) is not None and not task.done():
@@ -584,6 +629,7 @@ class TaskRunner:
         model: str | None = None,
         ponytail_mode: str | None = None,
         steering: SteeringPort | None = None,
+        execution_mode: str | None = None,
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances.
 
@@ -627,6 +673,7 @@ class TaskRunner:
                 skill_prompt=skill_prompt,
                 state_repo=state_repo,
                 steering=steering,
+                execution_mode=execution_mode,
             )
 
         return _factory

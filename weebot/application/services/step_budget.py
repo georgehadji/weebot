@@ -1,7 +1,7 @@
 """StepBudget — thread-safe per-agent step allocation with consume/refund semantics.
 
 Inspired by hermes-agent's IterationBudget pattern. Each ExecutorAgent instance
-gets its own StepBudget. Parent agents default to MAX_EXECUTOR_STEPS (25);
+gets its own StepBudget. Parent agents default to MAX_EXECUTOR_STEPS (50);
 sub-agents spawned by DispatchAgentsTool get SUBAGENT_MAX_STEPS (15).
 
 The refund() method allows programmatic/internal tool calls to return their

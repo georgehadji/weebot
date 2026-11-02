@@ -10,6 +10,7 @@ import logging
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.infrastructure.browser.session_manager import BrowserSessionManager
+from weebot.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -379,7 +380,8 @@ class AdvancedBrowserTool(BaseTool):
             return  # Already launched
         from weebot.application.ports.browser_port import BrowserConfig
 
-        config = BrowserConfig(headless=headless)
+        settings = get_settings()
+        config = BrowserConfig(headless=headless, proxy_server=settings.proxy_server)
         await self.browser.start(config)
         # Load session if specified
         if session_name:
@@ -457,6 +459,17 @@ class WebScraperTool(BaseTool):
         "required": ["url", "selector"],
     }
 
+    # Injected by tool_registry from the composition root: a zero-argument callable that
+    # returns a fresh BrowserPort. One browser per scrape, never the session the agent drives.
+    browser_factory: object | None = None
+
+    def _new_browser(self):
+        if self.browser_factory is not None:
+            return self.browser_factory()
+        from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+
+        return PlaywrightAdapter()
+
     async def execute(
         self,
         url: str,
@@ -480,48 +493,52 @@ class WebScraperTool(BaseTool):
             return ToolResult(output="", error="timeout must be > 0")
 
         try:
-            from playwright.async_api import async_playwright
             from bs4 import BeautifulSoup
+            from weebot.application.ports.browser_port import BrowserConfig
 
-            async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch(headless=True)
-                page = await browser.new_page()
+            browser = self._new_browser()
+            try:
+                settings = get_settings()
+                await browser.start(BrowserConfig(headless=True, proxy_server=settings.proxy_server))
+                nav = await browser.navigate(url, wait_until="networkidle", timeout=timeout / 1000)
+                # page.goto never raised on an HTTP error, and the body is still data;
+                # only "no page at all" (status 0 and not successful) is a failure.
+                if not nav.success and nav.status_code == 0:
+                    return ToolResult(output="", error=nav.error or f"navigation to {url} failed")
 
-                # Navigate to URL
-                await page.goto(url, wait_until="networkidle", timeout=timeout)
+                if wait_for and not await browser.wait_for_selector(
+                    wait_for, timeout=timeout / 1000
+                ):
+                    return ToolResult(output="", error=f"timed out waiting for: {wait_for}")
 
-                # Wait for selector if specified
-                if wait_for:
-                    await page.wait_for_selector(wait_for, timeout=timeout)
-
-                # Get page content
-                content = await page.content()
-
-                # Handle markdown extraction directly
-                if extract_type == "markdown":
-                    from weebot.infrastructure.browser.content_extractor import ContentExtractor
-
-                    extractor = ContentExtractor(max_tokens=max_tokens, preserve_links=True)
-                    markdown = extractor.extract_markdown(content, url=url)
-
-                    await browser.close()
-
-                    output = f"Extracted markdown from {url}\n\n{markdown[:800]}"
-                    if len(markdown) > 800:
-                        output += f"...\n\n[Full content: {len(markdown)} chars, ~{extractor.estimate_tokens(markdown)} tokens]"
-
-                    return ToolResult(
-                        output=output,
-                        data={
-                            "url": url,
-                            "markdown": markdown,
-                            "truncated": len(markdown) >= max_tokens * 4,
-                            "char_count": len(markdown),
-                            "estimated_tokens": extractor.estimate_tokens(markdown),
-                        },
-                    )
-
+                content = await browser.evaluate("document.documentElement.outerHTML")
+                if not isinstance(content, str):
+                    detail = content.get("error") if isinstance(content, dict) else "no content"
+                    return ToolResult(output="", error=f"could not read the page: {detail}")
+            finally:
                 await browser.close()
+
+            # Handle markdown extraction directly
+            if extract_type == "markdown":
+                from weebot.infrastructure.browser.content_extractor import ContentExtractor
+
+                extractor = ContentExtractor(max_tokens=max_tokens, preserve_links=True)
+                markdown = extractor.extract_markdown(content, url=url)
+
+                output = f"Extracted markdown from {url}\n\n{markdown[:800]}"
+                if len(markdown) > 800:
+                    output += f"...\n\n[Full content: {len(markdown)} chars, ~{extractor.estimate_tokens(markdown)} tokens]"
+
+                return ToolResult(
+                    output=output,
+                    data={
+                        "url": url,
+                        "markdown": markdown,
+                        "truncated": len(markdown) >= max_tokens * 4,
+                        "char_count": len(markdown),
+                        "estimated_tokens": extractor.estimate_tokens(markdown),
+                    },
+                )
 
             # Parse with BeautifulSoup
             soup = BeautifulSoup(content, "html.parser")

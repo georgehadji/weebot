@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer } from "react";
 import { api } from "@/lib/api";
 import { composerReducer, initialComposerState } from "@/lib/composer";
+import { useToast } from "@/providers/ToastProvider";
 import { DeliveryState, MessageEvent } from "@/types/events";
 
 function draftKey(sessionId: string | null): string {
@@ -36,11 +37,16 @@ function makeClientMsgId(): string {
 interface UseComposerOptions {
   sessionId: string | null;
   model?: string;
+  /** "auto" runs the flow without human pauses; "interactive" is the default. */
+  executionMode?: "auto" | "interactive";
   onSessionCreated: (sessionId: string) => void;
   /** Show the user's message in the timeline immediately (with delivery "sending"). */
   onOptimisticMessage: (event: MessageEvent) => void;
-  /** Report how a send ended so the timeline row can settle or offer a retry. */
-  onDelivery: (id: string, delivery: DeliveryState) => void;
+  /**
+   * Report how a send ended so the timeline row can settle or offer a retry. Returns the row's
+   * resulting state: "sent" if the server's echo had already settled it, whatever was reported.
+   */
+  onDelivery: (id: string, delivery: DeliveryState) => DeliveryState | undefined;
 }
 
 /**
@@ -50,11 +56,13 @@ interface UseComposerOptions {
 export function useComposer({
   sessionId,
   model,
+  executionMode,
   onSessionCreated,
   onOptimisticMessage,
   onDelivery,
 }: UseComposerOptions) {
   const key = draftKey(sessionId);
+  const { toast } = useToast();
   const [state, dispatch] = useReducer(composerReducer, "", initialComposerState);
 
   // Read after hydration: the server render cannot see sessionStorage, and reading it in the
@@ -73,58 +81,77 @@ export function useComposer({
     async (text: string, clientMsgId: string) => {
       try {
         if (!sessionId) {
-          const session = await api.sessions.create({ prompt: text, model });
+          const session = await api.sessions.create({
+            prompt: text,
+            model,
+            execution_mode: executionMode,
+          });
           try {
             await api.sessions.run(session.id);
           } catch (e) {
             // The session exists, so a retry would create a second one. Open it instead: the
             // page shows its real status and the run controls.
             console.warn("[Composer] starting the run failed; opening the session anyway", e);
+            toast({
+              title: "Task created but not started",
+              description: e instanceof Error ? e.message : "Unknown error",
+              variant: "error",
+            });
           }
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
           onSessionCreated(session.id);
         } else {
-          await api.sessions.input(sessionId, text, { clientMsgId, model });
+          await api.sessions.input(sessionId, text, { clientMsgId, model, executionMode });
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
         }
       } catch (e) {
-        onDelivery(clientMsgId, "failed");
+        // An echoed row is delivered (the timeline shows it so): do not claim "Not sent".
+        if (onDelivery(clientMsgId, "failed") === "sent") return dispatch({ type: "sent" });
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
       }
     },
-    [sessionId, model, onDelivery, onSessionCreated]
+    [sessionId, model, executionMode, onDelivery, onSessionCreated, toast]
+  );
+
+  const submitText = useCallback(
+    (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || state.phase === "sending") return;
+      const clientMsgId = makeClientMsgId();
+      dispatch({ type: "submit" });
+      onOptimisticMessage({
+        type: "message",
+        id: clientMsgId,
+        timestamp: new Date().toISOString(),
+        session_id: sessionId ?? "",
+        role: "user",
+        message: text,
+        delivery: "sending",
+      });
+      void deliver(text, clientMsgId);
+    },
+    [state.phase, sessionId, onOptimisticMessage, deliver]
   );
 
   const submit = useCallback(() => {
-    const text = state.draft.trim();
-    if (!text || state.phase === "sending") return;
-    const clientMsgId = makeClientMsgId();
-    dispatch({ type: "submit" });
-    onOptimisticMessage({
-      type: "message",
-      id: clientMsgId,
-      timestamp: new Date().toISOString(),
-      session_id: sessionId ?? "",
-      role: "user",
-      message: text,
-      delivery: "sending",
-    });
-    void deliver(text, clientMsgId);
-  }, [state.draft, state.phase, sessionId, onOptimisticMessage, deliver]);
+    submitText(state.draft);
+  }, [state.draft, submitText]);
 
   /** Re-send a message whose delivery failed; it keeps its row (same id) in the timeline. */
   const retry = useCallback(
     (event: MessageEvent) => {
+      if (state.phase === "sending") return; // one send in flight at a time, as submit
+      dispatch({ type: "retry" });
       if (state.draft === event.message) dispatch({ type: "edit", draft: "" });
       onDelivery(event.id, "sending");
       void deliver(event.message, event.id);
     },
-    [state.draft, onDelivery, deliver]
+    [state.draft, state.phase, onDelivery, deliver]
   );
 
   const edit = useCallback((draft: string) => dispatch({ type: "edit", draft }), []);
 
-  return { state, edit, submit, retry };
+  return { state, edit, submit, submitText, retry };
 }

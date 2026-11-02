@@ -24,7 +24,7 @@ from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
 from weebot.core.background_tasks import get_background_tasks
 from weebot.core.effect_key import effect_key, step_scope
 from weebot.core.log_context import bind_step
-from weebot.core.trust_boundary import must_taint, trust_of
+from weebot.core.trust_boundary import must_taint, taints_after_network, trust_of
 from weebot.domain.models.output_trust import OutputTrust
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
@@ -461,8 +461,19 @@ class ToolExecutor:
         effect_to_record = ""  # set when this call is an egress the ledger should remember
         network_ok = False  # W3.9: does this call get sandbox network?
         if guard is not None:
+            from weebot.config.settings import get_settings
+            from weebot.core.approval_policy import is_output_only_python
+
+            local_python_safe = (
+                get_settings().auto_approve_local_after_untrusted
+                and name in {"python_execute", "python"}
+                and is_output_only_python(str(args.get("code", "")))
+            )
             decision = guard.classify(
-                name, args, untrusted_context_active=self._untrusted_context_active
+                name,
+                args,
+                untrusted_context_active=self._untrusted_context_active,
+                local_python_safe=local_python_safe,
             )
             # ORCH-2: an outbound action this session already completed is not
             # repeated, and a replay never reaches the approval gate below (the
@@ -515,7 +526,7 @@ class ToolExecutor:
         if not approved_call and self._untrusted_context_active:
             from weebot.application.services.tool_guards import reads_only, shell_guard_mode
 
-            if not reads_only(name, args):
+            if not (local_python_safe or reads_only(name, args)):
                 if shell_guard_mode() != "enforce":
                     logger.warning("untrusted_content would ask: %s", name)
                 else:
@@ -614,6 +625,14 @@ class ToolExecutor:
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):
+            self._untrusted_context_active = True
+        elif guard is not None and taints_after_network(
+            trust_of(tool_obj),
+            getattr(result, "is_error", False),
+            guard.uses_network(name, args),
+        ):
+            # A LOCAL shell or python call that fetched from the network (git clone, pip
+            # install) put third-party text where the model reads it next (F20).
             self._untrusted_context_active = True
         await self._flush_flags()
         return result

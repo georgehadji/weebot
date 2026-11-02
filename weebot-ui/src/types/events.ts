@@ -80,6 +80,19 @@ export interface WaitForUserEvent extends BaseEvent {
   question: string;
 }
 
+/** A structured, one-call approval request. The following wait event is its text fallback. */
+export interface ToolApprovalEvent extends BaseEvent {
+  type: 'tool_approval';
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  risk_level: string;
+  reason: string;
+  prompt: string;
+  fingerprint: string;
+  /** Present only when allowing this first-time egress host is safe to offer. */
+  allow_always?: string | null;
+}
+
 export interface NotificationEvent extends BaseEvent {
   type: 'notification';
   text: string;
@@ -119,6 +132,7 @@ export type AgentEvent =
   | TitleEvent
   | DoneEvent
   | WaitForUserEvent
+  | ToolApprovalEvent
   | NotificationEvent
   | PlanReviewEvent
   | SessionPresenceEvent;
@@ -137,6 +151,8 @@ export interface Session {
   created_at: string;
   updated_at: string;
   event_count: number;
+  /** Models the session's LLM calls used, first use first (EventStorePort.models_used). */
+  models?: string[];
 }
 
 /** One agent role: its built-in model cascade, the user's pick, and the model tried first. */

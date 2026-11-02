@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { StateView } from "@/components/common/StateView";
+import { useRemote } from "@/hooks/useRemote";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RoleModelsPanel } from "@/components/models/RoleModelsPanel";
@@ -8,92 +9,37 @@ import { api } from "@/lib/api";
 import { ModelInfo } from "@/types/events";
 import { Brain, Zap, DollarSign } from "lucide-react";
 
-export default function ModelsPage() {
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const loadModels = () => api.models.list();
 
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const data = await api.models.list();
-        setModels(data);
-      } catch (e) {
-        setError("Failed to load models");
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchModels();
-  }, []);
+function groupByProvider(models: ModelInfo[]): Record<string, ModelInfo[]> {
+  return models.reduce((acc, model) => {
+    (acc[model.provider] ??= []).push(model);
+    return acc;
+  }, {} as Record<string, ModelInfo[]>);
+}
 
+function ModelCatalog({ models }: { models: ModelInfo[] }) {
+  const groupedModels = groupByProvider(models);
   const getTierColor = (tier: string) => {
     switch (tier) {
       case "free":
-        return "bg-green-500";
+        return "bg-status-live";
       case "fast":
-        return "bg-blue-500";
+        return "bg-sky";
       case "standard":
-        return "bg-yellow-500";
+        return "bg-status-waiting";
       case "premium":
-        return "bg-purple-500";
+        return "bg-fig";
       default:
-        return "bg-gray-500";
+        return "bg-muted-foreground";
     }
   };
 
-  const groupedModels = models.reduce((acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) acc[provider] = [];
-    acc[provider].push(model);
-    return acc;
-  }, {} as Record<string, ModelInfo[]>);
-
-  if (loading) {
-    return (
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-6">Available Models</h1>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader>
-                <div className="h-6 bg-muted rounded w-3/4"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-4 bg-muted rounded w-1/2"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-6">Available Models</h1>
-        <Card className="border-red-500">
-          <CardContent className="pt-6">
-            <p className="text-red-500">{error}</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Make sure the backend is running: python -m weebot.interfaces.web.main
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Available Models</h1>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Brain className="h-4 w-4" />
-          <span>{models.length} models available</span>
-        </div>
+    <>
+      <div className="mb-6 flex items-center justify-end gap-2 text-sm text-muted-foreground">
+        <Brain className="h-4 w-4" />
+        <span>{models.length} models available</span>
       </div>
 
       <RoleModelsPanel models={models} />
@@ -120,7 +66,7 @@ export default function ModelsPage() {
                       </span>
                       <span className="font-medium">
                         {model.cost_per_1k_tokens === 0 ? (
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                          <Badge variant="secondary" className="bg-status-live/10 text-status-live-fg">
                             FREE
                           </Badge>
                         ) : (
@@ -162,6 +108,30 @@ export default function ModelsPage() {
           </div>
         </div>
       ))}
+    </>
+  );
+}
+
+export default function ModelsPage() {
+  const { state, reload } = useRemote(loadModels);
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <h1 className="text-3xl font-bold mb-6">Available Models</h1>
+      <StateView
+        state={state}
+        loadingLabel="Loading models"
+        errorTitle="Couldn't load models"
+        onRetry={reload}
+        skeleton={
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <Card key={i} className="h-24 animate-pulse" />
+            ))}
+          </div>
+        }
+      >
+        {(models) => <ModelCatalog models={models} />}
+      </StateView>
     </div>
   );
 }

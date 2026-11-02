@@ -119,6 +119,7 @@ class RoleBasedToolRegistry:
             "screenshot_ocr",
             "ocr_structured",
             "web_scraper",
+            "install_tool",
         ],
         "webhook": [
             # Admin-level tools minus exec tools (bash, powershell, python_execute)
@@ -511,6 +512,10 @@ class RoleBasedToolRegistry:
                         logger.debug("Skipping tool %s: no browser_factory wired", name)
                         continue
                     tool = tool_cls(browser=_shared_browser_adapter)
+                elif name == "web_scraper" and browser_factory is not None:
+                    # Not the shared adapter above: a scrape gets a fresh browser per call,
+                    # so it never navigates the page the agent is driving.
+                    tool = tool_cls(browser_factory=browser_factory)
                 else:
                     try:
                         tool = tool_cls()
@@ -529,6 +534,11 @@ class RoleBasedToolRegistry:
                 # None: no reranker configured, results keep engine order.
                 if rerank is not None and hasattr(tool, "set_rerank"):
                     tool.set_rerank(rerank)
+                # A tool whose external dependency is missing (moli_fetch without moli) is
+                # left out: offered, it only burns the step's tool-call rounds on an error.
+                if hasattr(tool, "is_available") and not tool.is_available():
+                    logger.debug("Skipping tool %s: not available on this host", name)
+                    continue
                 tools.append(tool)
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)

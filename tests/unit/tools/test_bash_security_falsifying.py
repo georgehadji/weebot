@@ -253,11 +253,11 @@ class TestSecurityAnalyzerEdgeCases:
         assert assessment.risk_level == CommandRiskLevel.SAFE
 
     def test_very_long_command(self, analyzer):
-        """Very long commands should not crash analyzer."""
+        """A command past the cap is refused (F17), not crashed on and not skipped."""
         long_command = "echo " + "A" * 10000
         assessment = analyzer.analyze(long_command)
-        # Should complete without exception
-        assert assessment.risk_level in [CommandRiskLevel.SAFE, CommandRiskLevel.SUSPICIOUS]
+        assert assessment.risk_level == CommandRiskLevel.DANGEROUS
+        assert "too long" in assessment.reason
 
     def test_unicode_in_command(self, analyzer):
         """Unicode characters should be handled gracefully."""

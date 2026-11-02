@@ -118,8 +118,10 @@ def test_a_redaction_marker_does_not_trip_the_next_rule():
 def test_the_label_in_the_text_survives():
     """`secret: x` used to come out claiming to be a password."""
     r = SecretRedactor()
-    assert r.redact("passwd: abc123").startswith("passwd=")
-    assert r.redact("secret: abc123").startswith("secret=")
+    # The separator is kept too (F28: one pattern for every key style), so only the label is pinned.
+    assert r.redact("passwd: abc123").startswith("passwd")
+    assert r.redact("secret: abc123").startswith("secret")
+    assert "abc123" not in r.redact("passwd: abc123")
 
 
 # ── C8: redact_dict must not present four shapes as sanitised ─────────

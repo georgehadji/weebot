@@ -11,6 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRemote } from "@/hooks/useRemote";
 import { api } from "@/lib/api";
+import { modelsLabel } from "@/lib/sessions";
 import { useToast } from "@/providers/ToastProvider";
 import { Session } from "@/types/events";
 
@@ -81,7 +82,7 @@ export default function SessionsPage() {
                         <CardTitle className="text-lg">
                           <Link
                             href={`/sessions/${session.id}`}
-                            className="transition-colors hover:text-primary"
+                            className="transition-colors hover:text-primary-text"
                           >
                             {session.title || "New session"}
                           </Link>
@@ -90,6 +91,7 @@ export default function SessionsPage() {
                           {formatDistanceToNow(new Date(session.created_at), { addSuffix: true })}
                           {" · "}
                           {eventsLabel(session.event_count)}
+                          {session.models?.length ? ` · ${modelsLabel(session.models)}` : null}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

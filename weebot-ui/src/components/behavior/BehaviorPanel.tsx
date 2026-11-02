@@ -25,13 +25,13 @@ export function BehaviorPanel({
   showRecentActions = true,
   className,
 }: BehaviorPanelProps) {
-  // Try WebSocket first, fallback to REST
   const ws = useBehavior(sessionId);
   const rest = useBehaviorREST(sessionId);
 
-  // Use WebSocket data if connected, otherwise REST
-  const trustScore = ws.trustScore || rest.trustScore;
-  const recentActions = ws.recentActions.length > 0 ? ws.recentActions : rest.recentActions;
+  // REST is polled and complete; the socket's trust frame has no status and its recent list is
+  // a one-off snapshot, so each is only the fallback for when REST has nothing.
+  const trustScore = rest.trustScore || ws.trustScore;
+  const recentActions = rest.recentActions.length > 0 ? rest.recentActions : ws.recentActions;
   const isConnected = ws.isConnected;
   const isLoading = rest.isLoading;
 

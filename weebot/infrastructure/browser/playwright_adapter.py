@@ -18,6 +18,7 @@ from weebot.application.ports.browser_port import (
     ElementInfo,
     NavigationResult,
 )
+from weebot.infrastructure.browser.browser_launcher import open_browser
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ class PlaywrightAdapter(BrowserPort):
         if self._config.proxy_server:
             launch_options["proxy"] = {"server": self._config.proxy_server}
 
-        self._browser = await browser_type.launch(**launch_options)
+        self._browser = await open_browser(browser_type, launch_options)
 
         # Build context options
         context_options: dict[str, Any] = {
@@ -201,12 +202,15 @@ class PlaywrightAdapter(BrowserPort):
 
             self._page = None
 
-    async def navigate(self, url: str, wait_until: str = "networkidle") -> NavigationResult:
+    async def navigate(
+        self, url: str, wait_until: str = "networkidle", timeout: float | None = None
+    ) -> NavigationResult:
         """Navigate to a URL.
 
         Args:
             url: URL to navigate to.
             wait_until: When to consider navigation complete.
+            timeout: Maximum time to wait in seconds; None keeps Playwright's default.
 
         Returns:
             NavigationResult with navigation details.
@@ -234,7 +238,11 @@ class PlaywrightAdapter(BrowserPort):
         t_start = time.monotonic()
 
         try:
-            response = await page.goto(url, wait_until=playwright_wait)
+            response = await page.goto(
+                url,
+                wait_until=playwright_wait,
+                timeout=timeout * 1000 if timeout is not None else None,
+            )
             elapsed_ms = (time.monotonic() - t_start) * 1000
 
             if response:

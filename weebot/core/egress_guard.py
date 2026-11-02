@@ -321,6 +321,153 @@ def classify_host(host: str, resolve: bool = False) -> HostClass:
 
 
 # ---------------------------------------------------------------------------
+# Every destination in a command (audit F18)
+# ---------------------------------------------------------------------------
+
+_URL_HOST_RE = re.compile(r"""\b(?:https?|ftps?|sftp|ssh|git|wss?)://([^/\s"'?#]+)""", re.I)
+# `\\host\share` or `//host/share`; a `://` or a path joined by a letter is not one.
+_UNC_HOST_RE = re.compile(
+    r"""(?<![\w\\:/.])(?:\\\\|//)([A-Za-z0-9._-]+)(?:@(?:SSL|\d+))?(?=[\\/\s"']|$)""", re.I
+)
+_HOSTNAME_RE = re.compile(
+    r"^(?:\[[0-9a-fA-F:.]+\]|(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)*"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)(?::\d+)?$"
+)
+
+# A verb that opens a connection, and the options after it that take a value (a file, a
+# header, a count) and so are not a destination. Only options that always take a value are
+# listed: skipping the word after an option that does not would hide a host.
+_CURL_VALUES = frozenset({
+    "-o", "--output", "-d", "--data", "--data-raw", "--data-binary", "--data-urlencode",
+    "-H", "--header", "-X", "--request", "-u", "--user", "-A", "--user-agent", "-e",
+    "--referer", "-F", "--form", "-T", "--upload-file", "-b", "--cookie", "-c", "--cookie-jar",
+    "-K", "--config", "-w", "--write-out", "-m", "--max-time", "--connect-timeout", "--retry",
+    "--cacert", "--cert", "--key", "-D", "--dump-header",
+})
+_WGET_VALUES = frozenset({
+    "-O", "--output-document", "-P", "--directory-prefix", "-t", "--tries", "-T", "--timeout",
+    "-e", "-U", "--user-agent", "--header", "--post-data", "--post-file", "-o", "-a",
+})
+_POWERSHELL_VALUES = frozenset({
+    "-outfile", "-method", "-body", "-headers", "-contenttype", "-infile", "-useragent",
+    "-timeoutsec", "-credential", "-destination", "-maximumredirection", "-retrycount",
+    "-transferencoding", "-port", "-count", "-timeoutseconds", "-informationlevel", "-type",
+})
+_SSH_VALUES = frozenset({
+    "-p", "-i", "-l", "-o", "-F", "-c", "-m", "-E", "-b", "-D", "-L", "-R", "-P", "-S",
+})
+_NC_VALUES = frozenset({"-p", "-w", "-q", "-i"})
+_PING_VALUES = frozenset({"-n", "-c", "-w", "-i", "-s", "-W", "-l"})
+_DNS_VALUES = frozenset({"-p", "-t", "-q", "-c", "-type", "-port"})
+# verb -> (options with a value, may a bare word without a dot be the host?)
+_HOST_VERBS: dict[str, tuple[frozenset[str], bool]] = {
+    "curl": (_CURL_VALUES, False),
+    "wget": (_WGET_VALUES, False),
+    "scp": (_SSH_VALUES, False),
+    "sftp": (_SSH_VALUES, False),
+    "rsync": (_SSH_VALUES, False),
+    "ssh": (_SSH_VALUES, True),
+    "ftp": (frozenset(), True),
+    "telnet": (frozenset(), True),
+    "nc": (_NC_VALUES, True),
+    "ncat": (_NC_VALUES, True),
+    "netcat": (_NC_VALUES, True),
+    "ping": (_PING_VALUES, True),
+    "nslookup": (_DNS_VALUES, True),
+    "dig": (_DNS_VALUES, True),
+    **{
+        verb: (_POWERSHELL_VALUES, True)
+        for verb in (
+            "iwr", "irm", "invoke-webrequest", "invoke-restmethod", "start-bitstransfer",
+            "test-netconnection", "tnc", "test-connection", "resolve-dnsname",
+        )
+    },
+}
+
+
+def _destination(word: str, *, bare_label_ok: bool) -> str | None:
+    """The host a bare word names, or None when it is not one.
+
+    A word the shell would expand (`$h`, a subexpression, a backtick) is returned as it is: no
+    allowlist knows it, so it asks, which is the point.
+    """
+    word = word.strip("'\"")
+    if not word or word[0] in "-.~/@\\" or "://" in word or re.match(r"^[A-Za-z]:[\\/]", word):
+        return None
+    if any(c in word for c in "$(`"):
+        return word
+    if "@" in word:
+        word = word.rsplit("@", 1)[1]
+    host = re.split(r"[/?#]", word, maxsplit=1)[0]
+    name, _, tail = host.partition(":")
+    if not tail.isdigit() and not host.startswith("["):
+        host = name  # scp's `host:path`
+    if not _HOSTNAME_RE.match(host) or not re.search(r"[A-Za-z]", host):
+        return None
+    if "." not in host and not host.startswith("[") and not bare_label_ok:
+        return None
+    return host.lower()
+
+
+def _bare_hosts(segment: str) -> list[str]:
+    from weebot.core.shell_segments import tokenize
+
+    words = [w.text for w in tokenize(segment)]
+    if not words:
+        return []
+    verb = words[0].strip("&.\"'").lower().removesuffix(".exe")
+    spec = _HOST_VERBS.get(verb)
+    if spec is None:
+        return []
+    value_flags, bare_label_ok = spec
+    powershell = value_flags is _POWERSHELL_VALUES  # its options are case-insensitive
+    hosts: list[str] = []
+    positionals = 0
+    skip = False
+    for word in words[1:]:
+        if skip:
+            skip = False
+            continue
+        if word.startswith((">", "<", "1>", "2>")):
+            break
+        if word.startswith("-"):
+            flag = word.lower() if powershell else word
+            if flag.startswith("--url=") and (host := _destination(word[6:], bare_label_ok=True)):
+                hosts.append(host)
+            skip = flag in value_flags
+            continue
+        host = _destination(word, bare_label_ok=bare_label_ok and positionals == 0)
+        if host:
+            hosts.append(host)
+        positionals += 1
+    return hosts
+
+
+def _ordered_hosts(command: str, *, bare: bool = True) -> list[str]:
+    """Every destination in *command*, URLs first, then UNC, then bare words after a verb."""
+    from weebot.core.shell_segments import split_segments
+
+    found: list[str] = []
+    for match in _URL_HOST_RE.finditer(command):
+        found.append(match.group(1).rsplit("@", 1)[-1].lower())
+    found += [m.group(1).lower() for m in _UNC_HOST_RE.finditer(command)]
+    if bare:
+        for segment in split_segments(command):
+            found += _bare_hosts(segment)
+    return list(dict.fromkeys(found))
+
+
+def extract_hosts(command: str, *, bare: bool = True) -> frozenset[str]:
+    """Every host *command* talks to: URLs, UNC shares, and bare names after a network verb.
+
+    The policy over it is a subset test: every host must be known, so a command that adds a
+    host can only move toward "ask". ``bare=False`` for program text (python), where a word
+    after ``ssh`` is not a command line.
+    """
+    return frozenset(_ordered_hosts(command, bare=bare))
+
+
+# ---------------------------------------------------------------------------
 # Allowlist (persisted as JSON, keyed on stable IDs)
 # ---------------------------------------------------------------------------
 
@@ -386,7 +533,12 @@ class EgressGuard:
         self._allowlist = allowlist or RecipientAllowlist()
 
     def classify(
-        self, tool_name: str, args: dict[str, Any], untrusted_context_active: bool = False
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        untrusted_context_active: bool = False,
+        *,
+        local_python_safe: bool = False,
     ) -> EgressDecision:
         """Return an EgressDecision for the proposed tool call.
 
@@ -402,11 +554,18 @@ class EgressGuard:
         recipient, is_egress = self._detect_egress(tool_name, args)
         if not is_egress:
             recipient, is_egress = self._browser_egress(tool_name, args, untrusted_context_active)
-        if not is_egress and untrusted_context_active:
+        if not is_egress and untrusted_context_active and not local_python_safe:
             recipient, is_egress = self._network_capable(tool_name, args)
             decision.network_only = is_egress
         if not is_egress:
             return decision
+
+        # Every host the call names must be known, not only the first (F18); the recipient
+        # put to the human is the first one that is not.
+        hosts = self._call_hosts(tool_name, args)
+        unknown_hosts = [h for h in hosts if not self._allowlist.is_known(h)]
+        if hosts:
+            recipient = unknown_hosts[0] if unknown_hosts else hosts[0]
 
         decision.is_egress = True
         decision.recipient = recipient
@@ -423,7 +582,9 @@ class EgressGuard:
         # 4. First-time recipient check (stable-ID keyed).
         # If recipient is None (e.g. Send-MailMessage with no extractable URL),
         # treat it as an unknown destination and require approval.
-        recipient_is_unknown = (not recipient) or (not self._allowlist.is_known(recipient))
+        recipient_is_unknown = (
+            (not recipient) or bool(unknown_hosts) or (not self._allowlist.is_known(recipient))
+        )
         if recipient_is_unknown:
             decision.reasons.append(EgressReason.FIRST_TIME_RECIPIENT)
 
@@ -480,14 +641,32 @@ class EgressGuard:
         match = _SHELL_NETWORK_RE.search(cmd)
         if not match:
             return False, None
-        host = self._extract_host_from_cmd(cmd)
-        if host is None:
+        hosts = _ordered_hosts(cmd)
+        if not hosts:
             scp_like = re.search(r"\bgit@([\w.-]+):", cmd)
-            host = scp_like.group(1).lower() if scp_like else None
-        if host is None:
-            kind = next((k for k in _DEFAULT_HOSTS if match.group(k)), None)
-            host = _DEFAULT_HOSTS.get(kind) if kind else None
-        return True, host
+            hosts = [scp_like.group(1).lower()] if scp_like else []
+        # The registry an install implies is a destination too, for every install named.
+        for found in _SHELL_NETWORK_RE.finditer(cmd):
+            kind = next((k for k in _DEFAULT_HOSTS if found.group(k)), None)
+            if kind and _DEFAULT_HOSTS[kind] not in hosts:
+                hosts.append(_DEFAULT_HOSTS[kind])
+        # One host stands for the call: the first one not known, else the first.
+        unknown = [h for h in hosts if not self.is_known_recipient(h)]
+        return True, (unknown or hosts or [None])[0]
+
+    def uses_network(self, tool_name: str, args: dict[str, Any]) -> bool:
+        """Did this shell or python call fetch from the network? (F20)
+
+        ``network_use`` for a shell (downloads, installs, git remotes), and a network
+        library import for python. Pings and lookups are not: they fetch no content.
+        """
+        tool_lower = tool_name.lower()
+        if tool_lower in ("python_execute", "python"):
+            return bool(_PYTHON_NETWORK_RE.search(str(args.get("code", ""))))
+        if tool_lower in ("bash_execute", "powershell", "bash", "shell", "cmd", "terminal"):
+            cmd = str(args.get("command", ""))
+            return bool(_SHELL_NETWORK_RE.search(cmd) or _SHELL_PYTHON_NETWORK_RE.search(cmd))
+        return False
 
     @staticmethod
     def _is_internal(stable_id: str) -> bool:
@@ -596,9 +775,17 @@ class EgressGuard:
         return matched
 
     def _extract_host_from_cmd(self, cmd: str) -> str | None:
-        url_re = re.compile(r'https?://([^/\s"\']+)', re.IGNORECASE)
-        m = url_re.search(cmd)
-        return m.group(1).lower() if m else None
+        hosts = _ordered_hosts(cmd)
+        return hosts[0] if hosts else None
+
+    def _call_hosts(self, tool_name: str, args: dict[str, Any]) -> list[str]:
+        """Every host a shell or python call names; other tools carry one recipient."""
+        tool_lower = tool_name.lower()
+        if tool_lower in ("bash_execute", "powershell", "bash", "shell", "cmd", "terminal"):
+            return _ordered_hosts(str(args.get("command", "")))
+        if tool_lower in ("python_execute", "python"):
+            return _ordered_hosts(str(args.get("code", "")), bare=False)
+        return []
 
     def _normalize_host(self, url: str) -> str | None:
         m = re.match(r'https?://([^/\s"\']+)', url, re.IGNORECASE)

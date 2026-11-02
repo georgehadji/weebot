@@ -15,8 +15,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { Composer, SessionLifecycleStatus } from "./Composer";
-import { EventRenderer } from "./EventRenderer";
+import { EventRenderer, isRendered } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
 import { RunControls } from "./RunControls";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
@@ -27,6 +29,7 @@ import {
   getDisplayItems,
   initialSessionViewState,
   markDelivery,
+  mergeHistory,
   sessionReducer,
   SessionViewState,
 } from "@/lib/session-reducer";
@@ -43,6 +46,8 @@ interface ConversationPaneProps {
   sessionId: string | null;
   status: SessionLifecycleStatus;
   initialEvents?: AgentEvent[];
+  /** Why the run stopped; shown for a failed session so the next step is not a guess. */
+  failureReason?: string;
   model?: string;
   onSessionCreated: (sessionId: string) => void;
 }
@@ -51,6 +56,7 @@ export function ConversationPane({
   sessionId,
   status,
   initialEvents,
+  failureReason,
   model,
   onSessionCreated,
 }: ConversationPaneProps) {
@@ -82,7 +88,7 @@ export function ConversationPane({
         const missed = events.filter((e) => !seen.has(e.id));
         if (missed.length === 0) return;
         missed.forEach((e) => seen.add(e.id));
-        setState((prev) => missed.reduce(sessionReducer, prev));
+        setState((prev) => mergeHistory(prev, events));
       })
       .catch((e) => console.warn("[Conversation] could not refresh events", e));
     return () => {
@@ -94,10 +100,16 @@ export function ConversationPane({
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),
     []
   );
-  const settleDelivery = useCallback(
-    (id: string, delivery: DeliveryState) => setState((prev) => markDelivery(prev, id, delivery)),
-    []
-  );
+  // Mirrors `state` so a settle can report the row's outcome synchronously (see useComposer).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  const settleDelivery = useCallback((id: string, delivery: DeliveryState) => {
+    const known = stateRef.current.eventsById.get(id);
+    setState((prev) => markDelivery(prev, id, delivery));
+    return known?.type === "message" && known.delivery === "sent" ? ("sent" as const) : delivery;
+  }, []);
   const retryRef = useRef<(event: MessageEvent) => void>(undefined);
   const registerRetry = useCallback((fn: (event: MessageEvent) => void) => {
     retryRef.current = fn;
@@ -107,8 +119,25 @@ export function ConversationPane({
     setDraftRef.current = fn;
   }, []);
   const onRetry = useCallback((event: MessageEvent) => retryRef.current?.(event), []);
+  const quickReplyRef = useRef<(text: string) => void>(undefined);
+  const registerQuickReply = useCallback((fn: (text: string) => void) => {
+    quickReplyRef.current = fn;
+  }, []);
+  const onReply = useCallback((text: string) => quickReplyRef.current?.(text), []);
 
-  const items = getDisplayItems(state);
+  // Events with no row (title, plan, …) are not timeline rows: they must not hide the empty state
+  // or inflate the "new" count.
+  const items = getDisplayItems(state).filter((item, index, all) => {
+    if (item.kind === "gap" || !isRendered(item.event)) return false;
+    // ToolApprovalEvent contains the same prompt as the following wait event, plus controls.
+    // Keep the wait event as a fallback for older clients, but do not render duplicate text here.
+    const previous = all[index - 1];
+    return !(
+      item.event.type === "wait_for_user" &&
+      previous?.kind === "event" &&
+      previous.event.type === "tool_approval"
+    );
+  });
   const { viewportRef, sentinelRef, atBottom, unseen, scrollToBottom } = useStickToBottom(items.length);
   const isRunning = status === "running";
 
@@ -131,7 +160,7 @@ export function ConversationPane({
                         <button
                           type="button"
                           onClick={() => setDraftRef.current?.(prompt)}
-                          className="rounded-full border bg-surface-2 px-3 py-1.5 text-xs transition-colors hover:bg-surface-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                          className="focus-ring rounded-full border bg-surface-2 px-3 py-1.5 text-xs transition-colors hover:bg-surface-3 pointer-coarse:min-h-11"
                         >
                           {prompt}
                         </button>
@@ -145,7 +174,12 @@ export function ConversationPane({
                 item.kind === "gap" ? (
                   <GapMarkerRow key={item.key} droppedCount={item.droppedCount} />
                 ) : (
-                  <EventRenderer key={item.event.id} event={item.event} onRetry={onRetry} />
+                  <EventRenderer
+                    key={item.event.id}
+                    event={item.event}
+                    onRetry={onRetry}
+                    onReply={onReply}
+                  />
                 )
               )
             )}
@@ -163,7 +197,7 @@ export function ConversationPane({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-surface-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-surface-3 focus-ring pointer-coarse:min-h-11"
           >
             <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             Jump to latest
@@ -174,6 +208,26 @@ export function ConversationPane({
 
       {isRunning && sessionId && <RunControls sessionId={sessionId} />}
 
+      {status === "failed" && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 border-t bg-status-error/10 px-3 py-2 text-xs"
+        >
+          <StatusBadge status="failed" variant="icon" />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            {failureReason || "This run stopped before finishing."}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => onReply("continue")}
+          >
+            Continue
+          </Button>
+        </div>
+      )}
+
       <Composer
         sessionId={sessionId}
         status={status}
@@ -183,6 +237,7 @@ export function ConversationPane({
         onDelivery={settleDelivery}
         registerRetry={registerRetry}
         registerSetDraft={registerSetDraft}
+        registerQuickReply={registerQuickReply}
       />
     </div>
   );

@@ -47,6 +47,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from weebot.application.di import Container
+from weebot.config.feature_flags import web_reload_enabled
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.strategies.llm_pool import unwrap_llm
@@ -258,6 +259,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await scheduler.start()
     app.state.scheduler = scheduler
 
+    # ── Sessions a stopped process left RUNNING ─────────────────
+    # Nothing runs them, and a message sent to one would be steered into a flow that does not
+    # exist. FAILED with a reason lets the composer resume them at the first unfinished step.
+    try:
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
+
+        await container.get(TaskRunnerPort).interrupt_orphans()
+    except Exception as exc:
+        logger.warning("Interrupted-session check failed: %s", exc)
+
     # ── Restore circuit breaker state ──────────────────────────
     try:
         import importlib as _il
@@ -427,6 +438,7 @@ def create_app() -> FastAPI:
         return response
 
     # ── Rate limiting middleware ───────────────────────────────────
+    from weebot.interfaces.web.host_guard import HostGuardMiddleware
     from weebot.interfaces.web.rate_limit import RateLimitMiddleware
 
     _rate_limit_enabled = os.environ.get("WEEBOT_RATE_LIMIT_ENABLED", "true").lower() not in (
@@ -560,6 +572,8 @@ def create_app() -> FastAPI:
     # Added after everything else, so outermost: a rejected request (bad key, oversize body)
     # still reaches it, which is what lets it throttle key guessing.
     app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
+    # Outermost of all: a foreign Host or WebSocket Origin never reaches auth or the routes.
+    app.add_middleware(HostGuardMiddleware, allowed_origins=_allowed_origins)
     if _rate_limit_enabled:
         logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
     else:
@@ -632,7 +646,9 @@ def create_app() -> FastAPI:
 
         logger.info("WebSocket /ws connection from %s", client_host)
 
-        await manager.connect(websocket)
+        from weebot.interfaces.web.auth import current_principal
+
+        await manager.connect(websocket, principal=await current_principal(websocket))
         try:
             while True:
                 data = await websocket.receive_text()
@@ -724,7 +740,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "weebot.interfaces.web.main:app", host=host,
         port=port,
-        reload=True,
+        reload=web_reload_enabled(),
         loop=uvicorn_loop(),
         log_level="info",
     )

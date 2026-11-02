@@ -86,6 +86,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Web API bind address (0.0.0.0 to expose to network)"},
     {"var": "WEEBOT_PORT", "type": "int", "default": "8000",
      "desc": "Web API port number"},
+    {"var": "WEEBOT_WEB_RELOAD", "type": "bool", "default": "false",
+     "desc": "Restart the web API when Python files change. Leave this off while sessions run: a reload kills the running session mid-step"},
     {"var": "WEEBOT_CORS_ORIGIN", "type": "str", "default": "",
      "desc": "Additional CORS origin (besides localhost:3000 defaults)"},
     {"var": "WEEBOT_RATE_LIMIT_ENABLED", "type": "bool", "default": "true",
@@ -184,9 +186,32 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce user_id matching on session access"},
     {"var": "WEEBOT_SHELL_DEFAULT_ASK", "type": "str", "default": "observe",
      "desc": "Shell commands no approval rule covers: off, observe (log what would ask) or enforce"},
+    {"var": "WEEBOT_AUTO_INSTALL_TOOLS", "type": "bool", "default": "true",
+     "desc": "Let install_tool add a missing dependency from PyPI (wheels only), npm (no "
+             "lifecycle scripts) or winget. Every install still asks first; URLs, VCS specs, "
+             "local paths and installer scripts are refused"},
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},
+    {"var": "WEEBOT_PROXY_SERVER", "type": "str", "default": "",
+     "desc": "Proxy URL for Playwright browser sessions (e.g. http://127.0.0.1:9081 for Ladder)"},
+    {"var": "WEEBOT_ALLOWED_HOSTS", "type": "str", "default": "",
+     "desc": "Extra Host names the web API accepts from a loopback caller, comma separated. localhost, 127.0.0.1 and [::1] are always allowed; any other Host from a loopback peer gets 421 (DNS-rebinding guard). Set it when a reverse proxy on this machine forwards a public name"},
+    {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",
+     "desc": "CDP endpoint of a running browser to connect to instead of launching Chromium, "
+             "e.g. Lightpanda on http://127.0.0.1:9222. Fails closed: a proxy or headless=False "
+             "is refused unless WEEBOT_BROWSER_CDP_FALLBACK is on"},
+    {"var": "WEEBOT_BROWSER_CDP_FALLBACK", "type": "bool", "default": "false",
+     "desc": "Launch Chromium on the host when the CDP browser is down or cannot serve a request "
+             "(proxy, headless=False). Off: those calls fail, so pages never render outside "
+             "the container"},
+    {"var": "WEEBOT_BROWSER_CDP_CONNECT_TIMEOUT_MS", "type": "int", "default": "5000",
+     "desc": "Milliseconds to wait for the CDP endpoint; a failure is remembered for 30 seconds"},
+    {"var": "WEEBOT_BROWSER_CDP_SHARE_CONNECTION", "type": "bool", "default": "false",
+     "desc": "Pooled browser sessions share one CDP connection, one context each. Only for an "
+             "endpoint that allows many contexts per connection (not Lightpanda)"},
+    {"var": "WEEBOT_BROWSER_CDP_MAX_CONNECTIONS", "type": "int", "default": "0",
+     "desc": "Most CDP connections the browser session pool opens at once (0 = no cap)"},
     {"var": "WEEBOT_MAX_BODY_BYTES", "type": "int", "default": "1048576",
      "desc": "Largest request body the web API accepts (413 above it)"},
     {"var": "WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS", "type": "bool",

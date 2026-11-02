@@ -9,8 +9,7 @@ import { FilePlus, FileEdit, FileX, FileSymlink, Circle, AlertTriangle } from "l
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RecentAction } from "@/hooks/useBehavior";
-import { ENDPOINTS } from "@/lib/endpoints";
-import { authHeaders } from "@/lib/api";
+import { authHeaders, getApiBase } from "@/lib/api";
 
 interface RecentActionsProps {
   actions: RecentAction[];
@@ -48,13 +47,14 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
   const [overrideReason, setOverrideReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const API_URL = ENDPOINTS.api;
+  const [error, setError] = useState<string | null>(null);
 
   const handleOverride = async () => {
     if (!selectedAction || !overrideReason.trim()) return;
     setIsSubmitting(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_URL}/behavior/override`, {
+      const res = await fetch(`${getApiBase()}/behavior/override`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
@@ -66,9 +66,13 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
         setSelectedAction(null);
         setOverrideReason("");
         onRefresh?.();
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`);
       }
     } catch (e) {
       console.error("Failed to submit override:", e);
+      setError("Could not reach the backend");
     } finally {
       setIsSubmitting(false);
     }
@@ -141,6 +145,12 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
                 className="min-h-[80px] w-full resize-y rounded border border-border bg-surface-1 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
+
+            {error && (
+              <p role="alert" className="mb-4 text-xs text-status-error-fg">
+                {error}
+              </p>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setSelectedAction(null)}>

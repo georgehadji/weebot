@@ -12,6 +12,7 @@ import logging
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from weebot.application.ports.state_repo_port import SessionActivity, StateRepositoryPort
 from weebot.application.ports.state_roles_port import (  # W5.1: the roles it plays
@@ -537,6 +538,30 @@ class SQLiteStateRepository(
             cls._event_adapter = TypeAdapter(AgentEvent)
         return cls._event_adapter
 
+    @staticmethod
+    def _rebuild_event(adapter, raw) -> Any | None:
+        """One stored event as a typed model, or None when this build cannot read it.
+
+        ``AgentEvent`` is the union ``Session.events`` validates against, and every
+        event type a flow can persist must be a member of it. An event it rejects
+        (a payload from an older or newer build) is dropped rather than raised: it
+        used to fall back to ``MessageEvent(**raw)``, which raised for anything but
+        a message payload and made the entire session unreadable.
+        """
+        from weebot.domain.models.event import MessageEvent
+
+        try:
+            return adapter.validate_python(raw)
+        except Exception:
+            # Older message payloads predate today's MessageEvent fields; their
+            # text is still worth keeping. Everything else is unreadable.
+            if isinstance(raw, dict) and raw.get("type") == "message":
+                try:
+                    return MessageEvent(**raw)
+                except Exception:
+                    logger.debug("Unreadable stored message event", exc_info=True)
+            return None
+
     def _row_to_session(self, row, load_events: bool = True) -> Session:
         """Convert a dict row to a Session domain object.
 
@@ -544,7 +569,6 @@ class SQLiteStateRepository(
         """
         if not isinstance(row, dict):
             raise TypeError(f"_row_to_session requires a dict, got {type(row).__name__}")
-        from weebot.domain.models.event import MessageEvent
 
         # Normalize to a plain dict: rows arrive as sqlite3.Row, which supports
         # bracket access but not the dict-style .get(default) used below for
@@ -554,11 +578,23 @@ class SQLiteStateRepository(
         if load_events:
             events_raw = json.loads(row["events_json"] or "[]")
             adapter = self._get_event_adapter()
-            for e in events_raw:
-                try:
-                    events.append(adapter.validate_python(e))
-                except Exception:
-                    events.append(MessageEvent(**e))
+            dropped: list[str] = []
+            for raw in events_raw:
+                event = self._rebuild_event(adapter, raw)
+                if event is None:
+                    dropped.append(str(raw.get("type") if isinstance(raw, dict) else "?"))
+                    continue
+                events.append(event)
+            if dropped:
+                # A session's history is a log: one unreadable entry must not take
+                # the whole session with it (the API answered 500 for it, so the
+                # console could not open the session at all).
+                logger.warning(
+                    "Session %s: dropped %d unreadable stored event(s): %s",
+                    row["id"],
+                    len(dropped),
+                    sorted(set(dropped)),
+                )
         from weebot.domain.models.session import SessionContext
 
         try:

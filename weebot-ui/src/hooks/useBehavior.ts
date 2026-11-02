@@ -208,8 +208,11 @@ export function useBehaviorREST(sessionId?: string) {
       
       const res = await fetch(`${getApiBase()}/behavior/recent?${params}`, { headers: authHeaders() });
       if (res.ok) {
-        const data = await res.json();
-        setRecentActions(data);
+        // /behavior/recent names the verb `event_type`; the socket frame and RecentAction say `action`.
+        const rows: (Omit<RecentAction, "action"> & { event_type: string })[] = await res.json();
+        setRecentActions(
+          rows.map((r) => ({ timestamp: r.timestamp, action: r.event_type, path: r.path, is_override: r.is_override }))
+        );
         setIsUnavailable(false);
       } else {
         setIsUnavailable(true);

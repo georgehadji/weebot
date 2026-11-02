@@ -53,6 +53,9 @@ function toolDisplayKey(toolCallId: string): DisplayKey {
 const DROPPED_PATTERN = /^(\d+) event\(s\) dropped/;
 
 export function sessionReducer(state: SessionViewState, event: AgentEvent): SessionViewState {
+  // The SSE drop notice (routers/sse.py) is sent without an id; keyed on `undefined`, every
+  // one after the first collided with it and was discarded as a duplicate.
+  if (typeof event.id !== "string") event = { ...event, id: `anon:${state.eventsById.size}` } as AgentEvent;
   // Idempotent — replaying an already-seen event (e.g. after a reconnect
   // re-syncs history) must not duplicate a row.
   const known = state.eventsById.get(event.id);
@@ -117,6 +120,17 @@ export function markDelivery(
 
 export function reduceSessionEvents(events: readonly AgentEvent[]): SessionViewState {
   return events.reduce(sessionReducer, initialSessionViewState);
+}
+
+/**
+ * Fold a stored history into a live state *in the server's order*. Applying only the missing
+ * rows with `sessionReducer` appended them after everything that arrived live, and let a
+ * replayed `calling` overwrite a `called` already shown. Rows only the client has (optimistic
+ * messages, gap markers) are replayed after the history.
+ */
+export function mergeHistory(state: SessionViewState, history: readonly AgentEvent[]): SessionViewState {
+  const live = getDisplayItems(state).map((i) => (i.kind === "gap" ? state.eventsById.get(i.key)! : i.event));
+  return live.reduce(sessionReducer, reduceSessionEvents(history));
 }
 
 export type DisplayItem = { kind: "event"; event: AgentEvent } | GapMarker;

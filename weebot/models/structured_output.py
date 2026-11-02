@@ -16,7 +16,7 @@ from datetime import datetime, UTC
 from enum import Enum
 from typing import Any, Literal, TypeVar
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +331,22 @@ class SynthesisPayload(BaseModel):
 
     clusters: list[dict] = Field(default_factory=list)
     synthesis: str = ""
+
+
+class VerifierScores(BaseModel):
+    """The verifier's self-critique reply: all four axes, each an integer from 1 to 5.
+
+    Every field is required and strict. A missing axis used to be filled with the
+    passing threshold, so `{}` passed all four checks (audit F5). A reply that does
+    not parse into this model means the scorer did not run.
+    """
+
+    model_config = ConfigDict(strict=True)
+
+    correctness: int = Field(ge=1, le=5)
+    completeness: int = Field(ge=1, le=5)
+    specificity: int = Field(ge=1, le=5)
+    restraint: int = Field(ge=1, le=5)
 
 
 def extract_json_text(text: str) -> str:

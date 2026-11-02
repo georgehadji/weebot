@@ -44,3 +44,19 @@ describe("composer state machine", () => {
     expect(s).toMatchObject({ phase: "sending", error: null });
   });
 });
+
+describe("retry (W3)", () => {
+  it("a retry moves a failed composer to sending and clears the error, keeping the draft", () => {
+    const failed = { draft: "newer", phase: "failed" as const, error: "offline" };
+    expect(composerReducer(failed, { type: "retry" })).toEqual({ draft: "newer", phase: "sending", error: null });
+  });
+  it("a retry from idle also enters sending", () => {
+    expect(composerReducer(initialComposerState(), { type: "retry" })).toMatchObject({ phase: "sending" });
+  });
+  it("a retry while sending changes nothing, and a later 'sent' settles it", () => {
+    const sending = { draft: "", phase: "sending" as const, error: null };
+    expect(composerReducer(sending, { type: "retry" })).toBe(sending);
+    const retried = composerReducer({ draft: "", phase: "failed", error: "x" }, { type: "retry" });
+    expect(composerReducer(retried, { type: "sent" })).toMatchObject({ phase: "idle", error: null });
+  });
+});

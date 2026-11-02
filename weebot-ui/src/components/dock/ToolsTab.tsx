@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Terminal } from "lucide-react";
+import { AlertCircle, Loader2, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { ToolEvent } from "@/types/events";
@@ -28,14 +28,33 @@ export function ToolsTab({ sessionId }: ToolsTabProps) {
     <div className="space-y-1.5 p-2">
       {entries.map((call) => (
         <div key={call.tool_call_id} className="flex items-center gap-2 rounded-md border bg-surface-1 px-2.5 py-1.5 text-xs">
-          <Terminal className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <Terminal className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           <Badge variant="outline" className="shrink-0">{call.tool_name}</Badge>
           <span className="truncate font-mono text-muted-foreground">{call.function_name}</span>
-          <span className="ml-auto shrink-0 text-muted-foreground">
-            {call.status === "calling" ? "running…" : "done"}
-          </span>
+          <ToolCallState call={call} />
         </div>
       ))}
     </div>
   );
+}
+
+/** Same states and wording as the timeline's ToolCallRow: Running, Failed, Done. */
+function ToolCallState({ call }: { call: ToolEvent }) {
+  if (call.status === "calling") {
+    return (
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-status-live-fg">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        Running
+      </span>
+    );
+  }
+  if (call.is_error === true) {
+    return (
+      <span className="ml-auto flex shrink-0 items-center gap-1 text-status-error-fg">
+        <AlertCircle className="h-3 w-3" aria-hidden="true" />
+        Failed
+      </span>
+    );
+  }
+  return <span className="ml-auto shrink-0 text-muted-foreground">Done</span>;
 }

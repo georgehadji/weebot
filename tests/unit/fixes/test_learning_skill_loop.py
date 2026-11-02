@@ -296,7 +296,11 @@ async def test_a_step_reports_its_used_skills_to_the_mediator():
 
 def test_executing_state_reports_skill_uses_on_both_outcomes():
     src = Path("weebot/application/flows/states/executing.py").read_text(encoding="utf-8")
-    assert src.count("record_skill_uses(") == 2
+    # success, failure, and the AUTO-mode HITL branch (which completes the step without
+    # asking, so it counts as a success).
+    assert src.count("record_skill_uses(") == 3
+    assert src.count("passed=True") == 2
+    assert src.count("passed=False") == 1
 
 
 # ── promoted and demoted skills reach the disk the retriever reads ──────────

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isForeignMutation } from "./proxy-guard";
+import { isForeignMutation, isUntrustedHost } from "./proxy-guard";
 
 const h = (o: Record<string, string>) => new Headers(o);
 const HOST = "localhost:3000";
@@ -33,5 +33,51 @@ describe("isForeignMutation", () => {
 
   it("refuses an unparseable Origin", () => {
     expect(isForeignMutation("POST", h({ origin: "null" }), HOST)).toBe(true);
+  });
+});
+
+// A hostile page can make its own domain resolve to 127.0.0.1 (DNS rebinding). The browser then
+// treats http://evil.test:3000 as same origin, so isForeignMutation passes. The proxy forwards
+// to a backend that trusts loopback, so the Host must be one of the operator's own names.
+// Only when the backend is local: a UI in a container reaches the API over the bridge, which
+// grants no loopback trust, and users there arrive by a LAN name.
+describe("isUntrustedHost", () => {
+  const LOCAL_API = "http://localhost:8000/api";
+  const DOCKER_API = "http://weebot-api:8000/api";
+
+  it.each([
+    "localhost",
+    "localhost:3000",
+    "LOCALHOST:3000",
+    "127.0.0.1:3000",
+    "[::1]:3000",
+  ])("trusts %s when the backend is local", (host) => {
+    expect(isUntrustedHost(host, LOCAL_API, "")).toBe(false);
+  });
+
+  it.each([
+    "evil.test",
+    "evil.test:3000",
+    "localhost.evil.test",
+    "127.0.0.1.evil.test",
+    "localhost@evil.test",
+    "",
+    null,
+  ])("distrusts %s when the backend is local", (host) => {
+    expect(isUntrustedHost(host, LOCAL_API, "")).toBe(true);
+  });
+
+  it("allows a configured name", () => {
+    expect(isUntrustedHost("weebot.lan:3000", LOCAL_API, "weebot.lan, dash.test")).toBe(false);
+    expect(isUntrustedHost("evil.weebot.lan", LOCAL_API, "weebot.lan")).toBe(true);
+  });
+
+  it("does not judge the host when the backend is not local", () => {
+    expect(isUntrustedHost("192.168.1.5:3000", DOCKER_API, "")).toBe(false);
+    expect(isUntrustedHost("evil.test", DOCKER_API, "")).toBe(false);
+  });
+
+  it("treats an IPv6 loopback backend as local", () => {
+    expect(isUntrustedHost("evil.test", "http://[::1]:8000/api", "")).toBe(true);
   });
 });

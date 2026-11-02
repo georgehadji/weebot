@@ -7,7 +7,7 @@ synchronously.
 
 from __future__ import annotations
 
-import hmac as _hmac
+from weebot.core.secret_compare import safe_equals
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -42,7 +42,7 @@ async def require_webhook_auth(request: Request) -> None:
 
     if _settings.webhook_api_key:
         header_key = request.headers.get("X-Webhook-Key", "")
-        if not _hmac.compare_digest(header_key, _settings.webhook_api_key):
+        if not safe_equals(header_key, _settings.webhook_api_key):
             raise HTTPException(
                 status_code=401,
                 detail="Unauthorized — provide valid X-Webhook-Key header",
@@ -52,7 +52,7 @@ async def require_webhook_auth(request: Request) -> None:
 
     if _settings.weebot_api_key:
         header_key = request.headers.get("X-API-Key", "")
-        if not _hmac.compare_digest(header_key, _settings.weebot_api_key):
+        if not safe_equals(header_key, _settings.weebot_api_key):
             raise HTTPException(
                 status_code=401,
                 detail="Unauthorized — provide valid X-API-Key header",

@@ -122,3 +122,19 @@ async def test_live_fetch_of_example_com():
     if result.is_error and "MOLI_PATH" in result.error:
         pytest.skip("moli is not installed")
     assert "documentation examples" in result.output
+
+
+def test_the_registry_leaves_moli_fetch_out_when_moli_is_not_installed(monkeypatch, tmp_path):
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
+
+    monkeypatch.setenv("MOLI_PATH", str(tmp_path / "missing.exe"))
+    assert not MoliFetchTool().is_available()
+    tools = RoleBasedToolRegistry().create_tool_collection_from_names(["moli_fetch"])
+    assert tools.get_tool("moli_fetch") is None
+
+
+def test_the_registry_offers_moli_fetch_when_moli_is_installed(fake_moli):
+    from weebot.application.services.tool_registry import RoleBasedToolRegistry
+
+    tools = RoleBasedToolRegistry().create_tool_collection_from_names(["moli_fetch"])
+    assert tools.get_tool("moli_fetch") is not None

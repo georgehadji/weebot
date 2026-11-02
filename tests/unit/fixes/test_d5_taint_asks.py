@@ -16,6 +16,7 @@ from weebot.application.agents.executor._tool_executor import ToolExecutor
 from weebot.application.ports.approval_port import ApprovalOutcome, ApprovalPort
 from weebot.application.services.tool_approval import approval_scope
 from weebot.application.services.tool_guards import reads_only
+from weebot.core.approval_policy import is_output_only_python
 
 SESSION = "sess-d5-taint"
 WRITE_OUTSIDE = {"command": "create", "path": "C:/Users/x/AppData/startup.ps1", "file_text": "x"}
@@ -110,3 +111,41 @@ async def test_a_tainted_session_still_reads_unasked():
     await ex.execute_tool("web_search", {"query": "x"})
     await ex.execute_tool("web_search", {"query": "y"})
     assert [c[0] for c in tools.calls] == ["web_search", "web_search"]
+
+
+def test_local_python_subset_allows_only_output_writes():
+    safe = '''import json
+out = "Output/research"
+path = os.path.join(out, "queries.json")
+os.makedirs(out, exist_ok=True)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump({"query": "Lyapunov"}, handle)
+'''
+    assert is_output_only_python(safe)
+    assert not is_output_only_python('import requests\nrequests.get("https://example.com")')
+    assert not is_output_only_python('open("C:/Users/tesse/notes.txt", "w").write("x")')
+
+
+@pytest.mark.asyncio
+async def test_opt_in_local_python_runs_after_untrusted_content(monkeypatch):
+    monkeypatch.setenv("WEEBOT_AUTO_APPROVE_LOCAL_AFTER_UNTRUSTED", "true")
+    ex, tools = _executor()
+    await ex.execute_tool("web_search", {"query": "x"})
+    result = await ex.execute_tool(
+        "python_execute",
+        {"code": 'import os\nout = "Output/research"\nos.makedirs(out, exist_ok=True)\nprint(out)'},
+    )
+    assert not result.is_error
+    assert [call[0] for call in tools.calls] == ["web_search", "python_execute"]
+
+
+@pytest.mark.asyncio
+async def test_opt_in_does_not_allow_network_python(monkeypatch):
+    monkeypatch.setenv("WEEBOT_AUTO_APPROVE_LOCAL_AFTER_UNTRUSTED", "true")
+    ex, tools = _executor()
+    await ex.execute_tool("web_search", {"query": "x"})
+    result = await ex.execute_tool(
+        "python_execute", {"code": 'import requests\nrequests.get("https://example.com")'}
+    )
+    assert result.error and "approval" in result.error.lower()
+    assert [call[0] for call in tools.calls] == ["web_search"]

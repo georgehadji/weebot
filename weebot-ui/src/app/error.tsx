@@ -22,7 +22,7 @@ export default function RouteError({
   return (
     <div className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
       <AlertCircle className="h-8 w-8 text-status-error-fg" aria-hidden="true" />
-      <h2 className="text-lg font-semibold">Something went wrong on this page</h2>
+      <h1 className="text-lg font-semibold">Something went wrong on this page</h1>
       <p className="text-sm text-muted-foreground">
         The rest of the app is fine. Try again, or go back to another page.
       </p>

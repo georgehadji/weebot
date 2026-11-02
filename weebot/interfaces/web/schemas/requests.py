@@ -23,6 +23,11 @@ class CreateSessionRequest(BaseModel):
         default=None,
         description="Optional Ponytail lazy-senior-dev mode: off | lite | full | ultra",
     )
+    execution_mode: str | None = Field(
+        default=None,
+        pattern=r"^(auto|interactive)$",
+        description="Execution mode for the run: auto (no human pauses) | interactive (default)",
+    )
 
 
 class SendMessageRequest(BaseModel):
@@ -63,3 +68,8 @@ class SessionInputRequest(BaseModel):
         "id of the user's message event",
     )
     model: str | None = Field(default=None, description="LLM model override (chat/start only)")
+    execution_mode: str | None = Field(
+        default=None,
+        pattern=r"^(auto|interactive)$",
+        description="Execution mode override for this turn's run: auto | interactive",
+    )

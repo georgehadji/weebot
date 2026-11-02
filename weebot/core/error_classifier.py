@@ -71,7 +71,7 @@ _PATTERNS: list[tuple[str, ErrorCategory]] = [
     ),
     # Auth / billing — fail fast, no point retrying
     (
-        r"api.?key|unauthorized|authentication|invalid.?key|payment.?required|"
+        r"api.?key|unauthorized|authentication|invalid.?key|payment.?required|permission.?denied|"
         + _code("40[123]"),
         ErrorCategory.AUTH,
     ),
@@ -81,7 +81,8 @@ _PATTERNS: list[tuple[str, ErrorCategory]] = [
     (r"(gateway|request|connection|read|write).?timeout|timed.?out", ErrorCategory.TIMEOUT),
     # Model unavailable
     (
-        r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|" + _code("503"),
+        r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|resource.?not.?found|"
+        + _code("404|503"),
         ErrorCategory.MODEL_UNAVAILABLE,
     ),
     # Server error — provider-side 5xx (distinct from network flakiness)

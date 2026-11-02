@@ -78,12 +78,16 @@ class ConnectionManager:
         self._connections: dict[str, set[WebSocket]] = {}
         # Global connections (for broadcasts)
         self._global_connections: set[WebSocket] = set()
+        # The principal each global client authenticated as (None when unknown).
+        self._global_principals: dict[WebSocket, str | None] = {}
         # Locks for thread-safe access
         self._connections_lock = asyncio.Lock()
         self._global_lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, session_id: str | None = None) -> None:
-        """Accept a new WebSocket connection."""
+    async def connect(
+        self, websocket: WebSocket, session_id: str | None = None, principal: str | None = None
+    ) -> None:
+        """Accept a new WebSocket connection; a global one remembers its *principal*."""
         try:
             subprotocol = accepted_subprotocol(websocket)
             if subprotocol:
@@ -103,6 +107,7 @@ class ConnectionManager:
         else:
             async with self._global_lock:
                 self._global_connections.add(websocket)
+                self._global_principals[websocket] = principal
             logger.debug("Global WebSocket connected")
 
     async def disconnect(self, websocket: WebSocket, session_id: str | None = None) -> None:
@@ -117,6 +122,7 @@ class ConnectionManager:
 
         async with self._global_lock:
             self._global_connections.discard(websocket)
+            self._global_principals.pop(websocket, None)
 
     async def broadcast_to_session(self, session_id: str, message: dict | str) -> None:
         """Broadcast a message to all connections for a session."""
@@ -145,11 +151,16 @@ class ConnectionManager:
                     for conn in disconnected:
                         self._connections[session_id].discard(conn)
 
-    async def broadcast_global(self, message: dict | str) -> None:
-        """Broadcast to all global connections."""
+    async def broadcast_global(
+        self, message: dict | str, only_principal: str | None = None
+    ) -> None:
+        """Broadcast to all global connections, or only to *only_principal*'s."""
         async with self._global_lock:
             # Iterate over a copy to avoid "Set changed size during iteration"
-            connections = list(self._global_connections)
+            connections = [
+                c for c in self._global_connections
+                if only_principal is None or self._global_principals.get(c) == only_principal
+            ]
 
         payload = json.dumps(message) if isinstance(message, dict) else message
         disconnected = await fan_out(
@@ -163,6 +174,7 @@ class ConnectionManager:
             async with self._global_lock:
                 for conn in disconnected:
                     self._global_connections.discard(conn)
+                    self._global_principals.pop(conn, None)
 
 
 # Global connection manager instance

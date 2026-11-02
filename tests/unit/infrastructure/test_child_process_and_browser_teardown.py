@@ -123,7 +123,8 @@ class _FakeContext:
 
 class _FakeDriver:
     def __init__(self, browser):
-        self.chromium = types.SimpleNamespace(launch=self._launch)
+        # Playwright's BrowserType has a `name`; the launcher reads it to pick the engine.
+        self.chromium = types.SimpleNamespace(name="chromium", launch=self._launch)
         self.firefox = self.chromium
         self.webkit = self.chromium
         self._browser = browser
