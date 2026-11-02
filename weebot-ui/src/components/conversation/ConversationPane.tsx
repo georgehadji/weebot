@@ -114,10 +114,25 @@ export function ConversationPane({
     setDraftRef.current = fn;
   }, []);
   const onRetry = useCallback((event: MessageEvent) => retryRef.current?.(event), []);
+  const quickReplyRef = useRef<(text: string) => void>(undefined);
+  const registerQuickReply = useCallback((fn: (text: string) => void) => {
+    quickReplyRef.current = fn;
+  }, []);
+  const onReply = useCallback((text: string) => quickReplyRef.current?.(text), []);
 
   // Events with no row (title, plan, …) are not timeline rows: they must not hide the empty state
   // or inflate the "new" count.
-  const items = getDisplayItems(state).filter((i) => i.kind === "gap" || isRendered(i.event));
+  const items = getDisplayItems(state).filter((item, index, all) => {
+    if (item.kind === "gap" || !isRendered(item.event)) return false;
+    // ToolApprovalEvent contains the same prompt as the following wait event, plus controls.
+    // Keep the wait event as a fallback for older clients, but do not render duplicate text here.
+    const previous = all[index - 1];
+    return !(
+      item.event.type === "wait_for_user" &&
+      previous?.kind === "event" &&
+      previous.event.type === "tool_approval"
+    );
+  });
   const { viewportRef, sentinelRef, atBottom, unseen, scrollToBottom } = useStickToBottom(items.length);
   const isRunning = status === "running";
 
@@ -154,7 +169,12 @@ export function ConversationPane({
                 item.kind === "gap" ? (
                   <GapMarkerRow key={item.key} droppedCount={item.droppedCount} />
                 ) : (
-                  <EventRenderer key={item.event.id} event={item.event} onRetry={onRetry} />
+                  <EventRenderer
+                    key={item.event.id}
+                    event={item.event}
+                    onRetry={onRetry}
+                    onReply={onReply}
+                  />
                 )
               )
             )}
@@ -192,6 +212,7 @@ export function ConversationPane({
         onDelivery={settleDelivery}
         registerRetry={registerRetry}
         registerSetDraft={registerSetDraft}
+        registerQuickReply={registerQuickReply}
       />
     </div>
   );

@@ -70,6 +70,18 @@ class PlanReviewState(FlowState):
 
         plan = context._plan
 
+        # AUTO execution mode promises no human pauses: present no gate, execute now.
+        from weebot.application.flows.states._execution_gates import _is_auto_mode
+
+        if _is_auto_mode(context):
+            _log.info(
+                "AUTO mode: plan review skipped for %d-step plan '%s'",
+                len(plan.steps),
+                plan.title,
+            )
+            context.set_state(new_state(StateId.EXECUTING))
+            return
+
         # Auto-approve tiny plans to avoid friction on trivial tasks
         if len(plan.steps) < self._min_steps:
             _log.debug(

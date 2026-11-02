@@ -4,9 +4,9 @@ name: BaseTool
 code: BaseTool, ToolResult, ToolCollection
 cluster: tools
 universe: live
-status: verified
+status: stale
 verified: 2026-11-01
-commit: 4f76c44f
+commit: db304f26
 ---
 
 # BaseTool
@@ -29,13 +29,13 @@ The tool contract. `BaseTool` is what every agent tool subclasses, `ToolResult` 
   - `teardown()` shuts down an `apify_service` attribute (looking through a `GuardedTool` to `.inner`) and calls every tool's `close()` (`tool_collection.py:130-154`).
 
 ### How a call reaches a tool
-1. `ToolExecutor.execute_tool` (`weebot/application/agents/executor/_tool_executor.py:372-627`) takes the timeout from the tool's `default_timeout_seconds` (`_tool_executor.py:424-428`), gets the egress guard (`_tool_executor.py:445`, `_get_egress_guard` `_tool_executor.py:298-330`), runs `guard.classify` (`_tool_executor.py:464-466`) and, if a human approved there, records that call's fingerprint (`_tool_executor.py:489-498`). An egress this session already completed is not re-run: the ledger returns a replay note (`_tool_executor.py:470-488`). After untrusted content, a call that does more than read asks as well (`_tool_executor.py:513-529`).
-2. It calls `self._tools.execute(...)` under `approval_scope(session_id, approved_call)` with an `asyncio.wait_for` timeout (`_tool_executor.py:541-547`).
-3. `ToolCollection.execute` dispatches to the tool, which for `bash`, `powershell`, `python_execute` and any financial or outbound tool is a `GuardedTool` (`weebot/application/services/tool_guards.py:43, 560-581`).
-4. `GuardedTool.execute` (`tool_guards.py:492-523`) runs `GuardChain.evaluate`: every guard is asked, the most restrictive verdict wins, a guard that raises yields DENY (`tool_guards.py:403-428`). The full chain is BashGuard, CommandSecurityAnalyzer, ExecApprovalPolicy, financial, outbound and (optionally) egress adapters (`tool_guards.py:431-444`); the first three only look at `command` of `bash`/`powershell` (`tool_guards.py:41, 79-83`).
-5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:248-252`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:507-511`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`tool_guards.py:350`), goes to `_resolve_ask` (`tool_guards.py:512-522`, `tool_guards.py:525-551`).
-6. `_resolve_ask` skips the question if the executor already approved this exact call (`tool_guards.py:532-533`, `weebot/application/services/tool_approval.py:193-195`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:545`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:104-112, 173`), `ConsoleApproval` (TTY prompt, `tool_approval.py:136-160`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `tool_approval.py:115-128`). PENDING returns `pending_result` with `data["approval_required"]` (`tool_approval.py:280-297`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-41`, called at `weebot/application/agents/executor/_tool_batch.py:224`).
-7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:252-273`, called at `weebot/application/agents/executor/_tool_batch.py:242`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:596-626`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:223`).
+1. `ToolExecutor.execute_tool` (`weebot/application/agents/executor/_tool_executor.py:[stale 372-627]`) takes the timeout from the tool's `default_timeout_seconds` (`_tool_executor.py:424-428`), gets the egress guard (`_tool_executor.py:445`, `_get_egress_guard` `_tool_executor.py:298-330`), runs `guard.classify` (`_tool_executor.py:[stale 464-466]`) and, if a human approved there, records that call's fingerprint (`_tool_executor.py:500-509`). An egress this session already completed is not re-run: the ledger returns a replay note (`_tool_executor.py:481-499`). After untrusted content, a call that does more than read asks as well (`_tool_executor.py:[stale 513-529]`).
+2. It calls `self._tools.execute(...)` under `approval_scope(session_id, approved_call)` with an `asyncio.wait_for` timeout (`_tool_executor.py:552-558`).
+3. `ToolCollection.execute` dispatches to the tool, which for `bash`, `powershell`, `python_execute` and any financial or outbound tool is a `GuardedTool` (`weebot/application/services/tool_guards.py:43, 567-588`).
+4. `GuardedTool.execute` (`tool_guards.py:499-530`) runs `GuardChain.evaluate`: every guard is asked, the most restrictive verdict wins, a guard that raises yields DENY (`tool_guards.py:410-435`). The full chain is BashGuard, CommandSecurityAnalyzer, ExecApprovalPolicy, financial, outbound and (optionally) egress adapters (`tool_guards.py:438-451`); the first three only look at `command` of `bash`/`powershell` (`tool_guards.py:41, 79-83`).
+5. Mode `shell_guard_mode` (default `enforce`, `weebot/config/settings.py:256-260`): in `enforce` a DENY returns an error and is never approvable (`weebot/application/services/tool_guards.py:514-518`); an ASK, or any ASK marked `enforce_always` by the outbound adapter (`tool_guards.py:357`), goes to `_resolve_ask` (`tool_guards.py:519-529`, `tool_guards.py:532-558`).
+6. `_resolve_ask` skips the question if the executor already approved this exact call (`tool_guards.py:539-540`, `weebot/application/services/tool_approval.py:211-213`), else asks `current_approval()` (`weebot/application/services/tool_guards.py:552`): `DenyApproval` (process default, `weebot/application/services/tool_approval.py:104-112, 173`), `ConsoleApproval` (TTY prompt, `tool_approval.py:154-178`) or `FlowPauseApproval` (answers PENDING, then consumes a single-use grant on retry, `tool_approval.py:133-146`). PENDING returns `pending_result` with `data["approval_required"]` (`tool_approval.py:298-315`), which the executor turns into `ToolApprovalEvent` + `WaitForUserEvent` (`weebot/application/agents/executor/_step_result_handler.py:16-41`, called at `weebot/application/agents/executor/_tool_batch.py:226`).
+7. The LLM sees `str(result)`, fenced unless the tool's `OutputTrust` is `LOCAL` (`weebot/application/agents/executor/_base.py:252-273`, called at `weebot/application/agents/executor/_tool_batch.py:245`); a non-error `EXTERNAL` result also taints the session (`_tool_executor.py:607-637`). `result.data` goes to the executor's `_facts`, not to the model (`weebot/application/agents/executor/_tool_batch.py:225`).
 
 Consequences (read from source, not run):
 - Only `output`/`error` reach the model. A tool that puts its payload only in `data` gives the agent nothing to act on; see the WebTools card (`search_images`).
@@ -43,8 +43,8 @@ Consequences (read from source, not run):
 - `error_result(error, data=...)` puts `data` into `metadata["data"]`, not `data`, because `data` is not a parameter (`weebot/domain/models/tool_result.py:95-108`).
 
 ## Connected to
-- **Built by** `RoleBasedToolRegistry.create_tool_collection*`, which wraps with `guard_tools(..., include_egress=False)` (`weebot/application/services/tool_registry.py:543-545`); `interfaces/factories.py:322-398`, which wraps again after MCP/Apify tools join and fails closed without the guard (`interfaces/factories.py:388-395`); the DI `guard_tools` registration (`weebot/application/di/__init__.py:298-303`); the MCP server, with egress included (`weebot/mcp/server.py:269-276, 388-392`). Empty collections: `cqrs/handlers/execute_step_handler.py:26, 69`, `di/__init__.py:490`.
-- **Used by** `ToolExecutor` (above); teardown from `plan_act_flow.py:289`, `agent_session_manager.py:45`, `dispatch_session_input.py:114, 140`.
+- **Built by** `RoleBasedToolRegistry.create_tool_collection*`, which wraps with `guard_tools(..., include_egress=False)` (`weebot/application/services/tool_registry.py:544-546`); `interfaces/factories.py:326-402`, which wraps again after MCP/Apify tools join and fails closed without the guard (`interfaces/factories.py:392-399`); the DI `guard_tools` registration (`weebot/application/di/__init__.py:298-303`); the MCP server, with egress included (`weebot/mcp/server.py:269-276, 388-392`). Empty collections: `cqrs/handlers/execute_step_handler.py:26, 69`, `di/__init__.py:490`.
+- **Used by** `ToolExecutor` (above); teardown from `plan_act_flow.py:289`, `agent_session_manager.py:45`, `dispatch_session_input.py:141, 141`.
 - **Related:** the ExecTools and WebTools cards (concrete tools), the RoleBasedToolRegistry card, the BashGuard / ExecApprovalPolicy / EgressGuard / ApprovalManager cards, `call_fingerprint` (`weebot/core/approval.py:126`).
 - **Looks like but is not:** `ApprovalManager` itself, which only stores grants (`tool_approval.py:94`).
 
@@ -53,7 +53,7 @@ Consequences (read from source, not run):
 **Does not hit:** which role sees a tool (registry table); the rules inside BashGuard / ExecApprovalPolicy.
 
 ## Surfaces
-Every agent tool call; the approval prompt in the CLI and the web UI pause, which shows every argument, redacted, with both ends of anything long (`tool_approval.py:243-277`, audit R15); MCP clients via `run_mcp.py`.
+Every agent tool call; the approval prompt in the CLI and the web UI pause, which shows every argument, redacted, with both ends of anything long (`tool_approval.py:261-295`, audit R15); MCP clients via `run_mcp.py`.
 
 ## See
 `weebot/domain/models/base_tool.py`, `weebot/application/models/tool_collection.py`, `weebot/application/services/tool_guards.py`

@@ -120,6 +120,8 @@ async def create_session(
     context: dict[str, Any] = {"last_prompt": body.prompt, "model": body.model}
     if body.ponytail_mode is not None:
         context["ponytail_mode"] = body.ponytail_mode
+    if body.execution_mode is not None:
+        context["execution_mode"] = body.execution_mode
 
     # Override user_id with the authenticated identity
     current_user = await current_principal(http_request)
@@ -366,6 +368,7 @@ async def run_session(
                 model=opts.model,
                 ponytail_mode=opts.ponytail_mode,
                 steering=steering,
+                execution_mode=opts.execution_mode,
             )
             session = await task_runner.start_session(session, factory)
         except Exception:
@@ -446,6 +449,7 @@ async def send_session_input(
         state_repo,
         model=request.model,
         client_msg_id=request.client_msg_id,
+        execution_mode=request.execution_mode,
     )
     logger.info("Dispatched %s input for session %s", result.verb, session_id)
     return {"verb": result.verb, "session": await _respond(http_request, result.session)}
@@ -459,6 +463,7 @@ async def _dispatch_input(
     *,
     model: str | None = None,
     client_msg_id: str | None = None,
+    execution_mode: str | None = None,
 ):
     """Route *text* to the start / resume / steer / chat strategy for *session*."""
     from weebot.application.ports.event_bus_port import EventBusPort
@@ -477,6 +482,7 @@ async def _dispatch_input(
         text=text,
         client_msg_id=client_msg_id,
         model=model,
+        execution_mode=execution_mode,
         state_repo=state_repo,
         task_runner=container.get(TaskRunnerPort),
         llm=container.get(LLMPort),

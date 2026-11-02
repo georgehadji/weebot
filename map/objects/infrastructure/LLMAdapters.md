@@ -5,8 +5,8 @@ code: AdapterFactory, ResilientLLMAdapter
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-11-01
-commit: 4f76c44f
+verified: 2026-11-02
+commit: db304f26
 ---
 
 # LLM adapters
@@ -32,7 +32,7 @@ Retry policy is built per call (`_retry_for_one_call`, `resilient_adapter.py:364
 Configuration is read from environment variables in the factory (`LLM_TIMEOUT`, `LLM_ENABLE_CIRCUIT_BREAKER`, `LLM_ENABLE_RETRY`, `LLM_ENABLE_CACHING`, `weebot/infrastructure/adapters/llm/adapter_factory.py:99-104, 109-122`); provider keys come from `WeebotSettings` first, then `os.getenv` (`weebot/infrastructure/adapters/llm/adapter_factory.py:408-439`). One flag, `LLM_ENABLE_CACHING`, switches both prompt caching and response caching (`weebot/infrastructure/adapters/llm/adapter_factory.py:189-194`).
 
 ## Bulkhead (outside this layer)
-`FactoriesMixin._bounded_llm` wraps every LLM the container builds in `BoundedLLMAdapter`, so each `chat()` takes a slot in the shared `LLMPool` and logs one `llm_call` record (`weebot/application/di/_factories.py:133-148`; `weebot/application/strategies/llm_pool.py:62-290`). A call already inside the cascade's slot passes through (`llm_pool.py:117-149`). Code that needs the concrete adapter calls `unwrap_llm` (`llm_pool.py:348-353`; `weebot/interfaces/web/main.py:267, 370`). Pinned by `tests/stress/test_llm_bulkhead.py:171`.
+`FactoriesMixin._bounded_llm` wraps every LLM the container builds in `BoundedLLMAdapter`, so each `chat()` takes a slot in the shared `LLMPool` and logs one `llm_call` record (`weebot/application/di/_factories.py:133-148`; `weebot/application/strategies/llm_pool.py:62-290`). A call already inside the cascade's slot passes through (`llm_pool.py:117-149`). Code that needs the concrete adapter calls `unwrap_llm` (`llm_pool.py:348-353`; `weebot/interfaces/web/main.py:277, 380`). Pinned by `tests/stress/test_llm_bulkhead.py:171`.
 
 ## Local models (off unless `OLLAMA_ENABLED`)
 `create_adapter` wraps the finished adapter in `LocalModelRouter` only when Ollama is on or `WEEBOT_FREE_ROLES` names a role with its key set (`weebot/infrastructure/adapters/llm/adapter_factory.py:219-231`, switches at `adapter_factory.py:442` and `adapter_factory.py:452`). The router sends `ollama/<tag>` ids to a second adapter built on first use and `free/<provider>/<model>` ids to that provider's adapter, stripping the prefix (`weebot/infrastructure/adapters/llm/local_router_adapter.py:57-62`); the `ollama` provider branch is an `OpenAIAdapter` on `OLLAMA_BASE_URL` with a dummy key (`adapter_factory.py:340-350`), and the `free` branch an `OpenAIAdapter` on the provider's URL with its own key, refusing without one so the OpenRouter key never leaks (`adapter_factory.py:352-366`); `ModelProvider.from_model_name` maps both prefixes (`weebot/config/model_registry.py:69-72`). `unwrap_llm` sees through the router via `_llm_wrapper`. `OLLAMA_ROLES` maps roles to tags, so a local and a `-cloud` tag can serve different roles (`weebot/config/local_models.py:31`); `WEEBOT_FREE_ROLES` maps roles to Groq or Gemini models (`weebot/config/free_models.py:80`). Both go first in the role cascade, Ollama then free (`weebot/config/model_refs.py:154`); a `-cloud` tag runs on Ollama's servers, and Gemini's free tier may train on prompts, so the cascade drops it, and any OpenRouter `adapter_factory.py:free` variant, for a session that read untrusted content (`keep_private`, `weebot/application/agents/executor/_session_scope.py:167-180`). Single-model callers skip free ids (`role_primary_model`, `weebot/config/model_refs.py:163-169`). Setup and role choice: `docs/OLLAMA.md`.

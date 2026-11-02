@@ -5,8 +5,8 @@ code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-11-01
-commit: 4f76c44f
+verified: 2026-11-02
+commit: db304f26
 ---
 
 # SQLiteStateRepository
@@ -39,7 +39,7 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `session_activity` | `cqrs/handlers/active_queries.py`, `interfaces/web/routers/chat_router.py` |
 | `create_session` | `interfaces/web/routers/sessions.py` |
 | `save_session_if_unchanged` | `scheduling/default_jobs.py` (compaction) |
-| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:313` |
+| `update_session_status` | `services/task_runner.py`; `cli/commands/flow.py:340` |
 | `delete_session` | `services/session_deletion_orchestrator.py` only |
 | `search_sessions` | `services/session_search_service.py` only |
 | `get_low_salience_entries` | `services/memory_lifecycle_service.py`, `services/user_model_consolidator.py` |

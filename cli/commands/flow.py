@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 
 import click
@@ -19,6 +20,7 @@ from weebot.interfaces.cli.agent_runner import AgentRunner
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 # Shared container — initialized lazily
 _container: Container | None = None
@@ -118,11 +120,19 @@ def flow() -> None:
 @click.argument("prompt")
 @click.option("--session-id", default=None, help="Session identifier")
 @click.option("--model", default=None, help="Override default LLM model")
-def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
+@click.option(
+    "--auto/--interactive",
+    default=False,
+    help="Run in AUTO mode — skip all human pauses (gates, approvals, HITL)",
+)
+def flow_run(prompt: str, session_id: str | None, model: str | None, auto: bool) -> None:
     """Run a one-shot PlanActFlow with the given prompt."""
 
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+        from weebot.domain.models.execution_mode import ExecutionMode
+
+        execution_mode = ExecutionMode.AUTO if auto else ExecutionMode.INTERACTIVE
 
         llm = _cli_llm(model or MODEL_BUDGET)
         state_repo = _get_state_repo()
@@ -142,15 +152,20 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
             subscriber = CLIEventSubscriber(use_rich=True)
 
             waiting = False
-            async for event in runner.run_prompt(prompt, session_id=run_session_id):
+            async for event in runner.run_prompt(
+                prompt, session_id=run_session_id, execution_mode=execution_mode
+            ):
                 await subscriber.on_event(event)
                 if isinstance(event, WaitForUserEvent):
+                    if auto:
+                        logger.info("AUTO mode: ignoring WaitForUserEvent, continuing")
+                        continue
                     waiting = True
                     break
             # Every question on the way gets asked: plan review, then e.g. the
             # constraint gate. Answering only the first one ended the command with
             # the session still waiting and nothing said.
-            while waiting:
+            while waiting and not auto:
                 # to_thread: a bare input() here would block the event loop,
                 # freezing the runner's own background tasks while it waits.
                 # The subscriber above already printed the question (F37).
@@ -166,7 +181,9 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
                     )
                     break
                 waiting = False
-                async for resume_event in runner.resume_session(run_session_id, answer):
+                async for resume_event in runner.resume_session(
+                    run_session_id, answer, execution_mode=execution_mode
+                ):
                     await subscriber.on_event(resume_event)
                     if isinstance(resume_event, WaitForUserEvent):
                         waiting = True
@@ -181,11 +198,19 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
 @flow.command("resume")
 @click.argument("session_id")
 @click.argument("answer")
-def flow_resume(session_id: str, answer: str) -> None:
+@click.option(
+    "--auto/--interactive",
+    default=False,
+    help="Resume in AUTO mode — skip all further human pauses",
+)
+def flow_resume(session_id: str, answer: str, auto: bool) -> None:
     """Resume a waiting session with a user answer."""
 
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+        from weebot.domain.models.execution_mode import ExecutionMode
+
+        execution_mode = ExecutionMode.AUTO if auto else ExecutionMode.INTERACTIVE
 
         llm = _cli_llm(MODEL_BUDGET)
         state_repo = _get_state_repo()
@@ -200,7 +225,9 @@ def flow_resume(session_id: str, answer: str) -> None:
         try:
             subscriber = CLIEventSubscriber(use_rich=True)
 
-            async for event in runner.resume_session(session_id, answer):
+            async for event in runner.resume_session(
+                session_id, answer, execution_mode=execution_mode
+            ):
                 await subscriber.on_event(event)
 
         finally:

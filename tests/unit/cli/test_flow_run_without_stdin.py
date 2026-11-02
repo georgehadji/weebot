@@ -20,10 +20,10 @@ class _Runner:
     def __init__(self, *a, **k):
         pass
 
-    async def run_prompt(self, prompt, session_id=None):
+    async def run_prompt(self, prompt, session_id=None, execution_mode=None):
         yield WaitForUserEvent(question="Plan ready. Approve?")
 
-    async def resume_session(self, session_id, answer):
+    async def resume_session(self, session_id, answer, execution_mode=None):
         _Runner.resumed.append(answer)
         if False:
             yield None
@@ -60,7 +60,7 @@ def test_closed_stdin_leaves_the_session_waiting(monkeypatch):
 class _TwoQuestions(_Runner):
     """Plan review, then a constraint-gate pause, then done."""
 
-    async def resume_session(self, session_id, answer):
+    async def resume_session(self, session_id, answer, execution_mode=None):
         _Runner.resumed.append(answer)
         if len(_Runner.resumed) == 1:
             yield WaitForUserEvent(question="Step may violate a constraint. Proceed?")

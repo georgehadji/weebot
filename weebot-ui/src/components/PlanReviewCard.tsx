@@ -2,14 +2,15 @@
 
 import { Circle, Edit3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { PlanReviewEvent } from "@/types/events";
 
 interface PlanReviewCardProps {
   event: PlanReviewEvent;
+  onReply?: (text: string) => void;
 }
 
-export function PlanReviewCard({ event }: PlanReviewCardProps) {
+export function PlanReviewCard({ event, onReply }: PlanReviewCardProps) {
   const steps = event.plan_data?.steps ?? [];
 
   return (
@@ -38,13 +39,14 @@ export function PlanReviewCard({ event }: PlanReviewCardProps) {
             </li>
           ))}
         </ol>
-        <p className="mt-3 text-xs text-muted-foreground italic">
-          Type{" "}
-          <Badge variant="outline" className="text-xs px-1 py-0">
-            approve
-          </Badge>{" "}
-          below to start execution, or describe any changes needed.
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => onReply?.("approve")} disabled={!onReply}>
+            Approve plan
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Or use the composer below to describe changes.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

@@ -14,6 +14,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.application.services.language_detector import LanguageDetector
 from weebot.domain.models.event import AgentEvent, WaitForUserEvent
+from weebot.domain.models.execution_mode import ExecutionMode
 
 _log = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class AgentRunner:
         session_id: str | None = None,
         user_id: str = "cli-user",
         agent_id: str = "weebot-cli",
+        execution_mode: ExecutionMode = ExecutionMode.INTERACTIVE,
     ) -> AsyncGenerator[AgentEvent, None]:
         # ── Enhancement 7: Detect language ──
         import importlib as _il
@@ -202,6 +204,7 @@ class AgentRunner:
                 mediator=self._mediator,
                 steering=self._steering,
                 state_repo=self._state_repo,
+                execution_mode=execution_mode,
             )
             # Store the route in session context for audit and traceability
             session = session.model_copy(
@@ -229,6 +232,7 @@ class AgentRunner:
                 mediator=self._mediator,
                 steering=self._steering,
                 state_repo=self._state_repo,
+                execution_mode=execution_mode,
             )
 
         async for event in flow.run(prompt):
@@ -262,7 +266,10 @@ class AgentRunner:
             self._print_behavior_summary(final_stats)
 
     async def resume_session(
-        self, session_id: str, answer: str
+        self,
+        session_id: str,
+        answer: str,
+        execution_mode: ExecutionMode = ExecutionMode.INTERACTIVE,
     ) -> AsyncGenerator[AgentEvent, None]:
         """Resume a waiting session by injecting a user answer.
 
@@ -305,6 +312,7 @@ class AgentRunner:
             mediator=self._mediator,
             steering=self._steering,
             state_repo=self._state_repo,
+            execution_mode=execution_mode,
         )
 
         async for event in flow.run(answer):

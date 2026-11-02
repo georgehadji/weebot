@@ -95,6 +95,7 @@ def build_flow(
     profile_name: str | None = None,
     max_iterations: int | None = None,
     max_step_repetitions: int | None = None,
+    execution_mode=None,
 ) -> BaseFlow:
     """Factory for creating agent flows.
 
@@ -163,6 +164,11 @@ def build_flow(
             )
             if value is not None
         }
+        if execution_mode is not None:
+            # AUTO on a plain CLI/web run: no plan review, no gates, no approvals.
+            from weebot.domain.models.execution_mode import ExecutionMode
+
+            limits["execution_mode"] = ExecutionMode.from_flag(str(execution_mode))
         return PlanActFlow(
             **limits,
             llm=llm,

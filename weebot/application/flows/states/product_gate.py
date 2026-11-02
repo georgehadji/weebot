@@ -96,6 +96,14 @@ class ProductGateState(FlowState):
         from weebot.application.flows.states.planning import PlanningState
         from weebot.application.services.product_gate_analyzer import ProductGateAnalyzer
 
+        # ── AUTO execution mode: never pause for clarification ─────
+        from weebot.application.flows.states._execution_gates import _is_auto_mode
+
+        if _is_auto_mode(context):
+            logger.info("Product gate skipped: AUTO execution mode (no human pauses)")
+            context.set_state(PlanningState())
+            return
+
         # ── Skip check: trivial prompts bypass the gate ───────────
         if not self._resume_with and _is_trivial(prompt):
             logger.debug("Product gate skipped: trivial prompt (%d words)", len(prompt.split()))
