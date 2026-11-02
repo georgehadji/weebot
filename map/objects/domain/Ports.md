@@ -6,7 +6,7 @@ cluster: domain
 universe: live
 status: verified
 verified: 2026-10-31
-commit: f238f23a
+commit: 993e7a90
 ---
 
 # Ports
@@ -21,7 +21,7 @@ Dependency inversion: application code types against the port, and an adapter is
 
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
-| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:182` (factory `di/_factories.py:246`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:112-118`) |
+| ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:182` (factory `di/_factories.py:246`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:113-119`) |
 | ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:104-160` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:171` |
 | BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:37` |

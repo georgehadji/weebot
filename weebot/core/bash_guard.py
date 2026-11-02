@@ -17,6 +17,7 @@ from typing import Any
 
 from weebot.core.encoded_command import LONG_FORM as ENCODED_LONG_FORM
 from weebot.core.encoded_command import SHORT_FORM as ENCODED_SHORT_FORM
+from weebot.core.shell_segments import strip_escapes
 
 _log = logging.getLogger(__name__)
 
@@ -556,9 +557,12 @@ class BashGuard:
         command = command.strip()
         checks: list[SafetyCheck] = []
         max_risk = RiskLevel.SAFE
+        # PowerShell drops a backtick inside a word, so `Invoke-Ex`pression` runs the same as
+        # the plain spelling: read every pattern against both (audit F29).
+        texts = (command, strip_escapes(command))
 
         for compiled_pattern, risk, desc, suggestion in self._compiled_patterns:
-            if compiled_pattern.search(command):
+            if any(compiled_pattern.search(t) for t in texts):
                 check = SafetyCheck(
                     pattern=compiled_pattern.pattern,
                     risk_level=risk,

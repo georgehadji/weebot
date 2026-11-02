@@ -386,6 +386,7 @@ jobs:
         run: |
           export OPENROUTER_API_KEY=ci-test-key
           export ANTHROPIC_API_KEY=ci-test-key
+          export WEEBOT_API_KEY=ci-smoke-api-key
           docker compose -f docker-compose.yml up -d --wait
       - name: Verify API health
         run: |
@@ -398,6 +399,17 @@ jobs:
           done
           echo "Health check failed after 10 retries"
           exit 1
+      - name: Verify an authenticated API call works from outside loopback
+        # /api/health is open, so it cannot show that the key reaches the container.
+        # The runner calls through the published port, which the API sees as non-loopback.
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "X-API-Key: ci-smoke-api-key" http://localhost:8000/api/sessions)
+          echo "GET /api/sessions with the key -> HTTP $code"
+          test "$code" = "200"
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/sessions)
+          echo "GET /api/sessions without a key -> HTTP $code"
+          test "$code" = "401" || test "$code" = "403"
       - name: Check services running
         if: always()
         run: docker compose ps

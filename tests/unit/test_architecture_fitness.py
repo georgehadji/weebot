@@ -2092,3 +2092,21 @@ def test_tool_file_writes_go_through_the_write_rule():
         + ", ".join(offenders)
     )
 
+
+
+def test_key_compares_go_through_safe_equals():
+    """A raw ``hmac.compare_digest`` on header text raises TypeError for non-ASCII input.
+
+    ``weebot.core.secret_compare.safe_equals`` encodes both sides first, so a sixth call site
+    cannot bring the 500 back.
+    """
+    allowed = {ROOT / "core" / "secret_compare.py"}
+    offenders = [
+        str(p.relative_to(ROOT.parent))
+        for p in _walk_py(ROOT)
+        if p not in allowed and "compare_digest(" in _source(p)
+    ]
+    assert not offenders, (
+        "Use weebot.core.secret_compare.safe_equals instead of hmac.compare_digest:\n"
+        + "\n".join(offenders)
+    )

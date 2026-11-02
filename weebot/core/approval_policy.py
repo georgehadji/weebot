@@ -13,12 +13,19 @@ import logging
 import os
 from pathlib import Path
 import re
-import shlex
 import types
 from dataclasses import dataclass
 from enum import Enum
 
-from weebot.core.shell_segments import SegmentSyntax, split_segments
+from weebot.core.shell_segments import (
+    SegmentSyntax,
+    after_directory_change,
+    has_dynamic_command_name,
+    parse_word,
+    split_segments,
+    strip_escapes,
+    tokenize,
+)
 from weebot.core.shell_segments import inline_literal_vars as _inline_literal_vars
 
 logger = logging.getLogger(__name__)
@@ -427,8 +434,20 @@ class ExecApprovalPolicy:
         # `Format-Volume D; rm x` was asked about instead of denied.
         segments = _inline_literal_vars(split_segments(command, syntax=syntax))
         chained = len(segments) > 1
-        decisions = [self._evaluate_segment(segment, chained, cwd) for segment in segments]
+        moved = after_directory_change(segments)
+        decisions = [
+            self._evaluate_segment(segment, chained, cwd, after_cd=after_cd)
+            for segment, after_cd in zip(segments, moved, strict=True)
+        ]
         worst = max(decisions, key=lambda d: d.rank, default=_NO_MATCH)
+        # `&` is a separator, so a built command name (`& ("Invoke-" + "Expression")`) is only
+        # whole in the command, not in any one segment (F29).
+        if worst.rank == _RANK[ApprovalMode.AUTO_APPROVE] and has_dynamic_command_name(command):
+            worst = _SegmentDecision(
+                _RANK[ApprovalMode.ALWAYS_ASK],
+                "The command's name is built at run time, so no rule can read it.",
+                "Run the command by its literal name.",
+            )
 
         if worst.rank == _RANK[ApprovalMode.DENY]:
             return ApprovalResult(
@@ -462,13 +481,13 @@ class ExecApprovalPolicy:
         segments = _inline_literal_vars(split_segments(command))
         chained = len(segments) > 1
         return [
-            s for s in segments
-            if not self._evaluate_segment(s, chained, cwd).matched
+            s for s, after_cd in zip(segments, after_directory_change(segments), strict=True)
+            if not self._evaluate_segment(s, chained, cwd, after_cd=after_cd).matched
             and not is_read_only_segment(s)
         ]
 
     def _evaluate_segment(
-        self, segment: str, chained: bool, cwd: str | None = None
+        self, segment: str, chained: bool, cwd: str | None = None, *, after_cd: bool = False
     ) -> _SegmentDecision:
         """Judge one segment.
 
@@ -478,20 +497,36 @@ class ExecApprovalPolicy:
         the Output\\ rule above the blanket rule they refine. With no rule,
         a destructive keyword in a chained command still asks.
         """
+        # PowerShell drops a backtick inside a word, so `Invoke-Ex`pression` runs the same as
+        # the plain spelling: every rule is read against both texts (audit F29).
+        texts = (segment, plain) if (plain := strip_escapes(segment)) != segment else (segment,)
         seg_lower = segment.lower()
         matches = [
             rule
             for i, rule in enumerate(self._rules)
             if (
-                self._compiled[i].search(segment)
+                any(self._compiled[i].search(t) for t in texts)
                 if rule.is_regex and i in self._compiled
-                else (not rule.is_regex and rule.pattern.lower() in seg_lower)
+                else (not rule.is_regex and any(rule.pattern.lower() in t.lower() for t in texts))
             )
         ]
         denies = [r for r in matches if r.mode is ApprovalMode.DENY]
         user_rule_matched = any(r in self._rules[: self._n_user_rules] for r in matches)
-        if not denies and not user_rule_matched and _output_scoped(segment, cwd):
+        # After a `cd` the segment runs somewhere else, so "Output\x" no longer means this
+        # workspace's Output/ (audit F3).
+        if (
+            not denies
+            and not user_rule_matched
+            and not after_cd
+            and _output_scoped(segment, cwd)
+        ):
             return _NO_MATCH
+        if not denies and has_dynamic_command_name(segment):
+            return _SegmentDecision(
+                _RANK[ApprovalMode.ALWAYS_ASK],
+                "The command's name is built at run time, so no rule can read it.",
+                "Run the command by its literal name.",
+            )
         if denies or matches:
             best = max(denies or matches, key=lambda r: len(r.pattern))
             # A warning that the command destroys a file outranks a milder hint from a
@@ -546,8 +581,15 @@ READ_ONLY_COMMANDS: frozenset[str] = frozenset({
     "gc", "gci", "gl", "gm", "gps", "select", "measure", "sls", "ft", "fl", "fw",
     "out-null", "sort-object", "where-object", "group-object", "write-output", "write-host",
     "test-path", "resolve-path", "split-path", "join-path", "out-string",
+    # Exact names, not a `get-` prefix: `get-info.cmd` and `Get-Credential` are not reads (F19).
+    "get-childitem", "get-content", "get-item", "get-itemproperty", "get-location",
+    "get-date", "get-process", "get-command", "get-help", "get-service", "get-filehash",
+    "get-member", "get-variable", "get-host", "get-psdrive", "get-alias", "get-module",
+    "get-random", "get-unique", "get-culture", "get-timezone", "get-computerinfo",
+    "select-object", "select-string", "select-xml", "measure-object", "compare-object",
+    "test-json", "format-table", "format-list", "format-wide", "format-hex", "format-custom",
+    "convertto-json", "convertfrom-json", "convertto-csv", "convertfrom-csv", "convertto-html",
 })
-_READ_ONLY_PREFIXES = ("get-", "select-", "measure-", "compare-", "test-", "format-")
 _READ_ONLY_GIT = frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files", "blame"})
 # A segment holding any of these can write or run code whatever its first word is.
 _NOT_PLAIN = ("::", ">", "{", "$(", chr(96))
@@ -583,7 +625,12 @@ def is_read_only_segment(segment: str) -> bool:
     if _VERSION.match(low):
         return True
     tokens = low.split()
-    first = tokens[0].strip("&.\"'").replace(chr(92), "/").rsplit("/", 1)[-1].removesuffix(".exe")
+    # A word that reaches the network (`\\host\share`) is not a local read, whatever the
+    # command; a built command name is not a name at all (F19, F29).
+    if any(parse_word(t).is_unc for t in tokens) or has_dynamic_command_name(seg):
+        return False
+    # The first word must be the bare, exact name: no path, no `.exe`, no `&` call operator.
+    first = tokens[0]
     if first == "git":
         sub = next((t for t in tokens[1:] if not t.startswith("-")), "")
         return sub in _READ_ONLY_GIT
@@ -591,7 +638,7 @@ def is_read_only_segment(segment: str) -> bool:
         return False
     if first == "env" and len(tokens) > 1:
         return False  # `env X` runs X
-    return first in READ_ONLY_COMMANDS or first.startswith(_READ_ONLY_PREFIXES)
+    return first in READ_ONLY_COMMANDS
 
 
 def stays_in_workspace(command: str, cwd: str | None = None) -> bool:
@@ -601,7 +648,8 @@ def stays_in_workspace(command: str, cwd: str | None = None) -> bool:
     """
     segments = _inline_literal_vars(split_segments(command))
     return bool(segments) and all(
-        is_read_only_segment(s) or _output_scoped(s, cwd) for s in segments
+        is_read_only_segment(s) or (not after_cd and _output_scoped(s, cwd))
+        for s, after_cd in zip(segments, after_directory_change(segments), strict=True)
     )
 
 
@@ -633,8 +681,12 @@ def _in_output(path: str, cwd: str | None = None) -> bool:
     The workspace is the process cwd. A relative path resolves against *cwd*, the directory
     the command will run in, so `Output\\x` in another project is not this Output (R01).
     """
+    # A word PowerShell would expand, split or send over the network is not the path its
+    # text shows: `Output/a.txt,C:/x` is a list, ``Output/.`./x`` is `Output/../x` (F3).
+    if not parse_word(path).is_plain:
+        return False
     p = path.strip("'\"").replace("\\", "/")
-    if not p or "$" in p or "~" in p or ".." in p.split("/"):
+    if not p or ".." in p.split("/"):
         return False
     workspace = Path(os.getcwd())
     base = workspace
@@ -672,11 +724,11 @@ def _output_scoped(segment: str, cwd: str | None = None) -> bool:
     guard = _IF_GUARD.match(segment.strip())
     if guard:
         return _in_output(guard.group("path"), cwd) and _output_scoped(guard.group("body"), cwd)
-    try:
-        tokens = shlex.split(segment, posix=False)
-    except ValueError:
+    words = tokenize(segment)
+    if not words or words[0].is_dynamic_name:
         return False
-    if not tokens or tokens[0].lower() not in _OUTPUT_CMDLETS:
+    tokens = [w.text for w in words]
+    if tokens[0].lower() not in _OUTPUT_CMDLETS:
         return False
     shape = _OUTPUT_CMDLETS[tokens[0].lower()]
     paths: list[str] = []

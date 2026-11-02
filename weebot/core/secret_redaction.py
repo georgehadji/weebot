@@ -22,6 +22,35 @@ from typing import Any
 
 from weebot.config.settings import get_settings
 
+# The one list of key names whose value is a secret, and the one pattern over it
+# (audit F28). `credential_sanitizer` calls `redact_key_values` instead of keeping a copy.
+SECRET_KEYS: tuple[str, ...] = (
+    "password", "passwd", "pwd", "secret", "token",
+    r"api[_-]?key", "apikey", r"api[_-]?secret",
+)
+# key, then `:` or `=`, then a value; the key may be quoted (`"password": ...` in JSON) and
+# so may the value, which then runs to its closing quote and may hold spaces.
+KEY_VALUE_RE = re.compile(
+    r"""(?P<key>(?:""" + "|".join(SECRET_KEYS) + r""")["']?)(?P<sep>\s*[:=]\s*)"""
+    r"""(?P<value>"[^"]*"|'[^']*'|[^\s"'&|;]+)""",
+    re.IGNORECASE,
+)
+
+
+def redact_key_values(text: str, marker: str) -> str:
+    """Replace the value after every secret key with *marker*, keeping the key, the
+    separator and the value's quotes. A value already redacted is left alone, so a second
+    pass with another marker does not rewrite the first."""
+
+    def _sub(match: re.Match) -> str:
+        value = match.group("value")
+        if "REDACTED" in value:
+            return match.group(0)
+        quote = value[0] if value[0] in "\"'" else ""
+        return f"{match.group('key')}{match.group('sep')}{quote}{marker}{quote}"
+
+    return KEY_VALUE_RE.sub(_sub, text)
+
 
 class SecretRedactor:
     """Redacts secrets from text using pattern matching and entropy analysis.
@@ -50,13 +79,6 @@ class SecretRedactor:
     _AWS_KEY_RE = re.compile(r"AKIA[0-9A-Z]{16}")
     _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
     _BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9._\-+/=]{20,}", re.IGNORECASE)
-    _PASSWORD_RE = re.compile(
-        r'(password|passwd|pwd|secret)\s*[:=]\s*["\']?([^\s"\'&|;]{4,})["\']?', re.IGNORECASE
-    )
-    _API_KEY_GENERIC = re.compile(
-        r"(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*[\"']?([A-Za-z0-9_\-]{16,})[\"']?",
-        re.IGNORECASE,
-    )
 
     # Shapes that are high-entropy and are never secrets in this codebase. The
     # entropy heuristic cannot tell them from a token, because there is nothing
@@ -136,9 +158,8 @@ class SecretRedactor:
         # Keep the label the text actually used. The old replacement was the
         # literal `password=[REDACTED]`, so `secret: x` and `pwd=x` both came
         # out claiming to be a password — a sanitiser rewriting the surrounding
-        # log rather than only the secret in it.
-        result = self._PASSWORD_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", result)
-        result = self._API_KEY_GENERIC.sub(r"[API_KEY_REDACTED]", result)
+        # log rather than only the secret in it. Key, separator and quotes stay.
+        result = redact_key_values(result, "[REDACTED]")
 
         # 2. PANs (credit card numbers) — validated with Luhn check
         result = self._redact_pans(result)

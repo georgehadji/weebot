@@ -77,11 +77,19 @@ class FakeTools:
         return SimpleNamespace(output_trust=OutputTrust.LOCAL)
 
 
+class _LedgerGuard(EgressGuard):
+    """These tests are about the ledger, not taint: a send must not taint the session and
+    block the next one. (F20 taints after a networked shell call; that has its own tests.)"""
+
+    def uses_network(self, tool_name, args) -> bool:
+        return False
+
+
 def _guard(approved: bool = True) -> EgressGuard:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = Path(f.name)
     path.write_text(json.dumps({"api.example.com": 0.0} if approved else {}))
-    return EgressGuard(allowlist=RecipientAllowlist(path))
+    return _LedgerGuard(allowlist=RecipientAllowlist(path))
 
 
 def _executor(store, tools=None, step="step-2", description="Send the weekly report", guard=None):

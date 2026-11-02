@@ -19,7 +19,7 @@ stored key; ``tests/unit/security/test_api_key_golden_vectors.py`` pins them.
 from __future__ import annotations
 
 import hashlib
-import hmac
+from weebot.core.secret_compare import safe_equals
 import os
 import secrets
 
@@ -58,7 +58,7 @@ def hash_key(raw_key: str) -> tuple[str, str]:
 def verify_key(raw_key: str, stored_hash_hex: str, salt_hex: str) -> bool:
     """Verify a raw key against a stored scrypt hash and salt.
 
-    Uses ``hmac.compare_digest`` for constant-time comparison.
+    Uses ``safe_equals`` for constant-time comparison.
     """
     dk = hashlib.scrypt(
         raw_key.encode("utf-8"),
@@ -68,7 +68,7 @@ def verify_key(raw_key: str, stored_hash_hex: str, salt_hex: str) -> bool:
         p=SCRYPT_P,
         dklen=SCRYPT_DKLEN,
     )
-    return hmac.compare_digest(dk.hex(), stored_hash_hex)
+    return safe_equals(dk.hex(), stored_hash_hex)
 
 
 def generate_raw_key() -> str:

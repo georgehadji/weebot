@@ -5,8 +5,8 @@ code: WebSearchTool, ScraperTool, MoliFetchTool, VaneSearchTool, AgentReachTool,
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-31
-commit: fe394636
+verified: 2026-11-01
+commit: d3269de6
 ---
 
 # WebTools
@@ -48,7 +48,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Built by** `RoleBasedToolRegistry`: `set_config` for `spacescraper`, `moli_fetch`, `agent_reach`; `set_rerank` for `web_search`; collaborators for `knowledge` and `ocr` (`weebot/application/services/tool_registry.py:446-531`, `weebot/application/di/_factories.py:540-587`).
-- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `weebot/core/trust_boundary.py:74`, `must_taint` `weebot/core/trust_boundary.py:79`, `wrap_untrusted` `weebot/core/trust_boundary.py:107`) through the executor (`weebot/application/agents/executor/_base.py:252-274`, `weebot/application/agents/executor/_tool_executor.py:584-618`). A tool that declares nothing is `EXTERNAL`.
+- **Fenced and tainted by** `weebot/core/trust_boundary.py` (`must_fence` `weebot/core/trust_boundary.py:74`, `must_taint` `weebot/core/trust_boundary.py:79`, `wrap_untrusted` `weebot/core/trust_boundary.py:118`) through the executor (`weebot/application/agents/executor/_base.py:252-274`, `weebot/application/agents/executor/_tool_executor.py:596-626`). A tool that declares nothing is `EXTERNAL`.
 - **Related:** the BaseTool card (call path), the EgressGuard card, the Browser card (`advanced_browser`, `camofox_browser`).
 - **Looks like but is not:** `web_scraper`, `screenshot_ocr`, `youtube_download`: other tools, each declaring its own `output_trust` in its module, not covered here.
 

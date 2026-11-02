@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from weebot.core.secret_compare import safe_equals
 import logging
 import time
 
@@ -68,7 +69,7 @@ class SlackAdapter(GatewayAdapter):
                 self._signing_secret.encode("utf-8"), sig_basestring.encode("utf-8"), hashlib.sha256
             ).hexdigest()
         )
-        return hmac.compare_digest(expected, signature)
+        return safe_equals(expected, signature)
 
     def parse_event(self, payload: dict) -> GatewayMessage | None:
         """Extract a GatewayMessage from a Slack Events API payload."""

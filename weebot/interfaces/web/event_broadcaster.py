@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from weebot.application.ports.event_publisher_port import EventPublisherPort
-from weebot.domain.models.event import AgentEvent, SessionPresenceEvent
+from weebot.domain.models.event import AgentEvent
 from .websocket import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -51,10 +51,9 @@ class WebSocketEventBroadcaster(EventPublisherPort):
     @staticmethod
     def _presence_owner(event: AgentEvent) -> str | None:
         from weebot.interfaces.web.auth import ownership_enforced
+        from weebot.interfaces.web.event_visibility import presence_owner
 
-        if isinstance(event, SessionPresenceEvent) and event.owner_user_id and ownership_enforced():
-            return event.owner_user_id
-        return None
+        return presence_owner(event, ownership_enforced())
 
     def _event_to_dict(self, event: AgentEvent) -> dict[str, Any]:
         """Convert AgentEvent to a JSON-safe dictionary.

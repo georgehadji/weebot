@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from weebot.core.secret_compare import safe_equals
 import logging
 from typing import Any
 
@@ -89,7 +90,7 @@ class WhatsAppAdapter(GatewayAdapter):
         expected = (
             "sha256=" + hmac.new(self._app_secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
         )
-        return hmac.compare_digest(expected, signature)
+        return safe_equals(expected, signature)
 
     async def process_message(self, message: GatewayMessage) -> str:
         """Run an inbound WhatsApp message through PlanActFlow.

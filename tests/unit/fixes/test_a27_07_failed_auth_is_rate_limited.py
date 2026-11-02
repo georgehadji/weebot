@@ -76,6 +76,33 @@ def test_the_real_app_puts_the_limiter_outside_auth_and_the_body_limit_next():
     from weebot.interfaces.web.body_limit import BodyLimitMiddleware
     from weebot.interfaces.web.main import create_app
 
+    from weebot.interfaces.web.host_guard import HostGuardMiddleware
+
     classes = [m.cls for m in create_app().user_middleware]
+    # The host guard sits outside everything: a foreign Host never reaches the limiter, and it
+    # is not a key-guessing path. The limiter-then-body-limit order is what this test pins.
+    assert classes[0] is HostGuardMiddleware
+    classes = classes[1:]
     assert classes[0] is RateLimitMiddleware
     assert classes[1] is BodyLimitMiddleware
+
+
+def test_rotating_bad_keys_on_a_health_subpath_also_hit_429():
+    """/api/health/status needs a key. A prefix match on "/api/health" made it "unlimited",
+    which returned before the failure budget, so guesses against it were never counted."""
+    app = FastAPI()
+
+    @app.get("/api/health/status")
+    async def status():
+        return {"ok": True}
+
+    app.add_middleware(_KeyGate)
+    app.add_middleware(RateLimitMiddleware, enabled=True)
+    client = TestClient(app)
+
+    codes = [
+        client.get("/api/health/status", headers={"X-API-Key": f"guess-{i}"}).status_code
+        for i in range(30)
+    ]
+    assert codes[:10] == [401] * 10
+    assert 429 in codes[10:]

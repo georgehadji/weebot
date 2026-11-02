@@ -5,8 +5,8 @@ code: CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment
 cluster: core
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-01
+commit: d3269de6
 ---
 
 # CommandSecurityAnalyzer
@@ -14,15 +14,16 @@ commit: 85a51bdd
 A stateless, regex-and-statistics scanner that rates a shell command SAFE, SUSPICIOUS or DANGEROUS in four layers. It lives in `weebot/tools/`, not `weebot/core/`. `BashTool` calls it directly and the guard chain calls it through `AnalyzerAdapter`. It is a second, independent rule set next to `BashGuard`.
 
 ## Why this shape
-Defense in depth for the one tool that takes free-form shell text (`weebot/tools/bash_security.py:1-17`). Each layer is cheap and synchronous, and none calls an LLM. A single module-level instance is reused (`weebot/tools/bash_security.py:424-433`) because the class holds no state. Detections are data (`Rule` records with an id, level, layer and rationale, `weebot/tools/bash_security.py:51-59`), and a golden corpus pins the calibration.
+Defense in depth for the one tool that takes free-form shell text (`weebot/tools/bash_security.py:1-17`). Each layer is cheap and synchronous, and none calls an LLM. A single module-level instance is reused (`weebot/tools/bash_security.py:449-458`) because the class holds no state. Detections are data (`Rule` records with an id, level, layer and rationale, `weebot/tools/bash_security.py:52-60`), and a golden corpus pins the calibration.
 
 ## Shape
-- `CommandRiskLevel` has three levels, no BLOCKED (`weebot/tools/bash_security.py:33-38`). `SecurityAssessment(risk_level, layer_triggered, reason, details)` (`weebot/tools/bash_security.py:41-48`).
-- `analyze(command)` (`weebot/tools/bash_security.py:308-318`) runs layers 1 to 4 in order. It returns early only on DANGEROUS from layers 1 to 3; otherwise the layer 4 result is the answer.
-  1. **Patterns** (`LAYER1_RULES`, `weebot/tools/bash_security.py:65-158`; matching `weebot/tools/bash_security.py:320-338`): 27 case-insensitive regexes. Base64 decode pipes, `eval $(`, pipe-to-shell, process substitution, download piped to a shell, hex escapes, nested backticks, and PowerShell `Invoke-Expression`, `iex`, `Net.WebClient...DownloadString`, hidden `Start-Process`, TCP reverse shell, reflective assembly load, encoded commands.
-  2. **Behaviour** (`weebot/tools/bash_security.py:346-363`): six download-then-execute regexes (`LAYER2_RULES`, `weebot/tools/bash_security.py:162-205`), then three token-set combinations (`LAYER2_COMBINATIONS`, `weebot/tools/bash_security.py:210-222`): download tool with shell or `chmod`, `base64`/`openssl` with `eval`/`exec`/`source`, `temp`/`tmp`/`mktemp` with `chmod`/`execute`.
-  3. **Encoded payloads** (`weebot/tools/bash_security.py:365-387`): each base64-looking run of 16+ characters is decoded (`weebot/tools/bash_security.py:270-286`, UTF-16LE included); DANGEROUS if it decodes to a shell command, or if it is an opaque blob (`weebot/tools/bash_security.py:289-297`): 40+ characters, not pure hex, has a digit or `+/=`, is not a path, raw Shannon entropy above 4.0 (`weebot/tools/bash_security.py:229-232`).
-  4. **Structure** (`weebot/tools/bash_security.py:389-417`): more than 5 chain operators (20 when a PowerShell cmdlet is present or the command starts with `$`, `weebot/tools/bash_security.py:241-248`) or a URL together with `|`, `&&`, `||` gives SUSPICIOUS. A short list of known-safe PowerShell pipelines (`weebot/tools/bash_security.py:251-257`) skips both checks when the command has no `;` or `&` (`weebot/tools/bash_security.py:392-395`).
+- `CommandRiskLevel` has three levels, no BLOCKED (`weebot/tools/bash_security.py:34-39`). `SecurityAssessment(risk_level, layer_triggered, reason, details)` (`weebot/tools/bash_security.py:42-49`).
+- `analyze(command)` (`weebot/tools/bash_security.py:312-336`) runs layers 1 to 4 in order. It returns early only on DANGEROUS from layers 1 to 3; otherwise the layer 4 result is the answer.
+- A command over `MAX_ANALYZED_COMMAND_CHARS` (8192) is refused as DANGEROUS ("too long to analyse"), not skipped: the rules are regexes that run on the event loop (audit F17). Layers 1 to 3 read the command and its backtick-stripped form (`shell_segments.strip_escapes`), so `Invoke-Ex`pression` is caught (F29); layer 4 rates a built command name (`& ("Invoke-" + "Expression")`) SUSPICIOUS.
+  1. **Patterns** (`LAYER1_RULES`, `weebot/tools/bash_security.py:66-159`; matching `weebot/tools/bash_security.py:338-356`): 27 case-insensitive regexes. Base64 decode pipes, `eval $(`, pipe-to-shell, process substitution, download piped to a shell, hex escapes, nested backticks, and PowerShell `Invoke-Expression`, `iex`, `Net.WebClient...DownloadString`, hidden `Start-Process`, TCP reverse shell, reflective assembly load, encoded commands.
+  2. **Behaviour** (`weebot/tools/bash_security.py:364-381`): six download-then-execute regexes (`LAYER2_RULES`, `weebot/tools/bash_security.py:163-209`), then three token-set combinations (`LAYER2_COMBINATIONS`, `weebot/tools/bash_security.py:211-223`): download tool with shell or `chmod`, `base64`/`openssl` with `eval`/`exec`/`source`, `temp`/`tmp`/`mktemp` with `chmod`/`execute`.
+  3. **Encoded payloads** (`weebot/tools/bash_security.py:383-405`): each base64-looking run of 16+ characters is decoded (`weebot/tools/bash_security.py:274-290`, UTF-16LE included); DANGEROUS if it decodes to a shell command, or if it is an opaque blob (`weebot/tools/bash_security.py:293-301`): 40+ characters, not pure hex, has a digit or `+/=`, is not a path, raw Shannon entropy above 4.0 (`weebot/tools/bash_security.py:230-233`).
+  4. **Structure** (`weebot/tools/bash_security.py:407-442`): more than 5 chain operators (20 when a PowerShell cmdlet is present or the command starts with `$`, `weebot/tools/bash_security.py:245-252`) or a URL together with `|`, `&&`, `||` gives SUSPICIOUS. A short list of known-safe PowerShell pipelines (`weebot/tools/bash_security.py:255-261`) skips both checks when the command has no `;` or `&` (`weebot/tools/bash_security.py:417-420`).
 - Layers 1 to 3 can only return SAFE or DANGEROUS. SUSPICIOUS comes from layer 4 alone.
 
 How `BashTool` uses it (`weebot/tools/bash_tool.py:251-308`; a logged command is sanitised first, audit R23):
@@ -33,7 +34,7 @@ How `BashTool` uses it (`weebot/tools/bash_tool.py:251-308`; a logged command is
 Consequences (read from source, not run):
 - SUSPICIOUS never stops anything. The code comment says "handled by the approval policy below" (`bash_tool.py:280-281`), but `ExecApprovalPolicy.evaluate` is called with the command and cwd only, never with this verdict (`weebot/tools/bash_tool.py:397`). `AnalyzerAdapter` likewise maps SUSPICIOUS to ALLOW with a note (`application/services/tool_guards.py:118-149`).
 - The 1.2x entropy multiplier is gone (W3.6, F10). Hex digests and CamelCase identifiers pass; `tests/unit/fixes/test_f10_entropy_hex_digest.py` pins `git checkout <40-hex sha>` and `docker pull ...@sha256:<64-hex>`, and `tests/unit/tools/data/command_corpus.json` pins the rest of the calibration.
-- The `temp`/`tmp`/`mktemp` combination flags any command that contains one of those words and `chmod` or `execute` as a word (`weebot/tools/bash_security.py:221`).
+- The `temp`/`tmp`/`mktemp` combination flags any command that contains one of those words and `chmod` or `execute` as a word (`weebot/tools/bash_security.py:222`).
 - The `_layer4_semantic_llm_analysis` method, the unread `_DANGEROUS_OPERATORS` and the `bash_security -> model_selection` `.importlinter` exemption were deleted in W1.6.
 
 ## Connected to

@@ -23,6 +23,7 @@ except ImportError as _mcp_err:
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.application.services.composite_tool_builder import CompositeToolBuilder
 from weebot.core.activity_stream import ActivityStream
+from weebot.core.secret_compare import safe_equals
 from weebot.mcp.resources import (
     build_activity_json,
     build_costs_json,
@@ -87,9 +88,8 @@ class _APIKeyTokenVerifier:
         Uses hmac.compare_digest for constant-time comparison to prevent
         timing side-channel attacks on token validation.
         """
-        import hmac as _hmac
 
-        if not _hmac.compare_digest(token, self._expected):
+        if not safe_equals(token, self._expected):
             return None
         return AccessToken(token=token, client_id="weebot-mcp", scopes=[])
 
