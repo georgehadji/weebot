@@ -86,6 +86,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Web API bind address (0.0.0.0 to expose to network)"},
     {"var": "WEEBOT_PORT", "type": "int", "default": "8000",
      "desc": "Web API port number"},
+    {"var": "WEEBOT_WEB_RELOAD", "type": "bool", "default": "false",
+     "desc": "Restart the web API when Python files change. Leave this off while sessions run: a reload kills the running session mid-step"},
     {"var": "WEEBOT_CORS_ORIGIN", "type": "str", "default": "",
      "desc": "Additional CORS origin (besides localhost:3000 defaults)"},
     {"var": "WEEBOT_RATE_LIMIT_ENABLED", "type": "bool", "default": "true",

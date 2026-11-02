@@ -104,3 +104,29 @@ describe("history refetch keeps the timeline in the order the server stored it",
     expect(text()).toContain("first");
   });
 });
+
+describe("a failed session says why it stopped and how to continue", () => {
+  it("shows the server's interruption reason next to a Continue action", () => {
+    render(
+      <ConversationPane
+        sessionId="s1"
+        status="failed"
+        failureReason="interrupted: the server stopped while this session was running."
+        onSessionCreated={() => {}}
+      />
+    );
+    expect(screen.getByText(/interrupted: the server stopped/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
+  });
+
+  it("falls back to a plain explanation when no reason was stored", () => {
+    render(<ConversationPane sessionId="s1" status="failed" onSessionCreated={() => {}} />);
+    expect(screen.getByText(/stopped before finishing/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
+  });
+
+  it("is hidden while the session is not failed", () => {
+    render(<ConversationPane sessionId="s1" status="running" onSessionCreated={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  });
+});

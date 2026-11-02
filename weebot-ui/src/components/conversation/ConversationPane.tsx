@@ -13,8 +13,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { Composer, SessionLifecycleStatus } from "./Composer";
 import { EventRenderer, isRendered } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
@@ -44,6 +45,8 @@ interface ConversationPaneProps {
   sessionId: string | null;
   status: SessionLifecycleStatus;
   initialEvents?: AgentEvent[];
+  /** Why the run stopped; shown for a failed session so the next step is not a guess. */
+  failureReason?: string;
   model?: string;
   onSessionCreated: (sessionId: string) => void;
 }
@@ -52,6 +55,7 @@ export function ConversationPane({
   sessionId,
   status,
   initialEvents,
+  failureReason,
   model,
   onSessionCreated,
 }: ConversationPaneProps) {
@@ -202,6 +206,26 @@ export function ConversationPane({
       </div>
 
       {isRunning && sessionId && <RunControls sessionId={sessionId} />}
+
+      {status === "failed" && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 border-t bg-status-waiting/10 px-3 py-2 text-xs"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-waiting-fg" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            {failureReason || "This run stopped before finishing."}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => onReply("continue")}
+          >
+            Continue
+          </Button>
+        </div>
+      )}
 
       <Composer
         sessionId={sessionId}

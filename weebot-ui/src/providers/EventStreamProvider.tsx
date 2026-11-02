@@ -52,6 +52,8 @@ interface EventStreamContextValue {
   subscribeSession: (sessionId: string, listener: Listener) => () => void;
   subscribePresence: (listener: (event: SessionPresenceEvent) => void) => () => void;
   getSessionMode: (sessionId: string) => ConnectionMode;
+  /** Increments on each reconnect of the always-on presence socket (not the first open). */
+  streamEpoch: number;
 }
 
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -103,6 +105,8 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
   const presenceWsRef = useRef<WebSocket | null>(null);
   const presenceReconnectRef = useRef(0);
   const presenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceOpened = useRef(false);
+  const [streamEpoch, setStreamEpoch] = useState(0);
   const [, forceRender] = useState(0);
 
   // ── per-session connections ──────────────────────────────────────
@@ -270,6 +274,11 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
       ws.onopen = () => {
         presenceReconnectRef.current = 0;
+        // A reconnect means the server may have restarted while this tab was open:
+        // replaying presence is not guaranteed, so consumers refetch on the new epoch.
+        // The first open follows the page's own REST load and does not need a second one.
+        if (presenceOpened.current) setStreamEpoch((n) => n + 1);
+        else presenceOpened.current = true;
       };
       ws.onmessage = (evt) => {
         try {
@@ -329,8 +338,8 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
   }, [closeSessionConnection]);
 
   const value = useMemo<EventStreamContextValue>(
-    () => ({ subscribeSession, subscribePresence, getSessionMode }),
-    [subscribeSession, subscribePresence, getSessionMode]
+    () => ({ subscribeSession, subscribePresence, getSessionMode, streamEpoch }),
+    [subscribeSession, subscribePresence, getSessionMode, streamEpoch]
   );
 
   return <EventStreamContext.Provider value={value}>{children}</EventStreamContext.Provider>;

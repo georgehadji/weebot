@@ -33,7 +33,7 @@ interface CostChartProps {
   totalTokens: number;
 }
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
+const COLORS = ["#D97757", "#788C5D", "#6A9BCC", "#C46686", "#B0AEA5", "#C6613F"];
 
 export function CostChart({
   dailyCosts,
@@ -91,13 +91,26 @@ export function CostChart({
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={dailyCosts}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="date"
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+              />
+              <YAxis
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+              />
               <Tooltip
                 formatter={(value) => [`$${Number(value).toFixed(4)}`, "Cost"]}
+                contentStyle={{
+                  background: "hsl(var(--popover))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  color: "hsl(var(--popover-foreground))",
+                }}
               />
-              <Bar dataKey="cost" fill="#3b82f6" />
+              <Bar dataKey="cost" fill="#D97757" />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -121,7 +134,7 @@ export function CostChart({
                     `${name}: ${(percent ? percent * 100 : 0).toFixed(0)}%`
                   }
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="#D97757"
                   dataKey="cost"
                 >
                   {modelUsage.map((_, index) => (
@@ -131,7 +144,15 @@ export function CostChart({
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => `$${Number(value).toFixed(4)}`} />
+                <Tooltip
+                  formatter={(value) => `$${Number(value).toFixed(4)}`}
+                  contentStyle={{
+                    background: "hsl(var(--popover))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 8,
+                    color: "hsl(var(--popover-foreground))",
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
 

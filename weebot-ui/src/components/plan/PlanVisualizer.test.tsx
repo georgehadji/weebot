@@ -32,9 +32,9 @@ const step = (id: string, status: "pending" | "running" | "completed") => ({ id,
 describe("PlanVisualizer", () => {
   it("edges follow the plan when step statuses change (they were frozen at first render)", () => {
     const { rerender } = render(<PlanVisualizer steps={[step("a", "pending"), step("b", "pending")]} />);
-    expect(seen.edges[0].style?.stroke).toBe("#9ca3af");
+    expect(seen.edges[0].style?.stroke).toBe("hsl(var(--status-idle))");
     rerender(<PlanVisualizer steps={[step("a", "completed"), step("b", "running")]} />);
-    expect(seen.edges[0].style?.stroke).toBe("#22c55e");
+    expect(seen.edges[0].style?.stroke).toBe("hsl(var(--status-live))");
   });
 
   it("edges never reference a step that is no longer in the plan", () => {

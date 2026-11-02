@@ -39,24 +39,24 @@ export default function DebugPage() {
 
       <div style={{ marginBottom: 20 }}>
         <strong>Status: </strong>
-        <span style={{ color: isConnected ? "green" : "red" }}>
+        <span style={{ color: isConnected ? "#B6D39C" : "#F2A9A1" }}>
           {isConnected ? "CONNECTED" : "DISCONNECTED"}
         </span>
-        {error && <span style={{ color: "red", marginLeft: 10 }}>Error: {error}</span>}
+        {error && <span style={{ color: "#F2A9A1", marginLeft: 10 }}>Error: {error}</span>}
       </div>
 
       <div
         style={{
-          border: "1px solid #333",
+          border: "1px solid #30302E",
           padding: 10,
           height: 400,
           overflowY: "auto",
-          background: "#1a1a1a",
-          color: "#0f0",
+          background: "#0F0F0E",
+          color: "#BCD1CA",
           fontSize: 12,
         }}
       >
-        {logs.length === 0 && <div style={{ color: "#666" }}>No logs yet...</div>}
+        {logs.length === 0 && <div style={{ color: "#87867F" }}>No logs yet...</div>}
         {logs.map((log, i) => (
           <div key={i} style={{ marginBottom: 2 }}>
             {log}

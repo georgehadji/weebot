@@ -81,7 +81,7 @@ export default function SessionsPage() {
                         <CardTitle className="text-lg">
                           <Link
                             href={`/sessions/${session.id}`}
-                            className="transition-colors hover:text-primary"
+                            className="transition-colors hover:text-primary-text"
                           >
                             {session.title || "New session"}
                           </Link>

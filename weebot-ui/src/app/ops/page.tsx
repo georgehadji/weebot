@@ -337,20 +337,20 @@ export default function OpsPage() {
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[500px]">
-                <div className="font-mono text-xs space-y-0.5 bg-black text-green-400 p-4 rounded-lg min-h-[460px]">
+                <div className="font-mono text-xs space-y-0.5 bg-[hsl(var(--p-ink-1000))] text-[hsl(var(--p-cactus-300))] p-4 rounded-lg min-h-[460px]">
                   {logs.length === 0 ? (
-                    <div className="text-gray-500">
+                    <div className="text-[hsl(var(--p-ink-500))]">
                       Waiting for events… Start a session to see live output.
                     </div>
                   ) : (
                     logs.map((entry, i) => (
                       <div key={i} className="flex gap-2">
-                        <span className="text-gray-500 shrink-0">
+                        <span className="text-[hsl(var(--p-ink-500))] shrink-0">
                           {entry.timestamp.slice(11, 19)}
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-xs h-4 px-1 shrink-0 border-green-800 text-green-500"
+                          className="text-xs h-4 px-1 shrink-0 border-[hsl(var(--p-olive-700))] text-[hsl(var(--p-cactus-300))]"
                         >
                           {entry.type}
                         </Badge>

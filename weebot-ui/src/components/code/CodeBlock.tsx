@@ -28,15 +28,15 @@ export function CodeBlock({
   };
 
   return (
-    <div className="rounded-lg overflow-hidden bg-[#1e1e1e] border">
+    <div className="rounded-lg overflow-hidden bg-[#1F1E1D] border">
       {filename && (
-        <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b">
-          <span className="text-sm text-gray-400">{filename}</span>
+        <div className="flex items-center justify-between px-4 py-2 bg-[#262624] border-b">
+          <span className="text-sm text-[#B0AEA5]">{filename}</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleCopy}
-            className="h-8 text-gray-400 hover:text-white"
+            className="h-8 text-[#B0AEA5] hover:text-[#FAF9F5]"
           >
             {copied ? (
               <Check className="h-4 w-4 mr-1" />

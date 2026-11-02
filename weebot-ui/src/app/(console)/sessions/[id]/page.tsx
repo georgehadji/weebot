@@ -10,6 +10,7 @@ import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { useShellSlots } from "@/hooks/useShellSlots";
 import { useSessionPresence } from "@/hooks/useSessionPresence";
 import { applyPresence } from "@/hooks/useSessionList";
+import { useEventStreamContext } from "@/providers/EventStreamProvider";
 import { api } from "@/lib/api";
 import { AgentEvent, Session } from "@/types/events";
 
@@ -30,9 +31,14 @@ export default function SessionPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const { isConnected } = useSessionEvents(sessionId);
   const presence = useSessionPresence();
+  const { streamEpoch } = useEventStreamContext();
   // Applied at read time, so a status change that arrives before the REST
   // load finishes still shows once the session is in.
   const session = loadedSession && applyPresence(loadedSession, presence.get(sessionId));
+  const failureReason =
+    typeof session?.context?.extra?.failure_reason === "string"
+      ? session.context.extra.failure_reason
+      : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +72,9 @@ export default function SessionPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, reloadKey]);
+    // streamEpoch changes when the presence socket reconnects: the status loaded before
+    // the backend restarted is stale, so refetch it (and the events) then.
+  }, [sessionId, reloadKey, streamEpoch]);
 
   useShellSlots({
     title: loading ? "Loading session" : session ? session.title || "New session" : "Session not found",
@@ -103,6 +111,7 @@ export default function SessionPage() {
       sessionId={sessionId}
       status={toLifecycleStatus(session.status)}
       initialEvents={initialEvents}
+      failureReason={failureReason}
       onSessionCreated={(id) => router.push(`/sessions/${id}`)}
     />
   );

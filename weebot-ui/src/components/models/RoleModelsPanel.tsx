@@ -78,7 +78,7 @@ function RoleRow({
         Reset
       </Button>
       {error && (
-        <p role="alert" className="text-xs text-red-500 sm:basis-full">
+        <p role="alert" className="text-xs text-status-error-fg sm:basis-full">
           {error}
         </p>
       )}

@@ -22,6 +22,10 @@ vi.mock("@/hooks/useSessionPresence", async () => {
   const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l));
   return { useSessionPresence: () => useSyncExternalStore(subscribe, () => presence) };
 });
+// The page test renders the hook outside the real transport provider; no reconnect here.
+vi.mock("@/providers/EventStreamProvider", () => ({
+  useEventStreamContext: () => ({ streamEpoch: 0 }),
+}));
 
 const row = (id: string) => ({
   id, user_id: "u", agent_id: "a", status: "completed", title: `Title ${id}`, context: {},
