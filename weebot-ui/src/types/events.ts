@@ -80,6 +80,19 @@ export interface WaitForUserEvent extends BaseEvent {
   question: string;
 }
 
+/** A structured, one-call approval request. The following wait event is its text fallback. */
+export interface ToolApprovalEvent extends BaseEvent {
+  type: 'tool_approval';
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  risk_level: string;
+  reason: string;
+  prompt: string;
+  fingerprint: string;
+  /** Present only when allowing this first-time egress host is safe to offer. */
+  allow_always?: string | null;
+}
+
 export interface NotificationEvent extends BaseEvent {
   type: 'notification';
   text: string;
@@ -119,6 +132,7 @@ export type AgentEvent =
   | TitleEvent
   | DoneEvent
   | WaitForUserEvent
+  | ToolApprovalEvent
   | NotificationEvent
   | PlanReviewEvent
   | SessionPresenceEvent;

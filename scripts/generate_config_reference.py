@@ -187,6 +187,8 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},
+    {"var": "WEEBOT_PROXY_SERVER", "type": "str", "default": "",
+     "desc": "Proxy URL for Playwright browser sessions (e.g. http://127.0.0.1:9081 for Ladder)"},
     {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",
      "desc": "CDP endpoint of a running browser to connect to instead of launching Chromium, "
              "e.g. Lightpanda on http://127.0.0.1:9222. Fails closed: a proxy or headless=False "

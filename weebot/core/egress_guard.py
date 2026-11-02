@@ -386,7 +386,12 @@ class EgressGuard:
         self._allowlist = allowlist or RecipientAllowlist()
 
     def classify(
-        self, tool_name: str, args: dict[str, Any], untrusted_context_active: bool = False
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        untrusted_context_active: bool = False,
+        *,
+        local_python_safe: bool = False,
     ) -> EgressDecision:
         """Return an EgressDecision for the proposed tool call.
 
@@ -402,7 +407,7 @@ class EgressGuard:
         recipient, is_egress = self._detect_egress(tool_name, args)
         if not is_egress:
             recipient, is_egress = self._browser_egress(tool_name, args, untrusted_context_active)
-        if not is_egress and untrusted_context_active:
+        if not is_egress and untrusted_context_active and not local_python_safe:
             recipient, is_egress = self._network_capable(tool_name, args)
             decision.network_only = is_egress
         if not is_egress:

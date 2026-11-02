@@ -10,6 +10,7 @@ import logging
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.infrastructure.browser.session_manager import BrowserSessionManager
+from weebot.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -379,7 +380,8 @@ class AdvancedBrowserTool(BaseTool):
             return  # Already launched
         from weebot.application.ports.browser_port import BrowserConfig
 
-        config = BrowserConfig(headless=headless)
+        settings = get_settings()
+        config = BrowserConfig(headless=headless, proxy_server=settings.proxy_server)
         await self.browser.start(config)
         # Load session if specified
         if session_name:
@@ -496,7 +498,8 @@ class WebScraperTool(BaseTool):
 
             browser = self._new_browser()
             try:
-                await browser.start(BrowserConfig(headless=True))
+                settings = get_settings()
+                await browser.start(BrowserConfig(headless=True, proxy_server=settings.proxy_server))
                 nav = await browser.navigate(url, wait_until="networkidle", timeout=timeout / 1000)
                 # page.goto never raised on an HTTP error, and the body is still data;
                 # only "no page at all" (status 0 and not successful) is a failure.

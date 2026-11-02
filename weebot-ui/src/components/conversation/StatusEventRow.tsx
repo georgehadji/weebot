@@ -1,7 +1,14 @@
-import { AlertCircle, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, HelpCircle, ShieldCheck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { doneLabel } from "@/lib/announce";
-import { DoneEvent, ErrorEvent, NotificationEvent, WaitForUserEvent } from "@/types/events";
+import {
+  DoneEvent,
+  ErrorEvent,
+  NotificationEvent,
+  ToolApprovalEvent,
+  WaitForUserEvent,
+} from "@/types/events";
 
 export function ErrorRow({ event }: { event: ErrorEvent }) {
   return (
@@ -17,6 +24,44 @@ export function WaitForUserRow({ event }: { event: WaitForUserEvent }) {
     <div className="surface-waiting flex items-start gap-2 rounded-lg border p-3">
       <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-status-waiting-fg" aria-hidden="true" />
       <p className="text-sm whitespace-pre-wrap">{event.question}</p>
+    </div>
+  );
+}
+
+export function ToolApprovalRow({
+  event,
+  onReply,
+}: {
+  event: ToolApprovalEvent;
+  onReply?: (text: string) => void;
+}) {
+  // The backend prompt also serves the CLI, where typing yes/no is necessary. In the web UI
+  // the controls below replace that final instruction, so avoid telling the operator to type.
+  const prompt = event.prompt
+    .replace(/\s*Reply ['"]yes['"] to run this exact call once, or say what to do instead\.?\s*$/i, "")
+    .trim();
+  return (
+    <div className="surface-waiting rounded-lg border p-3" role="group" aria-label="Approval request">
+      <div className="flex items-start gap-2">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-status-waiting-fg" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Approval needed: {event.tool_name}</p>
+          {prompt && <p className="mt-1 whitespace-pre-wrap text-sm">{prompt}</p>}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => onReply?.("approve")} disabled={!onReply}>
+          Approve once
+        </Button>
+        {event.allow_always && (
+          <Button size="sm" variant="secondary" onClick={() => onReply?.("always")} disabled={!onReply}>
+            Always allow {event.allow_always}
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={() => onReply?.("no")} disabled={!onReply}>
+          Decline
+        </Button>
+      </div>
     </div>
   );
 }
