@@ -17,6 +17,10 @@ CHARS_PER_TOKEN: int = 4
 CODE_CHARS_PER_TOKEN: float = 3.5
 """Code characters per token (code is more token-efficient)."""
 
+IMAGE_PART_TOKENS: int = 1500
+"""Flat estimate for one image part of a message. Its base64 is not text: counting the
+characters made a screenshot look like 100k tokens (audit F15)."""
+
 # ========================================================================
 # Execution defaults
 # ========================================================================

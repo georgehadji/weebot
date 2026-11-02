@@ -24,9 +24,11 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4
 from weebot.config.token_bounds import completion_bound
-from weebot.core.error_classifier import ErrorClassifier
+from weebot.core.cascade_plan import build_cascade_plan
+from weebot.core.error_classifier import ErrorCategory, ErrorClassifier
 from weebot.application.strategies.llm_pool import unwrap_llm
 from weebot.application.agents.executor._session_scope import keep_private
+from weebot.application.services.context_tokenizer import ContextTokenizer
 
 # Import for ACR telemetry enrichment (Phase P0)
 from weebot.core.model_cascade_tracker import (
@@ -277,7 +279,7 @@ class CascadeExecutor:
         A cancelled non-streamed request still bills; the prompt is the part we can estimate,
         so the limit stays on the safe side without guessing the completion.
         """
-        prompt = sum(len(str(m.get("content") or "")) for m in messages) // 4
+        prompt = ContextTokenizer().estimate_messages_tokens(messages)
         await self._call_completed(model_id, prompt, 0, estimated=True)
 
     @staticmethod
@@ -291,20 +293,22 @@ class CascadeExecutor:
     # ── Single model call (with retry + pool) ───────────────────────
 
     @staticmethod
-    def _is_fast_fail_error(exc: Exception) -> bool:
-        msg = str(exc).lower()
-        return any(
-            kw in msg
-            for kw in (
-                "404",
-                "401",
-                "403",
-                "not found",
-                "unauthorized",
-                "permission denied",
-                "invalid api key",
-                "resource_not_found",
-            )
+    def _error_category(error: BaseException | str) -> ErrorCategory:
+        """`first_error` keeps the message text, not the exception, so accept either."""
+        return ErrorClassifier.classify(
+            error if isinstance(error, BaseException) else RuntimeError(error)
+        )
+
+    @staticmethod
+    def _is_fast_fail_error(exc: BaseException | str) -> bool:
+        """A bad key or a missing model fails the same way on every try.
+
+        Asks `ErrorClassifier`, which matches a status code only when it stands alone.
+        Bare substrings read `req_404abc` in a 429 body as a 404 (audit F13).
+        """
+        return CascadeExecutor._error_category(exc) in (
+            ErrorCategory.AUTH,
+            ErrorCategory.MODEL_UNAVAILABLE,
         )
 
     async def _cascade_try_chat(
@@ -405,19 +409,19 @@ class CascadeExecutor:
                     ),
                     timeout=effective,
                 )
-            if resp and (resp.content or resp.tool_calls):
+            # Meter before the reply is judged: an empty reply that carries usage is billed
+            # too (audit F14). Usage is declared but four adapters set it to None, so no `.get`.
+            _usage = (getattr(resp, "usage", None) or {}) if resp else {}
+            _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
+            _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
+            _cached = int(_usage.get("cached_tokens", 0) or 0)
+            answered = bool(resp and (resp.content or resp.tool_calls))
+            if answered or _prompt_tokens or _completion_tokens:
+                await self._call_completed(model_id, _prompt_tokens, _completion_tokens, _cached)
+            if answered:
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
                 logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
-                # `hasattr(resp, "usage")` was vacuous -- usage is a declared
-                # field, so it is always present -- and four adapters set it to
-                # None when a provider omits it, making `.get` raise on the
-                # success path. The adapters themselves already use the correct
-                # `getattr(response, "usage", None)` truthiness form.
-                _usage = getattr(resp, "usage", None) or {}
-                _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
-                _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
-                _cached = int(_usage.get("cached_tokens", 0) or 0)
                 self._record_decision(
                     model_name=model_id,
                     tier=tier,
@@ -434,7 +438,6 @@ class CascadeExecutor:
                     ),
                     task_category=task_category,
                 )
-                await self._call_completed(model_id, _prompt_tokens, _completion_tokens, _cached)
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
@@ -446,6 +449,7 @@ class CascadeExecutor:
                 error_message="empty response",
                 task_category=task_category,
             )
+            self._cascade_record_failure(model_id)
             return None
         except TimeoutError:
             elapsed = (_cascade_time.monotonic() - start) * 1000
@@ -477,8 +481,6 @@ class CascadeExecutor:
                     first_error[model_id] = str(exc)[:300] or type(exc).__name__
                 self._cascade_record_failure(model_id)
                 # Track server errors so we skip this model in the current cascade run
-                from weebot.core.error_classifier import ErrorCategory
-
                 if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
                     self._server_error_models.add(model_id)
                     logger.debug("Server error from %s — skipping for rest of cascade", model_id)
@@ -550,9 +552,6 @@ class CascadeExecutor:
             await self._acr_router.ensure_loaded()  # once per router; posteriors for route()
 
         role_cascade = get_model_cascade_for_role(self._agent_role)
-        role_primary = role_cascade[0]
-        role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
-        role_fallback2 = role_cascade[2] if len(role_cascade) > 2 else self._TIER3_MODEL
 
         # model_provider returns a list (ACR) or a single model (static router)
         task_model_raw = self._model_provider(description) if self._model_provider else None
@@ -594,14 +593,15 @@ class CascadeExecutor:
             return resp
 
         # ── Credit pre-check: filter OpenRouter models if low credits ──
-        all_models = list(
-            dict.fromkeys(
-                m
-                for m in (self._pinned_model, role_primary, *acr_models, task_model, role_fallback1)
-                if m
-            )
+        plan = build_cascade_plan(
+            role_cascade,
+            tier2=self._TIER2_MODEL,
+            tier3=self._TIER3_MODEL,
+            tier4=self._TIER4_MODEL,
+            pinned=self._pinned_model,
+            extra_probes=(*acr_models, task_model),
         )
-        within = self._within_budget(await self.get_credits_and_filter_direct(all_models))
+        within = self._within_budget(await self.get_credits_and_filter_direct(list(plan.probes)))
         filtered_models = keep_private(within)
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
@@ -686,7 +686,7 @@ class CascadeExecutor:
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [
             m
-            for m in keep_private(self._within_budget([role_fallback2, self._TIER4_MODEL]))
+            for m in keep_private(self._within_budget(list(plan.fallbacks)))
             if m
             and not self.cascade_is_tripped(m)
             and m not in parallel
@@ -704,7 +704,7 @@ class CascadeExecutor:
             fast_fail
             and first_error
             and all(
-                any(kw in (e or "").lower() for kw in ("404", "not found"))
+                self._error_category(e) is ErrorCategory.MODEL_UNAVAILABLE
                 for e in first_error.values()
             )
         ):

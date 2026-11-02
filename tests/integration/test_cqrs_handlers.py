@@ -122,7 +122,7 @@ class TestUpdatePlanHandler:
     ):
         handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
         cmd = UpdatePlanCommand(
-            session_id="nonexistent", updates={"reason": "retry"}, reason="retry"
+            session_id="nonexistent", reason="retry"
         )
         result = await handler.handle(cmd)
         assert not result.success
