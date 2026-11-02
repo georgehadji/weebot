@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { StateView } from "@/components/common/StateView";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { cn } from "@/lib/utils";
 import { useSessionList } from "@/hooks/useSessionList";
-import { filterSessions } from "@/lib/sessions";
+import { filterSessions, modelsLabel } from "@/lib/sessions";
 import { Session } from "@/types/events";
 
 function isActive(status: string): boolean {
@@ -34,7 +34,7 @@ export function SessionRail() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search sessions…"
-            className="h-8 w-full rounded-md border border-input bg-background pl-7 pr-7 text-xs placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+            className="focus-ring h-8 w-full rounded-md border border-input bg-background pl-7 pr-7 text-xs placeholder:text-muted-foreground pointer-coarse:h-11 pointer-coarse:pr-11 [&::-webkit-search-cancel-button]:hidden"
             aria-label="Search sessions"
           />
           {query && (
@@ -42,7 +42,7 @@ export function SessionRail() {
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+              className="focus-ring absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -70,7 +70,7 @@ export function SessionRail() {
       <div className="border-t p-2">
         <Link
           href="/"
-          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md pointer-coarse:h-11 bg-agent text-xs font-medium text-agent-foreground transition-colors hover:bg-agent/90"
+          className="focus-ring flex h-9 w-full items-center justify-center gap-1.5 rounded-md pointer-coarse:h-11 bg-agent text-xs font-medium text-agent-foreground transition-colors hover:bg-agent/90"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           New
@@ -114,29 +114,39 @@ function SessionGroup({
   sessions: Session[];
   pathname: string | null;
 }) {
+  const headingId = useId();
   if (sessions.length === 0) return null;
   return (
-    <div className="mb-2">
-      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      {sessions.map((s) => {
-        const href = `/sessions/${s.id}`;
-        return (
-          <Link
-            key={s.id}
-            href={href}
-            aria-current={pathname === href ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-2 text-xs transition-colors pointer-coarse:py-3",
-              pathname === href
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            )}
-          >
-            <StatusBadge status={s.status} variant="icon" />
-            <span className="truncate">{s.title || "New session"}</span>
-          </Link>
-        );
-      })}
-    </div>
+    <section className="mb-2" aria-labelledby={headingId}>
+      <h2 id={headingId} className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </h2>
+      <ul>
+        {sessions.map((s) => {
+          const href = `/sessions/${s.id}`;
+          const models = modelsLabel(s.models);
+          return (
+            <li key={s.id}>
+              <Link
+                href={href}
+                aria-current={pathname === href ? "page" : undefined}
+                className={cn(
+                  "focus-ring flex items-center gap-2 rounded-md px-2 py-2 text-xs transition-colors pointer-coarse:py-3",
+                  pathname === href
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <StatusBadge status={s.status} variant="icon" />
+                <span className="min-w-0">
+                  <span className="block truncate">{s.title || "New session"}</span>
+                  {models && <span className="block truncate font-mono">{models}</span>}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

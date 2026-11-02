@@ -32,6 +32,7 @@ from weebot.application.services.harness_prompt_assembler import HarnessPromptAs
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.model_aware_harness_resolver import ModelAwareHarnessResolver
 from weebot.application.services.plan_history import PlanHistory
+from weebot.domain.models.execution_mode import ExecutionMode
 
 # The flow's own module name, for the stdlib logger `__init__` used to create with
 # `__name__`. Spelled out so the log channel does not change when this code moves.
@@ -76,6 +77,7 @@ LEGACY_KWARG_NAMES: tuple[str, ...] = (
     "correction_tracker",
     "persistence_adapter",
     "cost_meter",
+    "execution_mode",
     "misalignment_journal",
     "skill_distiller",
     "skill_review_gate",
@@ -176,6 +178,9 @@ def wire_ports(flow: Any, cfg: PlanActFlowConfig) -> None:
     flow._awm = None  # AgentWorkflowMemory -- lazy-init via _get_awm()
     flow._max_step_repetitions = cfg.max_step_repetitions
     flow._planning_mode = getattr(cfg, "planning_mode", "auto")
+    flow._execution_mode = ExecutionMode.from_flag(
+        str(cfg.execution_mode) if cfg.execution_mode is not None else None
+    )
     flow._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
     flow._context_aware_model_selection = cfg.context_aware_model_selection
     flow._max_iterations = cfg.max_iterations

@@ -209,6 +209,14 @@ class WeebotSettings(BaseSettings):
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
     sandbox_allow_network: bool = False  # env: SANDBOX_ALLOW_NETWORK
 
+    # Proxy server for browser sessions (e.g. http://127.0.0.1:9081 for Ladder).
+    # When set, all Playwright-based browser tools route traffic through this proxy.
+    proxy_server: str | None = Field(
+        default=None,
+        alias="WEEBOT_PROXY_SERVER",
+        description="Proxy URL for browser sessions (e.g. http://127.0.0.1:9081 for Ladder).",
+    )
+
     # A running CDP browser to connect to instead of launching Chromium, e.g. Lightpanda
     # (`docker run -d -p 127.0.0.1:9222:9222 lightpanda/browser`). Unset: launch as before.
     browser_cdp_url: str | None = Field(
@@ -256,6 +264,23 @@ class WeebotSettings(BaseSettings):
         description=(
             "Shell commands that match no approval rule and are not plain reads: 'off', "
             "'observe' (log what would ask, then run) or 'enforce' (ask)."
+        ),
+    )
+    auto_approve_local_after_untrusted: bool = Field(
+        default=False,
+        alias="WEEBOT_AUTO_APPROVE_LOCAL_AFTER_UNTRUSTED",
+        description=(
+            "Allow statically verified local Python work in Output/ after untrusted reads; "
+            "outbound calls and browser page writes still require approval."
+        ),
+    )
+    auto_install_tools: bool = Field(
+        default=True,
+        alias="WEEBOT_AUTO_INSTALL_TOOLS",
+        description=(
+            "Let the install_tool tool add a missing dependency from PyPI (wheels only), npm "
+            "(no lifecycle scripts) or winget. Every install still asks first; URLs, VCS "
+            "specs, local paths and installer scripts are refused."
         ),
     )
     intent_review_timeout_s: float = Field(
@@ -488,7 +513,7 @@ class WeebotSettings(BaseSettings):
             "*send_message*,*tweet*,*generate*,*clipping*,"
             # Paid per call (F54): Apify Actor runs, image/video generation, and
             # mixture_of_agents (several model calls at once).
-            "apify_*,image_gen,video_gen,mixture_of_agents"
+            "apify_*,image_gen,video_gen,mixture_of_agents,install_tool"
         ),
         alias="WEEBOT_OUTBOUND_TOOL_PATTERNS",
         description=(

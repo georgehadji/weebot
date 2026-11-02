@@ -135,7 +135,7 @@ async def test_update_plan_handler_persists_events(state_repo, sample_session):
     handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
     command = UpdatePlanCommand(
-        session_id=sample_session.id, updates={"reason": "Step 1 completed, adding step 3"}
+        session_id=sample_session.id, reason="Step 1 completed, adding step 3"
     )
     result = await handler.handle(command)
 
@@ -163,7 +163,7 @@ async def test_update_plan_handler_no_plan(state_repo, sample_session):
     handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
     command = UpdatePlanCommand(
-        session_id=sample_session.id, updates={"reason": "No plan to update"}
+        session_id=sample_session.id, reason="No plan to update"
     )
     result = await handler.handle(command)
 

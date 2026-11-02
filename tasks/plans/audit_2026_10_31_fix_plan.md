@@ -225,6 +225,7 @@ These three share a root cause: the approval policy reasons about command text w
 - **Root cause (checked):** `scores.get(axis, VERIFICATION_SCORE_MIN)` fills a missing axis with 3, and the fail test is `< 3`, so a missing axis passes.
 - **Design (parse, do not validate):** a Pydantic `VerifierScores` model with four required integer fields, each 1 to 5. Parse the reply into it. A `ValidationError` returns `(None, False)`, which maps to `NOT_RUN`. This follows the project's Structured Output Protocol.
 - **Tests first:** `""`, `{}`, `{"correctness": 5}`, a string score, a score of 9 and a fenced JSON reply each give the right result. Only a full valid reply is PASSED. This is the same defect class as D14 in `step_evaluator.py`.
+- **Outcome (2026-11-01):** done. `VerifierScores` in `weebot/models/structured_output.py` has four required, strict integer fields from 1 to 5. `_score_output` parses the reply through `extract_json_text` and `model_validate_json`, so a missing axis, a string, a bool, a float or a score outside 1 to 5 means the scorer did not run. A fenced reply now parses; before, it was NOT_RUN. A score of 9 is NOT_RUN rather than clamped to 5, as the plan said.
 
 ### F7. A scheduled job records its end even when cancelled
 
@@ -232,6 +233,7 @@ These three share a root cause: the approval policy reasons about command text w
 - **Root cause (checked):** `outcome` is set only on success or in `except Exception`. A cancel raises `CancelledError`, which is a `BaseException`, so `finally` hits an unbound local.
 - **Design:** set `outcome = (False, "cancelled")` before the `try`, add `except asyncio.CancelledError` that sets it and re-raises, and run `_record_run_end` through `asyncio.shield` so the cancel does not also cancel the database write.
 - **Tests first:** start a job that awaits, cancel it, and assert the row is not `running`, `error_count` rose, and the cancel still propagated.
+- **Outcome (2026-11-01):** done as designed. `outcome` is bound to `(False, "interrupted")` before the `try`, `except asyncio.CancelledError` records `"cancelled"` and re-raises, and `_record_run_end` runs under `asyncio.shield`. The default is "interrupted" rather than "cancelled" so that another `BaseException` is not mislabelled.
 
 ### F15, then F14, F13, F12: the cascade
 
@@ -253,6 +255,10 @@ Files: `weebot/application/agents/executor/_cascade.py`, `_context_compressor.py
   - Root cause (checked): Phase 1 uses `role_cascade[0..2]` and Phase 2 adds `role_fallback2` and the premium model. Entries from index 3 are never tried, and a prepended Ollama or free entry shifts paid models out of the slots.
   - Design: a pure `build_cascade_plan(role_cascade, tier4, tripped, within_budget) -> CascadePlan` returns the ordered phases from the whole de-duplicated list. The shell runs the plan. Phase sizes become named constants, not index arithmetic.
   - Tests first: a table with 4 and 5 entries, with Ollama and free models prepended, with tripped and over-budget models. The cheap fourth entry is tried before the premium one.
+- **Outcome (2026-11-01), F15:** done by reuse, not a new module. `ContextTokenizer.estimate_messages_tokens` (`weebot/application/services/context_tokenizer.py`) had no callers and already walked list content; it now counts an image part as `IMAGE_PART_TOKENS` (1500, in `weebot/config/constants.py`), text parts by length, and any other block by its repr so tool results still count. `_call_unanswered` and `_maybe_compress` both call it.
+- **Outcome (2026-11-01), F14:** done. Usage is read and `_call_completed` is called right after `chat` returns, for any non-empty response object. The empty branch also records a breaker failure.
+- **Outcome (2026-11-01), F13:** done, with two additions the plan did not name. `_is_fast_fail_error` now asks `ErrorClassifier` and is fatal only for `AUTH` or `MODEL_UNAVAILABLE`. It accepts the message text as well as an exception, because `first_error` stores text. The live-rescue check (`all-404`) had the same bare-substring defect and uses the same classification. To keep real provider errors fatal, the classifier gained `permission denied` under `AUTH`, and `resource_not_found` and a standalone `404` under `MODEL_UNAVAILABLE`. A bare "not found" no longer counts. For the resilient adapter, a 404 now means "fall back to another model" instead of "unknown, retry"; both are retryable.
+- **Outcome (2026-11-01), F12:** done. `build_cascade_plan` in `weebot/core/cascade_plan.py` is pure: phase 1 is the pinned model, the primary, the ACR and task models and the first fallback; phase 2 is the whole rest of the role list, then the premium model last. Lists shorter than the slots fall back to the tier defaults as before. Deviation: the plan passed `tripped` and `within_budget` into the function. They stay in the shell, because `_within_budget` is a list-level rule ("never empty the list") and tripped and server-error state change during the run.
 
 ### F10. The replan command carries typed context
 
@@ -260,6 +266,7 @@ Files: `weebot/application/agents/executor/_cascade.py`, `_context_compressor.py
 - **Root cause (checked):** `UpdatingState` puts `failure_context` and `reason` in an untyped `updates` dict. The handler never reads either, picks its own last step, and calls `planner.update_plan(plan, last_step)` with no context. The tree-of-thoughts calls are paid and discarded.
 - **Design:** `UpdatePlanCommand` gets typed fields, `failure_context: str = ""` and `last_step_id: str | None = None`, replacing the dict keys. The handler finds the step by id and passes the context to the planner. A typed field fails at construction time where a dict key silently does not.
 - **Tests first:** a fake planner records its arguments. The handler passes the failure text and the chosen step. A failed step no longer re-adds an equivalent step.
+- **Outcome (2026-11-01):** done. `UpdatePlanCommand` lost `updates` (read only by its own `validate`) and gained `failure_context` and `last_step_id`; the command forbids extra fields, so a misspelt name now fails at construction. The handler finds the step by id, returns `STEP_NOT_FOUND` for an unknown id instead of guessing, and passes `failure_context` to the planner. With no id it picks the last finished step as before. `reason` (the completed-steps summary and the "new approach" instruction) is still not read by the handler or the planner; the planner already receives the whole plan with step statuses, and its prompt caps the failure text at 1000 characters, so it was left alone.
 - **Open question:** whether the tree-of-thoughts step is worth 4 calls per failure once its output is used. Decision D5.
 
 ---

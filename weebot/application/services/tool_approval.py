@@ -112,6 +112,24 @@ class DenyApproval(ApprovalPort):
         return ApprovalOutcome.DENIED
 
 
+class AutoApproval(ApprovalPort):
+    """AUTO execution mode: no human is asked, so every ASK is granted.
+
+    Scoped to a single step through ``approval_scope`` by the executor; the
+    journal still records each grant (``channel="auto"``), so the audit trail
+    ADR-013 promises survives the mode that removes the prompt.
+    """
+
+    async def resolve(self, request: ToolCallApproval) -> ApprovalOutcome:
+        logger.warning(
+            "approval auto-granted (AUTO execution mode): %s by %s",
+            request.tool_name,
+            request.guard,
+        )
+        _journal_outcome("approval_granted", request, "auto")
+        return ApprovalOutcome.APPROVED
+
+
 class FlowPauseApproval(ApprovalPort):
     """Pause the flow and ask; run the call once a grant for it exists."""
 

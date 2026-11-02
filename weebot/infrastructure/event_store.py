@@ -243,6 +243,24 @@ class AsyncEventStore(EventStorePort):
                 counts[row["session_id"]] = row["n"]
         return counts
 
+    async def models_used(self, session_ids: Sequence[str]) -> dict[str, list[str]]:
+        """Models per session in order of first use (one grouped query per 500 ids)."""
+        models: dict[str, list[str]] = {sid: [] for sid in session_ids}
+        pool = await self._get_pool()
+        ids = list(models)
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            marks = ",".join("?" * len(chunk))
+            rows = await pool.execute_read(
+                f"SELECT session_id, model, MIN(id) AS first FROM events "  # noqa: S608 - marks only
+                f"WHERE session_id IN ({marks}) AND model IS NOT NULL AND model != '' "
+                f"GROUP BY session_id, model ORDER BY first",
+                tuple(chunk),
+            )
+            for row in rows:
+                models[row["session_id"]].append(row["model"])
+        return models
+
     async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
         """Get cost summary for a session."""
         pool = await self._get_pool()

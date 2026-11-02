@@ -43,11 +43,14 @@ def _displayed_title(session: Session, context: dict[str, Any]) -> str | None:
     return derive_session_title(str(prompt)) or None
 
 
-def _session_to_response(session: Session, event_count: int = 0) -> SessionResponse:
+def _session_to_response(
+    session: Session, event_count: int = 0, models: list[str] | None = None
+) -> SessionResponse:
     """Convert Session domain model to API response.
 
-    *event_count* comes from the event store (``EventStorePort.count_events``): the events live
-    there, not on the ``Session`` row, so ``len(session.events)`` was always 0.
+    *event_count* and *models* come from the event store (``EventStorePort.count_events`` and
+    ``models_used``): the events live there, not on the ``Session`` row, so
+    ``len(session.events)`` was always 0.
     """
     # SessionResponse.context is a dict; the model made every POST a 500.
     # A dict also occurs: model_copy(update=...) skips validation.
@@ -66,6 +69,7 @@ def _session_to_response(session: Session, event_count: int = 0) -> SessionRespo
         created_at=session.created_at,
         updated_at=session.updated_at,
         event_count=event_count,
+        models=models or [],
     )
 
 
@@ -79,10 +83,21 @@ async def _event_counts(request: Request, session_ids: list[str]) -> dict[str, i
         return {}
 
 
+async def _models_used(request: Request, session_ids: list[str]) -> dict[str, list[str]]:
+    """Models per session in one store call; none for all if no store is wired."""
+    try:
+        store = request.app.state.container.get(EventStorePort)
+        return await store.models_used(session_ids)
+    except Exception:
+        logger.warning("models used unavailable", exc_info=True)
+        return {}
+
+
 async def _respond(request: Request, session: Session) -> SessionResponse:
-    """`_session_to_response` for one session, with its event count."""
+    """`_session_to_response` for one session, with its event count and models."""
     counts = await _event_counts(request, [session.id])
-    return _session_to_response(session, counts.get(session.id, 0))
+    models = await _models_used(request, [session.id])
+    return _session_to_response(session, counts.get(session.id, 0), models.get(session.id))
 
 
 @router.get("", response_model=SessionListResponse)
@@ -100,9 +115,12 @@ async def list_sessions(
     )
     total = await state_repo.count_sessions(user_id=effective_user, status=status)
 
-    counts = await _event_counts(http_request, [s.id for s in sessions])
+    ids = [s.id for s in sessions]
+    counts = await _event_counts(http_request, ids)
+    models = await _models_used(http_request, ids)
     return SessionListResponse(
-        sessions=[_session_to_response(s, counts.get(s.id, 0)) for s in sessions], total=total
+        sessions=[_session_to_response(s, counts.get(s.id, 0), models.get(s.id)) for s in sessions],
+        total=total,
     )
 
 
@@ -120,6 +138,8 @@ async def create_session(
     context: dict[str, Any] = {"last_prompt": body.prompt, "model": body.model}
     if body.ponytail_mode is not None:
         context["ponytail_mode"] = body.ponytail_mode
+    if body.execution_mode is not None:
+        context["execution_mode"] = body.execution_mode
 
     # Override user_id with the authenticated identity
     current_user = await current_principal(http_request)
@@ -366,6 +386,7 @@ async def run_session(
                 model=opts.model,
                 ponytail_mode=opts.ponytail_mode,
                 steering=steering,
+                execution_mode=opts.execution_mode,
             )
             session = await task_runner.start_session(session, factory)
         except Exception:
@@ -446,6 +467,7 @@ async def send_session_input(
         state_repo,
         model=request.model,
         client_msg_id=request.client_msg_id,
+        execution_mode=request.execution_mode,
     )
     logger.info("Dispatched %s input for session %s", result.verb, session_id)
     return {"verb": result.verb, "session": await _respond(http_request, result.session)}
@@ -459,6 +481,7 @@ async def _dispatch_input(
     *,
     model: str | None = None,
     client_msg_id: str | None = None,
+    execution_mode: str | None = None,
 ):
     """Route *text* to the start / resume / steer / chat strategy for *session*."""
     from weebot.application.ports.event_bus_port import EventBusPort
@@ -477,6 +500,7 @@ async def _dispatch_input(
         text=text,
         client_msg_id=client_msg_id,
         model=model,
+        execution_mode=execution_mode,
         state_repo=state_repo,
         task_runner=container.get(TaskRunnerPort),
         llm=container.get(LLMPort),

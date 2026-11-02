@@ -102,6 +102,10 @@ class MoliFetchTool(BaseTool):
     def set_config(self, config: ToolConfig) -> None:
         self._tool_config = config
 
+    def is_available(self) -> bool:
+        """False without a moli binary, so the registry never offers a tool that cannot run."""
+        return _binary(self._tool_config) is not None
+
     async def execute(self, url: str = "", **kwargs: Any) -> ToolResult:
         url = (url or "").strip()
         if not url.lower().startswith(("http://", "https://")):

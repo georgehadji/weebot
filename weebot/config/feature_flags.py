@@ -277,3 +277,13 @@ def require(flag_name: str) -> None:
 # needs (core + category + named services); the rest stay callable by name.
 # Every call used to carry all ~171 (~49k tokens). WEEBOT_TOOL_SCOPE=false sends all.
 TOOL_SCOPE_ENABLED: bool = _env_bool("WEEBOT_TOOL_SCOPE", default=True)
+
+
+# A live session edits the repository the web API runs from, and uvicorn's reloader
+# restarts the server on every .py change — killing the session mid-step
+# ("interrupted: the server stopped while this session was running"). Off by default.
+# A function, not a module constant: the flag decides a process-startup option, and the
+# test toggles the environment.
+def web_reload_enabled() -> bool:
+    """Whether ``python -m weebot.interfaces.web.main`` runs uvicorn's reloader."""
+    return _env_bool("WEEBOT_WEB_RELOAD", default=False)

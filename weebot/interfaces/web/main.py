@@ -47,6 +47,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from weebot.application.di import Container
+from weebot.config.feature_flags import web_reload_enabled
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.strategies.llm_pool import unwrap_llm
@@ -739,7 +740,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "weebot.interfaces.web.main:app", host=host,
         port=port,
-        reload=True,
+        reload=web_reload_enabled(),
         loop=uvicorn_loop(),
         log_level="info",
     )

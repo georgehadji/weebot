@@ -10,7 +10,7 @@ import { MessageRow } from "./MessageRow";
 import { ToolCallRow } from "./ToolCallRow";
 import { StepRow } from "./StepRow";
 import { PlanReviewCard } from "@/components/PlanReviewCard";
-import { ErrorRow, WaitForUserRow, DoneRow, NotificationRow } from "./StatusEventRow";
+import { ErrorRow, WaitForUserRow, ToolApprovalRow, DoneRow, NotificationRow } from "./StatusEventRow";
 
 // A dispatch registry is inherently heterogeneous — each entry's component
 // expects a narrower event subtype than AgentEvent, which TypeScript can't
@@ -21,6 +21,7 @@ import { ErrorRow, WaitForUserRow, DoneRow, NotificationRow } from "./StatusEven
 type RowComponent = (props: {
   event: never;
   onRetry?: (event: MessageEvent) => void;
+  onReply?: (text: string) => void;
 }) => React.ReactElement | null;
 
 const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
@@ -30,6 +31,7 @@ const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
   plan_review: PlanReviewCard,
   error: ErrorRow,
   wait_for_user: WaitForUserRow,
+  tool_approval: ToolApprovalRow,
   done: DoneRow,
   notification: NotificationRow,
 } as unknown as Partial<Record<AgentEvent["type"], RowComponent>>;
@@ -40,14 +42,17 @@ export const isRendered = (event: AgentEvent) => event.type in EVENT_REGISTRY;
 function EventRendererImpl({
   event,
   onRetry,
+  onReply,
 }: {
   event: AgentEvent;
   /** Re-send a user message whose delivery failed (used by message rows only). */
   onRetry?: (event: MessageEvent) => void;
+  /** Send a button-selected response through the same session input path as the composer. */
+  onReply?: (text: string) => void;
 }) {
   const Row = EVENT_REGISTRY[event.type];
   if (!Row) return null;
-  return <Row event={event as never} onRetry={onRetry} />;
+  return <Row event={event as never} onRetry={onRetry} onReply={onReply} />;
 }
 
 /**

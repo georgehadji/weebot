@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from weebot.config.constants import IMAGE_PART_TOKENS
 
 if TYPE_CHECKING:
     from weebot.domain.models.session import Session
@@ -94,11 +96,24 @@ class ContextTokenizer:
             if isinstance(content, str):
                 total += self.estimate_text_tokens(content)
             elif isinstance(content, list):
-                # Handle multi-modal content
                 for part in content:
-                    if isinstance(part, dict) and "text" in part:
-                        total += self.estimate_text_tokens(part["text"])
+                    total += self._estimate_part_tokens(part)
         return total
+
+    def _estimate_part_tokens(self, part: Any) -> int:
+        """Text by length, an image as a flat figure, any other block by its repr.
+
+        An image's base64 is not text, and counting it as text made one screenshot look
+        like 100k tokens (audit F15). A non-text block such as a tool result still counts,
+        so compaction is not delayed by blocks that were never measured.
+        """
+        if not isinstance(part, dict):
+            return self.estimate_text_tokens(str(part))
+        if part.get("type") in ("image", "image_url") or "image_url" in part:
+            return IMAGE_PART_TOKENS
+        if isinstance(part.get("text"), str):
+            return self.estimate_text_tokens(part["text"])
+        return self.estimate_text_tokens(str(part))
 
     def is_long_context(self, session: Session, threshold: int = 50000) -> bool:
         """Check if session exceeds long context threshold.

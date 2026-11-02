@@ -5,8 +5,8 @@ code: FlowRouter
 cluster: application
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-02
+commit: db304f26
 ---
 
 # FlowRouter
@@ -35,13 +35,13 @@ Two details that look like bugs and are deliberate:
 - An empty answer approves a plan (`flow_router.py:94`) but does **not** approve a gate (`flow_router.py:136-139`): gates guard untrusted input, silence is not consent.
 - Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`flow_router.py:97-99, 109-114, 189-194`; loop break at `weebot/application/flows/plan_act_flow.py:473-476`).
 
-Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `weebot/application/flows/_run_prologue.py:109`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:313-315`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:87`, F37).
+Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `weebot/application/flows/_run_prologue.py:109`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:313-315`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:99`, F37).
 
 Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out` as `{**(extra or {}), ...}` (`flow_router.py:74, 89`), which erases other keys if a caller omits `extra` (`flow_router.py:130-133`). Priority 2 merges onto the session's own extra instead (`flow_router.py:134`). The one production caller passes `extra` (`_run_prologue.py:102`).
 
 ## Connected to
 - **Called by** `begin_run`, the prologue of `PlanActFlow._run_states` (`weebot/application/flows/_run_prologue.py:99-103`) and, for `record_misalignment`, `_run_prologue.py:120`.
-- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:314-326` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:94` (`plan_pending_approval`), `states/product_gate.py:153` (`_product_gate_pending`).
+- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:332-344` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:106` (`plan_pending_approval`), `states/product_gate.py:161` (`_product_gate_pending`).
 - **Approve words:** `_APPROVE_TOKENS`, `states/plan_review.py:36` (imported lazily at `flow_router.py:84, 127`).
 - **Not** the state machine itself: transitions *between* states are `context.set_state(...)` calls inside each state (see FlowState).
 

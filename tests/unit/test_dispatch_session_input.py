@@ -106,6 +106,45 @@ async def test_steer_strategy_sends_via_steering_port_without_mutating_session()
 
 
 @pytest.mark.asyncio
+async def test_start_strategy_persists_and_forwards_execution_mode():
+    """The web Auto switch rides on the session, so /run and /resume keep it."""
+    ctx = _make_ctx(SessionStatus.PENDING, text="build me a widget")
+    ctx.execution_mode = "auto"
+
+    await dispatch_session_input(ctx)
+
+    saved_session = ctx.state_repo.save_session.await_args.args[0]
+    assert saved_session.context.get("execution_mode") == "auto"
+    kwargs = ctx.task_runner.create_plan_act_factory.call_args.kwargs
+    assert kwargs["execution_mode"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_resume_strategy_forwards_the_sessions_execution_mode():
+    ctx = _make_ctx(SessionStatus.WAITING, text="proceed")
+    ctx.session.context["execution_mode"] = "auto"
+
+    await dispatch_session_input(ctx)
+
+    kwargs = ctx.task_runner.create_plan_act_factory.call_args.kwargs
+    assert kwargs["execution_mode"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_an_override_on_resume_sticks_on_the_session():
+    ctx = _make_ctx(SessionStatus.WAITING, text="proceed")
+    ctx.execution_mode = "auto"
+
+    await dispatch_session_input(ctx)
+
+    saved_session = ctx.state_repo.save_session.await_args.args[0]
+    assert saved_session.context.get("execution_mode") == "auto"
+    assert saved_session.context.get("last_prompt") == "", "the mode override must not rewrite it"
+    kwargs = ctx.task_runner.create_plan_act_factory.call_args.kwargs
+    assert kwargs["execution_mode"] == "auto"
+
+
+@pytest.mark.asyncio
 async def test_chat_strategy_starts_a_new_flow_via_task_runner():
     ctx = _make_ctx(SessionStatus.COMPLETED, text="one more question")
     result = await dispatch_session_input(ctx)

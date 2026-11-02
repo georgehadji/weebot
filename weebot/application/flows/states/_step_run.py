@@ -67,19 +67,29 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
     from weebot.application.cqrs.commands import ExecuteStepCommand
     from weebot.config.model_refs import MODEL_BUDGET
 
-    started = time.monotonic()
-    cmd_result = await context._mediator.send(
-        ExecuteStepCommand(
-            session_id=context._session.id,
-            step_id=step.id,
-            model=context._model or MODEL_BUDGET,
-            tools=[t.name for t in context._tools],
-            # `effective_prompt`, not the raw prompt: this sent the ORIGINAL, so steering
-            # was polled, logged and dropped (P3-2 in the audit).
-            user_input=effective_prompt,
-            step_context=context.step_execution_context(),  # ADR-015
-        )
+    auto = _is_auto_mode(context)
+    command = ExecuteStepCommand(
+        session_id=context._session.id,
+        step_id=step.id,
+        model=context._model or MODEL_BUDGET,
+        tools=[t.name for t in context._tools],
+        # `effective_prompt`, not the raw prompt: this sent the ORIGINAL, so steering
+        # was polled, logged and dropped (P3-2 in the audit).
+        user_input=effective_prompt,
+        step_context=context.step_execution_context(),  # ADR-015
     )
+
+    started = time.monotonic()
+    if auto:
+        # AUTO: grant every ASK inside this step, so no ToolApprovalEvent reaches the
+        # caller and nothing waits for a human. Scoped to this send, so the mode cannot
+        # leak into another session sharing the process.
+        from weebot.application.services.tool_approval import AutoApproval, approval_scope
+
+        with approval_scope(approval=AutoApproval(), session_id=context._session.id):
+            cmd_result = await context._mediator.send(command)
+    else:
+        cmd_result = await context._mediator.send(command)
     elapsed = time.monotonic() - started
 
     if not cmd_result.success:
@@ -95,11 +105,19 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
         if isinstance(event, WaitForUserEvent):
             run.hitl_paused = True
         elif isinstance(event, ToolApprovalEvent):
-            run.hitl_paused = True
-            # ADR-013: record what a "yes" approves; FlowRouter grants it.
-            from weebot.application.services.tool_approval import mark_tool_approval_pending
+            if auto:
+                # AutoApproval should have granted it before the tool ran; if one still
+                # surfaces, asking is exactly what AUTO promises not to do.
+                logger.warning(
+                    "AUTO mode: tool approval surfaced for %s — not pausing",
+                    getattr(event, "tool_name", "?"),
+                )
+            else:
+                run.hitl_paused = True
+                # ADR-013: record what a "yes" approves; FlowRouter grants it.
+                from weebot.application.services.tool_approval import mark_tool_approval_pending
 
-            context._session = mark_tool_approval_pending(context._session, event)
+                context._session = mark_tool_approval_pending(context._session, event)
         elif isinstance(event, ErrorEvent):
             run.execution_failed = True
         if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
@@ -111,6 +129,13 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
 
     run.result_text = _longest_output(run.events)
     return run
+
+
+def _is_auto_mode(context: PlanActFlow) -> bool:
+    """True when the flow runs with execution_mode=AUTO (no human pauses)."""
+    from weebot.domain.models.execution_mode import ExecutionMode
+
+    return getattr(context, "_execution_mode", ExecutionMode.INTERACTIVE) == ExecutionMode.AUTO
 
 
 def _reconstruct(raw: list[dict[str, Any]]) -> list[AgentEvent]:

@@ -4,9 +4,9 @@ name: Event store (audit journal)
 code: AsyncEventStore (alias EventStore)
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 85a51bdd
+commit: a824d62a
 ---
 
 # Event store
@@ -17,13 +17,13 @@ An append-only SQLite journal of events and per-session cost, used for audit, co
 Kept apart from session state so event logging is a cheap insert and can fail without affecting a run: `DurableEventBus` journals every event best-effort before fan-out and "never blocks event delivery" (`weebot/infrastructure/event_bus.py:180-199`, journal helpers `weebot/infrastructure/event_bus.py:227-283`). Behind `EventStorePort` so tests can use an in-memory store (`application/ports/event_store_port.py:1-8`).
 
 ## Shape
-- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:104`), exported under the old name `EventStore = AsyncEventStore` (`event_store.py:542-543`); DI imports `EventStore` (`application/di/_factories.py:122-125`).
+- Class `AsyncEventStore` (`weebot/infrastructure/event_store.py:104`), exported under the old name `EventStore = AsyncEventStore` (`event_store.py:560-561`); DI imports `EventStore` (`application/di/_factories.py:122-125`).
 - File: `~/.weebot/events.db` by default (`event_store.py:117`), its folder created on construction (`event_store.py:119`). Pool: shared `SQLiteConnectionPool`, 3 read connections, WAL, opened lazily (`event_store.py:122-130`).
 - Tables: `sessions(id, started_at, ended_at, status, user_id, total_cost, total_tokens)` and `events(id, timestamp, session_id, event_type, data_json, cost, model, tokens_used)` with indexes on session, type, timestamp (and on session status and user) (`event_store.py:132-168`). Note this `sessions` table is not the state repository's `sessions` table.
 - Cost columns are written for one event type only: `DurableEventBus._journal_domain` passes `cost`, `model` and `tokens_used` when the event is `LLMCallCompleted` (W4.1, 2026-10-22), which `CascadeExecutor` raises after each successful executor LLM call. Every other event keeps the defaults (0, "", 0). LLM calls outside the executor cascade (planner, verifier) are not recorded.
 - `log_event` (`event_store.py:172`) in one write transaction: inserts a session row if missing, inserts the event, adds `cost` and `tokens_used` to the session totals; returns the new event id (`event_store.py:185-206`).
 - `get_cost_window(window_hours)` sums the `llm_call_completed` rows by model: the one cost query (W4.2).
-- Also: `get_session_events`, `get_cost_summary`, `query_recent_events` (used by DreamerAgent per the port docstring), `start_session`/`end_session`, `export_session`, `delete_session`, `cleanup_old_sessions(days=30)`, `get_stats` (`event_store.py:208-504`).
+- Also: `get_session_events`, `get_cost_summary`, `query_recent_events` (used by DreamerAgent per the port docstring), `start_session`/`end_session`, `export_session`, `delete_session`, `cleanup_old_sessions(days=30)`, `get_stats` (`event_store.py:[stale 208-504]`).
 - `delete_session` exists so a deleted session's journal does not survive: the port docstring says `DurableEventBus` journals every agent event here (`event_store_port.py`, `delete_session` doc).
 
 ## Connected to
@@ -39,7 +39,7 @@ Kept apart from session state so event logging is a cheap insert and can fail wi
 
 ## Surfaces
 Audit data only. Cost views do **not** read this store:
-- Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:61-82`, `infrastructure/event_store.py:281`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
+- Fixed in W4.2 (F23): `GetCostSummaryHandler` no longer reads a fresh container's empty `cascade_tracker`. It asks the event store for the spend in `window_hours` (`application/cqrs/handlers/active_queries.py:61-82`, `infrastructure/event_store.py:299`), which `DurableEventBus` fills from `LLMCallCompleted`, and fails when no event store is configured. The CLI `costs` command, MCP `weebot://costs` and the ops API share it. It is also affected by the `mediator.send` defect on the Mediator card.
 - `python -m cli.main costs` prints hard-coded rows ("Today $2.45 / 12,340"; comment "Placeholder data", `cli/main.py:256-269`).
 - MCP `build_costs_json` reads a tracker only if one is passed to `WeebotMCPServer`; `run_mcp.py:59-63` does not pass one, so it returns its "Pass cascade_tracker=" note (`mcp/resources.py:221-231`).
 - `AsyncEventStore.get_cost_summary` computes real totals from this DB but nothing calls it.

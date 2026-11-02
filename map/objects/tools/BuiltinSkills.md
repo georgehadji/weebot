@@ -4,9 +4,9 @@ name: Built-in skills
 code: weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)
 cluster: tools
 universe: live
-status: verified
+status: stale
 verified: 2026-10-29
-commit: d0fa4540
+commit: db304f26
 ---
 
 # Built-in skills
@@ -59,7 +59,7 @@ A skill is prose the model reads, so a file per skill keeps it editable without 
 
 Consequences (read from source, not run):
 - The seven `manifest.json` skills (berb-research, competitive_analysis, design-taste, multi_llm_orchestrator, reasoner, skill-author, web_research) load through `_parse_manifest` (`weebot/application/skills/skill_registry.py:79-80, 188-211`), so the agent can be given `multi_llm_orchestrator`, which the root `CLAUDE.md` requires delegating to.
-- `youtube-download` and `remotion-video` point at `youtube_download`, which only `researcher` and `admin` have; `desktop-automation` at `desktop_a11y`, which only `admin` has (`weebot/application/services/tool_registry.py:27-185`). A skill naming a tool does not grant it.
+- `youtube-download` and `remotion-video` point at `youtube_download`, which only `researcher` and `admin` have; `desktop-automation` at `desktop_a11y`, which only `admin` has (`weebot/application/services/tool_registry.py:[stale 27-185]`). A skill naming a tool does not grant it.
 - `apify-scraper` declares its key as top-level `requires_env` (`.weebot/skills/apify-scraper/SKILL.md`, lines 5-6); the parser reads `metadata.env` (`weebot/application/skills/skill_registry.py:158`), so the skill is ready, and can be injected, when the Apify tools are absent.
 - A skill with no `trust` is trusted (`weebot/application/skills/skill_registry.py:248-251`). The ClawHub importer writes into a caller-given `install_dir` (its docstring example is `~/.weebot/skills`, `weebot/application/skills/clawhub_importer.py:81`; only tests call it) and forces `metadata.trust: quarantined` on both its writers (`weebot/application/skills/clawhub_importer.py:52-70, 227`), so imported skills fail the retrievers' trust gate until promoted.
 

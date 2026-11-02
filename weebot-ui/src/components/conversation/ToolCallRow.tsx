@@ -43,7 +43,7 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
     <div className={failed ? "rounded-lg border border-status-error/40 bg-surface-2 text-sm" : "rounded-lg border bg-surface-2 text-sm"}>
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-3"
+        className="focus-ring flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-3"
         aria-expanded={expanded}
       >
         {expanded ? (
@@ -59,7 +59,7 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
           {preview || event.function_name}
         </span>
         {isCalling ? (
-          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-status-live-fg" aria-label="Running" />
+          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-status-live-fg" role="img" aria-label="Running" />
         ) : failed ? (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-status-error-fg">
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -103,7 +103,7 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
               {truncated && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Showing {cut.toLocaleString()} of {result.length.toLocaleString()} characters.{" "}
-                  <button className="underline underline-offset-2" onClick={() => setShowAll(true)}>
+                  <button type="button" className="focus-ring rounded-sm underline underline-offset-2" onClick={() => setShowAll(true)}>
                     Show all
                   </button>
                 </p>

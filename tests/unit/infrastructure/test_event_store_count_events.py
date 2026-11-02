@@ -52,3 +52,19 @@ async def test_more_ids_than_one_sql_chunk(tmp_path):
     counts = await store.count_events(ids)
     assert len(counts) == 1500
     assert (counts["s-7"], counts["s-1234"], counts["s-0"]) == (1, 1, 0)
+
+
+# --- models_used: the UI shows which models ran each task -----------------------------------
+
+
+async def test_models_used_per_session_in_order_of_first_use(store):
+    await store.log_event("a", "llm_call_completed", {}, model="m/second")
+    await store.log_event("a", "message", {})
+    await store.log_event("a", "llm_call_completed", {}, model="m/first")
+    await store.log_event("a", "llm_call_completed", {}, model="m/second")
+    await store.log_event("b", "llm_call_completed", {}, model="m/first")
+    assert await store.models_used(["a", "b", "ghost"]) == {
+        "a": ["m/second", "m/first"],
+        "b": ["m/first"],
+        "ghost": [],
+    }

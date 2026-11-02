@@ -59,6 +59,7 @@ Before editing unfamiliar code, open `map/CLAUDE.md` (noun index, name collision
 - **Don't commit**: `.env`, SQLite databases, logs, or generated output under `Output/`.
 - **Ignore unrelated root files** (legacy contact exports and the like) unless the task is mail-related.
 - **Browser timeouts**: if `advanced_browser` times out, fall back to `web_search` or another URL.
+- **Ladder proxy**: Ladder (`https://github.com/everywall/ladder`) is a self-hosted HTTP proxy that bypasses paywalls and strips CORS. It runs as `weebot-ladder` Docker container on port 9081. Browser traffic routes through it when `WEEBOT_PROXY_SERVER` is set (currently `http://127.0.0.1:9081`). Start/stop: `docker start weebot-ladder` / `docker stop weebot-ladder`.
 - **Website and app builds** (mandatory rules): delegate first per `weebot/skills/builtin/multi_llm_orchestrator/prompt.md`, falling back to building it yourself; every site follows the standards in `weebot/skills/builtin/web-development/SKILL.md`.
 
 ## Workflow Instructions

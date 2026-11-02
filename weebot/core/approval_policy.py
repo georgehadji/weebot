@@ -9,6 +9,7 @@ CRITICAL: This policy runs on Windows 11 + PowerShell 5.1.
 
 from __future__ import annotations
 
+import ast
 import logging
 import os
 from pathlib import Path
@@ -708,6 +709,89 @@ def _in_output(path: str, cwd: str | None = None) -> bool:
         return real.is_relative_to((workspace / head).resolve(strict=False))
     except (OSError, ValueError):
         return False
+
+
+_LOCAL_PYTHON_IMPORTS = frozenset(
+    {"collections", "datetime", "itertools", "json", "math", "os", "re", "statistics"}
+)
+_LOCAL_PYTHON_BUILTINS = frozenset(
+    {"dict", "enumerate", "len", "list", "print", "range", "set", "sorted", "str", "sum", "tuple"}
+)
+_LOCAL_PYTHON_CALLS = frozenset(
+    {"json.dump", "json.dumps", "json.load", "json.loads", "os.makedirs", "os.path.join"}
+)
+
+
+def is_output_only_python(code: str) -> bool:
+    """Return whether *code* is a deliberately small, local-only Python subset.
+
+    This is an opt-in convenience predicate for a tainted research session, not a
+    general-purpose Python sandbox.  It permits standard-library data shaping and
+    writes only to this workspace's ``Output/`` directory.  Unknown syntax, imports,
+    dynamic execution and unrecognised calls fail closed.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+
+    values: dict[str, str] = {}
+
+    def text(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            return values.get(node.id)
+        if isinstance(node, ast.Call) and dotted(node.func) == "os.path.join":
+            parts = [text(arg) for arg in node.args]
+            if all(part is not None for part in parts):
+                return "/".join(str(part).strip("/\\") for part in parts)
+        return None
+
+    def dotted(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            parent = dotted(node.value)
+            return f"{parent}.{node.attr}" if parent else None
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            modules = (
+                [alias.name.split(".", 1)[0] for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module.split(".", 1)[0]] if node.module else []
+            )
+            if not modules or any(module not in _LOCAL_PYTHON_IMPORTS for module in modules):
+                return False
+        elif isinstance(node, ast.Assign):
+            value = text(node.value)
+            if value is not None:
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        values[target.id] = value
+        elif isinstance(node, ast.Call):
+            name = dotted(node.func)
+            if name == "open":
+                path = text(node.args[0]) if node.args else None
+                mode = text(node.args[1]) if len(node.args) > 1 else "r"
+                if (
+                    path is None
+                    or not _in_output(path)
+                    or mode is None
+                    or not any(x in mode for x in "wax+")
+                ):
+                    return False
+            elif name == "os.makedirs":
+                path = text(node.args[0]) if node.args else None
+                if path is None or not _in_output(path):
+                    return False
+            elif name in _LOCAL_PYTHON_BUILTINS or name in _LOCAL_PYTHON_CALLS:
+                continue
+            else:
+                return False
+    return True
 
 
 _IF_GUARD = re.compile(

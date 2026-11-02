@@ -15,6 +15,38 @@ const h = vi.hoisted(() => ({
   toast: vi.fn(),
 }));
 
+// Base UI's switch click path constructs a PointerEvent; jsdom has none.
+if (!window.PointerEvent) {
+  class PointerEventPolyfill extends MouseEvent {
+    readonly pointerId = 1;
+    readonly pointerType = "mouse";
+    readonly isPrimary = true;
+  }
+  Object.defineProperty(window, "PointerEvent", {
+    configurable: true,
+    value: PointerEventPolyfill,
+  });
+}
+
+// jsdom here has no origin, so `window.localStorage` is undefined. The Auto switch reads it
+// defensively; this stub makes the "remembers the choice" assertion possible.
+if (!window.localStorage) {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    } as Storage,
+  });
+}
+
 vi.mock("@/hooks/useSessionEvents", () => ({
   useSessionEvents: (_id: unknown, onEvent: (e: unknown) => void) => {
     h.emit = onEvent;
@@ -49,6 +81,7 @@ beforeEach(() => {
   h.input.mockReset().mockResolvedValue({});
   h.toast.mockReset();
   window.sessionStorage.clear();
+  window.localStorage.clear();
 });
 
 describe("Enter handling", () => {
@@ -165,6 +198,40 @@ describe("failed x sent (observation, deferred)", () => {
     await echo(sentId(), "echoed");
     await act(async () => fail());
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("Auto mode", () => {
+  const toggle = () => screen.getByRole("switch", { name: /auto mode/i });
+
+  it("is off by default and sends execution_mode=interactive", async () => {
+    mount();
+    expect(toggle().getAttribute("aria-checked")).toBe("false");
+    type("hello");
+    enter();
+    await waitFor(() => expect(h.input).toHaveBeenCalled());
+    expect(h.input.mock.calls[0][2]).toMatchObject({ executionMode: "interactive" });
+  });
+
+  it("sends execution_mode=auto once switched on, and remembers it", async () => {
+    mount();
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+    type("hello");
+    enter();
+    await waitFor(() => expect(h.input).toHaveBeenCalled());
+    expect(h.input.mock.calls[0][2]).toMatchObject({ executionMode: "auto" });
+    expect(window.localStorage.getItem("weebot_execution_mode")).toBe("auto");
+  });
+
+  it("creates a new session with execution_mode=auto", async () => {
+    mount(null);
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+    type("hello");
+    enter();
+    await waitFor(() => expect(h.create).toHaveBeenCalled());
+    expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ execution_mode: "auto" }));
   });
 });
 

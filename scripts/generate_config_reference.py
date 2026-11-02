@@ -86,6 +86,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Web API bind address (0.0.0.0 to expose to network)"},
     {"var": "WEEBOT_PORT", "type": "int", "default": "8000",
      "desc": "Web API port number"},
+    {"var": "WEEBOT_WEB_RELOAD", "type": "bool", "default": "false",
+     "desc": "Restart the web API when Python files change. Leave this off while sessions run: a reload kills the running session mid-step"},
     {"var": "WEEBOT_CORS_ORIGIN", "type": "str", "default": "",
      "desc": "Additional CORS origin (besides localhost:3000 defaults)"},
     {"var": "WEEBOT_RATE_LIMIT_ENABLED", "type": "bool", "default": "true",
@@ -184,9 +186,15 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce user_id matching on session access"},
     {"var": "WEEBOT_SHELL_DEFAULT_ASK", "type": "str", "default": "observe",
      "desc": "Shell commands no approval rule covers: off, observe (log what would ask) or enforce"},
+    {"var": "WEEBOT_AUTO_INSTALL_TOOLS", "type": "bool", "default": "true",
+     "desc": "Let install_tool add a missing dependency from PyPI (wheels only), npm (no "
+             "lifecycle scripts) or winget. Every install still asks first; URLs, VCS specs, "
+             "local paths and installer scripts are refused"},
     {"var": "WEEBOT_BEHIND_PROXY", "type": "bool", "default": "false",
      "desc": "The UI proxy fronts this API: loopback no longer counts as identity for mutations, "
              "so they need an API key"},
+    {"var": "WEEBOT_PROXY_SERVER", "type": "str", "default": "",
+     "desc": "Proxy URL for Playwright browser sessions (e.g. http://127.0.0.1:9081 for Ladder)"},
     {"var": "WEEBOT_ALLOWED_HOSTS", "type": "str", "default": "",
      "desc": "Extra Host names the web API accepts from a loopback caller, comma separated. localhost, 127.0.0.1 and [::1] are always allowed; any other Host from a loopback peer gets 421 (DNS-rebinding guard). Set it when a reverse proxy on this machine forwards a public name"},
     {"var": "WEEBOT_BROWSER_CDP_URL", "type": "str", "default": "",

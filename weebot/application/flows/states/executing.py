@@ -23,7 +23,7 @@ from weebot.domain.models.event import (
 )
 from weebot.domain.models.plan import Step, StepStatus
 
-from weebot.application.flows.states._execution_gates import apply_pre_step_gates
+from weebot.application.flows.states._execution_gates import apply_pre_step_gates, _is_auto_mode
 from weebot.application.flows.states._step_outcome import (
     absorb_step_result,
     complete_step,
@@ -256,6 +256,21 @@ class ExecutingState(FlowState):
         if run.hitl_paused:
             logger.info("Step %s paused for human input after %.1fs", step.id, run.elapsed_s)
             await post_task_hooks(context, step, run)
+            if _is_auto_mode(context):
+                # AUTO promises no human pauses, so the step must not be left WAITING
+                # for an answer nobody will type. Complete it so the plan progresses;
+                # the unanswered question stays in the transcript for the operator.
+                logger.warning(
+                    "AUTO mode: step %s asked for human input — completing without asking",
+                    step.id,
+                )
+                complete_step(context, step, run)
+                await record_skill_uses(context, step, run, passed=True)
+                await absorb_step_result(context, step)
+                next_transition(
+                    context, step, run, audit_browser_invocation=self._audit_browser_invocation
+                )
+                return
             pause_for_human(context)
             return
 

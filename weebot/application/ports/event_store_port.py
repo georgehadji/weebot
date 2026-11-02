@@ -46,6 +46,14 @@ class EventStorePort(ABC):
         ...
 
     @abstractmethod
+    async def models_used(self, session_ids: Sequence[str]) -> dict[str, list[str]]:
+        """The models each session's LLM calls used, in order of first use, in one query.
+
+        Every id in *session_ids* is a key of the result (an empty list when it made no calls).
+        """
+        ...
+
+    @abstractmethod
     async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
         """Get cost summary for a session."""
         ...

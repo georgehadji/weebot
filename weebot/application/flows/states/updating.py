@@ -117,7 +117,8 @@ class UpdatingState(FlowState):
             cmd_result = await context._mediator.send(
                 UpdatePlanCommand(
                     session_id=context._session.id,
-                    updates={"last_step_id": last_step.id, "failure_context": _fc},
+                    last_step_id=last_step.id,
+                    failure_context=_fc,
                     reason=(
                         f"{_completed_summary}\n"
                         f"Step {last_step.id} {last_step.status.value}{failure_msg}. "

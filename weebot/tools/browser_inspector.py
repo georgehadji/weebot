@@ -19,6 +19,8 @@ from urllib.parse import urljoin
 
 from weebot.tools.base import BaseTool, ToolResult
 
+from weebot.config.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 # JS snippets injected into the page
@@ -288,7 +290,8 @@ class BrowserInspectorTool(BaseTool):
                 self.browser = PlaywrightAdapter()
             from weebot.application.ports.browser_port import BrowserConfig
 
-            await self.browser.start(BrowserConfig(headless=True))
+            settings = get_settings()
+            await self.browser.start(BrowserConfig(headless=True, proxy_server=settings.proxy_server))
         await self.browser.page.goto(url, wait_until="domcontentloaded", timeout=30000)
         return ToolResult.success_result(
             output=f"Navigated to {url}", data={"url": url, "action": "navigate"}

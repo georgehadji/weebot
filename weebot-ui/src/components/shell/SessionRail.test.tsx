@@ -32,6 +32,7 @@ vi.mock("@/hooks/useSessionList", () => {
         created_at: "2026-10-24T00:00:00Z",
         updated_at: "2026-10-24T00:00:00Z",
         event_count: 4,
+        models: ["openrouter/anthropic/claude-x", "deepseek/deepseek-v4"],
       },
   ];
   return {
@@ -52,5 +53,10 @@ describe("SessionRail", () => {
     fireEvent.click(screen.getByLabelText("Clear search"));
     expect(search.value).toBe("");
     expect(screen.getByText("Migrate authentication")).toBeDefined();
+  });
+
+  it("shows the models each session ran on", () => {
+    render(<SessionRail />);
+    expect(screen.getByText("claude-x, deepseek-v4")).toBeDefined();
   });
 });

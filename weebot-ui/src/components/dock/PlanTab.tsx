@@ -79,8 +79,8 @@ export function PlanTab({ sessionId }: PlanTabProps) {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center py-8">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      <div role="status" aria-label="Loading plan" className="flex flex-1 items-center justify-center py-8">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
       </div>
     );
   }
