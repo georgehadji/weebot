@@ -1,37 +1,53 @@
 """Install a dependency from a trusted package catalog.
 
-This deliberately is not a general downloader or shell escape hatch. Package
-names are passed as argv values to PyPI (pip), npm, or Windows Package Manager
-(winget). Each installation remains subject to Weebot's approval flow.
+This deliberately is not a general downloader or shell escape hatch. A package is a bare
+catalog name, passed as an argv value to PyPI (pip), npm, or Windows Package Manager
+(winget). URLs, VCS specs, local paths, GitHub shorthands and installer scripts are refused
+by the name check, and the commands are built to run no package code at install time.
+Installing always asks first (`tool_guards._ALWAYS_ASK_TOOLS`), and every attempt is logged.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import PrivateAttr
 
-from weebot.config.tool_config import ToolConfig
+from weebot.config.tool_config import DEFAULT_TOOL_CONFIG, ToolConfig
+from weebot.domain.models.output_trust import OutputTrust
 from weebot.tools.base import BaseTool, ToolResult
 
-_PACKAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@/+:-]*$")
-_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!<>=~-]*$")
+logger = logging.getLogger(__name__)
+
+# One shape per catalog. None allows ":", "/" (except an npm scope) or "+", which is what
+# turns "git+https://...", "user/repo", "file:../x" and "C:/dir" into something else than a name.
+_NAME_RE = {
+    "pypi": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*"),
+    "npm": re.compile(r"(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*"),
+    "winget": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*"),
+}
+_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 _TIMEOUT_S = 300
 
 
+def _in_virtualenv() -> bool:
+    return sys.prefix != sys.base_prefix
+
+
 class ToolInstaller(BaseTool):
-    """Install a package from PyPI, npm, or winget into the user environment."""
+    """Install a package from PyPI, npm, or winget."""
 
     name: str = "install_tool"
     description: str = (
-        "Install a missing dependency from a trusted catalog only: PyPI (source=pypi), "
-        "npm (source=npm), or Windows Package Manager (source=winget). This action "
-        "always needs user approval. Arbitrary URLs, shell commands, and remote "
-        "installer scripts are not accepted."
+        "Install a missing dependency from a trusted catalog only: PyPI (source=pypi, "
+        "prebuilt wheels), npm (source=npm) or Windows Package Manager (source=winget). "
+        "Give the catalog name, not a URL or path. This action always needs user approval. "
+        "Arbitrary URLs, shell commands, and remote installer scripts are not accepted."
     )
     parameters: dict = {
         "type": "object",
@@ -43,6 +59,8 @@ class ToolInstaller(BaseTool):
         "required": ["source", "package"],
     }
     default_timeout_seconds: int = _TIMEOUT_S + 10
+    # The installer's output relays text from a package catalog, which a package author wrote.
+    output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
 
     _tool_config: ToolConfig | None = PrivateAttr(default=None)
 
@@ -50,7 +68,7 @@ class ToolInstaller(BaseTool):
         self._tool_config = config
 
     async def execute(self, source: str = "", package: str = "", **kwargs: Any) -> ToolResult:
-        if not (self._tool_config and self._tool_config.auto_install_tools):
+        if not (self._tool_config or DEFAULT_TOOL_CONFIG).auto_install_tools:
             return ToolResult(
                 output="",
                 error=(
@@ -61,31 +79,38 @@ class ToolInstaller(BaseTool):
         source = source.lower().strip()
         package = package.strip()
         version = str(kwargs.get("version") or "").strip()
-        if source not in {"pypi", "npm", "winget"}:
+        if source not in _NAME_RE:
             return ToolResult(output="", error="source must be pypi, npm, or winget")
-        valid_version = not version or _VERSION_RE.fullmatch(version)
-        if not _PACKAGE_RE.fullmatch(package) or not valid_version:
-            return ToolResult(output="", error="package or version contains unsupported characters")
+        if not _NAME_RE[source].fullmatch(package):
+            return ToolResult(output="", error=f"{package!r} is not a {source} catalog name")
+        if version and not _VERSION_RE.fullmatch(version):
+            return ToolResult(output="", error=f"{version!r} is not a catalog version")
 
         argv = self._command(source, package, version)
         if argv is None:
             return ToolResult(output="", error=f"{source} is not available on this machine")
+        logger.info("install_tool: %s %s %s", source, package, version or "(latest)")
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
+        except OSError as exc:
+            logger.warning("install_tool: could not start %s: %s", source, exc)
+            return ToolResult(output="", error=f"Could not start {source}: {exc}")
+        try:
             out, err = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_S)
         except TimeoutError:
             proc.kill()
+            logger.warning("install_tool: %s %s timed out", source, package)
             return ToolResult(output="", error=f"{source} install timed out after {_TIMEOUT_S}s")
-        except OSError as exc:
-            return ToolResult(output="", error=f"Could not start {source}: {exc}")
 
         detail = (out + err).decode("utf-8", errors="replace").strip()[-4_000:]
         if proc.returncode:
+            logger.warning("install_tool: %s %s failed (exit %s)", source, package, proc.returncode)
             return ToolResult(
                 output="", error=f"{source} install failed (exit {proc.returncode}): {detail}"
             )
+        logger.info("install_tool: installed %s %s from %s", package, version or "(latest)", source)
         return ToolResult(
             output=(
                 f"Installed {package}{'@' + version if version else ''} from {source}. "
@@ -98,8 +123,12 @@ class ToolInstaller(BaseTool):
     def _command(source: str, package: str, version: str) -> list[str] | None:
         if source == "pypi":
             spec = f"{package}=={version}" if version else package
+            # Wheels only: a source distribution runs its setup.py while installing.
+            # Inside a virtualenv, --user is an error and the venv is the right target.
+            user = [] if _in_virtualenv() else ["--user"]
             return [
-                sys.executable, "-m", "pip", "install", "--user", "--disable-pip-version-check", spec
+                sys.executable, "-m", "pip", "install", *user,
+                "--disable-pip-version-check", "--only-binary=:all:", spec,
             ]
         if source == "npm":
             npm = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -107,7 +136,9 @@ class ToolInstaller(BaseTool):
             spec = f"{package}@{version}" if version else package
             return [npm, "install", "--global", "--prefix", str(prefix), "--ignore-scripts", spec]
         if source == "winget" and sys.platform == "win32":
-            command = ["winget", "install", "--exact", "--id", package, "--scope", "user",
-                       "--accept-package-agreements", "--accept-source-agreements"]
+            command = [
+                "winget", "install", "--exact", "--id", package, "--source", "winget",
+                "--scope", "user", "--accept-package-agreements", "--accept-source-agreements",
+            ]
             return [*command, "--version", version] if version else command
         return None

@@ -55,15 +55,25 @@ class UpdatePlanHandler(CommandHandler):
                 model=command.model if hasattr(command, "model") else None,
             )
 
-            # Find the last completed or failed step
-            last_step = next((s for s in reversed(plan.steps) if s.is_done()), None)
-            if last_step is None and plan.steps:
-                last_step = plan.steps[0]
+            if command.last_step_id is not None:
+                last_step = next((s for s in plan.steps if s.id == command.last_step_id), None)
+                if last_step is None:
+                    return CommandResult.fail(
+                        error=f"Step {command.last_step_id} is not in the plan",
+                        error_code="STEP_NOT_FOUND",
+                    )
+            else:
+                # Find the last completed or failed step
+                last_step = next((s for s in reversed(plan.steps) if s.is_done()), None)
+                if last_step is None and plan.steps:
+                    last_step = plan.steps[0]
 
             events: list[dict] = []
             updated_plan = None
             if last_step:
-                async for event in planner.update_plan(plan, last_step):
+                async for event in planner.update_plan(
+                    plan, last_step, failure_context=command.failure_context
+                ):
                     events.append(event.model_dump())
                     session = session.add_event(event)
                     if isinstance(event, PlanEvent) and event.plan is not None:

@@ -24,7 +24,7 @@ from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
 from weebot.core.background_tasks import get_background_tasks
 from weebot.core.effect_key import effect_key, step_scope
 from weebot.core.log_context import bind_step
-from weebot.core.trust_boundary import must_taint, trust_of
+from weebot.core.trust_boundary import must_taint, taints_after_network, trust_of
 from weebot.domain.models.output_trust import OutputTrust
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
@@ -625,6 +625,14 @@ class ToolExecutor:
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):
+            self._untrusted_context_active = True
+        elif guard is not None and taints_after_network(
+            trust_of(tool_obj),
+            getattr(result, "is_error", False),
+            guard.uses_network(name, args),
+        ):
+            # A LOCAL shell or python call that fetched from the network (git clone, pip
+            # install) put third-party text where the model reads it next (F20).
             self._untrusted_context_active = True
         await self._flush_flags()
         return result

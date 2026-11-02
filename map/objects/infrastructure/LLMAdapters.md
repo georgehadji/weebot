@@ -5,8 +5,8 @@ code: AdapterFactory, ResilientLLMAdapter
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-01
+commit: 4f76c44f
 ---
 
 # LLM adapters
@@ -26,7 +26,7 @@ Resilience is added in one place, so provider adapters stay plain (`weebot/infra
 6. Wrap in `ResilientLLMAdapter` (`adapter_factory.py:205-217`); `retry_rate_limits` is off for provider `free`.
 7. When Ollama or free roles are switched on, wrap in `LocalModelRouter` (`adapter_factory.py:219-231`).
 
-`ResilientLLMAdapter.chat` (`resilient_adapter.py:174-338`): trace span → circuit check (key = the runtime `model` argument, else the adapter's model, so each cascade tier has its own breaker, `resilient_adapter.py:220, 227-231`) → optional cache lookup (`resilient_adapter.py:233-243`) → `_execute_with_timeout` inside `RetryWithBackoff` with delays `[1, 2, 4, 8, 15, 30]` s and 25% jitter (`resilient_adapter.py:147-155`); the retry stops scheduling a sleep that would cross the deadline the cascade set around the call (`weebot/utils/backoff.py:82-83`, set at `application/agents/executor/_cascade.py:393`) → success resets the breaker. Breaker: 3 failures, 60 s cooldown, 20% jitter (`resilient_adapter.py:159-161`).
+`ResilientLLMAdapter.chat` (`resilient_adapter.py:174-338`): trace span → circuit check (key = the runtime `model` argument, else the adapter's model, so each cascade tier has its own breaker, `resilient_adapter.py:220, 227-231`) → optional cache lookup (`resilient_adapter.py:233-243`) → `_execute_with_timeout` inside `RetryWithBackoff` with delays `[1, 2, 4, 8, 15, 30]` s and 25% jitter (`resilient_adapter.py:147-155`); the retry stops scheduling a sleep that would cross the deadline the cascade set around the call (`weebot/utils/backoff.py:82-83`, set at `application/agents/executor/_cascade.py:397`) → success resets the breaker. Breaker: 3 failures, 60 s cooldown, 20% jitter (`resilient_adapter.py:159-161`).
 Retry policy is built per call (`_retry_for_one_call`, `resilient_adapter.py:364-389`): a timeout is retried at most once, a 429 is handed straight back when `retry_rate_limits` is off (free tiers), other retryable errors follow the delay ladder. Error handling: timeout → `LLMTimeoutError`, counted as a breaker failure (`resilient_adapter.py:298-309`); fail-fast errors (auth) skip the breaker, credentials are redacted from the message and an HTTP 401 is re-raised as the domain type `LLMAuthenticationError` (`resilient_adapter.py:311-327`); other retryable errors count against the breaker (`resilient_adapter.py:328-330`); every error message is passed through `_sanitize_error` (`resilient_adapter.py:320, 337`).
 
 Configuration is read from environment variables in the factory (`LLM_TIMEOUT`, `LLM_ENABLE_CIRCUIT_BREAKER`, `LLM_ENABLE_RETRY`, `LLM_ENABLE_CACHING`, `weebot/infrastructure/adapters/llm/adapter_factory.py:99-104, 109-122`); provider keys come from `WeebotSettings` first, then `os.getenv` (`weebot/infrastructure/adapters/llm/adapter_factory.py:408-439`). One flag, `LLM_ENABLE_CACHING`, switches both prompt caching and response caching (`weebot/infrastructure/adapters/llm/adapter_factory.py:189-194`).

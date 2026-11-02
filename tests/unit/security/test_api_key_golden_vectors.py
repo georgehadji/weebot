@@ -50,8 +50,11 @@ def test_hash_key_round_trips_with_a_fresh_salt():
 
 def test_verification_compares_in_constant_time():
     """A timing oracle on the stored hash would help an attacker with a leaked table."""
-    source = inspect.getsource(_verify_key)
-    assert "hmac.compare_digest" in source or "compare_digest" in source
+    from weebot.core import secret_compare
+
+    # verify_key calls safe_equals, which uses hmac.compare_digest on encoded bytes.
+    assert "safe_equals" in inspect.getsource(_verify_key)
+    assert "compare_digest" in inspect.getsource(secret_compare.safe_equals)
 
 
 def test_generated_keys_have_the_documented_shape():

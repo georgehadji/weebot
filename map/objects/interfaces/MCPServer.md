@@ -5,8 +5,8 @@ code: WeebotMCPServer, run_mcp.py
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-31
-commit: fe394636
+verified: 2026-11-01
+commit: 993e7a90
 ---
 
 # MCP server
@@ -19,7 +19,7 @@ An external client (Claude Desktop over stdio, an IDE over SSE) calls Weebot's t
 ## Shape
 - Entry point: `--transport stdio|sse`, `--host` (default `127.0.0.1`), `--port` (8765), `--allow-remote` (`run_mcp.py:82-96`). It requires one provider key (`run_mcp.py:98-105`), refuses a non-loopback SSE host without `--allow-remote` (`run_mcp.py:107-115`), and `--allow-remote` requires `WEEBOT_MCP_API_KEY` (`run_mcp.py:117-128`).
 - `_build_server` (`run_mcp.py:42-70`): one `Container()` with `configure_defaults()`; passes state repo, scheduler, event store, reranker, tool discovery, a loaded `SkillRegistry` (`run_mcp.py:73-78`) and `mcp_composite_tools_enabled`.
-- Auth: `api_key` or `WEEBOT_MCP_API_KEY` (`server.py:160`) enables `_APIKeyTokenVerifier` (`server.py:67-94`, constant-time compare, returns `AccessToken`) with `AuthSettings` (`server.py:174-182`). `run_sse` refuses a non-loopback bind without a key (`server.py:215-239`), so the guard holds for callers that skip `run_mcp.py`.
+- Auth: `api_key` or `WEEBOT_MCP_API_KEY` (`server.py:160`) enables `_APIKeyTokenVerifier` (`server.py:68-94`, constant-time compare, returns `AccessToken`) with `AuthSettings` (`server.py:174-182`). `run_sse` refuses a non-loopback bind without a key (`server.py:215-239`), so the guard holds for callers that skip `run_mcp.py`.
 - Tools (`server.py:570-645`): `bash`, `python_execute`, `web_search`, `file_view`, `file_create`, `file_str_replace`, `file_insert`, deprecated `file_editor`, `ping`. Each handler applies `check_rate_limit`, records metrics and pushes to the `ActivityStream` (`server.py:404-565`). Composite tools register first and can hide atomic ones (`server.py:656-667, 669-684`). File tools use one `StrReplaceEditorTool` (`server.py:399`), not wrapped by `guard_tools`.
 - Resources (`server.py:690-773`): `weebot://skills`, `activity`, `state`, `schedule`, `products`, `tools`, `costs`, `routing`, built in `weebot/mcp/resources.py`.
 

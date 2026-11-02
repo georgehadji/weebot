@@ -128,10 +128,13 @@ class TestTimingSafeComparison:
         """The one authenticator, which the middleware and sockets call, uses compare_digest."""
         import inspect
 
+        from weebot.core import secret_compare
         from weebot.interfaces.web import auth
 
-        source = inspect.getsource(auth._authenticate)
-        assert "hmac.compare_digest" in source, "API key comparison must use hmac.compare_digest"
+        # The authenticator calls safe_equals, which encodes both sides and then uses
+        # hmac.compare_digest. A raw compare_digest on a non-ASCII header raised TypeError.
+        assert "safe_equals" in inspect.getsource(auth._authenticate)
+        assert "hmac.compare_digest" in inspect.getsource(secret_compare.safe_equals)
 
     def test_the_api_middleware_goes_through_the_authenticator(self):
         """The middleware has no key comparison of its own to get wrong."""

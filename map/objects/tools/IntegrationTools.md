@@ -5,8 +5,8 @@ code: AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemToo
 cluster: tools
 universe: live
 status: verified
-verified: 2026-10-31
-commit: fe394636
+verified: 2026-11-01
+commit: d3269de6
 ---
 
 # Integration tools
@@ -25,7 +25,7 @@ Native integrations are `BaseTool`s in the role table. Apify and MCP tools are g
 
 Approval, read from source:
 - `guard_tools` wraps a tool if its name is in `GUARDED_TOOLS` (`bash`, `powershell`, `python_execute`), matches `WEEBOT_FINANCIAL_TOOL_PATTERNS` or is outbound (`weebot/application/services/tool_guards.py:560-581`). Outbound means a match of `WEEBOT_OUTBOUND_TOOL_PATTERNS`, default `*schedulepost*,*deletepost*,*publish*,*send_email*,*send_mail*,*send_reply*,*send_message*,*tweet*,*generate*,*clipping*,apify_*,image_gen,video_gen,mixture_of_agents` (`weebot/config/settings.py:502-515`), or any `mcp__` tool whose name does not read as a read verb (`weebot/application/services/tool_guards.py:289-290, 293-328`). An outbound tool always asks, even in observe mode unless `WEEBOT_OUTBOUND_ASK_IN_OBSERVE=false` (`weebot/application/services/tool_guards.py:331-351`, `weebot/config/settings.py:516-520`). `docs/SECURITY_MODEL.md` names `mcp__postiz__schedulePostTool`.
-- `atomic_mail` matches no pattern; its sends are gated by `EgressGuard` instead: a `jmap_request` that is not a dry run and not the `list_inbox` preset, or inline `ops` that call `EmailSubmission/set` once `$VAR`s are filled in (or cannot be read), is egress to `vars.TO` or to an unknown recipient (`weebot/core/egress_guard.py:543-558`, `weebot/core/jmap_ops.py`). Fetched mail is `EXTERNAL`, so it is fenced and taints the session (`weebot/tools/atomic_mail_tool.py:78`), and the next step pauses for review (`weebot/application/flows/states/_step_run.py:109-110, 122-139`, `weebot/application/flows/states/_execution_gates.py:96-113`; category `inbound_mail` `weebot/core/approval_policy.py:765`).
+- `atomic_mail` matches no pattern; its sends are gated by `EgressGuard` instead: a `jmap_request` that is not a dry run and not the `list_inbox` preset, or inline `ops` that call `EmailSubmission/set` once `$VAR`s are filled in (or cannot be read), is egress to `vars.TO` or to an unknown recipient (`weebot/core/egress_guard.py:717-732`, `weebot/core/jmap_ops.py`). Fetched mail is `EXTERNAL`, so it is fenced and taints the session (`weebot/tools/atomic_mail_tool.py:78`), and the next step pauses for review (`weebot/application/flows/states/_step_run.py:109-110, 122-139`, `weebot/application/flows/states/_execution_gates.py:96-113`; category `inbound_mail` `weebot/core/approval_policy.py:817`).
 
 Output trust: every tool declares `output_trust`; `atomic_mail`, `apify_*`, `design_system` and each `mcp__` tool (`weebot/infrastructure/mcp/mcp_toolkit_adapter.py:16`) are `EXTERNAL`, `product` is `LOCAL` (`weebot/tools/product_tool.py:37`). The rules and the default are in `weebot/core/trust_boundary.py:58-90`.
 

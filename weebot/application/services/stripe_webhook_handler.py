@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from weebot.core.secret_compare import safe_equals
 import logging
 from typing import Any
 
@@ -120,7 +121,7 @@ class StripeWebhookHandler:
             ).hexdigest()
 
             # Constant-time comparison
-            if not hmac.compare_digest(computed_sig, expected_sig):
+            if not safe_equals(computed_sig, expected_sig):
                 logger.warning("Stripe webhook signature mismatch")
                 return False
 

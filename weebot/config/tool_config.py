@@ -42,7 +42,7 @@ class ToolConfig:
     agent_reach_path: str | None = None  # env: AGENT_REACH_PATH — agent-reach.exe
     camofox_path: str | None = None  # env: CAMOFOX_PATH — camofox-browser package folder
     remotion_host: str | None = None  # env: REMOTION_HOST — folder with Remotion installed
-    auto_install_tools: bool = False  # env: WEEBOT_AUTO_INSTALL_TOOLS — trusted catalogs only
+    auto_install_tools: bool = True  # env: WEEBOT_AUTO_INSTALL_TOOLS — trusted catalogs only
 
     def __post_init__(self):
         if not (30 <= self.max_tool_timeout <= 3600):

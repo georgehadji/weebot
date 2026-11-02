@@ -38,10 +38,9 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
 
 # Endpoint path → tier mapping
 _PATH_TIERS: dict[str, str] = {
-    # Health — unlimited
-    "/api/health": "unlimited",
-    "/api/live": "unlimited",
-    "/api/ready": "unlimited",
+    # Health probes are unlimited by exact path only (UNLIMITED_PATHS). A prefix entry here
+    # made /api/health/status and even /api/healthz unlimited, which returned before the
+    # failed-login budget, so key guesses against them were never counted.
     # Read
     "/api/sessions": "read",
     "/api/models": "read",
@@ -60,11 +59,15 @@ _PATH_TIERS: dict[str, str] = {
 }
 
 UNLIMITED_TIERS = {"unlimited"}
-UNLIMITED_PATHS = {"/api/health", "/api/live", "/api/ready"}
+# The probes AuthMiddleware leaves public (`_public_paths` in main.py). Anything else under
+# /api/health needs a key, so it is a normal "read" path whose rejected guesses are counted.
+UNLIMITED_PATHS = {"/api/health", "/api/health/live", "/api/health/prometheus"}
 
 
 def _path_tier(path: str) -> str:
     """The tier a path belongs to, before the method is known."""
+    if path in UNLIMITED_PATHS:
+        return "unlimited"
     if path in _PATH_TIERS:
         return _PATH_TIERS[path]
     # Prefix match for parameterized paths — check longest first

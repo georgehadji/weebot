@@ -90,6 +90,17 @@ def must_taint(trust: OutputTrust, is_error: bool) -> bool:
     return trust is OutputTrust.EXTERNAL and not is_error
 
 
+def taints_after_network(trust: OutputTrust, is_error: bool, used_network: bool) -> bool:
+    """Whether a ``LOCAL`` tool that reached the network ingested content an attacker wrote.
+
+    The shell and python tools are ``LOCAL``: their own output is not authored by a third
+    party. After ``git clone`` or ``pip install`` it is not their output that matters but
+    what they fetched, which the model reads next. ``EXTERNAL`` tools are covered by
+    :func:`must_taint`; an error result carries no new content (audit F20).
+    """
+    return trust is OutputTrust.LOCAL and used_network and not is_error
+
+
 def escalate(trust: OutputTrust, detection: dict[str, Any] | None) -> OutputTrust:
     """Raise trust one step toward ``EXTERNAL`` when the scanner flagged content.
 

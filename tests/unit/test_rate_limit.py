@@ -58,8 +58,8 @@ class TestTierMapping:
 
     def test_health_unlimited(self):
         assert _get_tier("/api/health") == "unlimited"
-        assert _get_tier("/api/live") == "unlimited"
-        assert _get_tier("/api/ready") == "unlimited"
+        assert _get_tier("/api/health/live") == "unlimited"
+        assert _get_tier("/api/health/prometheus") == "unlimited"
 
     def test_read_tier(self):
         assert _get_tier("/api/sessions") == "read"

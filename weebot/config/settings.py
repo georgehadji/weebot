@@ -275,11 +275,12 @@ class WeebotSettings(BaseSettings):
         ),
     )
     auto_install_tools: bool = Field(
-        default=False,
+        default=True,
         alias="WEEBOT_AUTO_INSTALL_TOOLS",
         description=(
-            "Allow approved installs from PyPI, npm, and winget. Arbitrary URLs and "
-            "installer scripts remain refused."
+            "Let the install_tool tool add a missing dependency from PyPI (wheels only), npm "
+            "(no lifecycle scripts) or winget. Every install still asks first; URLs, VCS "
+            "specs, local paths and installer scripts are refused."
         ),
     )
     intent_review_timeout_s: float = Field(

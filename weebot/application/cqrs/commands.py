@@ -56,13 +56,14 @@ class UpdatePlanCommand(Command):
     """Command to update an existing plan."""
 
     session_id: str = Field(min_length=1)
-    updates: dict[str, Any]
     reason: str = ""
     model: str = ""
-
-    def validate(self) -> None:
-        if not self.updates:
-            raise ValueError("updates is required")
+    failure_context: str = Field(
+        default="", description="Why the step failed; the planner gets it to avoid repeating it"
+    )
+    last_step_id: str | None = Field(
+        default=None, description="The step to replan around; None means the last finished step"
+    )
 
 
 class SummarizeCommand(Command):

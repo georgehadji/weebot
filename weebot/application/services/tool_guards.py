@@ -271,6 +271,11 @@ class FinancialToolAdapter:
         )
 
 
+# Named here, not only in the pattern list, because that list is user-editable and these must
+# ask whatever it says: installing code onto the machine is never a silent action.
+_ALWAYS_ASK_TOOLS = frozenset({"install_tool"})
+
+
 def is_outbound_tool(tool_name: str) -> bool:
     """True for a tool named like a publish/send/spend action.
 
@@ -283,6 +288,8 @@ def is_outbound_tool(tool_name: str) -> bool:
     from weebot.config.settings import get_settings
 
     name = tool_name.lower()
+    if name in _ALWAYS_ASK_TOOLS:
+        return True
     patterns = (p.strip().lower() for p in get_settings().outbound_tool_patterns.split(","))
     if any(fnmatchcase(name, p) for p in patterns if p):
         return True

@@ -5,8 +5,8 @@ code: cli (click group), AgentRunner, interfaces.factories
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-10-31
-commit: 85a51bdd
+verified: 2026-11-01
+commit: 4f76c44f
 ---
 
 # CLI
@@ -61,7 +61,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Uses** the DI container (`application/DIContainer.md`), `PlanActFlow` (`application/PlanActFlow.md`), `RoleBasedToolRegistry` via `build_tools`, `SQLiteStateRepository` and the event store (`infrastructure/`).
-- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:358-360, 457-470`, `routers/webhook.py:135`, through `run_scope`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:262-281`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:737`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
+- **Shares** `create_flow` / `build_tools` with the web routers (`weebot/interfaces/web/routers/sessions.py:358-360, 457-470`, `routers/webhook.py:135`, through `run_scope`) and every chat gateway (see `ChatGateways.md`). The container registers `create_flow` as a service (`weebot/application/di/__init__.py:262-281`) for `TaskRunner`, the scheduler (`weebot/scheduling/scheduler.py:745`) and `cron-agent run` (`cli/commands/cron_agent.py:276`).
 - **Looks like but is not:** `run.py` (legacy REPL, also on `shared_container`, `run.py:146-153`); the MCP server (`MCPServer.md`); `cli mcp`, which edits the MCP client's server list.
 
 ## If you change this
