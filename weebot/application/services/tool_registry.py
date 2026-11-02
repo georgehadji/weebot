@@ -119,6 +119,7 @@ class RoleBasedToolRegistry:
             "screenshot_ocr",
             "ocr_structured",
             "web_scraper",
+            "install_tool",
         ],
         "webhook": [
             # Admin-level tools minus exec tools (bash, powershell, python_execute)

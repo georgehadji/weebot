@@ -258,6 +258,15 @@ class WeebotSettings(BaseSettings):
             "'observe' (log what would ask, then run) or 'enforce' (ask)."
         ),
     )
+    auto_install_tools: bool = Field(
+        default=True,
+        alias="WEEBOT_AUTO_INSTALL_TOOLS",
+        description=(
+            "Let the install_tool tool add a missing dependency from PyPI (wheels only), npm "
+            "(no lifecycle scripts) or winget. Every install still asks first; URLs, VCS "
+            "specs, local paths and installer scripts are refused."
+        ),
+    )
     intent_review_timeout_s: float = Field(
         default=30.0,
         gt=0,
