@@ -17,9 +17,10 @@
  * never disabled while a message is in flight, and Enter does not send mid-IME-composition.
  */
 
-import { KeyboardEvent, useEffect, useRef } from "react";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { canSubmit } from "@/lib/composer";
@@ -45,6 +46,8 @@ interface ComposerProps {
   registerRetry?: (retry: (event: MessageEvent) => void) => void;
   /** Receives the function that replaces the draft (used by the example prompts). */
   registerSetDraft?: (setDraft: (text: string) => void) => void;
+  /** Receives the function used by approval and plan-review buttons. */
+  registerQuickReply?: (reply: (text: string) => void) => void;
   className?: string;
 }
 
@@ -66,6 +69,9 @@ const MODE_PLACEHOLDER: Record<SessionLifecycleStatus, string> = {
   completed: "Ask a follow-up…",
 };
 
+/** Remembers the Auto switch across sessions; the server render cannot see it. */
+const AUTO_KEY = "weebot_execution_mode";
+
 export function Composer({
   sessionId,
   status,
@@ -75,11 +81,31 @@ export function Composer({
   onDelivery,
   registerRetry,
   registerSetDraft,
+  registerQuickReply,
   className,
 }: ComposerProps) {
-  const { state, edit, submit, retry } = useComposer({
+  const [autoMode, setAutoMode] = useState(false);
+  // Read after hydration: localStorage is invisible to the server render, and reading it in the
+  // initializer made the switch disagree with the HTML (a hydration mismatch).
+  useEffect(() => {
+    try {
+      setAutoMode(window.localStorage.getItem(AUTO_KEY) === "auto");
+    } catch {
+      // storage can throw (privacy mode); the interactive default stands.
+    }
+  }, []);
+  const setAuto = useCallback((next: boolean) => {
+    setAutoMode(next);
+    try {
+      window.localStorage.setItem(AUTO_KEY, next ? "auto" : "interactive");
+    } catch {
+      // ignore
+    }
+  }, []);
+  const { state, edit, submit, submitText, retry } = useComposer({
     sessionId,
     model,
+    executionMode: autoMode ? "auto" : "interactive",
     onSessionCreated,
     onOptimisticMessage,
     onDelivery,
@@ -96,6 +122,9 @@ export function Composer({
       textareaRef.current?.focus();
     });
   }, [registerSetDraft, edit]);
+  useEffect(() => {
+    registerQuickReply?.(submitText);
+  }, [registerQuickReply, submitText]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // isComposing: Enter confirms an IME candidate (Greek tonos, CJK, ...), it must not send.
@@ -127,6 +156,13 @@ export function Composer({
             Sending…
           </span>
         )}
+        <label
+          className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+          title="Auto mode: run without stopping for approvals, gates, or questions"
+        >
+          <Switch checked={autoMode} onCheckedChange={setAuto} aria-label="Auto mode" />
+          Auto
+        </label>
       </div>
       <div className="flex items-end gap-2">
         <Textarea

@@ -26,10 +26,12 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import DEFAULT_MAX_FLOW_ITERATIONS, DEFAULT_MAX_STEP_REPETITIONS
 
-logger = logging.getLogger(__name__)
 from weebot.core.structured_logger import StructuredLogger
+from weebot.domain.models.execution_mode import ExecutionMode
 from weebot.domain.models.session import Session
 from weebot.domain.models.task_preset import TaskPreset
+
+logger = logging.getLogger(__name__)
 
 # Real types, imported for annotations only, so no runtime import and no cycle.
 # These were `Any` -- some "to avoid a circular import" -- which cost the
@@ -105,6 +107,12 @@ class PlanActFlowConfig:
     cost_meter: object | None = None  # SessionCostMeter: per-session spend (plan 2.4, D6)
     session_cost_hard_usd: float | None = None  # per-flow override of the hard limit; 0 disables
     planning_mode: str = "auto"  # "sequential", "dppm", or "auto" (dppm for complex tasks)
+
+    # ── Execution mode ──────────────────────────────────────────
+    execution_mode: ExecutionMode = ExecutionMode.INTERACTIVE
+    """Whether the flow pauses for human input during execution.  ``AUTO``
+    skips every gate, tool call approval, and AskHumanTool pause.  Set
+    via the CLI ``--auto`` flag or programmatically."""
 
     # ── Critique & validation ───────────────────────────────────────
     truth_binder: TruthBinder | None = None  # TruthBinder

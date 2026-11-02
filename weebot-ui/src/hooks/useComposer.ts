@@ -37,6 +37,8 @@ function makeClientMsgId(): string {
 interface UseComposerOptions {
   sessionId: string | null;
   model?: string;
+  /** "auto" runs the flow without human pauses; "interactive" is the default. */
+  executionMode?: "auto" | "interactive";
   onSessionCreated: (sessionId: string) => void;
   /** Show the user's message in the timeline immediately (with delivery "sending"). */
   onOptimisticMessage: (event: MessageEvent) => void;
@@ -54,6 +56,7 @@ interface UseComposerOptions {
 export function useComposer({
   sessionId,
   model,
+  executionMode,
   onSessionCreated,
   onOptimisticMessage,
   onDelivery,
@@ -78,7 +81,11 @@ export function useComposer({
     async (text: string, clientMsgId: string) => {
       try {
         if (!sessionId) {
-          const session = await api.sessions.create({ prompt: text, model });
+          const session = await api.sessions.create({
+            prompt: text,
+            model,
+            execution_mode: executionMode,
+          });
           try {
             await api.sessions.run(session.id);
           } catch (e) {
@@ -95,7 +102,7 @@ export function useComposer({
           dispatch({ type: "sent" });
           onSessionCreated(session.id);
         } else {
-          await api.sessions.input(sessionId, text, { clientMsgId, model });
+          await api.sessions.input(sessionId, text, { clientMsgId, model, executionMode });
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
         }
@@ -105,25 +112,32 @@ export function useComposer({
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
       }
     },
-    [sessionId, model, onDelivery, onSessionCreated, toast]
+    [sessionId, model, executionMode, onDelivery, onSessionCreated, toast]
+  );
+
+  const submitText = useCallback(
+    (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || state.phase === "sending") return;
+      const clientMsgId = makeClientMsgId();
+      dispatch({ type: "submit" });
+      onOptimisticMessage({
+        type: "message",
+        id: clientMsgId,
+        timestamp: new Date().toISOString(),
+        session_id: sessionId ?? "",
+        role: "user",
+        message: text,
+        delivery: "sending",
+      });
+      void deliver(text, clientMsgId);
+    },
+    [state.phase, sessionId, onOptimisticMessage, deliver]
   );
 
   const submit = useCallback(() => {
-    const text = state.draft.trim();
-    if (!text || state.phase === "sending") return;
-    const clientMsgId = makeClientMsgId();
-    dispatch({ type: "submit" });
-    onOptimisticMessage({
-      type: "message",
-      id: clientMsgId,
-      timestamp: new Date().toISOString(),
-      session_id: sessionId ?? "",
-      role: "user",
-      message: text,
-      delivery: "sending",
-    });
-    void deliver(text, clientMsgId);
-  }, [state.draft, state.phase, sessionId, onOptimisticMessage, deliver]);
+    submitText(state.draft);
+  }, [state.draft, submitText]);
 
   /** Re-send a message whose delivery failed; it keeps its row (same id) in the timeline. */
   const retry = useCallback(
@@ -139,5 +153,5 @@ export function useComposer({
 
   const edit = useCallback((draft: string) => dispatch({ type: "edit", draft }), []);
 
-  return { state, edit, submit, retry };
+  return { state, edit, submit, submitText, retry };
 }

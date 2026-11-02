@@ -137,6 +137,7 @@ export const api = {
       agent_id?: string;
       model?: string;
       session_id?: string;
+      execution_mode?: "auto" | "interactive";
     }) => fetchApi<Session>("/sessions", { method: "POST", body: JSON.stringify(data) }),
 
     get: (id: string) => fetchApi<Session>(`/sessions/${id}`),
@@ -160,13 +161,18 @@ export const api = {
      * start/resume/steer/chat from the session's current status
      * (see application/use_cases/dispatch_session_input.py).
      */
-    input: (id: string, text: string, opts?: { clientMsgId?: string; model?: string }) =>
+    input: (
+      id: string,
+      text: string,
+      opts?: { clientMsgId?: string; model?: string; executionMode?: "auto" | "interactive" }
+    ) =>
       fetchApi<{ verb: string; session: Session }>(`/sessions/${id}/input`, {
         method: "POST",
         body: JSON.stringify({
           text,
           client_msg_id: opts?.clientMsgId,
           model: opts?.model,
+          execution_mode: opts?.executionMode,
         }),
       }),
   },

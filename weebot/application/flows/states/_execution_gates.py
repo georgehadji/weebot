@@ -73,7 +73,11 @@ class GateOutcome:
 async def apply_pre_step_gates(
     state: ExecutingState, context: PlanActFlow, step: Step, prompt: str
 ) -> GateOutcome:
-    """Run the five gates in order and report the first one that fires."""
+    """Run the five gates in order and report the first one that fires.
+
+    In AUTO execution mode every gate skips pausing — violations are logged
+    but the step proceeds without user interaction.
+    """
     pause = await _inbound_mail_gate(context)
     if pause is not None:
         return GateOutcome(event=pause, effective_prompt=prompt)
@@ -93,8 +97,20 @@ async def apply_pre_step_gates(
     return GateOutcome(effective_prompt=effective_prompt)
 
 
+def _is_auto_mode(context: PlanActFlow) -> bool:
+    """Return True when the flow is running in AUTO execution mode."""
+    from weebot.domain.models.execution_mode import ExecutionMode
+
+    mode = getattr(context, "_execution_mode", ExecutionMode.INTERACTIVE)
+    return mode == ExecutionMode.AUTO
+
+
 async def _inbound_mail_gate(context: PlanActFlow) -> AgentEvent | None:
-    """ADR 006 / R1: content fetched from an inbox is untrusted, so acting on it is gated."""
+    """ADR 006 / R1: content fetched from an inbox is untrusted, so acting on it is gated.
+
+    In AUTO execution mode the gate clears the flag and logs the event but does
+    not pause — the agent proceeds without human review.
+    """
     if not context._session.get_fact("atomic_mail_inbound_pending"):
         return None
 
@@ -105,11 +121,16 @@ async def _inbound_mail_gate(context: PlanActFlow) -> AgentEvent | None:
     if not policy.requires_confirmation:
         return None
 
-    # Clear the flag BEFORE pausing so the resume proceeds normally, and record *why*
-    # we are waiting where FlowRouter can see it: `set_fact` writes to context.facts,
-    # which SessionContext.get never reads, so without the marker the resume landed in
-    # the generic branch of resolve_initial_state and the answer changed nothing.
+    # Clear the flag — the mail arrived and we've noted it.
     context._session = context._session.set_fact("atomic_mail_inbound_pending", False)
+
+    if _is_auto_mode(context):
+        logger.info(
+            "AUTO mode: inbound mail gate skipped — agent may act on %s without review",
+            context._session.id,
+        )
+        return None
+
     context._session = mark_user_gate(context._session, "inbound_mail")
     return await pause_for_user(
         context,
@@ -124,7 +145,11 @@ async def _inbound_mail_gate(context: PlanActFlow) -> AgentEvent | None:
 async def _constraint_gate(
     state: ExecutingState, context: PlanActFlow, step: Step, prompt: str
 ) -> AgentEvent | None:
-    """Lost-in-Compaction Phase 5.4: pause before a step that contradicts a constraint."""
+    """Lost-in-Compaction Phase 5.4: pause before a step that contradicts a constraint.
+
+    In AUTO execution mode the violation is logged and acknowledged but the step
+    proceeds without pausing.
+    """
     from weebot.application.flows.collaborators.user_pause import pause_for_user
 
     ack_key = f"constraint_gate_ack:{step.id}"
@@ -137,14 +162,22 @@ async def _constraint_gate(
         return None
 
     violation_text = "; ".join(c.text for c in violations[:2])
+
+    # Always journal and acknowledge, regardless of mode.
+    await state._journal_constraint_violation(context, step, violations[0].text)
+    context._session = context._session.set_fact(ack_key, True)
+
+    if _is_auto_mode(context):
+        logger.warning(
+            "AUTO mode: constraint gate skipped — step '%s' may violate: %s",
+            step.id,
+            violation_text,
+        )
+        return None
+
     logger.warning(
         "Step '%s' may violate constraint: %s — pausing for user", step.id, violation_text
     )
-    await state._journal_constraint_violation(context, step, violations[0].text)
-    # Clear the gate for this step BEFORE pausing. On resume FlowRouter flips
-    # WAITING -> RUNNING and re-enters execute() from the top against the same step;
-    # with nothing cleared the gate re-fires and the user can never get past it.
-    context._session = context._session.set_fact(ack_key, True)
     context._session = mark_user_gate(context._session, "constraint")
     return await pause_for_user(
         context,

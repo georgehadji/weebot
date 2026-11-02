@@ -629,6 +629,7 @@ class TaskRunner:
         model: str | None = None,
         ponytail_mode: str | None = None,
         steering: SteeringPort | None = None,
+        execution_mode: str | None = None,
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances.
 
@@ -672,6 +673,7 @@ class TaskRunner:
                 skill_prompt=skill_prompt,
                 state_repo=state_repo,
                 steering=steering,
+                execution_mode=execution_mode,
             )
 
         return _factory

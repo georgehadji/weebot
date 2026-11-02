@@ -28,6 +28,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ── AUTO execution mode helper ─────────────────────────────────
+def _is_auto_mode(context: PlanActFlow) -> bool:
+    """Return True when the flow is running in AUTO execution mode."""
+    from weebot.domain.models.execution_mode import ExecutionMode
+
+    mode = getattr(context, "_execution_mode", ExecutionMode.INTERACTIVE)
+    return mode == ExecutionMode.AUTO
+
+
 # ── Code step detection (Phase 8: per-step code review) ──────────────────────
 # Tool names whose presence indicates a code-producing step
 _CODE_TOOL_NAMES: frozenset[str] = frozenset(
@@ -205,7 +214,11 @@ def _error_message(run: StepRun) -> str:
 
 
 def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
-    """Phase 3 step-result quality check. Returns True when it forced a retry."""
+    """Phase 3 step-result quality check. Returns True when it forced a retry.
+
+    In AUTO execution mode the check still runs but failure is logged, not
+    retried — the step proceeds as-is.
+    """
     enabled = getattr(getattr(context, "_task_preset", None), "enable_step_validation", True)
     if not enabled or step.retry_count >= 1:
         return False
@@ -219,6 +232,14 @@ def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
         step_events=run.events,
     )
     if validation.passed:
+        return False
+
+    if _is_auto_mode(context):
+        logger.warning(
+            "AUTO mode: step '%s' failed quality check (%s) — allowing through",
+            step.id,
+            validation.reason,
+        )
         return False
 
     logger.info(
@@ -240,7 +261,11 @@ def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
 
 
 async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
-    """Improvement 6: per-step progress evaluation. Returns True when it stopped the step."""
+    """Improvement 6: per-step progress evaluation. Returns True when it stopped the step.
+
+    In AUTO execution mode the evaluation still runs but failures are logged,
+    not acted on — the step proceeds without interruption.
+    """
     evaluator = getattr(context, "_step_evaluator", None)
     if evaluator is None or not run.result_text:
         return False
@@ -277,6 +302,15 @@ async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
         evaluation.regression_detected,
         evaluation.reasoning,
     )
+
+    if _is_auto_mode(context):
+        logger.warning(
+            "AUTO mode: step '%s' failed progress eval (score=%.2f) — allowing through",
+            step.id,
+            evaluation.score,
+        )
+        return False
+
     # A stopped step counts against the candidate skills it used, like a failed one.
     from weebot.application.flows.states._step_run import record_skill_uses
 
