@@ -69,7 +69,8 @@ export function AppBar() {
           variant="outline"
           size="sm"
           onClick={() => setPaletteOpen(true)}
-          aria-label="Open command palette"
+          aria-label="Open command palette (Ctrl or Command K)"
+          aria-keyshortcuts="Control+K Meta+K"
           className="gap-1"
         >
           <Command className="h-3.5 w-3.5" aria-hidden="true" />
@@ -82,7 +83,7 @@ export function AppBar() {
             New session
           </Link>
           <Button variant="ghost" size="icon-sm" aria-label={themeLabel} title={themeLabel} onClick={toggleTheme}>
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
           </Button>
           {SHOW_DEBUG && (
             <Link href="/debug" aria-label="WebSocket debug" title="WebSocket debug" className={buttonVariants({ variant: "ghost", size: "icon-sm" })}>
@@ -102,7 +103,7 @@ export function AppBar() {
           aria-haspopup="dialog"
           onClick={() => setMenuPath(pathname)}
         >
-          <Menu className="h-4 w-4" />
+          <Menu className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -128,7 +129,7 @@ export function AppBar() {
               Settings
             </Link>
             <Button variant="ghost" onClick={toggleTheme}>
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
               {themeLabel}
             </Button>
           </div>
@@ -154,7 +155,7 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+        "focus-ring rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
         block && "py-2.5",
         active
           ? "bg-accent text-accent-foreground"

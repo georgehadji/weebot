@@ -44,6 +44,14 @@ PAIRS: list[tuple[str, str]] = [
     *[(f"status-{s}-fg", bg) for s in ("live", "waiting", "error") for bg in ("background", "surface-1", "surface-2", "surface-3")],
 ]
 
+# Non-text UI (WCAG 1.4.11): focus indicator, field boundary, switch track.
+AA_NON_TEXT = 3.0
+NON_TEXT_PAIRS: list[tuple[str, str]] = [
+    (fg, bg)
+    for fg in ("ring", "input", "control-on")
+    for bg in ("background", "surface-1", "surface-2", "card")
+]
+
 _BLOCK = re.compile(r"(:root|\.dark)\s*\{([^}]*)\}", re.DOTALL)
 _DECL = re.compile(r"--([\w-]+)\s*:\s*([^;]+);")
 _VAR = re.compile(r"var\(--([\w-]+)\)")
@@ -90,27 +98,31 @@ def contrast(fg: tuple[float, float, float], bg: tuple[float, float, float]) -> 
     return (hi + 0.05) / (lo + 0.05)
 
 
-def check(css: str) -> list[tuple[str, str, str, float]]:
+def check(css: str, pairs: list[tuple[str, str]] = PAIRS) -> list[tuple[str, str, str, float]]:
     """Every ``(theme, fg, bg, ratio)`` for the declared pairs."""
     rows = []
     for theme, tokens in parse_tokens(css).items():
-        for fg, bg in PAIRS:
+        for fg, bg in pairs:
             if fg in tokens and bg in tokens:
                 rows.append((theme, fg, bg, contrast(resolve(tokens, fg), resolve(tokens, bg))))
     return rows
 
 
 def main(argv: list[str]) -> int:
-    rows = check(_CSS.read_text(encoding="utf-8"))
-    failing = [r for r in rows if r[3] < AA_TEXT]
-    shown = rows if "--list" in argv else failing
-    for theme, fg, bg, ratio in shown:
-        print(f"{theme:5} {fg:24} on {bg:12} {ratio:5.2f}:1 {'FAIL' if ratio < AA_TEXT else 'ok'}")
-    if failing:
-        print(f"{len(failing)} pair(s) below {AA_TEXT}:1. Darken the foreground token, do not lower the bar.")
-        return 1
-    print(f"{len(rows)} token pairs meet {AA_TEXT}:1 in both themes.")
-    return 0
+    css = _CSS.read_text(encoding="utf-8")
+    failed = 0
+    for pairs, bar in ((PAIRS, AA_TEXT), (NON_TEXT_PAIRS, AA_NON_TEXT)):
+        rows = check(css, pairs)
+        failing = [r for r in rows if r[3] < bar]
+        shown = rows if "--list" in argv else failing
+        for theme, fg, bg, ratio in shown:
+            print(f"{theme:5} {fg:24} on {bg:12} {ratio:5.2f}:1 {'FAIL' if ratio < bar else 'ok'}")
+        if failing:
+            print(f"{len(failing)} pair(s) below {bar}:1. Darken the foreground token, do not lower the bar.")
+            failed += len(failing)
+        else:
+            print(f"{len(rows)} token pairs meet {bar}:1 in both themes.")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
