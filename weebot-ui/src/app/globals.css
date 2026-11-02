@@ -55,6 +55,15 @@
   --color-status-waiting-fg: hsl(var(--status-waiting-fg));
   --color-status-error-fg: hsl(var(--status-error-fg));
 
+  /* Brand accents — decorative dots, graph edges and chart series. Not for body text. */
+  --color-clay: hsl(var(--p-clay-500));
+  --color-olive: hsl(var(--p-olive-500));
+  --color-sky: hsl(var(--p-sky-500));
+  --color-fig: hsl(var(--p-fig-500));
+  --color-oat: hsl(var(--p-oat-300));
+  /* Clay that reaches 4.5:1 as text on the ivory/card surfaces (see --primary-text). */
+  --color-primary-text: hsl(var(--primary-text));
+
   --border-color-strong: hsl(var(--border-strong));
 
   --radius-lg: var(--radius);
@@ -102,22 +111,61 @@
 
 /* ────────────────────────────────────────────────────────────────
  * Layer 1 — primitives. Raw palette, no semantic meaning yet.
+ *
+ * Sampled on 2026-11-02 from the two sites this console should feel like:
+ *   anthropic.com  --color-slate-* / --color-gray-* ramp (#141413 → #FAF9F5),
+ *                  --color-clay-primary #D97757, --color-olive #788C5D,
+ *                  --color-sky #6A9BCC, --color-fig #C46686, --color-oat #E3DACC
+ *   claude.ai      --bg-100 `48 33.3% 97.1%` (light) / --bg-300 `60 2.6% 7.6%` (dark),
+ *                  --text-100, --text-400 and --border-100
+ * Every value below is one of those tokens; nothing is invented.
  * ──────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    --p-slate-950: 222 47% 7%;   /* #0B1120 */
-    --p-slate-900: 222 47% 11%;  /* #0F172A */
-    --p-slate-850: 222 33% 16%;  /* #1B2336 */
-    --p-slate-800: 222 30% 20%;  /* #272F42 */
-    --p-slate-700: 217 24% 22%;  /* #2A3347 */
-    --p-slate-600: 215 19% 35%;  /* #475569 */
-    --p-slate-400: 215 20% 65%;  /* #94A3B8 */
-    --p-slate-50:  210 40% 98%;  /* #F8FAFC */
+    /* Warm neutral "ink" ramp */
+    --p-ink-1000: 60 3.4% 5.7%;    /* #0F0F0E */
+    --p-ink-950:  60 2.6% 7.6%;    /* #141413  Anthropic slate-950 / Claude text-100 */
+    --p-ink-900:  30 4% 9.8%;      /* #1A1918 */
+    --p-ink-850:  30 3.3% 11.8%;   /* #1F1E1D */
+    --p-ink-800:  60 2.7% 14.5%;   /* #262624 */
+    --p-ink-750:  60 2.1% 18.4%;   /* #30302E */
+    --p-ink-700:  60 2.5% 23.3%;   /* #3D3D3A */
+    --p-ink-600:  48 2.7% 35.9%;   /* #5E5D59 */
+    --p-ink-500:  52.5 3.2% 51.4%; /* #87867F */
+    --p-ink-450:  48 4.8% 59.2%;   /* #9C9A92  Claude text-400 */
+    --p-ink-400:  49.1 6.5% 66.9%; /* #B0AEA5 */
+    --p-ink-350:  50 9% 73.7%;     /* #C2C0B6 */
+    --p-ink-300:  50 11.5% 79.6%;  /* #D1CFC5 */
+    --p-ink-250:  50.8 16.5% 84.5%;/* #DEDCD1  Claude border-100 */
+    --p-ink-200:  50 20.7% 88.6%;  /* #E8E6DC */
+    --p-ink-150:  48 25% 92.2%;    /* #F0EEE6  Anthropic ivory-medium */
+    --p-ink-100:  52.5 28.6% 94.5%;/* #F5F4ED */
+    --p-ink-50:   48 33.3% 97.1%;  /* #FAF9F5  Anthropic ivory-light / Claude bg-100 */
 
-    --p-violet-600: 262 83% 58%; /* #7C3AED */
-    --p-green-500:  142 71% 45%; /* #22C55E */
-    --p-amber-500:  38 92% 50%;  /* #F59E0B */
-    --p-red-500:    0 84% 60%;   /* #EF4444 */
+    /* Claude accents */
+    --p-clay-500:  14.8 63.1% 59.6%; /* #D97757  Claude Crayon */
+    --p-clay-600:  15.1 54.2% 51.2%; /* #C6613F  clay interactive */
+    --p-clay-700:  16 59.6% 40.8%;   /* #A64B2A  clay as 4.5:1 text on ivory */
+    --p-olive-500: 85.5 20.2% 45.7%; /* #788C5D  Anthropic olive */
+    --p-sky-500:   210 49% 60.8%;    /* #6A9BCC  Anthropic sky */
+    --p-fig-500:   339.6 44.3% 58.4%;/* #C46686  Anthropic fig */
+    --p-oat-300:   36.5 29.1% 84.5%; /* #E3DACC  Anthropic oat */
+    --p-cactus-300:160 18.6% 77.8%;  /* #BCD1CA  Anthropic cactus */
+
+    /* Status fills and text-safe tones (4.5:1 on every surface, see check_ui_contrast.py) */
+    --p-amber-500: 39 74% 42%;      /* #BA841C  ochre fill */
+    --p-red-500:   4.8 49.2% 50.6%; /* #BF4D43  Anthropic error */
+    --p-olive-700: 87.5 31.2% 30.2%;/* #4F6535 */
+    --p-ochre-700: 40.3 90.6% 25.1%;/* #7A5406 */
+    --p-red-700:   5 51.9% 40.8%;   /* #9E3B32 */
+    --p-olive-300: 91.6 38.5% 72%;  /* #B6D39C */
+    --p-ochre-300: 40.9 70.5% 69.4%;/* #E8C57A */
+    --p-red-300:   5.9 75.7% 79%;   /* #F2A9A1 */
+
+    /* Dark-theme fill variants that stay legible as solid dots */
+    --p-olive-400: 94.6 28.5% 59.4%;/* #93B57A */
+    --p-ochre-400: 39.9 65.3% 57.1%;/* #D9A94A */
+    --p-red-400:   5.7 61.4% 66.5%; /* #DE7F75 */
   }
 }
 
@@ -128,46 +176,47 @@
  * ──────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    /* light theme */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* light theme — anthropic.com's ivory page, white cards */
+    --background: var(--p-ink-50);
+    --foreground: var(--p-ink-950);
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: var(--p-ink-950);
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: var(--p-violet-600);
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215 16% 40%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 72% 46%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: var(--p-violet-600);
+    --popover-foreground: var(--p-ink-950);
+    --primary: var(--p-clay-500);
+    --primary-foreground: var(--p-ink-950);
+    --primary-text: var(--p-clay-700);
+    --secondary: var(--p-ink-200);
+    --secondary-foreground: var(--p-ink-700);
+    --muted: var(--p-ink-150);
+    --muted-foreground: var(--p-ink-600);
+    --accent: var(--p-ink-200);
+    --accent-foreground: var(--p-ink-950);
+    --destructive: 4.8 51.6% 42.9%; /* #A63E35 — Anthropic error, darkened for AA on ivory */
+    --destructive-foreground: var(--p-ink-50);
+    --border: var(--p-ink-200);
+    --input: var(--p-ink-250);
+    --ring: var(--p-clay-500);
     --radius: 0.5rem;
 
-    /* surfaces — light theme has one elevation step (card above bg) */
-    --surface-1: 0 0% 100%;
-    --surface-2: 210 20% 98%;
-    --surface-3: 210 20% 95%;
-    --border-strong: 214.3 20% 80%;
+    /* surfaces — warm elevation steps below the white card */
+    --surface-1: var(--p-ink-100);
+    --surface-2: var(--p-ink-150);
+    --surface-3: var(--p-ink-200);
+    --border-strong: var(--p-ink-350);
 
-    /* agent identity + status — same hues in both themes */
-    --agent: var(--p-violet-600);
-    --agent-foreground: 0 0% 100%;
-    --user-bubble: 215 25% 27%;
-    --user-bubble-foreground: 0 0% 100%;
-    --status-live: var(--p-green-500);
+    /* agent identity + status */
+    --agent: var(--p-clay-500);
+    --agent-foreground: var(--p-ink-950);
+    --user-bubble: var(--p-ink-200);
+    --user-bubble-foreground: var(--p-ink-950);
+    --status-live: var(--p-olive-500);
     --status-waiting: var(--p-amber-500);
     --status-error: var(--p-red-500);
-    --status-idle: 215 16% 55%;
-    --status-live-fg: 142 72% 26%;
-    --status-waiting-fg: 30 90% 30%;
-    --status-error-fg: 0 72% 40%;
+    --status-idle: var(--p-ink-500);
+    --status-live-fg: var(--p-olive-700);
+    --status-waiting-fg: var(--p-ochre-700);
+    --status-error-fg: var(--p-red-700);
 
     /* layout chrome */
     --topbar-h: 48px;
@@ -182,46 +231,47 @@
   }
 
   .dark {
-    --background: var(--p-slate-950);
-    --foreground: var(--p-slate-50);
+    --background: var(--p-ink-950);
+    --foreground: var(--p-ink-50);
 
     /* --card intentionally != --background: fixes the invisible-card bug
        (previously both were 222.2 84% 4.9%, so every Card vanished). */
-    --card: var(--p-slate-900);
-    --card-foreground: var(--p-slate-50);
-    --popover: var(--p-slate-850);
-    --popover-foreground: var(--p-slate-50);
+    --card: var(--p-ink-900);
+    --card-foreground: var(--p-ink-50);
+    --popover: var(--p-ink-850);
+    --popover-foreground: var(--p-ink-50);
 
-    --primary: var(--p-violet-600);
-    --primary-foreground: 0 0% 100%;
-    --secondary: var(--p-slate-800);
-    --secondary-foreground: var(--p-slate-50);
-    --muted: var(--p-slate-850);
-    --muted-foreground: var(--p-slate-400);
-    --accent: var(--p-slate-800);
-    --accent-foreground: var(--p-slate-50);
-    --destructive: 0 63% 31%;
-    --destructive-foreground: var(--p-slate-50);
-    --border: var(--p-slate-700);
-    --input: var(--p-slate-700);
-    --ring: var(--p-slate-400);
+    --primary: var(--p-clay-500);
+    --primary-foreground: var(--p-ink-950);
+    --primary-text: var(--p-clay-500);
+    --secondary: var(--p-ink-800);
+    --secondary-foreground: var(--p-ink-50);
+    --muted: var(--p-ink-850);
+    --muted-foreground: var(--p-ink-400);
+    --accent: var(--p-ink-800);
+    --accent-foreground: var(--p-ink-50);
+    --destructive: 4.8 52.9% 36.7%; /* #8F342C */
+    --destructive-foreground: var(--p-ink-50);
+    --border: var(--p-ink-750);
+    --input: var(--p-ink-750);
+    --ring: var(--p-ink-400);
 
-    --surface-1: var(--p-slate-900);
-    --surface-2: var(--p-slate-850);
-    --surface-3: var(--p-slate-800);
-    --border-strong: var(--p-slate-600);
+    --surface-1: var(--p-ink-900);
+    --surface-2: var(--p-ink-850);
+    --surface-3: var(--p-ink-800);
+    --border-strong: var(--p-ink-600);
 
-    --agent: var(--p-violet-600);
-    --agent-foreground: 0 0% 100%;
-    --user-bubble: var(--p-slate-700);
-    --user-bubble-foreground: var(--p-slate-50);
-    --status-live: var(--p-green-500);
-    --status-waiting: var(--p-amber-500);
-    --status-error: var(--p-red-500);
-    --status-idle: var(--p-slate-400);
-    --status-live-fg: var(--p-green-500);
-    --status-waiting-fg: var(--p-amber-500);
-    --status-error-fg: 0 90% 68%;
+    --agent: var(--p-clay-500);
+    --agent-foreground: var(--p-ink-950);
+    --user-bubble: var(--p-ink-750);
+    --user-bubble-foreground: var(--p-ink-50);
+    --status-live: var(--p-olive-400);
+    --status-waiting: var(--p-ochre-400);
+    --status-error: var(--p-red-400);
+    --status-idle: var(--p-ink-400);
+    --status-live-fg: var(--p-olive-300);
+    --status-waiting-fg: var(--p-ochre-300);
+    --status-error-fg: var(--p-red-300);
   }
 }
 

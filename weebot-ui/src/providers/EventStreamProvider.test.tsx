@@ -8,11 +8,12 @@
  *   D15 — tearing a connection down must not schedule a reconnect
  */
 
-import { act, render, renderHook } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentEvent } from "@/types/events";
 import { EventStreamProvider, useEventStreamContext } from "./EventStreamProvider";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
+import { useSessionPresence } from "@/hooks/useSessionPresence";
 import {
   FakeWebSocketControl,
   flushStream,
@@ -211,5 +212,50 @@ describe("EventStreamProvider — teardown", () => {
 
     expect(sockets.sockets.length).toBe(opened);
     expect(sse.streams).toHaveLength(0);
+  });
+});
+
+describe("EventStreamProvider — reconnect epoch", () => {
+  let sockets: FakeWebSocketControl;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    sockets = installFakeWebSocket();
+  });
+
+  afterEach(() => {
+    sockets.restore();
+    vi.useRealTimers();
+  });
+
+  function Probe() {
+    useSessionPresence();
+    return <span data-testid="epoch">{useEventStreamContext().streamEpoch}</span>;
+  }
+
+  it("increments when the presence socket reconnects, so open tabs can refetch", async () => {
+    render(
+      <EventStreamProvider>
+        <Probe />
+      </EventStreamProvider>
+    );
+    expect(screen.getByTestId("epoch").textContent).toBe("0");
+
+    // The first open follows the page's own load; it is not a reconnect.
+    await act(async () => {
+      sockets.last.accept();
+    });
+    expect(screen.getByTestId("epoch").textContent).toBe("0");
+
+    await act(async () => {
+      sockets.last.serverClose();
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(sockets.sockets).toHaveLength(2);
+
+    await act(async () => {
+      sockets.last.accept();
+    });
+    expect(screen.getByTestId("epoch").textContent).toBe("1");
   });
 });

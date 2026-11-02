@@ -113,20 +113,20 @@ export function ConnectionStatus() {
 
   if (status === "connected") {
     return (
-      <Alert className="bg-green-50 border-green-200">
-        <CheckCircle2 className="h-4 w-4 text-green-600" />
-        <AlertTitle className="text-green-800">Connected</AlertTitle>
-        <AlertDescription className="text-green-700 space-y-2">
+      <Alert className="border-status-live/40 bg-status-live/10">
+        <CheckCircle2 className="h-4 w-4 text-status-live-fg" />
+        <AlertTitle className="text-status-live-fg">Connected</AlertTitle>
+        <AlertDescription className="space-y-2">
           <p>Backend is running and accessible</p>
           {hasApiKey && (
             <div className="flex items-center gap-2 mt-1">
-              <KeyRound className="h-3 w-3 text-green-500" />
-              <span className="text-xs text-green-600">API key configured</span>
+              <KeyRound className="h-3 w-3 text-status-live-fg" />
+              <span className="text-xs text-muted-foreground">API key configured</span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleClearApiKey}
-                className="h-6 text-xs text-red-500 hover:text-red-700"
+                className="h-6 text-xs text-status-error-fg hover:text-status-error-fg/80"
               >
                 Clear
               </Button>
@@ -146,7 +146,7 @@ export function ConnectionStatus() {
         <p className="text-sm">
           Make sure the backend is running:
         </p>
-        <code className="block bg-red-950 p-2 rounded text-xs">
+        <code className="block bg-muted p-2 rounded text-xs">
           python -m weebot.interfaces.web.main
         </code>
 

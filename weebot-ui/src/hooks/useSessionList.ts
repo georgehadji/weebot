@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { api } from "@/lib/api";
 import { useRemote } from "./useRemote";
 import { useSessionPresence } from "./useSessionPresence";
+import { useEventStreamContext } from "@/providers/EventStreamProvider";
 import { Session, SessionPresenceEvent } from "@/types/events";
 import { Remote, remoteData } from "@/types/remote";
 
@@ -28,7 +29,18 @@ const loadSessions = () => api.sessions.list({ limit: "100" }).then((data) => da
 export function useSessionList() {
   const { state, reload } = useRemote(loadSessions);
   const presence = useSessionPresence();
+  const { streamEpoch } = useEventStreamContext();
   const sessions = remoteData(state);
+
+  // Presence is not replayed to a reconnecting socket. After the backend restarts,
+  // the seed loaded while it was down (or before the last status change) is stale,
+  // so one refetch per presence connection keeps the rail truthful.
+  const lastEpoch = useRef(streamEpoch);
+  useEffect(() => {
+    if (streamEpoch === lastEpoch.current) return;
+    lastEpoch.current = streamEpoch;
+    reload();
+  }, [streamEpoch, reload]);
 
   // Presence deltas are applied at read time rather than copied into
   // `sessions`, so an update that lands before the REST seed isn't lost.

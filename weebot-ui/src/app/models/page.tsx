@@ -23,15 +23,15 @@ function ModelCatalog({ models }: { models: ModelInfo[] }) {
   const getTierColor = (tier: string) => {
     switch (tier) {
       case "free":
-        return "bg-green-500";
+        return "bg-status-live";
       case "fast":
-        return "bg-blue-500";
+        return "bg-sky";
       case "standard":
-        return "bg-yellow-500";
+        return "bg-status-waiting";
       case "premium":
-        return "bg-purple-500";
+        return "bg-fig";
       default:
-        return "bg-gray-500";
+        return "bg-muted-foreground";
     }
   };
 
@@ -66,7 +66,7 @@ function ModelCatalog({ models }: { models: ModelInfo[] }) {
                       </span>
                       <span className="font-medium">
                         {model.cost_per_1k_tokens === 0 ? (
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                          <Badge variant="secondary" className="bg-status-live/10 text-status-live-fg">
                             FREE
                           </Badge>
                         ) : (
