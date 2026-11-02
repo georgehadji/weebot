@@ -4,9 +4,9 @@ name: Personas
 code: AgentPersona, AgentPersonaParser, AgentRegistry, PersonaRouter
 cluster: tools
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 85a51bdd
+commit: db304f26
 ---
 
 # Personas
@@ -24,7 +24,7 @@ Persona files come from outside ("agency-style agent markdown", `weebot/agents/p
 - CLI `python -m cli.main agents`: `import`, `export`, `list`, `describe`, `route`, `validate-output`, `sync-claude` (default target `~/.claude/agents`), `pack list`, `pack apply` (`cli/commands/agents.py:15-199`). Every command uses `AgentRegistry(Path.cwd())`.
 
 How it differs from LLM roles:
-- `PlannerAgent` and `ExecutorAgent` (map/CONTEXT.md, "persona" row) are the roles every flow runs; tool roles (`admin`, `coder`, ...) are keys of `RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_registry.py:26-185`). Personas reach neither: outside `weebot/agents/` the package is imported only by `cli/commands/agents.py` (and tests). No flow selects a persona or uses its system prompt.
+- `PlannerAgent` and `ExecutorAgent` (map/CONTEXT.md, "persona" row) are the roles every flow runs; tool roles (`admin`, `coder`, ...) are keys of `RoleBasedToolRegistry.DEFAULT_ROLE_MAPPINGS` (`weebot/application/services/tool_registry.py:[stale 26-185]`). Personas reach neither: outside `weebot/agents/` the package is imported only by `cli/commands/agents.py` (and tests). No flow selects a persona or uses its system prompt.
 - `pack apply` maps a persona to tools: `persona.tools` if the markdown listed any, else the tool role named like the persona, else `custom` (empty) (`cli/commands/agents.py:175-186`); it then prints the specs and a deprecation notice. `--execute` is accepted and unused (`cli/commands/agents.py:164-199`).
 
 Consequences (read from source, not run):

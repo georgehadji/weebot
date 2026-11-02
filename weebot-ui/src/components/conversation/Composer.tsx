@@ -17,7 +17,7 @@
  * never disabled while a message is in flight, and Enter does not send mid-IME-composition.
  */
 
-import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useSyncExternalStore } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -72,6 +72,43 @@ const MODE_PLACEHOLDER: Record<SessionLifecycleStatus, string> = {
 /** Remembers the Auto switch across sessions; the server render cannot see it. */
 const AUTO_KEY = "weebot_execution_mode";
 
+// localStorage is an external store, so React reads it with useSyncExternalStore rather than
+// mirroring it into state from an effect (which cascades renders) or into the initializer
+// (which disagrees with the server-rendered HTML). The storage event only fires in other
+// tabs, so this tab's listeners are notified by the setter below.
+const autoListeners = new Set<() => void>();
+
+function readAutoMode(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_KEY) === "auto";
+  } catch {
+    return false; // storage can throw (privacy mode); interactive is the default
+  }
+}
+
+function subscribeAutoMode(listener: () => void): () => void {
+  autoListeners.add(listener);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === AUTO_KEY) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    autoListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function writeAutoMode(next: boolean): void {
+  try {
+    window.localStorage.setItem(AUTO_KEY, next ? "auto" : "interactive");
+  } catch {
+    // ignore
+  }
+  autoListeners.forEach((listener) => listener());
+}
+
+const serverAutoMode = () => false;
+
 export function Composer({
   sessionId,
   status,
@@ -84,24 +121,7 @@ export function Composer({
   registerQuickReply,
   className,
 }: ComposerProps) {
-  const [autoMode, setAutoMode] = useState(false);
-  // Read after hydration: localStorage is invisible to the server render, and reading it in the
-  // initializer made the switch disagree with the HTML (a hydration mismatch).
-  useEffect(() => {
-    try {
-      setAutoMode(window.localStorage.getItem(AUTO_KEY) === "auto");
-    } catch {
-      // storage can throw (privacy mode); the interactive default stands.
-    }
-  }, []);
-  const setAuto = useCallback((next: boolean) => {
-    setAutoMode(next);
-    try {
-      window.localStorage.setItem(AUTO_KEY, next ? "auto" : "interactive");
-    } catch {
-      // ignore
-    }
-  }, []);
+  const autoMode = useSyncExternalStore(subscribeAutoMode, readAutoMode, serverAutoMode);
   const { state, edit, submit, submitText, retry } = useComposer({
     sessionId,
     model,
@@ -160,7 +180,7 @@ export function Composer({
           className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
           title="Auto mode: run without stopping for approvals, gates, or questions"
         >
-          <Switch checked={autoMode} onCheckedChange={setAuto} aria-label="Auto mode" />
+          <Switch checked={autoMode} onCheckedChange={writeAutoMode} aria-label="Auto mode" />
           Auto
         </label>
       </div>

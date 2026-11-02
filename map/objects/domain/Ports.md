@@ -4,9 +4,9 @@ name: Ports
 code: weebot/application/ports/*_port.py
 cluster: domain
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 993e7a90
+commit: db304f26
 ---
 
 # Ports
@@ -22,7 +22,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | Port | file:line | Main implementation | DI |
 |---|---|---|---|
 | ApiKeyPort | api_key_port.py:64 | SQLiteApiKeyStore `infrastructure/security/sqlite_api_key_store.py:38` | port `di/__init__.py:182` (factory `di/_factories.py:246`); the web app holds it as `app.state.api_key_store` (`interfaces/web/main.py:209`, read at `interfaces/web/auth.py:113-119`) |
-| ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:104-160` | none |
+| ApprovalPort | approval_port.py:36 | Deny / FlowPause / ConsoleApproval `application/services/tool_approval.py:[stale 104-160]` | none |
 | AuditPort | audit_port.py:15 | AuditService `application/services/audit_service.py:32` | key `AuditService` `di/__init__.py:171` |
 | BehavioralLearnerPort | behavioral_learner_port.py:11 | BehavioralLearner `application/services/behavioral_learner.py:36` | key `"behavioral_learner"` `di/_learning.py:37` |
 | BrowserPort | browser_port.py:151 | PlaywrightAdapter `infrastructure/browser/playwright_adapter.py:26` | none |
@@ -38,7 +38,7 @@ Dependency inversion: application code types against the port, and an adapter is
 | EventStorePort | event_store_port.py:16 | AsyncEventStore `infrastructure/event_store.py:104` | port `di/__init__.py:176` |
 | FileStoragePort | file_storage_port.py:14 | LocalFileStorageAdapter `infrastructure/adapters/file_storage_adapter.py:18` | port `di/__init__.py:196` |
 | IGatewaySessionStorePort (Protocol) / AbstractGatewaySessionStore | gateway_session_store_port.py:15, 67 | SQLiteGatewaySessionStore `infrastructure/persistence/gateway_session_store.py:40` | port `di/__init__.py:179` |
-| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:83`, `models/plan_act_flow_config.py:191`) |
+| HookRegistryPort (Protocol) | hook_registry_port.py:14 | structural | none (typed in `executor/_base.py:83`, `models/plan_act_flow_config.py:199`) |
 | IntentReviewPort | intent_review_port.py:11 | IntentReviewService `application/services/intent_review_service.py:35` | inside `"idea_gate"` `di/__init__.py:192`, `di/_factories.py:289-298` |
 | JudgePort | judge_port.py:52 | ModelJudge, ScoreJudge `application/eval/judges.py:44, 102` | ModelJudge built by `harness baseline --judge` (`cli/commands/harness.py:417`) |
 | KnowledgeGraphPort | knowledge_graph_port.py:16 | SQLiteKnowledgeGraph `infrastructure/persistence/sqlite_knowledge_graph.py:36`, PostgreSQLKnowledgeGraph | key `SQLiteKnowledgeGraph` `di/_capabilities.py:35` |

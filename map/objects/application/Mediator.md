@@ -4,9 +4,9 @@ name: Mediator (CQRS)
 code: Mediator
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-11-01
-commit: 1fe1231f
+commit: db304f26
 ---
 
 # Mediator
@@ -31,7 +31,7 @@ What exists (2026-10-31):
 
 ## Connected to
 - **Built and owned by** the DI Container (`Container.build_mediator`, `weebot/application/di/__init__.py:516-608`), as a singleton per container.
-- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:243`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:71`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:334`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`weebot/interfaces/web/routers/ops_router.py:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:227`).
+- **Callers (`.send`):** `PlanningState` (`weebot/application/flows/states/planning.py:243`), `ExecutingState` (`weebot/application/flows/states/_step_run.py:[stale 71]`), `UpdatingState` (`states/updating.py:117`), `SummarizingState` (`states/summarizing.py:34`), `CompletedState` (`states/completed.py:334`), `ChatMessageState` (`states/chat_message.py:56`), `SkillOptFlow` (`weebot/application/flows/skill_opt_flow.py:191, 267`), and `ScoreTrajectoryHandler` (`cqrs/handlers/trajectory_handler.py:94`). **`.query`:** `weebot/interfaces/web/routers/ops_router.py:48, 72, 96`, which takes the mediator and state repo from the app's container through `Depends` (`weebot/interfaces/web/routers/ops_router.py:28-36`). Planning and Executing refuse to run with no mediator (`planning.py:95`, `executing.py:227`).
 - **Handlers that build agents:** `CreatePlanHandler` builds PlannerAgent, `ExecuteStepHandler` builds ExecutorAgent through the container's executor factory, `UpdatePlanHandler` builds PlannerAgent, `SummarizeHandler` builds ExecutorAgent (see those cards).
 - **Looks like but is not:** the event bus (`EventBusPort`, publishes events, no handler per type); `MiddlewareChain` inside `ExecutorAgent` (wraps LLM requests, not commands).
 
