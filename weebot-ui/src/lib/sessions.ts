@@ -12,6 +12,11 @@ export function normalizeForSearch(text: string): string {
     .replace(/ς/g, "σ");
 }
 
+/** The models a session ran on, short names only: "openrouter/anthropic/claude-x" reads "claude-x". */
+export function modelsLabel(models: string[] | undefined): string {
+  return (models ?? []).map((m) => m.slice(m.lastIndexOf("/") + 1)).join(", ");
+}
+
 /** What the rail search looks at: the title and the prompt the session was started with. */
 function searchableText(session: Session): string {
   const ctx = session.context ?? {};

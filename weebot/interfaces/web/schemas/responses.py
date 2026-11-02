@@ -27,6 +27,9 @@ class SessionResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     event_count: int = Field(default=0, description="Number of events in session")
+    models: list[str] = Field(
+        default_factory=list, description="Models the session's LLM calls used, first use first"
+    )
 
 
 class SessionListResponse(BaseModel):

@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-11-02
-commit: 7be9066d
+commit: a824d62a
 ---
 
 # DI Container
@@ -29,7 +29,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 
 ## Connected to
 - **Creates:** the Mediator (`_create_mediator` calls `build_mediator`, `weebot/application/di/_factories.py:175-176`), every flow, the step executor, and the ports' adapters.
-- **Shared root:** `weebot/interfaces/factories.py:56-73` (`shared_container()`, one configured container per process; `reset_shared_container` at `weebot/interfaces/factories.py:75-83`), used by the web lifespan (`weebot/interfaces/web/main.py:188-190`) and the CLI (`cli/main.py:76-88`).
+- **Shared root:** `weebot/interfaces/factories.py:56-73` (`shared_container()`, one configured container per process; `reset_shared_container` at `weebot/interfaces/factories.py:75-83`), used by the web lifespan (`weebot/interfaces/web/main.py:189-191`) and the CLI (`cli/main.py:76-88`).
 - **Hand-built elsewhere:** 7 `Container()` sites outside `di/`, held at that ceiling by `scripts/lint_container_construction.py` (`tasks/quality/ceilings.toml:339`): `weebot/interfaces/factories.py:69`, `cli/commands/flow.py:432`, `cli/commands/harness.py:102, 143, 311, 410`, `run_mcp.py:58`. Each `Container()` has its own empty bindings and singletons, so it only works after `configure_defaults()`.
 - **Checked by:** `scripts/lint_di_wiring.py` (`make lint-di-wiring`) and `tests/unit/test_architecture_fitness.py`.
 - **Looks like but is not:** a framework container; there is no scope, no auto-wiring, no constructor injection. It is looked up by hand.
@@ -39,7 +39,7 @@ Bindings are factories so adapters that a process never uses (a browser in a CLI
 **Does not hit:** adapters' own behavior; the flow state machine. Changing a binding key hits string-keyed lookups silently: `_maybe_get_str` returns `None` (the source records a bug of that shape at `weebot/application/di/__init__.py:560-566`).
 
 ## Surfaces
-Process start-up: the web server calls `warm_up` (`weebot/interfaces/web/main.py:240`). The CLI takes `shared_container()` and builds `AgentRunner` itself (`cli/commands/flow.py:141`).
+Process start-up: the web server calls `warm_up` (`weebot/interfaces/web/main.py:241`). The CLI takes `shared_container()` and builds `AgentRunner` itself (`cli/commands/flow.py:141`).
 
 ## See
 `weebot/application/di/__init__.py`

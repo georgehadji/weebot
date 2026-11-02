@@ -24,6 +24,8 @@ export function applyPresence(session: Session, update?: SessionPresenceEvent): 
   return { ...session, status: update.status as Session["status"], title };
 }
 
+const SETTLED = new Set(["waiting", "completed", "failed"]);
+
 const loadSessions = () => api.sessions.list({ limit: "100" }).then((data) => data.sessions);
 
 export function useSessionList() {
@@ -68,6 +70,22 @@ export function useSessionList() {
         reload();
         return;
       }
+    }
+  }, [sessions, presence, reload]);
+
+  // Models come from the event store, not presence: when a run settles, refetch once so the
+  // rail shows the models it used.
+  const settled = useRef(new Set<string>());
+  useEffect(() => {
+    if (!sessions) return;
+    for (const s of sessions) {
+      const status = presence.get(s.id)?.status;
+      if (!status || !SETTLED.has(status) || status === s.status) continue;
+      const key = `${s.id}:${status}`;
+      if (settled.current.has(key)) continue;
+      settled.current.add(key);
+      reload();
+      return;
     }
   }, [sessions, presence, reload]);
 

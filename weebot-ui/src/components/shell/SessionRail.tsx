@@ -8,7 +8,7 @@ import { StateView } from "@/components/common/StateView";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { cn } from "@/lib/utils";
 import { useSessionList } from "@/hooks/useSessionList";
-import { filterSessions } from "@/lib/sessions";
+import { filterSessions, modelsLabel } from "@/lib/sessions";
 import { Session } from "@/types/events";
 
 function isActive(status: string): boolean {
@@ -124,6 +124,7 @@ function SessionGroup({
       <ul>
         {sessions.map((s) => {
           const href = `/sessions/${s.id}`;
+          const models = modelsLabel(s.models);
           return (
             <li key={s.id}>
               <Link
@@ -137,7 +138,10 @@ function SessionGroup({
                 )}
               >
                 <StatusBadge status={s.status} variant="icon" />
-                <span className="truncate">{s.title || "New session"}</span>
+                <span className="min-w-0">
+                  <span className="block truncate">{s.title || "New session"}</span>
+                  {models && <span className="block truncate font-mono">{models}</span>}
+                </span>
               </Link>
             </li>
           );
