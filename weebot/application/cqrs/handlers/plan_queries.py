@@ -48,7 +48,7 @@ class GetPlanVisualizationHandler(QueryHandler):
                 nodes.append(
                     {
                         "id": sid,
-                        "label": (step.description or sid)[:60],
+                        "label": step.description or sid,
                         "status": (
                             step.status.value if hasattr(step.status, "value") else str(step.status)
                         ),
