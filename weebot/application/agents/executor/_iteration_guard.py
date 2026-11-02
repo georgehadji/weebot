@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # Default limits
-_MAX_TOOL_CALLS_PER_STEP = 12
+# 24, not 12: a step doing real work (read, edit, run, verify) routinely needs more than
+# twelve rounds, and the old cap ended those steps with a summary before the work was
+# finished — the literal "Step completed (budget cap)." came from that summary's fallback.
+# MAX_EXECUTOR_STEPS (50) still bounds each step, and the loop guards below still catch
+# repetition, so this raises room to work rather than removing a guard.
+DEFAULT_MAX_TOOL_CALLS_PER_STEP = 24
+_MAX_TOOL_CALLS_PER_STEP = DEFAULT_MAX_TOOL_CALLS_PER_STEP  # back-compat for older imports
 _MAX_REPEATED_ASSISTANT_TURNS = 2
 _REPEATED_TOOL_SIGNATURE_LIMIT = 4
 
@@ -24,7 +30,7 @@ _REPEATED_TOOL_SIGNATURE_LIMIT = 4
 # The slack covers [RECOVERY] and budget-cap system messages, which are
 # appended outside the per-tool-call pairing.
 _CONTEXT_TURN_SLACK = 6
-DEFAULT_MAX_CONTEXT_TURNS = 1 + (2 * _MAX_TOOL_CALLS_PER_STEP) + _CONTEXT_TURN_SLACK
+DEFAULT_MAX_CONTEXT_TURNS = 1 + (2 * DEFAULT_MAX_TOOL_CALLS_PER_STEP) + _CONTEXT_TURN_SLACK
 
 
 @dataclass
@@ -68,7 +74,7 @@ class IterationGuard:
     def __init__(
         self,
         step_id: str,
-        max_tool_calls_per_step: int = _MAX_TOOL_CALLS_PER_STEP,
+        max_tool_calls_per_step: int = DEFAULT_MAX_TOOL_CALLS_PER_STEP,
         max_repeated_assistant_turns: int = _MAX_REPEATED_ASSISTANT_TURNS,
         repeated_tool_signature_limit: int = _REPEATED_TOOL_SIGNATURE_LIMIT,
     ):

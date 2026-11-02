@@ -35,7 +35,7 @@ Model choice per call: `_resolve_model_for_step` (`_base.py:332-347`) returns `M
 - **Looks like but is not:** `PlannerAgent` (writes plans, no tools); persona agents in `weebot/agents/`.
 
 ## If you change this
-**Hits:** `ExecuteStepHandler`, `SummarizeHandler`, `Container.step_executor`, `PlanActFlow` (summary executor, token usage), `ExecutingState` (reads facts and events); the event stream consumers (CLI, WebSocket); `IterationGuard` limits (12 tool calls per step, 2 repeated assistant turns, 4 repeated tool signatures, `_base.py:477-482`); the 19 test files that reference `ExecutorAgent` (grep 2026-10-24).
+**Hits:** `ExecuteStepHandler`, `SummarizeHandler`, `Container.step_executor`, `PlanActFlow` (summary executor, token usage), `ExecutingState` (reads facts and events); the event stream consumers (CLI, WebSocket); `IterationGuard` limits (24 tool calls per step, 2 repeated assistant turns, 4 repeated tool signatures, `_base.py:478-483`); the 19 test files that reference `ExecutorAgent` (grep 2026-10-24).
 **Does not hit:** plan creation (`PlannerAgent`); `FlowRouter`; model fallback order (that is `CascadeExecutor`).
 
 ## Surfaces

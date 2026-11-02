@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
+    DEFAULT_MAX_TOOL_CALLS_PER_STEP,
     IterationGuard,
 )
 from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
@@ -476,7 +477,7 @@ class ExecutorAgent:
 
         guard = IterationGuard(
             step_id=step.id,
-            max_tool_calls_per_step=12,
+            max_tool_calls_per_step=DEFAULT_MAX_TOOL_CALLS_PER_STEP,
             max_repeated_assistant_turns=2,
             repeated_tool_signature_limit=4,
         )
