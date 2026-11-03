@@ -47,6 +47,11 @@ updates:
       - dependency-name: "uuid-utils"
         update-types:
           - "version-update:semver-major"
+      # mcp 2.x renames FastMCP to MCPServer, moves host/port off the constructor and
+      # swaps the streamable-http client to httpx2 (PR #115). Port weebot/mcp/server.py
+      # and mcp_client_manager.py first, then drop this.
+      - dependency-name: "mcp"
+        versions: [">=2"]
     # Group bumps into single PRs to reduce noise; majors get their own group
     groups:
       python-minor-patch:
@@ -77,6 +82,11 @@ updates:
       prefix: "fix"
       prefix-development: "chore"
       include: "scope"
+    ignore:
+      # @vitejs/plugin-react 6 needs vite 8; vitest 5 currently resolves vite 7 (PR #79).
+      # 5.x supports vite 4-8. Drop this when vite 8 is adopted.
+      - dependency-name: "@vitejs/plugin-react"
+        versions: [">=6"]
     groups:
       npm-minor-patch:
         patterns:
