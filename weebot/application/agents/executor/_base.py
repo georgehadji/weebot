@@ -202,6 +202,7 @@ class ExecutorAgent:
             model=model,
             effect_ledger=effect_ledger,
             workspace_checkpoints=workspace_checkpoints,
+            middleware_chain=middleware_chain,
         )
 
     def set_harness_block(self, block: str | None) -> None:

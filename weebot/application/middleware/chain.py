@@ -16,9 +16,11 @@ import logging
 from typing import Any
 
 from weebot.application.middleware.base import (
+    Deny,
     Middleware,
     MiddlewareRequest,
     MiddlewareResponse,
+    ToolCall,
     ToolCallResult,
 )
 
@@ -97,6 +99,26 @@ class MiddlewareChain:
         for mw in self._middlewares:
             response, state = await mw.after_response(response, request, state)
         return response.content, response.tool_calls
+
+    async def apply_before_tool_call(
+        self, name: str, arguments: dict[str, Any]
+    ) -> ToolCall | Deny:
+        """Chain of responsibility: each middleware sees the previous one's call; the first
+        ``Deny`` stops the chain and the tool call."""
+        call = ToolCall(name=name, arguments=arguments)
+        for mw in self._middlewares:
+            outcome = await mw.before_tool_call(call)
+            if isinstance(outcome, Deny):
+                logger.info("tool call %s denied by %s: %s", name, mw.name(), outcome.reason)
+                return outcome
+            call = outcome
+        return call
+
+    async def apply_transform_tool_result(self, call: ToolCall, result: Any) -> Any:
+        """Run ``transform_tool_result`` for every middleware in declaration order."""
+        for mw in self._middlewares:
+            result = await mw.transform_tool_result(call, result)
+        return result
 
     async def apply_after_tool_call(
         self,

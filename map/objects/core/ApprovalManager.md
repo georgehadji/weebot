@@ -5,8 +5,8 @@ code: ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callb
 cluster: core
 universe: live
 status: verified
-verified: 2026-11-02
-commit: db304f26
+verified: 2026-11-03
+commit: e7c91b6a
 ---
 
 # ApprovalManager
@@ -27,7 +27,7 @@ A grant can only authorise the exact call a human saw: it is keyed on a SHA-256 
 Consequences (read from source, not run):
 - One process-wide store: `tool_approval._GRANTS = ApprovalManager(on_expired=_journal_expired)` (`weebot/application/services/tool_approval.py:90-98`). `FlowPauseApproval` consumes a grant to run a resumed call, else returns PENDING (`weebot/application/services/tool_approval.py:133-146`); `record_flow_reply` issues the grant when a human approves (`weebot/application/services/tool_approval.py:356-379`).
 - `GuardedTool` runs an approved ASK inside `human_approved_call` (`weebot/application/services/tool_guards.py:522-529`); `bash_tool`, `powershell_tool` and `python_tool` skip their own "requires confirmation" refusal when `is_human_approved` is true (`weebot/tools/bash_tool.py:400`, `weebot/tools/powershell_tool.py:165`, `weebot/tools/python_tool.py:170`).
-- `call_fingerprint` is also used by the egress, sandbox-network and untrusted-content (D5) asks in `ToolExecutor` (`weebot/application/agents/executor/_tool_executor.py:58-66, 86-92, 133-139, 496-498, 527-529`).
+- `call_fingerprint` is also used by the egress, sandbox-network and untrusted-content (D5) asks in `ToolExecutor` (`weebot/application/agents/executor/_tool_executor.py:59-67, 86-92, 133-139, 496-498, 527-529`).
 - `console_approval_callback` and `ApprovalRequest` have no runtime caller: `ConsoleApproval` asks with its own prompt (`tool_approval.py:154-178`); `ApprovalRequest` is used by `examples/phase11/02_bash_safety.py:28` and tests (grep, 2026-10-24). The module docstring says the Console strategy reuses the callback (`approval.py:4-5`); it does not.
 - `format_prompt` mixes Rich colour tags into a plain box-drawn string (`approval.py:60-73`).
 

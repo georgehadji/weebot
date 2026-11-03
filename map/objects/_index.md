@@ -15,14 +15,15 @@ Format: name — source — status — card
 ## application
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — stale 2026-11-01 — [card](application/CascadeExecutor.md)
 - DelegationGuard (DelegationGuard, DelegatedFlow, current_depth, DELEGATION_GUARD) — `docs/adr/018-delegation-policy.md` — stub — [card](application/DelegationGuard.md)
-- DI Container (Container) — `weebot/application/di/__init__.py` — verified 2026-11-02 — [card](application/DIContainer.md)
+- DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-11-02 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-02 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-11-02 — [card](application/FlowState.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
-- PlanActFlow — `weebot/application/flows/plan_act_flow.py` — verified 2026-11-02 — [card](application/PlanActFlow.md)
+- PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
+- ToolArgCoercion (coerce_args, Coercion, Deny, ToolCall, MiddlewareChain) — `tasks/specs/hermes_v022_parity_implementation_plan.md` — stub — [card](application/ToolArgCoercion.md)
 - WorkspaceCheckpoint (WorkspaceCheckpointPort, ShadowGitCheckpointAdapter, CheckpointRef, checkpoint_before_change) — `docs/adr/019-workspace-checkpoints.md` — stub — [card](application/WorkspaceCheckpoint.md)
 
 ## infrastructure
@@ -31,17 +32,17 @@ Format: name — source — status — card
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — stale 2026-10-31 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-11-03 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox, ModalSandboxBackend) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-11-02 — [card](infrastructure/Sandbox.md)
-- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — verified 2026-11-02 — [card](infrastructure/SQLiteStateRepository.md)
+- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — verified 2026-11-03 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
 - Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-11-02 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-11-01 — [card](interfaces/CLI.md)
-- MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-11-02 — [card](interfaces/MCPServer.md)
+- MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-11-03 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — stale 2026-10-31 — [card](interfaces/WebAPI.md)
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-31 — [card](interfaces/WebUI.md)
 
 ## core
-- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-02 — [card](core/ApprovalManager.md)
+- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-03 — [card](core/ApprovalManager.md)
 - BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-03 — [card](core/BashGuard.md)
 - ChildEnv (build_child_env, BASE_POSIX, BASE_WINDOWS) — `weebot/core/child_env.py` — stub — [card](core/ChildEnv.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-11-01 — [card](core/CommandSecurityAnalyzer.md)
