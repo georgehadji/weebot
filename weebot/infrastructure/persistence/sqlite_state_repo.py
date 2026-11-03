@@ -36,6 +36,8 @@ from weebot.infrastructure.persistence.fts5_search import (
     clear_session_events,
     ensure_fts5_table,
     index_event,
+    load_watermark,
+    save_watermark,
     search_events,
 )
 from weebot.infrastructure.persistence._session_queries import SessionQueries
@@ -395,9 +397,9 @@ class SQLiteStateRepository(
         if session.id not in self._fts5_locks:
             self._fts5_locks[session.id] = asyncio.Lock()
         async with self._fts5_locks[session.id]:
-            # `_fts5_indexed` is per-instance memory: nothing persists it, so
-            # the first save of a session by a fresh repository always starts
-            # from zero and re-walks every event. That is unavoidable, but
+            # Before H15 `_fts5_indexed` was per-instance memory only, so the first
+            # save of a session by a fresh repository started from zero and
+            # re-walked every event. That was unavoidable then, but
             # appending the result was not — `index_event` only ever INSERTs,
             # so each restart added a second full copy of the session to
             # `event_fts`. Measured: a 6-event session indexed once by one
@@ -411,6 +413,14 @@ class SQLiteStateRepository(
             # carries them. The index converges on what the row holds. The
             # alternative — keeping them — was never durable anyway, since the
             # watermark that would have protected them dies with the process.
+            # Since H15 the watermark is also stored (`fts_watermark`), so a restart
+            # resumes where the last run stopped; memory is only a cache of it. A full
+            # re-index now happens only for a session that was never indexed or whose
+            # row holds fewer events than the watermark counts.
+            if session.id not in self._fts5_indexed:
+                stored = await load_watermark(pool, session.id)
+                if stored is not None:
+                    self._fts5_indexed[session.id] = stored
             known = session.id in self._fts5_indexed
             last_indexed = self._fts5_indexed.get(session.id, 0)
             if len(session.events) < last_indexed:
@@ -448,11 +458,21 @@ class SQLiteStateRepository(
                     if hasattr(event, "details") and event.details:
                         content = str(event.details)[:1000]
                     try:
-                        await index_event(conn, session.id, str(event_type), str(summary), content)
+                        stamp = getattr(event, "timestamp", None)
+                        await index_event(
+                            conn,
+                            session.id,
+                            str(event_type),
+                            str(summary),
+                            content,
+                            event_id=str(getattr(event, "id", "") or ""),
+                            ts=stamp.isoformat() if hasattr(stamp, "isoformat") else "",
+                        )
                     except Exception:
                         logger.warning("Failed to index event for FTS5", exc_info=True)
                         break
                     indexed_count += 1
+                await save_watermark(conn, session.id, last_indexed + indexed_count)
             # Stop at the first failure and advance exactly as far as we got: the
             # failed event is retried on the next save, and the ones already
             # indexed are not duplicated.
