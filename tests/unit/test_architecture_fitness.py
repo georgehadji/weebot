@@ -691,6 +691,7 @@ def test_no_blocking_calls_in_async():
         "_capabilities.py",  # git integrity check (tracked: ARCHITECTURE_9_PLAN.md)
         "default_jobs.py",  # git integrity check job, moved from _capabilities.py;
         # subprocess.run is wrapped in asyncio.to_thread (non-blocking)
+        "shadow_git.py",  # git plumbing; every port method runs it through asyncio.to_thread
     }
     violations = [v for v in violations if not any(e in str(v) for e in known_exceptions)]
 

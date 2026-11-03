@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
     from weebot.application.services.strategy_transfer import StrategyTransferService
     from weebot.domain.services.skill_promotion_gate import SkillPromotionGate
+    from weebot.application.services.delegation_guard import DelegationGuard
     from weebot.application.services.session_cost import SessionCostMeter
     from weebot.application.strategies.llm_pool import LLMPool
 
@@ -54,3 +55,5 @@ SKILL_PROMOTION_GATE: Key[SkillPromotionGate | None] = Key("skill_promotion_gate
 SUMMARY_REPO: Key[SummaryRepositoryPort] = Key("summary_repo")
 # Cross-domain approaches from successful runs; None while its flag is off.
 STRATEGY_TRANSFER: Key[StrategyTransferService | None] = Key("strategy_transfer")
+# Depth, count, concurrency and timeout for every spawned child (H4); one per container.
+DELEGATION_GUARD: Key[DelegationGuard] = Key("delegation_guard")

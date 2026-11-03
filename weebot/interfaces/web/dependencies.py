@@ -29,6 +29,7 @@ def _session_stores() -> list[tuple[str, Any, str]]:
     from weebot.application.ports.event_store_port import EventStorePort
     from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
     from weebot.application.ports.steering_port import SteeringPort
+    from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
 
     return [
         # DurableEventBus journals every agent event of the session here.
@@ -41,6 +42,8 @@ def _session_stores() -> list[tuple[str, Any, str]]:
         ("episodic_summaries", SUMMARY_REPO, "delete_by_session_id"),
         # The plan snapshot after each step, for recovering an interrupted run.
         ("flow_checkpoints", CheckpointPort, "delete"),
+        # Shadow-git copies of the workspace taken before file-changing steps (H5).
+        ("workspace_checkpoints", WorkspaceCheckpointPort, "delete_session"),
         # Run trajectories and failure signatures, which feed skill optimisation.
         ("trajectories", "trajectory_repo", "delete_by_session_id"),
         # Steering messages sent to the run and not yet read (user text).

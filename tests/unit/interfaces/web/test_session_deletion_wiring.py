@@ -34,6 +34,7 @@ _SESSION_STORES = {
     "knowledge_graph",
     "episodic_summaries",
     "flow_checkpoints",
+    "workspace_checkpoints",
     "trajectories",
     "steering",
 }

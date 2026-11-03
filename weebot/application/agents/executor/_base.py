@@ -100,6 +100,8 @@ class ExecutorAgent:
         injection_scan: Callable[[str], dict[str, Any] | None] | None = None,
         # Outbound actions already taken, so a retried flow does not repeat them (ORCH-2).
         effect_ledger: Any | None = None,
+        # WorkspaceCheckpointPort: copies the workspace before a step's first change (H5).
+        workspace_checkpoints: Any | None = None,
         cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
         # Awaitable returning the persistent-memory snapshot for the system prompt; the
         # composition root supplies it, so the executor imports no tool (plan 3.4).
@@ -199,6 +201,7 @@ class ExecutorAgent:
             llm=llm,
             model=model,
             effect_ledger=effect_ledger,
+            workspace_checkpoints=workspace_checkpoints,
         )
 
     def set_harness_block(self, block: str | None) -> None:

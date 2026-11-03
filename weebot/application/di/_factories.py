@@ -234,6 +234,13 @@ class FactoriesMixin:
 
         return SQLiteGatewaySessionStore()
 
+    def _workspace_checkpoints(self):
+        """The shadow-git checkpoint port, or None while WEEBOT_FILE_CHECKPOINTS is off."""
+        from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
+        from weebot.config.feature_flags import FILE_CHECKPOINTS_ENABLED
+
+        return self._maybe_get(WorkspaceCheckpointPort) if FILE_CHECKPOINTS_ENABLED else None
+
     def _effect_ledger(self):
         """The outbound-action ledger over the event store, or None without one."""
         from weebot.application.ports.event_store_port import EventStorePort

@@ -40,8 +40,10 @@ class AgentToolsMixin:
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.config.constants import SUBAGENT_MAX_STEPS
         from weebot.config.harness.schema import HarnessConfig
-        from weebot.application.di.keys import SESSION_COST_METER
+        from weebot.application.di.keys import DELEGATION_GUARD, SESSION_COST_METER
+        from weebot.application.services.delegation_guard import current_depth
         from weebot.core.log_context import session_id_var
+        from weebot.domain.models.delegation import child_tool_names
 
         registry = self.get("tool_registry")
         meter = self._maybe_get(SESSION_COST_METER)
@@ -52,11 +54,24 @@ class AgentToolsMixin:
         def _flow_factory(s):
             return self._build_plan_act_flow_for_session(s)
 
-        tools = registry.create_tool_collection(
-            "admin",
-            llm_port=self._maybe_get(LLMPort),
-            flow_factory=_flow_factory,
-        )
+        # The child gets the admin set minus what the delegation policy withholds (H4): the
+        # collection used to be the full admin one, install_tool and the spawn tools included.
+        guard = self._maybe_get(DELEGATION_GUARD)
+        if guard is None:
+            tools = registry.create_tool_collection(
+                "admin", llm_port=self._maybe_get(LLMPort), flow_factory=_flow_factory
+            )
+        else:
+            tools = registry.create_tool_collection_from_names(
+                child_tool_names(
+                    registry.get_tools_for_role("admin"),
+                    (),
+                    guard.policy,
+                    current_depth() + 1,
+                ),
+                llm_port=self._maybe_get(LLMPort),
+                flow_factory=_flow_factory,
+            )
         cfg = PlanActFlowConfig(
             llm=self.get(LLMPort),
             tools=tools,
@@ -80,4 +95,5 @@ class AgentToolsMixin:
             mcp_bridge=self._maybe_get_str("mcp_bridge"),
             native_tool_selector=self._maybe_get_str("native_tool_selector"),
         )
-        return PlanActFlow(cfg)
+        flow = PlanActFlow(cfg)
+        return flow if guard is None else guard.wrap(flow, session_id_var.get() or "")

@@ -62,6 +62,7 @@ if "PYTEST_VERSION" not in os.environ:
 
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from cli.commands.rollback import cmd_rollback
 
 # Shared container for CLI commands — initialized once in cli()
 _container: Container | None = None
@@ -747,6 +748,7 @@ cli.add_command(cmd_ponytail)
 cli.add_command(cmd_ponytail_review)
 cli.add_command(cmd_ponytail_audit)
 cli.add_command(cmd_ponytail_help)
+cli.add_command(cmd_rollback)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────

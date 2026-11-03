@@ -18,6 +18,7 @@ from collections import deque
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
+from weebot.application.agents.executor._turn_checkpoint import checkpoint_before_change
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -184,7 +185,9 @@ class ToolExecutor:
         egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
         effect_ledger=None,  # EffectLedger | None — outbound actions already taken (ORCH-2)
         session_scope: SessionScope | None = None,
+        workspace_checkpoints=None,  # WorkspaceCheckpointPort | None (H5)
     ) -> None:
+        self._workspace_checkpoints = workspace_checkpoints
         self._effect_ledger = effect_ledger
         self._current_step_scope: str = ""
         self._tools = tools
@@ -538,6 +541,8 @@ class ToolExecutor:
                     from weebot.core.approval import call_fingerprint
 
                     approved_call = call_fingerprint(name, args)
+
+        await checkpoint_before_change(self, name, args)
 
         import time as _timer
 

@@ -218,6 +218,12 @@ SCORING_MODE: str = os.environ.get("WEEBOT_SCORING_MODE", "plan_outcome").strip(
 # write per step, no model calls. Default OFF.
 FLOW_CHECKPOINTS_ENABLED: bool = _env_bool("WEEBOT_FLOW_CHECKPOINTS", default=False)
 
+# ── Workspace file checkpoints (H5, D4) ─────────────────────────────────────
+# When True, the first tool call of a step that may change files copies the workspace into
+# a shadow git directory (~/.weebot/checkpoints), so `weebot rollback` can undo it. Skipped
+# for workspaces over 20 000 files or 500 MB. Default ON.
+FILE_CHECKPOINTS_ENABLED: bool = _env_bool("WEEBOT_FILE_CHECKPOINTS", default=True)
+
 
 # ── Strategy transfer (D4) ──────────────────────────────────────────────────
 # When True, a fully successful run records its approach under the task's
