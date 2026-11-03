@@ -29,7 +29,7 @@ describe("/models load state (W5 exit criterion: Remote<T> + StateView)", () => 
       fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
     });
     expect(screen.getByText("GPT X")).toBeTruthy();
-    expect(screen.getByText("1 models available")).toBeTruthy();
+    expect(screen.getByText("1 model available")).toBeTruthy();
   });
 
   it("shows a loading status first, then the models (no regression)", async () => {
@@ -38,6 +38,24 @@ describe("/models load state (W5 exit criterion: Remote<T> + StateView)", () => 
     expect(screen.getByRole("status", { name: "Loading models" })).toBeTruthy();
     await act(async () => {});
     expect(screen.getByText("GPT X")).toBeTruthy();
+  });
+
+  it("labels the price per 1M tokens: the backend sends per-1K, the card shows x1000", async () => {
+    const priced = { ...model, cost_per_1k_tokens: 0.006 };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).endsWith("/models/roles") ? json([]) : json([priced]))));
+    render(<ModelsPage />);
+    await act(async () => {});
+    expect(screen.getByText(/Cost per 1M tokens/)).toBeTruthy();
+    expect(screen.getByText("$6.00")).toBeTruthy();
+  });
+
+  it("states the tier as text, groups cards under the provider heading and formats the context window", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).endsWith("/models/roles") ? json([]) : json([{ ...model, context_window: 128000 }]))));
+    render(<ModelsPage />);
+    await act(async () => {});
+    expect(screen.getByText("premium")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "GPT X" })).toBeTruthy();
+    expect(screen.getByText("128,000 tokens")).toBeTruthy();
   });
 
   it("an empty catalogue renders the page with zero models (boundary)", async () => {

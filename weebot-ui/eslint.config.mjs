@@ -26,6 +26,23 @@ export default defineConfig([
       ],
     },
   },
+  // Regression guards for the 2026-11-03 Web Interface Guidelines audit
+  // (tasks/plans/web_guidelines_audit_2026_11_03_fix_plan.md, Phase 10). Add only; never loosen.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}', 'src/lib/format.ts', 'src/lib/storage.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'JSXText[value=/[.][.][.]/]', message: 'Use the ellipsis character "…", not three dots.' },
+        { selector: 'Literal[value=/transition-all/]', message: 'List the properties: transition-colors, transition-[opacity,transform], ...' },
+        { selector: 'TemplateElement[value.raw=/transition-all/]', message: 'List the properties: transition-colors, transition-[opacity,transform], ...' },
+        { selector: "CallExpression[callee.property.name='toFixed']", message: 'Format numbers through lib/format.ts (Intl).' },
+        { selector: "CallExpression[callee.property.name='toLocaleString']", message: 'Format through lib/format.ts so the locale and time zone are explicit.' },
+        { selector: "Identifier[name=/^(localStorage|sessionStorage)$/]", message: 'Use lib/storage.ts (never throws, notifies subscribers).' },
+      ],
+    },
+  },
   {
     files: ['src/lib/**/*.{ts,tsx}'],
     ignores: ['**/*.test.{ts,tsx}'],

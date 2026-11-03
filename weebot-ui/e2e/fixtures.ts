@@ -109,7 +109,7 @@ export async function mockBackend(page: Page, options: BackendOptions = {}): Pro
     if (one && method === "GET") {
       return json(route, sessions.find((s) => s.id === one[1]) ?? sessions[0]);
     }
-    if (path === "/models" || path === "/models/available") return json(route, []);
+    if (path === "/models" || path === "/models/available" || path === "/models/roles") return json(route, []);
     if (path === "/costs/summary") {
       return json(route, {
         ok: true,

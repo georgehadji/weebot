@@ -22,6 +22,15 @@ for (const theme of THEMES) {
           expect(
             blocking.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")}`)
           ).toEqual([]);
+
+          // Best-practice rules (not WCAG tags): heading levels do not skip, and content sits in landmarks.
+          const structure = await new AxeBuilder({ page }).withRules(["heading-order", "region"]).analyze();
+          expect(
+            structure.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")}`)
+          ).toEqual([]);
+
+          // Native scrollbars and select popups follow the theme, not only the page colours.
+          expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(theme);
         });
       }
     });

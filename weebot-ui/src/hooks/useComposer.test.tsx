@@ -12,7 +12,9 @@ const h = vi.hoisted(() => ({
   run: vi.fn(),
   input: vi.fn(),
   toast: vi.fn(),
+  announce: vi.fn(),
 }));
+vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => h.announce }));
 vi.mock("@/lib/api", () => ({ api: { sessions: { create: h.create, run: h.run, input: h.input } } }));
 vi.mock("@/providers/ToastProvider", () => ({ useToast: () => ({ toast: h.toast, dismiss: () => {} }) }));
 
@@ -47,6 +49,7 @@ beforeEach(() => {
   h.run.mockReset().mockResolvedValue({});
   h.input.mockReset().mockResolvedValue({});
   h.toast.mockReset();
+  h.announce.mockReset();
   window.sessionStorage.clear();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -85,6 +88,23 @@ describe("D7: a task that did not start is not silently shown as sent", () => {
     expect(onSessionCreated).not.toHaveBeenCalled();
     expect(h.run).not.toHaveBeenCalled();
     expect(h.toast).not.toHaveBeenCalled();
+  });
+});
+
+describe("a failed send is announced (the failed row is not a live region)", () => {
+  it("announces once when the send fails, and not when it succeeds", async () => {
+    h.input.mockRejectedValueOnce(new Error("offline"));
+    const { result } = setup();
+    act(() => result.current.edit("hello"));
+    act(() => result.current.submit());
+    await waitFor(() => expect(result.current.state.phase).toBe("failed"));
+    expect(h.announce).toHaveBeenCalledTimes(1);
+    expect(h.announce).toHaveBeenCalledWith("Message not sent. Retry Sending is available.");
+
+    h.announce.mockReset();
+    act(() => result.current.submit());
+    await waitFor(() => expect(result.current.state.phase).toBe("idle"));
+    expect(h.announce).not.toHaveBeenCalled();
   });
 });
 

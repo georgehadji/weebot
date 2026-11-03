@@ -4,11 +4,32 @@ import { useCallback, useState } from "react";
 import { StateView } from "@/components/common/StateView";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useRemote } from "@/hooks/useRemote";
 import { api } from "@/lib/api";
 import { ModelInfo, RoleModel } from "@/types/events";
 
 const SUBAGENT_ROLES = new Set(["subagent", "planner_sub"]);
+
+/** Ids that do not read well as "id with underscores replaced". */
+const ROLE_LABELS: Record<string, string> = {
+  planner_sub: "Planner (sub-agent)",
+  subagent: "Sub-agent",
+};
+
+const roleLabel = (role: string) =>
+  ROLE_LABELS[role] ?? role.charAt(0).toUpperCase() + role.slice(1).replace(/_/g, " ");
+
+/** The Select's value for "no override"; an empty string would read as "nothing chosen". */
+const DEFAULT = "__default__";
 
 /** Models grouped by provider, so a long catalog stays scannable in a dropdown. */
 function groupByProvider(models: ModelInfo[]): [string, ModelInfo[]][] {
@@ -29,56 +50,82 @@ function RoleRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const id = `role-model-${row.role}`;
+  const errorId = `${id}-error`;
+  const label = roleLabel(row.role);
 
   const change = async (model: string) => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
       await onChange(row.role, model);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save");
+      const reason = e instanceof Error ? e.message : "unknown error";
+      setError(`Couldn’t save this model (${reason}). Try again, or reload the page if it keeps failing.`);
     } finally {
       setBusy(false);
     }
   };
 
+  const fallback = row.default[0];
+  const defaultLabel = fallback
+    ? `Default · ${models.find((m) => m.id === fallback)?.name ?? fallback}`
+    : "Default";
+  const labels: Record<string, string> = { [DEFAULT]: defaultLabel };
+  for (const m of models) labels[m.id] = m.name;
+
   return (
     <li className="flex flex-col gap-1 border-b py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
       <label htmlFor={id} className="min-w-0 sm:w-48">
-        <span className="block text-sm font-medium capitalize">{row.role.replace(/_/g, " ")}</span>
+        <span className="block text-sm font-medium">{label}</span>
         <span className="block truncate font-mono text-xs text-muted-foreground">
           {row.override ? "your pick" : "default"}
         </span>
       </label>
-      <select
-        id={id}
-        value={row.override ?? ""}
-        disabled={busy}
-        onChange={(e) => void change(e.target.value)}
-        className="h-10 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
+      {/* readOnly + aria-busy while saving, never `disabled`: that would drop keyboard focus. */}
+      <Select
+        value={row.override ?? DEFAULT}
+        items={labels}
+        readOnly={busy}
+        onValueChange={(v) => void change(v === null || v === DEFAULT ? "" : v)}
       >
-        <option value="">Default · {row.default[0]}</option>
-        {groupByProvider(models).map(([provider, group]) => (
-          <optgroup key={provider} label={provider}>
-            {group.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        <SelectTrigger
+          id={id}
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="min-w-0 flex-1"
+        >
+          <SelectValue translate="no">{(v: string) => labels[v] ?? v}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={DEFAULT}>{defaultLabel}</SelectItem>
+          {groupByProvider(models).map(([provider, group]) => (
+            <SelectGroup key={provider}>
+              <SelectLabel>{provider}</SelectLabel>
+              {group.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  <span translate="no">{m.name}</span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
       <Button
         variant="ghost"
         size="sm"
-        disabled={busy || !row.override}
-        onClick={() => void change("")}
-        aria-label={`Reset ${row.role} to default`}
+        loading={busy}
+        aria-disabled={!row.override || busy || undefined}
+        onClick={() => row.override && void change("")}
+        aria-label={`Reset ${label} to default`}
+        className="aria-disabled:opacity-50"
       >
         Reset
       </Button>
       {error && (
-        <p role="alert" className="text-xs text-status-error-fg sm:basis-full">
+        <p id={errorId} role="alert" className="text-xs text-status-error-fg sm:basis-full">
           {error}
         </p>
       )}

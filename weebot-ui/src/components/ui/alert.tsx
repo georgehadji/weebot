@@ -1,4 +1,6 @@
 import * as React from "react"
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -19,32 +21,41 @@ const alertVariants = cva(
   }
 )
 
+/**
+ * `destructive` interrupts (role="alert"); everything else is polite (role="status"). A
+ * mounted-on-load "Connecting…" banner must not shout over the page title.
+ */
 function Alert({
   className,
   variant,
+  role,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
   return (
     <div
       data-slot="alert"
-      role="alert"
+      role={role ?? (variant === "destructive" ? "alert" : "status")}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />
   )
 }
 
-function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="alert-title"
-      className={cn(
-        "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 hover:[&_a]:text-foreground",
-        className
-      )}
-      {...props}
-    />
-  )
+function AlertTitle({ className, render, ...props }: useRender.ComponentProps<"h3">) {
+  return useRender({
+    defaultTagName: "h3",
+    props: mergeProps<"h3">(
+      {
+        "data-slot": "alert-title",
+        className: cn(
+          "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 hover:[&_a]:text-foreground",
+          className
+        ),
+      } as React.ComponentProps<"h3">,
+      props
+    ),
+    render,
+  })
 }
 
 function AlertDescription({

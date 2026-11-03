@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "./api";
+import { api, authHeaders, getApiBase } from "./api";
 
 // W4 (D4): fetchApi classified failures by substring of the message, so a backend
 // `detail` that merely contains "connect" or "fetch" was replaced by the
@@ -54,5 +54,28 @@ describe("fetchApi error mapping", () => {
       vi.fn(async () => new Response("<html>boom</html>", { status: 500, statusText: "Server Error" })),
     );
     await expect(api.models.list()).rejects.toThrow("Server Error");
+  });
+});
+
+describe("connection settings reach the api layer through lib/settings", () => {
+  const memory = (seed: Record<string, string>): Storage =>
+    ({
+      getItem: (k: string) => seed[k] ?? null,
+      setItem: () => {},
+      removeItem: () => {},
+    }) as unknown as Storage;
+
+  it("getApiBase follows the configured backend and falls back to same-origin", () => {
+    vi.stubGlobal("localStorage", memory({ weebot_backend_url: " http://10.0.0.5:9000/ " }));
+    expect(getApiBase()).toBe("http://10.0.0.5:9000/api");
+    vi.stubGlobal("localStorage", memory({}));
+    expect(getApiBase()).toBe("/api");
+  });
+
+  it("authHeaders carries the session key, and is empty without one", () => {
+    vi.stubGlobal("sessionStorage", memory({ weebot_api_key: "k-1" }));
+    expect(authHeaders()).toEqual({ "X-API-Key": "k-1" });
+    vi.stubGlobal("sessionStorage", memory({}));
+    expect(authHeaders()).toEqual({});
   });
 });

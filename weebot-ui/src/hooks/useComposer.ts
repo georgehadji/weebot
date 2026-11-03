@@ -3,30 +3,10 @@
 import { useCallback, useEffect, useReducer } from "react";
 import { api } from "@/lib/api";
 import { composerReducer, initialComposerState } from "@/lib/composer";
+import { draftKey, readStored, writeStored } from "@/lib/storage";
+import { useAnnounce } from "@/providers/AnnouncerProvider";
 import { useToast } from "@/providers/ToastProvider";
 import { DeliveryState, MessageEvent } from "@/types/events";
-
-function draftKey(sessionId: string | null): string {
-  return `weebot_draft:${sessionId ?? "new"}`;
-}
-
-// sessionStorage can throw (privacy mode, quota); a lost draft is never worth an error.
-function readDraft(key: string): string {
-  try {
-    return window.sessionStorage.getItem(key) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeDraft(key: string, draft: string): void {
-  try {
-    if (draft) window.sessionStorage.setItem(key, draft);
-    else window.sessionStorage.removeItem(key);
-  } catch {
-    // ignore
-  }
-}
 
 function makeClientMsgId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -51,7 +31,7 @@ interface UseComposerOptions {
 
 /**
  * The composer's behaviour: a reducer (lib/composer.ts) for its states, a per-session draft
- * kept in sessionStorage, and the send itself.
+ * kept in sessionStorage (through lib/storage, which never throws), and the send itself.
  */
 export function useComposer({
   sessionId,
@@ -63,18 +43,19 @@ export function useComposer({
 }: UseComposerOptions) {
   const key = draftKey(sessionId);
   const { toast } = useToast();
+  const announce = useAnnounce();
   const [state, dispatch] = useReducer(composerReducer, "", initialComposerState);
 
   // Read after hydration: the server render cannot see sessionStorage, and reading it in the
   // initializer made the first client render differ from the HTML (a hydration mismatch on the
   // Send button whenever a draft was saved). Declared before the write below so it reads first.
   useEffect(() => {
-    const saved = readDraft(key);
+    const saved = readStored("session", key);
     if (saved) dispatch({ type: "edit", draft: saved });
   }, [key]);
 
   useEffect(() => {
-    writeDraft(key, state.draft);
+    writeStored("session", key, state.draft || null);
   }, [key, state.draft]);
 
   const deliver = useCallback(
@@ -110,9 +91,11 @@ export function useComposer({
         // An echoed row is delivered (the timeline shows it so): do not claim "Not sent".
         if (onDelivery(clientMsgId, "failed") === "sent") return dispatch({ type: "sent" });
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
+        // The failed row is not a live region (see lib/announce.ts), so say it here.
+        announce("Message not sent. Retry Sending is available.");
       }
     },
-    [sessionId, model, executionMode, onDelivery, onSessionCreated, toast]
+    [sessionId, model, executionMode, onDelivery, onSessionCreated, toast, announce]
   );
 
   const submitText = useCallback(

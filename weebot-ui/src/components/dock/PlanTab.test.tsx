@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent } from "@/types/events";
 
@@ -90,5 +90,28 @@ describe("PlanTab live updates", () => {
     const plan = { steps: [{ id: "step-1", description: "only step", status: "pending" }] };
     act(() => emit(ev({ type: "plan", status: "created", plan })));
     expect(await screen.findByText("only step")).toBeTruthy();
+  });
+});
+
+describe("PlanTab load failure", () => {
+  beforeEach(() => {
+    planViz.mockReset();
+  });
+
+  it("shows the error through an alert with a Retry that loads the plan again", async () => {
+    planViz.mockRejectedValueOnce(new Error("Cannot connect to backend"));
+    planViz.mockResolvedValueOnce({ ok: true, data: { plan: { nodes: NODES } } });
+    render(<PlanTab sessionId="s1" />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Cannot connect to backend");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("1 of 3 done")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("loading is one status with text for assistive tech", () => {
+    planViz.mockReturnValue(new Promise(() => {}));
+    render(<PlanTab sessionId="s1" />);
+    expect(screen.getByRole("status").textContent).toBe("Loading plan…");
   });
 });

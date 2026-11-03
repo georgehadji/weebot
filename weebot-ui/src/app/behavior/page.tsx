@@ -9,34 +9,42 @@
  */
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { authHeaders } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useUrlState } from "@/hooks/useUrlState";
+import { authHeaders, getApiBase } from "@/lib/api";
+import { useToast } from "@/providers/ToastProvider";
 import { BehaviorPanel } from "@/components/behavior";
 
+const newDemoId = () => `demo-${Date.now().toString(36)}`;
+
 function MonitorTab() {
-  const [sessionId, setSessionId] = useState(() => `demo-${Date.now().toString(36)}`);
+  const [sessionId, setSessionId] = useState(newDemoId);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardContent className="pt-4">
-          <label htmlFor="behavior-session-id" className="mb-2 block text-sm text-muted-foreground">
+          <Label htmlFor="behavior-session-id" className="mb-2 text-muted-foreground">
             Session ID
-          </label>
+          </Label>
           <div className="flex gap-2">
-            <input
+            <Input
               id="behavior-session-id"
+              name="session-id"
               type="text"
+              autoComplete="off"
+              spellCheck={false}
               value={sessionId}
               onChange={(e) => setSessionId(e.target.value)}
-              className="flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+              className="h-10 flex-1 font-mono"
             />
-            <Button variant="outline" onClick={() => setSessionId(`demo-${Date.now().toString(36)}`)}>
-              New Session
+            <Button variant="outline" onClick={() => setSessionId(newDemoId())}>
+              Generate Demo ID
             </Button>
           </div>
         </CardContent>
@@ -75,7 +83,13 @@ function MonitorTab() {
           </div>
           <div>
             <h3 className="mb-2 font-medium text-foreground">CLI commands</h3>
-            <pre tabIndex={0} aria-label="Example commands" className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
+            <pre
+              tabIndex={0}
+              role="region"
+              aria-label="Behavior CLI commands"
+              translate="no"
+              className="overflow-auto overscroll-contain rounded-md bg-surface-1 p-4 text-xs"
+            >
 {`weebot behavior watch ./my-project --session-id abc123
 weebot behavior trust
 weebot behavior log --count 20
@@ -92,17 +106,25 @@ weebot behavior reflect`}
 function SettingsTab() {
   // Tracking is configured by the environment variables below; there is no
   // settings API (the old toggles posted to a route that did not exist).
-  const downloadSelfKnowledge = () => {
-    fetch("/api/behavior/self-knowledge", { headers: authHeaders() })
-      .then((res) => res.json())
-      .then((data) => {
-        const blob = new Blob([data.content], { type: "text/markdown" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "WEEBOT_SELF.md";
-        a.click();
+  const { toast } = useToast();
+  const downloadSelfKnowledge = async () => {
+    try {
+      const res = await fetch(`${getApiBase()}/behavior/self-knowledge`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`The server answered ${res.status}`);
+      const data = await res.json();
+      const url = URL.createObjectURL(new Blob([data.content], { type: "text/markdown" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "WEEBOT_SELF.md";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast({
+        title: "Couldn't download the self-knowledge file",
+        description: `${e instanceof Error ? e.message : "Unknown error"}. Check that the backend is running, then try again.`,
+        variant: "error",
       });
+    }
   };
 
   return (
@@ -110,7 +132,7 @@ function SettingsTab() {
       <Card>
         <CardContent className="divide-y pt-4">
           <div className="py-4">
-            <h3 className="font-medium">Storage Location</h3>
+            <h2 className="font-medium">Storage Location</h2>
             <code className="mt-2 block rounded-md bg-surface-1 p-3 text-sm text-muted-foreground">
               ~/.weebot/ledger/
             </code>
@@ -135,7 +157,13 @@ function SettingsTab() {
           <p className="mb-3 text-sm text-muted-foreground">
             Tracking is on by default. Set these before starting the backend to change it.
           </p>
-          <pre tabIndex={0} aria-label="Example commands" className="overflow-auto rounded-md bg-surface-1 p-4 text-xs">
+          <pre
+            tabIndex={0}
+            role="region"
+            aria-label="Environment variable examples"
+            translate="no"
+            className="overflow-auto overscroll-contain rounded-md bg-surface-1 p-4 text-xs"
+          >
 {`export WEEBOT_BEHAVIOR_TRACKING=false
 export WEEBOT_LEDGER_DIR=/path/to/ledger
 export WEEBOT_EXTRA_IGNORE="*.log,dist/"`}
@@ -150,11 +178,10 @@ export WEEBOT_EXTRA_IGNORE="*.log,dist/"`}
  *  opts the subtree into client-side rendering and Next fails the production
  *  build when it is not wrapped. */
 function BehaviorTabs() {
-  const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") === "settings" ? "settings" : "monitor";
+  const [tab, setTab] = useUrlState("tab", "monitor");
 
   return (
-    <Tabs defaultValue={initialTab}>
+    <Tabs value={tab === "settings" ? "settings" : "monitor"} onValueChange={(next) => setTab(String(next))}>
       <TabsList className="mb-6">
         <TabsTrigger value="monitor">Monitor</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -172,12 +199,18 @@ function BehaviorTabs() {
 export default function BehaviorPage() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
-      <h1 className="mb-6 flex items-center gap-2 text-3xl font-bold">
-        <ShieldCheck className="h-7 w-7 text-agent" />
+      <h2 className="mb-6 flex items-center gap-2 text-3xl font-bold">
+        <ShieldCheck className="h-7 w-7 text-agent" aria-hidden="true" />
         Behavior Tracking
-      </h1>
+      </h2>
 
-      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
+      <Suspense
+        fallback={
+          <div role="status" className="text-sm text-muted-foreground">
+            Loading…
+          </div>
+        }
+      >
         <BehaviorTabs />
       </Suspense>
     </div>

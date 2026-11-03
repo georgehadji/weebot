@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type ToastVariant = "info" | "success" | "error";
@@ -82,9 +83,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2"
+        className="pointer-events-none fixed inset-x-4 bottom-safe z-50 flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-96"
         role="region"
         aria-label="Notifications"
+        aria-live="polite"
       >
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
@@ -117,13 +119,12 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
   return (
     <div
       role={toast.variant === "error" ? "alert" : "status"}
-      aria-live={toast.variant === "error" ? "assertive" : "polite"}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       className={cn(
-        "pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lg transition-all duration-base ease-console animate-in slide-in-from-bottom-2 fade-in",
+        "pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lg transition-[opacity,transform] duration-base ease-console animate-in slide-in-from-bottom-2 fade-in",
         VARIANT_CLASS[toast.variant]
       )}
     >
@@ -134,24 +135,28 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
           <p className="mt-0.5 break-words text-xs text-muted-foreground">{toast.description}</p>
         )}
         {toast.action && (
-          <button
+          <Button
+            variant="link"
+            size="sm"
             onClick={() => {
               toast.action?.onClick();
               onDismiss(id);
             }}
-            className="mt-1.5 text-xs font-medium underline underline-offset-2 hover:no-underline"
+            className="mt-1 h-auto px-0 py-0 text-xs"
           >
             {toast.action.label}
-          </button>
+          </Button>
         )}
       </div>
-      <button
+      <Button
+        variant="ghost"
+        size="icon-xs"
         onClick={() => onDismiss(id)}
         aria-label="Dismiss notification"
-        className="shrink-0 rounded-sm opacity-60 transition-opacity hover:opacity-100"
+        className="shrink-0 opacity-60 hover:opacity-100"
       >
-        <X className="h-3.5 w-3.5" />
-      </button>
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
     </div>
   );
 }

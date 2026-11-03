@@ -34,6 +34,7 @@ import {
 } from "react";
 import { AgentEvent, SessionPresenceEvent } from "@/types/events";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { apiKey, backendUrl, wsUrl } from "@/lib/settings";
 import { openSocket } from "@/lib/api";
 
 type Listener = (event: AgentEvent) => void;
@@ -74,29 +75,14 @@ function closeSocketAfterOpen(socket: WebSocket | null): void {
   if (socket.readyState === WebSocket.OPEN) socket.close();
 }
 
-function getWsToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return sessionStorage.getItem("weebot_api_key");
-  } catch {
-    return null;
-  }
-}
+const getWsToken = apiKey;
 
 function getStreamUrls(): { ws: string; api: string } {
-  const defaultWs = ENDPOINTS.ws;
-  const defaultApi = ENDPOINTS.api;
-  if (typeof window === "undefined") return { ws: defaultWs, api: defaultApi };
-  try {
-    const configuredWs = localStorage.getItem("weebot_ws_url")?.trim();
-    const configuredBackend = localStorage.getItem("weebot_backend_url")?.trim();
-    return {
-      ws: configuredWs || defaultWs,
-      api: configuredBackend ? `${configuredBackend.replace(/\/$/, "")}/api` : defaultApi,
-    };
-  } catch {
-    return { ws: defaultWs, api: defaultApi };
-  }
+  const backend = backendUrl();
+  return {
+    ws: wsUrl() || ENDPOINTS.ws,
+    api: backend ? `${backend}/api` : ENDPOINTS.api,
+  };
 }
 
 export function EventStreamProvider({ children }: { children: React.ReactNode }) {

@@ -4,6 +4,8 @@
  * The timeline itself is not a live region (every row would be read as it lands); instead only
  * these coarse, meaningful moments are announced through the AnnouncerProvider.
  */
+import { DEFAULT_INTL, plural } from "@/lib/format";
+import { droppedCount } from "@/lib/session-reducer";
 import { AgentEvent, DoneEvent } from "@/types/events";
 
 /** A failed run must not read as done; events without a status predate it and say completed. */
@@ -25,6 +27,13 @@ export function announcementFor(event: AgentEvent): string | null {
       return doneLabel(event);
     case "tool":
       return event.status === "called" && event.is_error ? `Tool ${event.tool_name} failed` : null;
+    case "notification": {
+      // The gap marker row is not a live region (see the header), so the loss is announced here.
+      const dropped = droppedCount(event.text);
+      return dropped === null
+        ? null
+        : plural(dropped, DEFAULT_INTL, { one: "{n} event was dropped", other: "{n} events were dropped" });
+    }
     default:
       return null;
   }

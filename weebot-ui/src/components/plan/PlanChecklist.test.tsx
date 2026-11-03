@@ -44,6 +44,24 @@ describe("PlanChecklist", () => {
     expect(screen.getByText("2 of 3 done")).toBeTruthy();
   });
 
+  it("exposes progress as a progressbar that can be read on demand", () => {
+    render(<PlanChecklist steps={[step("a", "completed"), step("b", "completed"), step("c", "pending")]} />);
+    const bar = screen.getByRole("progressbar", { name: "Plan progress" });
+    expect(bar.getAttribute("aria-valuenow")).toBe("2");
+    expect(bar.getAttribute("aria-valuemax")).toBe("3");
+    expect(bar.getAttribute("aria-valuetext")).toBe("2 of 3 done");
+  });
+
+  it("boundary: an empty plan is 0 of 0, not NaN", () => {
+    render(<PlanChecklist steps={[]} />);
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("0");
+  });
+
+  it("is not a second live region", () => {
+    const { container } = render(<PlanChecklist steps={[step("a", "completed")]} />);
+    expect(container.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
+  });
+
   it("renders no map, zoom controls or diagram chrome", () => {
     const { container } = render(<PlanChecklist steps={[step("a", "pending")]} />);
     expect(container.querySelector(".react-flow")).toBeNull();

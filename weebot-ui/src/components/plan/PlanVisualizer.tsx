@@ -12,6 +12,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { AlertTriangle, CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { statusInfo } from "@/components/common/status";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { StepStatus } from "@/types/events";
 
 interface PlanStep {
@@ -36,17 +38,17 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
   const getIcon = () => {
     switch (step.status) {
       case "completed":
-        return <CheckCircle2 className="h-5 w-5 text-status-live-fg" />;
+        return <CheckCircle2 className="h-5 w-5 text-status-live-fg" aria-hidden="true" />;
       case "running":
       case "started":
-        return <Loader2 className="h-5 w-5 text-status-waiting-fg animate-spin" />;
+        return <Loader2 className="h-5 w-5 text-status-waiting-fg motion-safe:animate-spin" aria-hidden="true" />;
       case "error":
       case "failed":
-        return <XCircle className="h-5 w-5 text-status-error-fg" />;
+        return <XCircle className="h-5 w-5 text-status-error-fg" aria-hidden="true" />;
       case "unverified":
-        return <AlertTriangle className="h-5 w-5 text-status-waiting-fg" />;
+        return <AlertTriangle className="h-5 w-5 text-status-waiting-fg" aria-hidden="true" />;
       default:
-        return <Circle className="h-5 w-5 text-muted-foreground" />;
+        return <Circle className="h-5 w-5 text-muted-foreground" aria-hidden="true" />;
     }
   };
 
@@ -73,8 +75,11 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
       <div className="flex items-center gap-2">
         {getIcon()}
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-muted-foreground">Step {index + 1}</div>
-          <div className="text-sm font-medium truncate">{step.description}</div>
+          <div className="text-xs text-muted-foreground">
+            Step {index + 1}
+            <span className="sr-only">, {statusInfo(step.status).label}</span>
+          </div>
+          <div className="text-sm font-medium truncate" title={step.description}>{step.description}</div>
         </div>
       </div>
     </div>
@@ -82,6 +87,7 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
 }
 
 export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const initialNodes: Node[] = useMemo(
     () =>
       steps.map((step, index) => ({
@@ -102,7 +108,7 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
           id: `e${step.id}-${steps[index + 1].id}`,
           source: step.id,
           target: steps[index + 1].id,
-          animated: step.status === "running",
+          animated: step.status === "running" && !reducedMotion,
           style: {
             stroke:
               step.status === "completed"
@@ -119,12 +125,12 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
           id: `e${depId}-${step.id}`,
           source: depId,
           target: step.id,
-          animated: step.status === "running",
+          animated: step.status === "running" && !reducedMotion,
         });
       });
     });
     return edges;
-  }, [steps]);
+  }, [steps, reducedMotion]);
 
   const [nodes, setNodes] = useNodesState(initialNodes);
   // Derived, not state: seeding useEdgesState once froze the edges at the first plan drawn.
@@ -151,33 +157,40 @@ export function PlanVisualizer({ steps, title }: PlanVisualizerProps) {
   }
 
   return (
-    <div className="h-[500px] border rounded-lg overflow-hidden">
+    <div className="flex h-[min(500px,70dvh)] flex-col border rounded-lg overflow-hidden">
       {title && (
         <div className="px-4 py-2 bg-muted border-b">
           <h3 className="font-medium">{title}</h3>
         </div>
       )}
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        fitView
-        attributionPosition="bottom-right"
+      {/* A group, not an img: ReactFlow's Controls and MiniMap are focusable, and an img's children are presentational. PlanChecklist lists the same steps in text. */}
+      <div
+        role="group"
+        aria-label={`Plan graph, ${steps.length} ${steps.length === 1 ? "step" : "steps"}. The checklist lists the same steps.`}
+        className="min-h-0 flex-1"
       >
-        <Background color="hsl(var(--border))" gap={16} />
-        <Controls className="[&>button]:border-border [&>button]:bg-card [&>button]:text-foreground [&>button:hover]:bg-accent" />
-        <MiniMap
-          nodeColor="hsl(var(--primary))"
-          nodeStrokeWidth={3}
-          maskColor="hsl(var(--background) / 0.6)"
-          style={{ background: "hsl(var(--surface-2))" }}
-          zoomable
-          pannable
-        />
-      </ReactFlow>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          fitView
+          attributionPosition="bottom-right"
+        >
+          <Background color="hsl(var(--border))" gap={16} />
+          <Controls className="[&>button]:border-border [&>button]:bg-card [&>button]:text-foreground [&>button:hover]:bg-accent" />
+          <MiniMap
+            nodeColor="hsl(var(--primary))"
+            nodeStrokeWidth={3}
+            maskColor="hsl(var(--background) / 0.6)"
+            style={{ background: "hsl(var(--surface-2))" }}
+            zoomable
+            pannable
+          />
+        </ReactFlow>
+      </div>
     </div>
   );
 }

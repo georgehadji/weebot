@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { StateView } from "@/components/common/StateView";
 import { PlanChecklist } from "@/components/plan/PlanChecklist";
 import { api } from "@/lib/api";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
@@ -35,6 +36,11 @@ export function PlanTab({ sessionId }: PlanTabProps) {
   const [nodes, setNodes] = useState<Nodes | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => {
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   // The plan is fetched once, so the run's own events keep it current: a plan event carries the
   // whole (re)planned plan and a step event carries one step's new status.
@@ -75,24 +81,34 @@ export function PlanTab({ sessionId }: PlanTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, attempt]);
 
   if (loading) {
     return (
-      <div role="status" aria-label="Loading plan" className="flex flex-1 items-center justify-center py-8">
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+      <div role="status" className="flex flex-1 items-center justify-center py-8">
+        <Loader2 className="h-4 w-4 motion-safe:animate-spin text-muted-foreground" aria-hidden="true" />
+        <span className="sr-only">Loading plan…</span>
       </div>
     );
   }
 
+  // StateView owns the error role, so the failure is announced; Retry loads the plan again.
   if (error) {
-    return <p className="p-4 text-xs text-status-error-fg">{error}</p>;
+    return (
+      <StateView
+        state={{ status: "error", message: error }}
+        errorTitle="Couldn’t load the plan"
+        onRetry={retry}
+      >
+        {() => null}
+      </StateView>
+    );
   }
 
   if (!nodes || nodes.length === 0) {
     return (
       <p className="p-4 text-xs text-muted-foreground">
-        No plan yet — this session hasn&apos;t entered planning.
+        No plan yet — this session hasn’t entered planning.
       </p>
     );
   }

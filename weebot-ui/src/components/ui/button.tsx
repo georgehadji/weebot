@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -20,7 +21,7 @@ const buttonVariants = cva(
       size: {
         default: "h-10 px-4 py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         sm: "h-9 rounded-md px-3 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
-        lg: "h-11 rounded-md px-8",
+        lg: "h-11 rounded-md px-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         icon: "h-10 w-10 pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         "icon-sm": "h-8 w-8 rounded-md pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         "icon-xs": "h-6 w-6 rounded-md pointer-coarse:min-h-11 pointer-coarse:min-w-11",
@@ -35,16 +36,31 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  /**
+   * In-flight state. Sets aria-busy/aria-disabled and swallows clicks, but never `disabled`:
+   * a disabled button drops keyboard focus, which strands the user mid-action.
+   */
+  loading?: boolean
+}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, type = "button", loading = false, onClick, children, ...props }, ref) => {
+    // A bare <button> inside a form submits it; only an explicit type="submit" should.
+    const iconOnly = size?.startsWith("icon")
     return (
       <button
+        type={type}
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        aria-busy={loading || undefined}
+        aria-disabled={loading || undefined}
+        onClick={loading ? (e) => e.preventDefault() : onClick}
         {...props}
-      />
+      >
+        {loading && <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+        {loading && iconOnly ? null : children}
+      </button>
     )
   }
 )

@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (21)
+## open (20)
 
 - 2026-10-25 — [Defect Hunt V7.1 — Final Summary Report](audits/defect_hunt_v71_final_summary.md)
 - 2026-10-25 — [Wave 1 — Security and Trust Boundary](audits/defect_hunt_v71_w1_security.md)
@@ -17,7 +17,6 @@ Format: date — record — note
 - 2026-10-22 — [Plan: make Weebot an ICM workspace](icm_plan.md) — slice 7 rest: docs/*PLAN*, *SUMMARY*, PROJECT_COMPLETE.md not yet in docs/archive/ (needs referrer check and approval)
 - 2026-10-31 — [Repo audit of 2026-10-31: plan to fix the 29 findings](plans/audit_2026_10_31_fix_plan.md)
 - 2026-10-29 — [Plan: everything still open after the 2026-10-29 audit](plans/remaining_work_plan_2026_10_29.md) — everything still open after the 2026-10-29 audit, checked against the code on fix/audit-2026-10-29 (89b8121e); eight waves, security and data loss first, decision-gated work after the owner decides, map and docs last; supersedes the open lists in master_plan_2026_10_27.md sections 3-4 and audit_2026_10_29_fix_plan.md section 7
-- 2026-11-03 — [weebot-ui: plan to fix the Web Interface Guidelines audit of 2026-11-03](plans/web_guidelines_audit_2026_11_03_fix_plan.md) — fixes the 2026-11-03 Web Interface Guidelines audit of weebot-ui (~250 findings); ten phases, foundations first; follows on from specs/ui_ux_remediation_plan.md (done)
 - 2026-10-23 — [Plan: fix everything still open](remaining_fix_plan.md) — F28 type-safe mediator dispatch; container_construction ceiling still 8
 - 2026-07-21 — [Plan: Greek Scientific Book Generation via LaTeX](scientific-book-latex-plan.md) — LLM drafting, TeX Live image, CLI/Web wiring missing
 - 2026-08-13 — [Memory subsystem repair plan (AgeMem-derived)](specs/agentic_memory_fix_plan.md) — phases 5-8 not built (retrieval, preservation check, filter_context, memory-quality job)
@@ -42,7 +41,7 @@ Format: date — record — note
 - 2026-08-10 — [LongHorizon-Harness → weebot: analysis and enhancement plan](specs/longhorizon_harness_weebot_analysis.md) — superseded by [LongHorizon-Harness → weebot: implementation plan](specs/longhorizon_harness_implementation_plan.md)
 - 2026-06-30 — [Plan: Single-Source-of-Truth Remediation for Constants, Models & Magic Numbers](specs/ssot_constants_remediation_plan.md) — superseded by [Architecture Remediation — Path to 9+](specs/arch_audit_2026_09_remediation_plan.md) — folded into phase 3.2 of its successor
 
-## done (43)
+## done (44)
 
 - 2026-10-25 — [Wave 0 — Instruments, Baseline, and Census (COMPLETE)](audits/defect_hunt_v71_w0_complete.md)
 - 2026-07-21 — [CI Stabilization & Architecture-Debt Remediation Plan](ci-stabilization-plan.md)
@@ -53,6 +52,7 @@ Format: date — record — note
 - 2026-10-31 — [Lightpanda CDP browser: fixes for the 7 review findings on PR 126](plans/lightpanda_cdp_review_fix_plan.md)
 - 2026-06-28 — [Weebot Enhancement Roadmap — Based on "Fundamentals of Building Autonomous LLM Agents"](plans/paper_enhancement_roadmap.md)
 - 2026-06-28 — [Fix Plan — VideoGenTool Audit Defects (D1–D3) + Improvements (I1–I4)](plans/video_gen_tool_fixes.md)
+- 2026-11-03 — [weebot-ui: plan to fix the Web Interface Guidelines audit of 2026-11-03](plans/web_guidelines_audit_2026_11_03_fix_plan.md) — fixes the 2026-11-03 Web Interface Guidelines audit of weebot-ui (~250 findings); ten phases, foundations first; follows on from specs/ui_ux_remediation_plan.md (done)
 - 2026-06-28 — [YouTube Video Download Support — Implementation Plan](plans/youtube_download_plan.md)
 - 2026-06-30 — [Agent-Native Memory — Implementation Plan](specs/agent_native_memory_implementation_plan.md)
 - 2026-10-25 — [Architecture Remediation - 2026-10 wave 2](specs/arch_audit_2026_10_wave2_remediation_plan.md) — from the 2026-10-25 EGFV audit (7/10, 10 ledger rows WB-01..WB-10); phases 0-3 and 6 executed the same day, see section 17 for what landed and where it deviated; phases 4 (agent-loop extraction) and 5 (replica proof) NOT started

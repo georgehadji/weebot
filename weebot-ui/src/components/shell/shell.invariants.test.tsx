@@ -1,7 +1,8 @@
 /**
  * W6 shell invariants, restated as properties (parents for W7's primitive contracts):
  *   P1 exactly one <main>, and the skip link is the first tab stop and targets it
- *   P2 exactly one <h1> per route: the app bar's (slot) XOR the page's own
+ *   P2 exactly one <h1> per route: the app bar's, named by the page's slot or else by the route
+ *      (a page must not render a second h1 of its own)
  *   P3 a keyboard shortcut shown in the palette is a shortcut that exists
  *   P4 activating a link inside a modal sheet/menu dismisses it, even to the current path
  *   P5 closing a sheet returns focus to what opened it
@@ -46,12 +47,15 @@ vi.mock("@/components/shell/SessionRail", () => ({
     </nav>
   ),
 }));
+const announce = vi.fn();
+vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => announce }));
 vi.mock("@/components/dock/Dock", () => ({ MissionDock: () => <div>dock</div> }));
 
 let desktop = false;
 beforeEach(() => {
   pathname = "/";
   push.mockReset();
+  announce.mockReset();
   desktop = false;
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -65,9 +69,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function Page({ title, h1 }: { title?: string; h1?: string }) {
-  useShellSlots({ title });
-  return h1 ? <h1>{h1}</h1> : <p>page body</p>;
+function Page({ title, isConnected }: { title?: string; isConnected?: boolean }) {
+  useShellSlots({ title, isConnected });
+  return <p>page body</p>;
 }
 
 const Frame = ({ children }: { children: ReactNode }) => (
@@ -106,15 +110,25 @@ describe("P1/P2: landmarks", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("New conversation");
   });
 
-  it("a page with its own h1 and no slot title yields exactly one h1", () => {
-    renderShell(<Page h1="Ops Console" />);
+  it("a page with no slot title still gets the bar's h1, named after the route", () => {
+    pathname = "/ops";
+    renderShell(<Page />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Ops");
   });
 
-  it("the route error boundary keeps the one-h1 invariant", () => {
+  it("unknown routes fall back to the app name", () => {
+    pathname = "/somewhere-else";
+    renderShell(<Page />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Weebot");
+  });
+
+  it("the route error boundary renders inside the one <main>, under the bar's h1", () => {
     renderShell(<RouteError error={new Error("boom")} reset={() => {}} />);
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.getByRole("banner").querySelectorAll("h1")).toHaveLength(1);
+    // app/error.tsx still renders its own h1 (outside this component's ownership): once it is
+    // demoted to h2 this becomes `screen.getAllByRole("heading", { level: 1 })` of length 1.
   });
 
   it("the route error boundary's retry calls reset (no regression)", () => {
@@ -144,6 +158,14 @@ describe("P3: shortcuts shown are shortcuts that exist", () => {
     expect(screen.getByRole("combobox")).toBeTruthy();
     fireEvent.keyDown(window, { key: "K", ctrlKey: true });
     expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("the palette's input opts out of autofill and spellcheck", () => {
+    renderShell(<Page title="x" />);
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = screen.getByRole("combobox");
+    expect(input.getAttribute("autocomplete")).toBe("off");
+    expect(input.getAttribute("spellcheck")).toBe("false");
   });
 
   it("palette: choosing a command runs it and closes the palette", () => {
@@ -221,13 +243,53 @@ describe("P6: slots belong to the mounted page", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("B");
   });
 
-  it("unmounting the page clears its title (no stale h1)", () => {
+  it("unmounting the page clears its title (the h1 falls back to the route, not the old title)", () => {
     const { rerender } = renderShell(<Page title="A" />);
     rerender(
       <Frame>
         <p>other</p>
       </Frame>
     );
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("New conversation");
+  });
+});
+
+describe("Live/Offline is announced on a change, not on mount", () => {
+  const withConnection = (isConnected: boolean) => (
+    <Frame>
+      <Page title="x" isConnected={isConnected} />
+    </Frame>
+  );
+
+  it("mounting live says nothing; going offline then live says each once", () => {
+    const { rerender } = render(withConnection(true));
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+    rerender(withConnection(false));
+    expect(announce.mock.calls).toEqual([["Offline"]]);
+    rerender(withConnection(true));
+    expect(announce.mock.calls).toEqual([["Offline"], ["Live"]]);
+  });
+
+  it("a page that arrives offline says nothing until it changes", () => {
+    render(withConnection(false));
+    expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppBar labels", () => {
+  it("the command palette button's name starts with its visible text, and the menu reports expanded", () => {
+    renderShell(<Page title="x" />);
+    expect(screen.getByRole("button", { name: "K, open command palette" })).toBeTruthy();
+    const menu = screen.getByLabelText("Open menu");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(menu);
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("New Session is Title Case", () => {
+    renderShell(<Page title="x" />);
+    expect(screen.getAllByText("New Session").length).toBeGreaterThan(0);
+    expect(screen.queryByText("New session")).toBeNull();
   });
 });

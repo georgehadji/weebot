@@ -1,5 +1,5 @@
 ---
-status: open
+status: done
 date: 2026-11-03
 note: fixes the 2026-11-03 Web Interface Guidelines audit of weebot-ui (~250 findings); ten phases, foundations first; follows on from specs/ui_ux_remediation_plan.md (done)
 ---

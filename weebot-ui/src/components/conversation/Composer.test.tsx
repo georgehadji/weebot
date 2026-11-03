@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   run: vi.fn(),
   input: vi.fn(),
   toast: vi.fn(),
+  announce: vi.fn(),
 }));
 
 // Base UI's switch click path constructs a PointerEvent; jsdom has none.
@@ -56,7 +57,7 @@ vi.mock("@/hooks/useSessionEvents", () => ({
 vi.mock("@/lib/api", () => ({
   api: { sessions: { create: h.create, run: h.run, input: h.input, events: () => Promise.resolve([]) } },
 }));
-vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => () => {} }));
+vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => h.announce }));
 vi.mock("@/providers/ToastProvider", () => ({ useToast: () => ({ toast: h.toast, dismiss: () => {} }) }));
 vi.mock("./RunControls", () => ({ RunControls: () => null }));
 
@@ -80,6 +81,7 @@ beforeEach(() => {
   h.run.mockReset().mockResolvedValue({});
   h.input.mockReset().mockResolvedValue({});
   h.toast.mockReset();
+  h.announce.mockReset();
   window.sessionStorage.clear();
   window.localStorage.clear();
 });
@@ -202,21 +204,50 @@ describe("failed x sent (observation, deferred)", () => {
 });
 
 describe("Auto mode", () => {
-  const toggle = () => screen.getByRole("switch", { name: /auto mode/i });
+  const toggle = () => screen.getByRole("switch", { name: "Auto", hidden: true });
+  const on = () => toggle().getAttribute("aria-checked") === "true";
+  /** Enabling Auto asks first; this flips the switch and confirms. */
+  const turnOnAuto = async () => {
+    fireEvent.click(toggle());
+    fireEvent.click(await screen.findByRole("button", { name: "Turn on Auto" }));
+    await waitFor(() => expect(on()).toBe(true));
+  };
 
   it("is off by default and sends execution_mode=interactive", async () => {
     mount();
-    expect(toggle().getAttribute("aria-checked")).toBe("false");
+    expect(on()).toBe(false);
     type("hello");
     enter();
     await waitFor(() => expect(h.input).toHaveBeenCalled());
     expect(h.input.mock.calls[0][2]).toMatchObject({ executionMode: "interactive" });
   });
 
-  it("sends execution_mode=auto once switched on, and remembers it", async () => {
+  it("enabling Auto opens a confirm and stays off until it is confirmed; Cancel leaves it off", async () => {
     mount();
     fireEvent.click(toggle());
-    await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+    expect(await screen.findByText(/skips approval prompts/)).toBeTruthy();
+    expect(on()).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/skips approval prompts/)).toBeNull());
+    expect(on()).toBe(false);
+    expect(window.localStorage.getItem("weebot_execution_mode")).toBeNull();
+  });
+
+  it("disabling Auto needs no confirm and announces the change", async () => {
+    mount();
+    await turnOnAuto();
+    fireEvent.click(toggle());
+    await waitFor(() => expect(on()).toBe(false));
+    expect(screen.queryByText(/skips approval prompts/)).toBeNull();
+    expect(h.announce.mock.calls.map((c) => c[0]).filter((t) => /Auto mode/.test(t))).toEqual([
+      "Auto mode on. Tool calls run without asking.",
+      "Auto mode off. Approvals are back.",
+    ]);
+  });
+
+  it("sends execution_mode=auto once confirmed, and remembers it", async () => {
+    mount();
+    await turnOnAuto();
     type("hello");
     enter();
     await waitFor(() => expect(h.input).toHaveBeenCalled());
@@ -226,12 +257,36 @@ describe("Auto mode", () => {
 
   it("creates a new session with execution_mode=auto", async () => {
     mount(null);
-    fireEvent.click(toggle());
-    await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+    await turnOnAuto();
     type("hello");
     enter();
     await waitFor(() => expect(h.create).toHaveBeenCalled());
     expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ execution_mode: "auto" }));
+  });
+});
+
+describe("the form", () => {
+  it("the Send button submits through the form, with the browser hints on the box", async () => {
+    mount();
+    expect(box().name).toBe("message");
+    expect(box().getAttribute("autocomplete")).toBe("off");
+    expect(box().getAttribute("enterkeyhint")).toBe("send");
+    type("via button");
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(h.input).toHaveBeenCalledTimes(1));
+    expect(h.input.mock.calls[0][1]).toBe("via button");
+  });
+
+  it("while sending the Send button is busy (not disabled, so focus stays) and swallows clicks", async () => {
+    let release!: () => void;
+    h.input.mockReturnValueOnce(new Promise((r) => (release = () => r({}))));
+    mount();
+    type("slow");
+    enter();
+    const send = screen.getByRole("button", { name: "Send message" });
+    expect(send.getAttribute("aria-busy")).toBe("true");
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => release());
   });
 });
 

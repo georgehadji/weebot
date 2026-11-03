@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronDown, ChevronRight, Copy, Loader2, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useIntlContext } from "@/hooks/useIntlContext";
+import { formatNumber } from "@/lib/format";
+import { useAnnounce } from "@/providers/AnnouncerProvider";
 import { ToolEvent } from "@/types/events";
 
 const RESULT_PREVIEW_CHARS = 4000;
@@ -18,6 +21,11 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [copied, setCopied] = useState(false);
+  const ctx = useIntlContext();
+  const announce = useAnnounce();
+  const detailsId = useId();
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
   const isCalling = event.status === "calling";
   const failed = !isCalling && event.is_error === true;
   const args = event.function_args ?? {};
@@ -33,18 +41,24 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
     try {
       await navigator.clipboard.writeText(result || JSON.stringify(args, null, 2));
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard blocked (insecure context / permission): nothing useful to tell the user
+      announce("Copied");
+      clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      // clipboard blocked (insecure context / permission)
+      console.warn("[ToolCallRow] copy failed", e);
+      announce("Couldn’t copy");
     }
   };
 
   return (
     <div className={failed ? "rounded-lg border border-status-error/40 bg-surface-2 text-sm" : "rounded-lg border bg-surface-2 text-sm"}>
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setExpanded((e) => !e)}
-        className="focus-ring flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-3"
+        className="h-auto w-full justify-start gap-2 rounded-lg px-3 py-2 text-left font-normal hover:bg-surface-3"
         aria-expanded={expanded}
+        aria-controls={detailsId}
       >
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -52,14 +66,14 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
         <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <Badge variant="outline" className="shrink-0">
+        <Badge variant="outline" translate="no" className="shrink-0">
           {event.tool_name}
         </Badge>
-        <span className="truncate font-mono text-xs text-muted-foreground">
+        <span translate="no" className="min-w-0 truncate font-mono text-xs text-muted-foreground">
           {preview || event.function_name}
         </span>
         {isCalling ? (
-          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-status-live-fg" role="img" aria-label="Running" />
+          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 motion-safe:animate-spin text-status-live-fg" role="img" aria-label="Running" />
         ) : failed ? (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-status-error-fg">
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -68,10 +82,10 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
         ) : (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">Done</span>
         )}
-      </button>
+      </Button>
 
       {expanded && (
-        <div className="space-y-2 px-3 pb-3">
+        <div id={detailsId} className="space-y-2 px-3 pb-3">
           {hasArgs && (
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Arguments</p>
@@ -101,8 +115,8 @@ export function ToolCallRow({ event }: { event: ToolEvent }) {
                 {truncated ? result.slice(0, cut) : result}
               </pre>
               {truncated && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Showing {cut.toLocaleString()} of {result.length.toLocaleString()} characters.{" "}
+                <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                  Showing {formatNumber(cut, ctx)} of {formatNumber(result.length, ctx)} characters.{" "}
                   <button type="button" className="focus-ring rounded-sm underline underline-offset-2" onClick={() => setShowAll(true)}>
                     Show all
                   </button>

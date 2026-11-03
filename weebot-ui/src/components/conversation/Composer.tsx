@@ -13,18 +13,23 @@
  * dispatch_session_input.py) — the mode chip here is purely informational,
  * mirroring what the backend will do, not a client-side branch.
  *
- * The behaviour (states, drafts, sending) lives in `useComposer`; this is its view. The box is
- * never disabled while a message is in flight, and Enter does not send mid-IME-composition.
+ * The behaviour (states, drafts, sending) lives in `useComposer`; this is its view. It is a
+ * <form>, so the Send button and Enter share one submit path. The box is never disabled while a
+ * message is in flight, and Enter does not send mid-IME-composition.
  */
 
-import { KeyboardEvent, useEffect, useRef, useSyncExternalStore } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { canSubmit } from "@/lib/composer";
+import { STORAGE_KEYS } from "@/lib/storage";
 import { useComposer } from "@/hooks/useComposer";
+import { useStoredValue } from "@/hooks/useStoredValue";
+import { useAnnounce } from "@/providers/AnnouncerProvider";
 import { DeliveryState, MessageEvent } from "@/types/events";
 
 export type SessionLifecycleStatus =
@@ -48,6 +53,8 @@ interface ComposerProps {
   registerSetDraft?: (setDraft: (text: string) => void) => void;
   /** Receives the function used by approval and plan-review buttons. */
   registerQuickReply?: (reply: (text: string) => void) => void;
+  /** Receives the function that moves focus into the box (plan review's "Request changes"). */
+  registerFocus?: (focus: () => void) => void;
   className?: string;
 }
 
@@ -61,53 +68,13 @@ const MODE_LABEL: Record<SessionLifecycleStatus, string> = {
 };
 
 const MODE_PLACEHOLDER: Record<SessionLifecycleStatus, string> = {
-  none: "Message weebot… (e.g. \"refactor the cascade module\")",
+  none: "Message weebot… (e.g. “refactor the cascade module”)",
   pending: "Message weebot…",
   failed: "Message weebot…",
   waiting: "Type your response…",
   running: "Steer the agent while it works…",
   completed: "Ask a follow-up…",
 };
-
-/** Remembers the Auto switch across sessions; the server render cannot see it. */
-const AUTO_KEY = "weebot_execution_mode";
-
-// localStorage is an external store, so React reads it with useSyncExternalStore rather than
-// mirroring it into state from an effect (which cascades renders) or into the initializer
-// (which disagrees with the server-rendered HTML). The storage event only fires in other
-// tabs, so this tab's listeners are notified by the setter below.
-const autoListeners = new Set<() => void>();
-
-function readAutoMode(): boolean {
-  try {
-    return window.localStorage.getItem(AUTO_KEY) === "auto";
-  } catch {
-    return false; // storage can throw (privacy mode); interactive is the default
-  }
-}
-
-function subscribeAutoMode(listener: () => void): () => void {
-  autoListeners.add(listener);
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === AUTO_KEY) listener();
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    autoListeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
-}
-
-function writeAutoMode(next: boolean): void {
-  try {
-    window.localStorage.setItem(AUTO_KEY, next ? "auto" : "interactive");
-  } catch {
-    // ignore
-  }
-  autoListeners.forEach((listener) => listener());
-}
-
-const serverAutoMode = () => false;
 
 export function Composer({
   sessionId,
@@ -119,9 +86,14 @@ export function Composer({
   registerRetry,
   registerSetDraft,
   registerQuickReply,
+  registerFocus,
   className,
 }: ComposerProps) {
-  const autoMode = useSyncExternalStore(subscribeAutoMode, readAutoMode, serverAutoMode);
+  // Remembers the Auto switch across sessions; the server render cannot see it, so it starts off.
+  const [storedMode, setStoredMode] = useStoredValue("local", STORAGE_KEYS.executionMode);
+  const autoMode = storedMode === "auto";
+  const [confirmingAuto, setConfirmingAuto] = useState(false);
+  const announce = useAnnounce();
   const { state, edit, submit, submitText, retry } = useComposer({
     sessionId,
     model,
@@ -145,18 +117,31 @@ export function Composer({
   useEffect(() => {
     registerQuickReply?.(submitText);
   }, [registerQuickReply, submitText]);
+  useEffect(() => {
+    registerFocus?.(() => textareaRef.current?.focus());
+  }, [registerFocus]);
+
+  const setAuto = (on: boolean) => {
+    setStoredMode(on ? "auto" : "interactive");
+    announce(on ? "Auto mode on. Tool calls run without asking." : "Auto mode off. Approvals are back.");
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    submit();
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // isComposing: Enter confirms an IME candidate (Greek tonos, CJK, ...), it must not send.
     // Safari reports that Enter after compositionend with isComposing false but keyCode 229.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
-      submit();
+      e.currentTarget.form?.requestSubmit();
     }
   };
 
   return (
-    <div className={cn("border-t bg-surface-2 p-3", className)}>
+    <form onSubmit={handleSubmit} className={cn("border-t bg-surface-2 px-3 pt-3 pb-safe", className)}>
       <div className="mb-1.5 flex items-center gap-2">
         <span
           className={cn(
@@ -172,7 +157,7 @@ export function Composer({
         </span>
         {sending && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
             Sending…
           </span>
         )}
@@ -183,6 +168,7 @@ export function Composer({
         >
           Runs without approvals, gates or questions
         </span>
+        {/* The wrapping label is the switch's name, so it is exactly the visible "Auto". */}
         <label
           className={cn(
             "flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground pointer-coarse:min-h-11",
@@ -191,8 +177,8 @@ export function Composer({
         >
           <Switch
             checked={autoMode}
-            onCheckedChange={writeAutoMode}
-            aria-label="Auto mode"
+            // Turning Auto on skips every approval prompt, so it asks first; turning it off is safe.
+            onCheckedChange={(on) => (on ? setConfirmingAuto(true) : setAuto(false))}
             aria-describedby="composer-auto-hint"
           />
           Auto
@@ -206,12 +192,22 @@ export function Composer({
           onKeyDown={handleKeyDown}
           placeholder={MODE_PLACEHOLDER[status]}
           rows={1}
+          name="message"
+          autoComplete="off"
+          enterKeyHint="send"
           aria-label="Message weebot"
           aria-invalid={state.phase === "failed" || undefined}
           aria-describedby={state.phase === "failed" && state.error ? "composer-error composer-hint" : "composer-hint"}
           className="max-h-40 min-h-11 flex-1 resize-none overflow-y-auto bg-surface-1"
         />
-        <Button onClick={submit} disabled={!canSubmit(state)} size="icon" aria-label="Send message">
+        {/* `loading` (not `disabled`) while sending, so focus stays on the button. */}
+        <Button
+          type="submit"
+          loading={sending}
+          disabled={!sending && !canSubmit(state)}
+          size="icon"
+          aria-label="Send message"
+        >
           <Send className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
@@ -223,6 +219,14 @@ export function Composer({
       <p id="composer-hint" className="mt-1 text-xs text-muted-foreground">
         Enter to send · Shift+Enter for a new line
       </p>
-    </div>
+      <ConfirmDialog
+        open={confirmingAuto}
+        onOpenChange={setConfirmingAuto}
+        title="Turn on Auto mode?"
+        description="Auto skips approval prompts for tool calls. The agent runs them without asking you first."
+        confirmLabel="Turn on Auto"
+        onConfirm={() => setAuto(true)}
+      />
+    </form>
   );
 }

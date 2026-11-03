@@ -27,6 +27,12 @@ describe("announcementFor", () => {
     expect(quiet.map(announcementFor)).toEqual([null, null, null, null]);
   });
 
+  it("announces a gap marker's dropped events, and stays silent for other notices", () => {
+    expect(announcementFor({ ...base, type: "notification", text: "3 event(s) dropped" })).toBe("3 events were dropped");
+    expect(announcementFor({ ...base, type: "notification", text: "1 event(s) dropped" })).toBe("1 event was dropped");
+    expect(announcementFor({ ...base, type: "notification", text: "Saved" })).toBeNull();
+  });
+
   it("announces a failed tool but not a successful one", () => {
     const tool = { ...base, type: "tool" as const, tool_call_id: "c", tool_name: "bash", function_name: "run", function_args: {}, status: "called" as const };
     expect(announcementFor({ ...tool, is_error: true })).toBe("Tool bash failed");

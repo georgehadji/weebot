@@ -62,10 +62,13 @@ test.describe("failure and empty states", () => {
 test.describe("a page that crashes", () => {
   test("shows a recoverable error inside the app frame, not Next's bare error page", async ({ page }) => {
     await mockBackend(page);
-    // A malformed trust payload makes the behavior page throw while rendering.
-    await page.route("**/api/behavior/trust", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
-    );
+    // The trust bar tolerates a malformed payload now, so force a render-time throw: it formats
+    // its counts with Intl.PluralRules.
+    await page.addInitScript(() => {
+      Intl.PluralRules.prototype.select = () => {
+        throw new Error("boom");
+      };
+    });
     page.on("pageerror", () => {});
     await page.goto("/behavior");
     await expect(page.getByRole("heading", { name: "Something went wrong on this page" })).toBeVisible();

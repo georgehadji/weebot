@@ -103,8 +103,33 @@
   }
 }
 
-@utility text-balance {
-  text-wrap: balance;
+/* Tailwind v4 ships text-balance / text-pretty; headings balance by default. */
+@layer base {
+  h1,
+  h2 {
+    text-wrap: balance;
+  }
+}
+
+/* Clear the iPhone home indicator and rounded corners on bottom-fixed UI. */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+@utility bottom-safe {
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+/* Skips layout and paint for off-screen rows in long lists. Not virtualisation: the DOM stays,
+   so find-in-page and screen readers still see every row. */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 5rem;
+}
+
+/* Same, for short single-line rows (feed lines), so the reserved height is not 5rem. */
+@utility cv-auto-sm {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2rem;
 }
 
 @utility font-mono-console {
@@ -187,6 +212,9 @@
  * ──────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
+    /* Native scrollbars, form controls and select popups follow the theme. */
+    color-scheme: light;
+
     /* light theme — anthropic.com's ivory page, white cards */
     --background: var(--p-ink-50);
     --foreground: var(--p-ink-950);
@@ -241,9 +269,17 @@
     --dur-fast: 150ms;
     --dur-base: 220ms;
     --ease-console: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* chart series: the brand accents, same in both themes (see CostChart) */
+    --chart-1: hsl(var(--p-clay-500));
+    --chart-2: hsl(var(--p-sky-500));
+    --chart-3: hsl(var(--p-olive-500));
+    --chart-4: hsl(var(--p-fig-500));
+    --chart-5: hsl(var(--p-oat-300));
   }
 
   .dark {
+    color-scheme: dark;
     --background: var(--p-ink-950);
     --foreground: var(--p-ink-50);
 
@@ -296,6 +332,9 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
+    /* no double-tap-zoom delay on controls, and no grey flash on tap */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* semantic error surface — replaces bg-red-50, which was unreadable

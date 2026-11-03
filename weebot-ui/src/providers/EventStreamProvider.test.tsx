@@ -259,3 +259,31 @@ describe("EventStreamProvider — reconnect epoch", () => {
     expect(screen.getByTestId("epoch").textContent).toBe("1");
   });
 });
+
+describe("EventStreamProvider — connection settings", () => {
+  let sockets: FakeWebSocketControl;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    sockets = installFakeWebSocket();
+  });
+  afterEach(() => {
+    sockets.restore();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the presence socket on the WebSocket URL saved in Settings", async () => {
+    vi.stubGlobal("localStorage", { getItem: (k: string) => (k === "weebot_ws_url" ? " ws://10.0.0.5:9000/ws " : null) });
+    vi.stubGlobal("sessionStorage", { getItem: () => null });
+    function Probe() {
+      useSessionPresence();
+      return null;
+    }
+    render(
+      <EventStreamProvider>
+        <Probe />
+      </EventStreamProvider>
+    );
+    expect(sockets.last.url).toBe("ws://10.0.0.5:9000/ws");
+  });
+});

@@ -22,6 +22,7 @@ type RowComponent = (props: {
   event: never;
   onRetry?: (event: MessageEvent) => void;
   onReply?: (text: string) => void;
+  onRequestChanges?: () => void;
 }) => React.ReactElement | null;
 
 const EVENT_REGISTRY: Partial<Record<AgentEvent["type"], RowComponent>> = {
@@ -43,16 +44,19 @@ function EventRendererImpl({
   event,
   onRetry,
   onReply,
+  onRequestChanges,
 }: {
   event: AgentEvent;
   /** Re-send a user message whose delivery failed (used by message rows only). */
   onRetry?: (event: MessageEvent) => void;
   /** Send a button-selected response through the same session input path as the composer. */
   onReply?: (text: string) => void;
+  /** Focus the composer so the reader can describe plan changes (plan review rows only). */
+  onRequestChanges?: () => void;
 }) {
   const Row = EVENT_REGISTRY[event.type];
   if (!Row) return null;
-  return <Row event={event as never} onRetry={onRetry} onReply={onReply} />;
+  return <Row event={event as never} onRetry={onRetry} onReply={onReply} onRequestChanges={onRequestChanges} />;
 }
 
 /**

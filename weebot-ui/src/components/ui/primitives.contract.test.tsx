@@ -11,14 +11,16 @@ import { act, fireEvent, render, screen } from "@testing-library/react"
 import { createRef, useRef, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 
-import { Alert } from "./alert"
+import { Alert, AlertTitle } from "./alert"
 import { Badge } from "./badge"
 import { Button } from "./button"
+import { CardTitle } from "./card"
 import { Dialog, DialogContent, DialogSheet, DialogTitle } from "./dialog"
 import { Input } from "./input"
 import { Progress } from "./progress"
 import { ScrollArea } from "./scroll-area"
 import { Separator } from "./separator"
+import { Skeleton } from "./skeleton"
 import { Switch } from "./switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip"
@@ -324,9 +326,32 @@ describe("W7: form and status primitives", () => {
     expect(ref.current).toBe(screen.getByRole("button", { name: "go" }))
     expect(ref.current!.className).toContain("bg-destructive")
   })
-  it("Alert is role=alert", () => {
-    render(<Alert>boom</Alert>)
+  it("Alert is role=status by default and role=alert only when destructive", () => {
+    const { unmount } = render(<Alert>fyi</Alert>)
+    expect(screen.getByRole("status").textContent).toBe("fyi")
+    unmount()
+    render(<Alert variant="destructive">boom</Alert>)
     expect(screen.getByRole("alert").textContent).toBe("boom")
+  })
+  it("Button defaults to type=button, and loading swallows clicks without disabling", () => {
+    const onClick = vi.fn()
+    const { rerender } = render(<Button onClick={onClick}>go</Button>)
+    expect(screen.getByRole("button").getAttribute("type")).toBe("button")
+    rerender(<Button onClick={onClick} loading>go</Button>)
+    const btn = screen.getByRole("button")
+    fireEvent.click(btn)
+    expect(onClick).not.toHaveBeenCalled()
+    expect(btn.getAttribute("aria-busy")).toBe("true")
+    expect(btn.hasAttribute("disabled")).toBe(false)
+  })
+  it("CardTitle is an h2 and AlertTitle an h3", () => {
+    render(<><CardTitle>c</CardTitle><AlertTitle>a</AlertTitle></>)
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("c")
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("a")
+  })
+  it("Skeleton stops pulsing under reduced motion", () => {
+    const { container } = render(<Skeleton />)
+    expect(container.firstElementChild!.className).toContain("motion-reduce:animate-none")
   })
 })
 
@@ -335,5 +360,4 @@ describe("W7: form and status primitives", () => {
 //  - DialogContent `-translate-y-0` override in AppBar (tailwind-merge group resolution, real CSS)
 //  - focus-visible rings, pointer-coarse 44 px targets (e2e at 375 px, not runnable here)
 //  - Card / Skeleton / Label / Separator layout: pure class wrappers, no behaviour to assert
-// Primitives with NO consumer in the composition layer (DEAD for W7's exit criterion): Select,
-// DropdownMenu, Avatar, Switch (asserted above), Tooltip/TooltipContent (only the provider is mounted).
+// Primitives with NO consumer in the composition layer (DEAD for W7's exit criterion): DropdownMenu, Avatar, Switch (asserted above), Tooltip/TooltipContent (only the provider is mounted).
