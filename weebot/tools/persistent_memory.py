@@ -4,10 +4,10 @@ Inspired by hermes-agent's memory_tool pattern. Stores in two files:
   ~/.weebot/memory/AGENT.md  — agent-accumulated knowledge and observations
   ~/.weebot/memory/USER.md   — user preferences, workflow habits, and profile
 
-Both files are re-read from disk and re-injected into the system prompt on
-EVERY executor step (see PersistentMemoryTool.load_snapshot() and its call
-site in executor/_base.py) — there is no session-start freeze and no prefix
-cache preserved. A mid-session write is visible on the very next step.
+Both files are read once per session and the text is reused by every later step
+(see MemorySnapshotCache and WEEBOT_MEMORY_SNAPSHOT_FREEZE), so a write by any
+session cannot change the prompt prefix of a running one. A write reaches disk at
+once and is in context from the next session; this session sees it in the tool result.
 
 Entry delimiter: § (section sign, rare in natural text).
 """
@@ -28,6 +28,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = ["PersistentMemoryTool"]
+
+def _saved_note() -> str:
+    from weebot.config.feature_flags import is_enabled
+
+    # With the freeze off the next step re-reads the file, so there is nothing to say.
+    if not is_enabled("MEMORY_SNAPSHOT_FREEZE_ENABLED"):
+        return ""
+    return " Saved; it is in context from the next session."
 
 MEMORY_SNAPSHOT_MAX_ENTRIES: int = 20
 """Newest-N AGENT.md entries kept when the snapshot cap is enabled (feature_flags.py)."""
@@ -198,7 +206,7 @@ class PersistentMemoryTool(BaseTool):
         entries.append(entry)
         await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Added entry #{len(entries)} to {file.upper()}.md.",
+            output=f"Added entry #{len(entries)} to {file.upper()}.md.{_saved_note()}",
             data={"count": len(entries)},
         )
 
@@ -228,7 +236,7 @@ class PersistentMemoryTool(BaseTool):
         entries = [new_entry if e == matches[0] else e for e in entries]
         await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Replaced 1 entry in {file.upper()}.md.", data={"replaced": 1}
+            output=f"Replaced 1 entry in {file.upper()}.md.{_saved_note()}", data={"replaced": 1}
         )
 
     async def _remove(self, file: str, match: str) -> ToolResult:
@@ -252,7 +260,8 @@ class PersistentMemoryTool(BaseTool):
         entries = [e for e in entries if e != matches[0]]
         await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Removed 1 entry from {file.upper()}.md.", data={"removed": matches}
+            output=f"Removed 1 entry from {file.upper()}.md.{_saved_note()}",
+            data={"removed": matches},
         )
 
     # ── system prompt snapshot ────────────────────────────────────────────
@@ -261,9 +270,8 @@ class PersistentMemoryTool(BaseTool):
     async def load_snapshot(cls, memory: MemoryPort | None = None) -> str:
         """Return a formatted snapshot of both memory files for system prompt injection.
 
-        Returns empty string if both files are empty or missing. Re-read from
-        disk and re-injected on EVERY executor step (see the module docstring)
-        — there is no session-start freeze and no prefix cache preserved.
+        Returns empty string if both files are empty or missing. This is the raw read:
+        ``MemorySnapshotCache`` decides how often it runs.
 
         Args:
             memory: Port to read from. Defaults to a fresh

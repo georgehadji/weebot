@@ -106,9 +106,9 @@ class ExecutorAgent:
         spillover_store: Any | None = None,
         cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
         guard_config: GuardConfig | None = None,  # loop-guard numbers (H11); None = defaults
-        # Awaitable returning the persistent-memory snapshot for the system prompt; the
-        # composition root supplies it, so the executor imports no tool (plan 3.4).
-        memory_snapshot: Callable[[], Awaitable[str]] | None = None,
+        # Awaitable taking the session id and returning the persistent-memory snapshot for the
+        # system prompt; the composition root supplies it, so the executor imports no tool.
+        memory_snapshot: Callable[[str], Awaitable[str]] | None = None,
         # Shared AdaptiveCapabilityRouter: ranks models per step and learns from outcomes.
         acr_router: Any | None = None,
     ):
