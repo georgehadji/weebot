@@ -88,7 +88,7 @@ Format: date — record — note
 - 2026-10-24 — [UI/UX Remediation — weebot-ui](specs/ui_ux_remediation_plan.md) — from the 2026-10-24 UX/UI audit of weebot-ui; implemented the same day (Appendix C lists what landed and where it deviated); decisions D1-D6 were applied as recommended
 - 2026-06-30 — [Verbalized Sampling — Implementation Plan](specs/verbalized_sampling_implementation_plan.md) — VerbalizedSampler shipped but has no caller; phases 1-7 not wired
 
-## reference (87)
+## reference (88)
 
 - 2026-06-30 — [Implementation Audit Report — Cross-Phase (0–5)](audits/cross_phase_implementation_audit.md)
 - 2026-10-23 — [Decision models instead of chat LLMs — where they fit (2026-10-23)](audits/decision_models_2026_10_23.md)
@@ -108,6 +108,7 @@ Format: date — record — note
 - 2026-10-23 — [ICM optimization research (2026-10-23)](audits/icm_optimization_2026_10_23.md)
 - 2026-10-26 — [Implementation audit: ICM A4 and slices 5-6 (PR #98)](audits/implementation_audit_report.md) — audit of ICM A4 and slices 5-6 (PR #98); verdict APPROVED WITH CHANGES
 - 2026-10-23 — [Model routing against current scores (2026-10-23)](audits/model_routing_2026_10_23.md)
+- 2026-11-03 — [Model routing against AA Intelligence Index v5.0 (2026-11-03)](audits/model_routing_2026_11_03.md)
 - 2026-09-06 — [Updating the models from OpenRouter — instrument repaired, then run](audits/openrouter_catalog_refresh.md)
 - 2026-06-30 — [Implementation Audit Report](audits/phase01_implementation_audit.md)
 - 2026-06-30 — [Implementation Audit Report — Phase 2](audits/phase2_implementation_audit.md)

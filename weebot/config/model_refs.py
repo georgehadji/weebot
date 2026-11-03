@@ -95,10 +95,12 @@ def claude_model_allowed(model_id: str) -> bool:
     """False only for a Claude model outside the user's allowed set."""
     return "claude" not in model_id.lower() or bool(_ALLOWED_CLAUDE.match(model_id.lower()))
 _MIMO_FLASH = "xiaomi/mimo-v2.6-flash"
-_GLM = "z-ai/glm-5.3"
-_GLM_FLASH = "z-ai/glm-5.3-flash"
 _QWEN_FLASH = "qwen/qwen3.8-flash"
 
+# 2026-11-03, AA Intelligence Index v5.0 (tasks/audits/model_routing_2026_11_03.md):
+# MiMo-V2.6-Pro fell 46 -> 30 and is kept only where knowledge work (AA-Briefcase)
+# matters: product_manager, designer. GLM-5.3 and GLM-5.3-Flash were dominated and
+# are gone. Haiku-first roles and GPT-6.1 Terra await a billed eval.
 ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # Reasoning-heavy, one call per plan: quality per dollar at the top end.
     # Haiku 5.5 first for planner and researcher: on the 2026-10-23 billed
@@ -106,31 +108,33 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # (tasks/remaining_fix_plan.md); the previous primary is fallback 1. The
     # coder stays on Sonnet: in multi-step coding runs Haiku went 2/3 (it
     # rewrote a task's input) against Sonnet's 3/3.
-    "planner": [_HAIKU, _SOL, _KIMI, _MIMO_PRO],
-    "planner_sub": [_MIMO_PRO, _DEEPSEEK, _SOL],
+    "planner": [_HAIKU, _SOL, _KIMI],
+    "planner_sub": [_SOL, _DEEPSEEK, _HAIKU],
     # Highest volume: the agentic tool loop.
-    "executor": [_DEEPSEEK, _MIMO_PRO, _MINIMAX, _GLM_FLASH],
+    "executor": [_DEEPSEEK, _MINIMAX, _SOL],
     # Sol first: billed 2026-10-23 coding eval, 5 tasks pinned per model, Sol
     # 5/5 in 333 s vs Sonnet 4/5 in 1141 s, at ~1/3 the AA cost per task
-    # (tasks/audits/model_routing_2026_10_23.md). Sonnet is fallback 1.
-    "coder": [_SOL, _SONNET, _GLM, _DEEPSEEK],
+    # (tasks/audits/model_routing_2026_10_23.md). Sonnet is fallback 1. Kimi
+    # replaced GLM-5.3: Terminal-Bench 67 vs 42, $3.68 vs $5.01 per task.
+    "coder": [_SOL, _SONNET, _KIMI, _DEEPSEEK],
     # Haiku 5.5 tied Sol 6/6 on the billed subtle-bug eval at ~1/12 the cost.
     # Sol (another lab than the Anthropic coder) is fallback 1.
     "reviewer": [_HAIKU, _SOL, _KIMI, _OPUS],
-    "critic": [_SOL, _KIMI, _OPUS],
+    # Opus ahead of Kimi: v5.0 index 52 vs 46, $3.46 vs $3.68, 50 s vs 83 s.
+    "critic": [_SOL, _OPUS, _KIMI],
     "verifier": [_DEEPSEEK, _MIMO_FLASH, _HAIKU],
-    "researcher": [_HAIKU, _MIMO_PRO, _SOL, _DEEPSEEK],
-    "analyst": [_SOL, _MIMO_PRO, _KIMI],
-    "dreamer": [_MIMO_PRO, _DEEPSEEK, _SOL],
-    "product_manager": [_MIMO_PRO, _SOL, _HAIKU],
+    "researcher": [_HAIKU, _SOL, _DEEPSEEK],
+    "analyst": [_SOL, _OPUS, _KIMI],
+    "dreamer": [_SOL, _DEEPSEEK, _HAIKU],
+    "product_manager": [_MIMO_PRO, _SONNET, _SOL],
     "designer": [_MIMO_PRO, _SONNET, _DEEPSEEK],
     "documentation": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
     "summarizer": [_HAIKU, _MIMO_FLASH, _QWEN_FLASH],
     # DeepSeek first (AA 45, $0.26/task, 14 s) over MiniMax (43, $0.22, 30 s):
     # tasks/audits/model_routing_2026_10_23.md.
     "automation": [_DEEPSEEK, _MINIMAX, _MIMO_FLASH],
-    "admin": [_DEEPSEEK, _MINIMAX, _MIMO_PRO],
-    "subagent": [_LUNA, _MIMO_FLASH, _HAIKU, _GLM_FLASH],
+    "admin": [_DEEPSEEK, _MINIMAX, _SOL],
+    "subagent": [_LUNA, _MIMO_FLASH, _HAIKU],
     "vision": [MODEL_VISION_PRIMARY, _HAIKU, "google/gemini-3.8-flash", _MIMO_FLASH],
 }
 
@@ -252,7 +256,7 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     _LUNA,
     _QWEN_FLASH,
     _MIMO_PRO,
-    _GLM,
+    _KIMI,
     _SOL,
     "deepseek/deepseek-v4-flash",  # previous workhorse, cheapest last resort
 ]
