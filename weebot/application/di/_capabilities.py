@@ -62,6 +62,11 @@ class CapabilitiesMixin:
         self.register(
             WorkspaceCheckpointPort, lambda: ShadowGitCheckpointAdapter(DEFAULT_CHECKPOINT_DIR)
         )
+        # Tool output too long for the context, kept on disk (H7); a session delete purges it.
+        from weebot.application.ports.spillover_store_port import SpilloverStorePort
+        from weebot.infrastructure.spillover.file_store import FileSpilloverStore
+
+        self.register(SpilloverStorePort, lambda: FileSpilloverStore())
         from weebot.application.di.keys import STRATEGY_TRANSFER
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"

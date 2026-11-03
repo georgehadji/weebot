@@ -23,6 +23,7 @@ Format: name — source — status — card
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
+- SpilloverStore (SpilloverStorePort, FileSpilloverStore, SpilloverMiddleware, spill_over_budget) — `docs/adr/020-tool-output-spillover.md` — stub — [card](application/SpilloverStore.md)
 - ToolArgCoercion (coerce_args, Coercion, Deny, ToolCall, MiddlewareChain) — `tasks/specs/hermes_v022_parity_implementation_plan.md` — stub — [card](application/ToolArgCoercion.md)
 - WorkspaceCheckpoint (WorkspaceCheckpointPort, ShadowGitCheckpointAdapter, CheckpointRef, checkpoint_before_change) — `docs/adr/019-workspace-checkpoints.md` — stub — [card](application/WorkspaceCheckpoint.md)
 

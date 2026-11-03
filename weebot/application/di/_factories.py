@@ -234,6 +234,20 @@ class FactoriesMixin:
 
         return SQLiteGatewaySessionStore()
 
+    def _spillover_kwargs(self) -> dict:
+        """`spillover_store` and a middleware chain that spills oversized tool output (H7)."""
+        from weebot.application.middleware.chain import MiddlewareChain
+        from weebot.application.ports.spillover_store_port import SpilloverStorePort
+        from weebot.application.services.spillover import SpilloverMiddleware
+
+        store = self._maybe_get(SpilloverStorePort)
+        if store is None:
+            return {}
+        return {
+            "spillover_store": store,
+            "middleware_chain": MiddlewareChain([SpilloverMiddleware(store)]),
+        }
+
     def _workspace_checkpoints(self):
         """The shadow-git checkpoint port, or None while WEEBOT_FILE_CHECKPOINTS is off."""
         from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort

@@ -25,6 +25,8 @@ from weebot.application.agents.executor._error_handler import (
     tool_signature,
 )
 from weebot.application.agents.executor._step_result_handler import feed_vision, pause_events
+from weebot.application.services.spillover import spill_over_budget, turn_budget
+from weebot.core.log_context import session_id_var
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -133,6 +135,16 @@ class ToolBatchRunner:
         assert len(results) == len(prepared), (
             f"Mismatched result count {len(results)} vs tool call count {len(prepared)}"
         )
+
+        store = executor._spillover_store
+        if store is not None:
+            await spill_over_budget(
+                store,
+                session_id_var.get() or "unknown",
+                [tc["function"]["name"] for tc in prepared],
+                results,
+                turn_budget(),
+            )
 
         hints: list[str] = []
         for tool_call, result in zip(prepared, results, strict=False):

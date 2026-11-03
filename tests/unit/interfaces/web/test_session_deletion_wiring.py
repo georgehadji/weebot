@@ -35,6 +35,7 @@ _SESSION_STORES = {
     "episodic_summaries",
     "flow_checkpoints",
     "workspace_checkpoints",
+    "spillover",
     "trajectories",
     "steering",
 }

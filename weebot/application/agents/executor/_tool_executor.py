@@ -667,6 +667,7 @@ class ToolExecutor:
             ]
         if tool_call is not None:
             result = await chain.apply_transform_tool_result(tool_call, result)
+        result.metadata.pop("full_output", None)  # never leaves the executor (H7)
         return result
 
     def taint_session(self, tool_name: str, is_error: bool) -> None:

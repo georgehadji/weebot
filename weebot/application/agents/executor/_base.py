@@ -102,6 +102,8 @@ class ExecutorAgent:
         effect_ledger: Any | None = None,
         # WorkspaceCheckpointPort: copies the workspace before a step's first change (H5).
         workspace_checkpoints: Any | None = None,
+        # SpilloverStorePort: holds the full text of a turn's overflow tool output (H7).
+        spillover_store: Any | None = None,
         cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
         # Awaitable returning the persistent-memory snapshot for the system prompt; the
         # composition root supplies it, so the executor imports no tool (plan 3.4).
@@ -110,6 +112,7 @@ class ExecutorAgent:
         acr_router: Any | None = None,
     ):
         self._acr_router = acr_router
+        self._spillover_store = spillover_store
         self._memory_snapshot = memory_snapshot
         self._injection_scan = injection_scan
         self._llm = llm

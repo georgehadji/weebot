@@ -27,7 +27,7 @@ Called from `ToolExecutor.execute_tool` after name resolution and before the egr
 **Does not hit:** the LLM-side `before_request` and `after_response` hooks, tool schemas.
 
 ## Surfaces
-Every executor tool call. No production code builds a `MiddlewareChain` yet; the spillover (H7) and diagnostics (H20) middleware are its first planned members.
+Every executor tool call. `Container._spillover_kwargs` builds the one production `MiddlewareChain` (spillover, H7); diagnostics (H20) is the next planned member.
 
 ## See
 `tasks/specs/hermes_v022_parity_implementation_plan.md` (H16)

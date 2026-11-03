@@ -520,6 +520,8 @@ class Container(
             cost_meter=self._maybe_get(SESSION_COST_METER),
             memory_snapshot=PersistentMemoryTool.load_snapshot,
             acr_router=self._maybe_get(ACR_ROUTER),
+            # H7: output past the cap goes to a file; the model gets a head, a tail and the path.
+            **self._spillover_kwargs(),
         )
         if context is not None:
             kwargs.update(context.executor_kwargs())
