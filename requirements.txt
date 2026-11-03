@@ -10,7 +10,7 @@ langchain-openai==1.7.3
 pydantic==2.14.2
 # Imported directly by weebot.config.settings; also required transitively by
 # mcp/fastapi — pin explicitly so a transitive change can't drop it.
-pydantic-settings>=2.16.1
+pydantic-settings>=2.16.2
 python-dotenv==1.2.4
 import-linter==2.15
 structlog==26.1.0
