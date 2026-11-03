@@ -67,10 +67,25 @@ class CapabilitiesMixin:
         from weebot.infrastructure.spillover.file_store import FileSpilloverStore
 
         self.register(SpilloverStorePort, lambda: FileSpilloverStore())
+        # The persistent-memory text each session read at its first step (H24a).
+        from weebot.application.di.keys import MEMORY_SNAPSHOT_CACHE
+
+        self.register(MEMORY_SNAPSHOT_CACHE, self._create_memory_snapshot_cache)
         from weebot.application.di.keys import STRATEGY_TRANSFER
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"
         self.register(STRATEGY_TRANSFER, lambda: self._create_strategy_transfer(strategies_db))
+
+    @staticmethod
+    def _create_memory_snapshot_cache():
+        from weebot.application.services.memory_snapshot_cache import MemorySnapshotCache
+        from weebot.config.feature_flags import is_enabled
+        from weebot.tools.persistent_memory import PersistentMemoryTool
+
+        return MemorySnapshotCache(
+            PersistentMemoryTool.load_snapshot,
+            frozen=lambda: is_enabled("MEMORY_SNAPSHOT_FREEZE_ENABLED"),
+        )
 
     @staticmethod
     def _create_strategy_transfer(db_path):

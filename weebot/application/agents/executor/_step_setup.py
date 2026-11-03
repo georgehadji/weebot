@@ -64,7 +64,6 @@ async def build_step_prompts(
 ) -> None:
     """Assemble the system prompt and seed the conversation buffer for this step."""
     executor._tool_note = executor._scope_tools_for(step)
-    await _load_user_profile(executor)
 
     step_scope = getattr(step, "context_scope", None)
     scope_value = step_scope.value if step_scope is not None else "full"
@@ -86,11 +85,6 @@ async def build_step_prompts(
     if retrieval_scores:
         record_skill_gap(executor, step.description, retrieval_scores[0])
 
-    # Gated by scope: minimal/skill steps don't need the cached user profile blob
-    # (ICM per-step context scoping — see _prompt_builder).
-    if scope_value in ("full", "creative") and getattr(executor, "_user_profile_cache", ""):
-        system_prompt += f"\n\n## User Profile\n{executor._user_profile_cache}"
-
     executor._system_prompt = system_prompt
     # Inject OUTPUT_ROOT so tools resolve paths consistently
     from weebot.core.output_path import output_path as _op
@@ -102,41 +96,17 @@ async def build_step_prompts(
     )
 
     try:
-        snapshot = await executor._memory_snapshot() if executor._memory_snapshot else ""
+        snapshot = (
+            await executor._memory_snapshot(executor._current_session_id)
+            if executor._memory_snapshot
+            else ""
+        )
         if snapshot:
             executor._system_prompt = executor._system_prompt + "\n\n" + snapshot
     except Exception as exc:
         logger.warning("Persistent memory snapshot unavailable: %s", exc)
 
     _seed_conversation(executor, plan, step, user_input)
-
-
-async def _load_user_profile(executor: ExecutorAgent) -> None:
-    """Lazily fetch the dialectic-consolidation profile once per executor.
-
-    A failure here is not the step's problem: an empty profile costs a paragraph of
-    prompt, and refusing to run costs the task.
-    """
-    if hasattr(executor, "_user_profile_cache"):
-        return
-
-    try:
-        import hashlib
-
-        from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
-
-        repo = as_role(executor._state_repo, MemoryMetadataStore)
-        if repo is None:
-            executor._user_profile_cache = ""
-            return
-        key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-        row = await repo.get_memory_entry(key)
-        text = row.get("entry_text", "") if row else ""
-        executor._user_profile_cache = (
-            text[:500] if text and text != "No user data collected yet." else ""
-        )
-    except Exception:
-        executor._user_profile_cache = ""
 
 
 def _seed_conversation(

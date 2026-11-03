@@ -34,6 +34,7 @@ from weebot.application.di.keys import (  # noqa: E402
     DELEGATION_GUARD,
     LEARNING_SKILL_STORE,
     LLM_POOL,
+    MEMORY_SNAPSHOT_CACHE,
     SESSION_COST_METER,
     SKILL_PROMOTION_GATE,
     STEP_EVALUATOR,
@@ -493,7 +494,6 @@ class Container(
         from weebot.application.models.tool_collection import ToolCollection
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
         from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
-        from weebot.tools.persistent_memory import PersistentMemoryTool
 
         kwargs = dict(
             llm=llm if llm is not None else self._maybe_get(LLMPort),
@@ -518,7 +518,8 @@ class Container(
             workspace_checkpoints=self._workspace_checkpoints(),
             # Plan 2.4: past the soft cost limit the cascade skips PREMIUM models.
             cost_meter=self._maybe_get(SESSION_COST_METER),
-            memory_snapshot=PersistentMemoryTool.load_snapshot,
+            # H24a: read once per session, so a memory write cannot move a running prefix.
+            memory_snapshot=self.get(MEMORY_SNAPSHOT_CACHE).get,
             acr_router=self._maybe_get(ACR_ROUTER),
             # H7: output past the cap goes to a file; the model gets a head, a tail and the path.
             **self._spillover_kwargs(),

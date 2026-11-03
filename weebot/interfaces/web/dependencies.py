@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # The flow checkpoint store is here since D4 wired it (WEEBOT_FLOW_CHECKPOINTS);
 # it is purged whether or not the flag is on now, since it may have been earlier.
 def _session_stores() -> list[tuple[str, Any, str]]:
-    from weebot.application.di.keys import SUMMARY_REPO
+    from weebot.application.di.keys import MEMORY_SNAPSHOT_CACHE, SUMMARY_REPO
     from weebot.application.ports.checkpoint_port import CheckpointPort
     from weebot.application.ports.event_store_port import EventStorePort
     from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
@@ -47,6 +47,8 @@ def _session_stores() -> list[tuple[str, Any, str]]:
         ("workspace_checkpoints", WorkspaceCheckpointPort, "delete_session"),
         # Full text of tool outputs that were too long for the context (H7).
         ("spillover", SpilloverStorePort, "purge"),
+        # The persistent-memory text the session read at its first step (H24a).
+        ("memory_snapshot", MEMORY_SNAPSHOT_CACHE, "forget"),
         # Run trajectories and failure signatures, which feed skill optimisation.
         ("trajectories", "trajectory_repo", "delete_by_session_id"),
         # Steering messages sent to the run and not yet read (user text).

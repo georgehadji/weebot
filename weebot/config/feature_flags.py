@@ -151,6 +151,11 @@ WEEBOT_ACR_SHADOW: bool = _env_bool("WEEBOT_ACR_SHADOW", default=False)
 # real memory content, not test litter, has grown past the cap.
 MEMORY_SNAPSHOT_CAP_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_CAP", default=False)
 
+# H24a: read the persistent-memory snapshot once per session instead of at every step, so a
+# memory write by any session cannot change the prompt prefix of a running one. A write
+# reaches disk at once and shows up in the next session. Default ON; false re-reads per step.
+MEMORY_SNAPSHOT_FREEZE_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_FREEZE", default=True)
+
 
 # ── C2. Durable task queue backend (ARCH-AUDIT-V2) ──────────────────────────
 # Controls which queue backend the TaskRunner uses.
