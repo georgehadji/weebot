@@ -77,7 +77,7 @@ function RoleRow({
   return (
     <li className="flex flex-col gap-1 border-b py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
       <label htmlFor={id} className="min-w-0 sm:w-48">
-        <span className="block text-sm font-medium">{label}</span>
+        <span className="block text-sm font-medium">{label}</span>{" "}
         <span className="block truncate font-mono text-xs text-muted-foreground">
           {row.override ? "your pick" : "default"}
         </span>
