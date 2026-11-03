@@ -90,13 +90,6 @@ PINNED_FIELDS: dict[str, dict] = {
         "tier": "PREMIUM",
         "tool_use_score": 7,
     },
-    "poolside/laguna-s-2.1": {
-        "strengths": [
-            "CHAT", "CODE_GENERATION", "CODE_REVIEW", "AGENTIC", "DOCUMENTATION", "ARCHITECTURE",
-        ],
-        "tier": "FAST",
-        "tool_use_score": 6,
-    },
     "qwen/qwen3.7-flash": {
         "strengths": ["CHAT", "REASONING", "CODE_REVIEW", "DOCUMENTATION"],
         "tier": "FAST",

@@ -16,6 +16,381 @@
    },
    "context_length": 1048576,
    "expiration_date": null,
+   "id": "z-ai/glm-5.3-flashx-legal",
+   "name": "Z.ai: GLM 5.3 FlashX Legal",
+   "pricing": {
+    "completion": "0.00000125",
+    "input_cache_read": "0.000000075",
+    "prompt": "0.00000037"
+   },
+   "reasoning": {
+    "default_effort": "max",
+    "default_enabled": true,
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low"
+    ]
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_p"
+   ],
+   "top_provider": {
+    "context_length": 1048576,
+    "is_moderated": false,
+    "max_completion_tokens": 131072
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "instruct_type": null,
+    "modality": "text+image->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other"
+   },
+   "context_length": 1048576,
+   "expiration_date": null,
+   "id": "particle-ai/particle-1",
+   "name": "Particle AI: Particle-1",
+   "pricing": {
+    "completion": "0.0000005",
+    "input_cache_read": "0.000000003",
+    "prompt": "0.00000005"
+   },
+   "reasoning": {
+    "default_effort": "high",
+    "default_enabled": true,
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low",
+     "minimal",
+     "none"
+    ]
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "top_provider": {
+    "context_length": 1048576,
+    "is_moderated": false,
+    "max_completion_tokens": 131072
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "file",
+     "image",
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT"
+   },
+   "context_length": 1050000,
+   "expiration_date": null,
+   "id": "openai/gpt-6.1-terra-pro",
+   "name": "OpenAI: GPT-6.1 Terra Pro",
+   "pricing": {
+    "completion": "0.000005",
+    "input_cache_read": "0.00000005",
+    "input_cache_write": "0.00000125",
+    "overrides": [
+     {
+      "completion": "0.0000075",
+      "input_cache_read": "0.0000001",
+      "input_cache_write": "0.0000025",
+      "min_prompt_tokens": 272000,
+      "prompt": "0.000002"
+     }
+    ],
+    "prompt": "0.000001",
+    "web_search": "0.01"
+   },
+   "reasoning": {
+    "default_effort": "medium",
+    "default_enabled": true,
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low"
+    ]
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_completion_tokens",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "structured_outputs",
+    "tool_choice",
+    "tools",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": 1050000,
+    "is_moderated": true,
+    "max_completion_tokens": 128000
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "file",
+     "image",
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT"
+   },
+   "context_length": 1050000,
+   "expiration_date": null,
+   "id": "openai/gpt-6.1-terra-pro:batch",
+   "name": "OpenAI: GPT-6.1 Terra Pro (batch)",
+   "pricing": {
+    "completion": "0.0000025",
+    "input_cache_read": "0.000000025",
+    "input_cache_write": "0.000000625",
+    "overrides": [
+     {
+      "completion": "0.00000375",
+      "input_cache_read": "0.00000005",
+      "input_cache_write": "0.00000125",
+      "min_prompt_tokens": 272000,
+      "prompt": "0.000001"
+     }
+    ],
+    "prompt": "0.0000005",
+    "web_search": "0.01"
+   },
+   "reasoning": {
+    "default_effort": "medium",
+    "default_enabled": true,
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low"
+    ]
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "structured_outputs",
+    "tool_choice",
+    "tools",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": 1050000,
+    "is_moderated": true,
+    "max_completion_tokens": 128000
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "file",
+     "image",
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT"
+   },
+   "context_length": 1050000,
+   "expiration_date": null,
+   "id": "openai/gpt-6.1-terra",
+   "name": "OpenAI: GPT-6.1 Terra",
+   "pricing": {
+    "completion": "0.000005",
+    "input_cache_read": "0.00000005",
+    "input_cache_write": "0.00000125",
+    "overrides": [
+     {
+      "completion": "0.0000075",
+      "input_cache_read": "0.0000001",
+      "input_cache_write": "0.0000025",
+      "min_prompt_tokens": 272000,
+      "prompt": "0.000002"
+     }
+    ],
+    "prompt": "0.000001",
+    "web_search": "0.01"
+   },
+   "reasoning": {
+    "default_effort": "medium",
+    "default_enabled": true,
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low",
+     "none"
+    ]
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_completion_tokens",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "structured_outputs",
+    "tool_choice",
+    "tools",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": 1050000,
+    "is_moderated": true,
+    "max_completion_tokens": 128000
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "file",
+     "image",
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "GPT"
+   },
+   "context_length": 1050000,
+   "expiration_date": null,
+   "id": "openai/gpt-6.1-terra:batch",
+   "name": "OpenAI: GPT-6.1 Terra (batch)",
+   "pricing": {
+    "completion": "0.0000025",
+    "input_cache_read": "0.000000025",
+    "input_cache_write": "0.000000625",
+    "overrides": [
+     {
+      "completion": "0.00000375",
+      "input_cache_read": "0.00000005",
+      "input_cache_write": "0.00000125",
+      "min_prompt_tokens": 272000,
+      "prompt": "0.000001"
+     }
+    ],
+    "prompt": "0.0000005",
+    "web_search": "0.01"
+   },
+   "reasoning": {
+    "default_effort": "medium",
+    "default_enabled": true,
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low",
+     "none"
+    ]
+   },
+   "supported_parameters": [
+    "include_reasoning",
+    "max_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "structured_outputs",
+    "tool_choice",
+    "tools",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": 1050000,
+    "is_moderated": true,
+    "max_completion_tokens": 128000
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+video->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other"
+   },
+   "context_length": 1048576,
+   "expiration_date": null,
    "id": "moonshotai/kimi-k3.1-pro",
    "name": "MoonshotAI: Kimi K3.1 Pro",
    "pricing": {
@@ -37,6 +412,7 @@
    "supported_parameters": [
     "frequency_penalty",
     "include_reasoning",
+    "logprobs",
     "max_tokens",
     "presence_penalty",
     "reasoning",
@@ -45,7 +421,8 @@
     "stop",
     "structured_outputs",
     "tool_choice",
-    "tools"
+    "tools",
+    "top_logprobs"
    ],
    "top_provider": {
     "context_length": 1048576,
@@ -116,6 +493,22 @@
    "pricing": {
     "completion": "0.0000006",
     "input_cache_read": "0.000000015",
+    "overrides": [
+     {
+      "completion": "0.0000003",
+      "input_cache_read": "0.0000000075",
+      "prompt": "0.000000075",
+      "utc_end": 100,
+      "utc_start": 1500
+     },
+     {
+      "completion": "0.0000006",
+      "input_cache_read": "0.000000015",
+      "prompt": "0.00000015",
+      "utc_end": 1500,
+      "utc_start": 100
+     }
+    ],
     "prompt": "0.00000015"
    },
    "reasoning": {
@@ -175,8 +568,8 @@
    "id": "deepseek/deepseek-v4.1-flash-1017",
    "name": "DeepSeek: DeepSeek V4.1 Flash 1017",
    "pricing": {
-    "completion": "0.0000006",
-    "input_cache_read": "0.000000003",
+    "completion": "0.0000012",
+    "input_cache_read": "0.000000006",
     "overrides": [
      {
       "completion": "0.0000006",
@@ -258,7 +651,7 @@
       "utc_start": 1000
      }
     ],
-    "prompt": "0.00000015"
+    "prompt": "0.0000003"
    },
    "reasoning": {
     "default_effort": "high",
@@ -509,6 +902,57 @@
     "context_length": 1000000,
     "is_moderated": false,
     "max_completion_tokens": 131072
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "instruct_type": null,
+    "modality": "text+image->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Qwen"
+   },
+   "context_length": 262144,
+   "expiration_date": null,
+   "id": "prism-ml/ternary-bonsai-2-9b",
+   "name": "PrismML: Ternary Bonsai 2 9B",
+   "pricing": {
+    "completion": "0.00000013",
+    "input_cache_read": "0.00000004",
+    "prompt": "0.00000008"
+   },
+   "reasoning": {
+    "default_enabled": true,
+    "mandatory": false
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logprobs",
+    "max_tokens",
+    "presence_penalty",
+    "reasoning",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "top_provider": {
+    "context_length": 262144,
+    "is_moderated": false,
+    "max_completion_tokens": 65536
    }
   },
   {
@@ -1179,7 +1623,6 @@
    "supported_parameters": [
     "frequency_penalty",
     "include_reasoning",
-    "logit_bias",
     "logprobs",
     "max_tokens",
     "min_p",
@@ -1408,9 +1851,9 @@
    "id": "mistralai/mistral-large-4-0",
    "name": "Mistral: Mistral Large 4",
    "pricing": {
-    "completion": "0.00000418",
-    "input_cache_read": "0.00000014",
-    "prompt": "0.00000136"
+    "completion": "0.0000021",
+    "input_cache_read": "0.00000007",
+    "prompt": "0.0000007"
    },
    "reasoning": {
     "default_effort": "high",
@@ -1457,7 +1900,7 @@
     ],
     "tokenizer": "Other"
    },
-   "context_length": 262144,
+   "context_length": 1000000,
    "expiration_date": null,
    "id": "inclusionai/ling-3.1-flash",
    "name": "inclusionAI: Ling 3.1 Flash",
@@ -1492,9 +1935,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 262144,
+    "context_length": 1000000,
     "is_moderated": false,
-    "max_completion_tokens": 235929
+    "max_completion_tokens": 262144
    }
   },
   {
@@ -1807,7 +2250,7 @@
    ],
    "top_provider": {
     "context_length": 1000000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 128000
    }
   },
@@ -1864,62 +2307,6 @@
     "context_length": 1000000,
     "is_moderated": true,
     "max_completion_tokens": 128000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "audio",
-     "file",
-     "image",
-     "text",
-     "video"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file+audio+video->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 1000000,
-   "expiration_date": null,
-   "id": "typesafe/jev-router",
-   "name": "TypeSafe: Jev Router",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logit_bias",
-    "logprobs",
-    "max_completion_tokens",
-    "max_tokens",
-    "min_p",
-    "parallel_tool_calls",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_a",
-    "top_k",
-    "top_logprobs",
-    "top_p",
-    "verbosity"
-   ],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": 65536
    }
   },
   {
@@ -2984,33 +3371,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 1000000,
-   "expiration_date": null,
-   "id": "nvidia/switchyard",
-   "name": "NVIDIA: Switchyard",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text",
      "image",
      "video",
@@ -3213,10 +3573,12 @@
     "reasoning_effort",
     "response_format",
     "seed",
+    "stop",
     "structured_outputs",
     "temperature",
     "tool_choice",
     "tools",
+    "top_k",
     "top_logprobs",
     "top_p"
    ],
@@ -3357,7 +3719,7 @@
    "name": "Z.ai: GLM 5.3 FlashX",
    "pricing": {
     "completion": "0.00000125",
-    "input_cache_read": "0.00000009",
+    "input_cache_read": "0.000000075",
     "prompt": "0.00000037"
    },
    "reasoning": {
@@ -3406,8 +3768,8 @@
    "name": "DeepSeek: DeepSeek Pro Latest",
    "pricing": {
     "completion": "0.000008",
-    "input_cache_read": "0.00000012",
-    "prompt": "0.0000001188"
+    "input_cache_read": "0.0000001",
+    "prompt": "0.0000001035"
    },
    "reasoning": {
     "default_effort": "high",
@@ -3465,9 +3827,9 @@
    "id": "~deepseek/deepseek-flash-latest",
    "name": "DeepSeek: DeepSeek Flash Latest",
    "pricing": {
-    "completion": "0.0000005",
-    "input_cache_read": "0.000000008",
-    "prompt": "0.00000007"
+    "completion": "0.000000315",
+    "input_cache_read": "0.000000006",
+    "prompt": "0.000000035"
    },
    "reasoning": {
     "default_effort": "high",
@@ -3655,7 +4017,7 @@
    ],
    "top_provider": {
     "context_length": 1050000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 128000
    }
   },
@@ -3720,7 +4082,7 @@
    ],
    "top_provider": {
     "context_length": 1050000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 128000
    }
   },
@@ -3743,19 +4105,19 @@
    "id": "~openai/gpt-terra-latest",
    "name": "OpenAI: GPT Terra Latest",
    "pricing": {
-    "completion": "0.000012",
-    "input_cache_read": "0.0000002",
-    "input_cache_write": "0.0000025",
+    "completion": "0.000005",
+    "input_cache_read": "0.00000005",
+    "input_cache_write": "0.00000125",
     "overrides": [
      {
-      "completion": "0.000018",
-      "input_cache_read": "0.0000004",
-      "input_cache_write": "0.000005",
+      "completion": "0.0000075",
+      "input_cache_read": "0.0000001",
+      "input_cache_write": "0.0000025",
       "min_prompt_tokens": 272000,
-      "prompt": "0.000004"
+      "prompt": "0.000002"
      }
     ],
-    "prompt": "0.000002",
+    "prompt": "0.000001",
     "web_search": "0.01"
    },
    "reasoning": {
@@ -3786,7 +4148,7 @@
    ],
    "top_provider": {
     "context_length": 1050000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 128000
    }
   },
@@ -4032,9 +4394,9 @@
    "id": "deepseek/deepseek-v4.1-flash",
    "name": "DeepSeek: DeepSeek V4.1 Flash",
    "pricing": {
-    "completion": "0.0000012",
-    "input_cache_read": "0.000000006",
-    "prompt": "0.0000003"
+    "completion": "0.0000005",
+    "input_cache_read": "0.000000012",
+    "prompt": "0.000000045"
    },
    "reasoning": {
     "default_effort": "high",
@@ -4066,6 +4428,7 @@
     "temperature",
     "tool_choice",
     "tools",
+    "top_a",
     "top_k",
     "top_logprobs",
     "top_p"
@@ -4477,7 +4840,7 @@
    ],
    "top_provider": {
     "context_length": 1050000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 128000
    }
   },
@@ -4967,7 +5330,7 @@
    "id": "ibm-granite/granite-4.2-8b",
    "name": "IBM: Granite 4.2 8B",
    "pricing": {
-    "completion": "0.00000025",
+    "completion": "0.00000015",
     "input_cache_read": "0.000000015",
     "prompt": "0.00000006"
    },
@@ -5026,8 +5389,8 @@
    "id": "tencent/hy4-preview",
    "name": "Tencent: Hy4 preview",
    "pricing": {
-    "completion": "0.0000022509",
-    "input_cache_read": "0.0000000378",
+    "completion": "0.000002501",
+    "input_cache_read": "0.000000042",
     "overrides": [
      {
       "completion": "0.000002501",
@@ -5044,7 +5407,7 @@
       "utc_start": 1600
      }
     ],
-    "prompt": "0.0000007506"
+    "prompt": "0.000000834"
    },
    "reasoning": {
     "default_effort": "high",
@@ -5105,9 +5468,9 @@
    "id": "~z-ai/glm-flash-latest",
    "name": "Z.ai: GLM Flash Latest",
    "pricing": {
-    "completion": "0.0000001985",
-    "input_cache_read": "0.0000000052",
-    "prompt": "0.0000000052"
+    "completion": "0.0000000923",
+    "input_cache_read": "0.0000000285",
+    "prompt": "0.0000000285"
    },
    "reasoning": {
     "default_effort": "max",
@@ -5145,7 +5508,7 @@
    "top_provider": {
     "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 943718
+    "max_completion_tokens": 131072
    }
   },
   {
@@ -5219,9 +5582,9 @@
    "id": "z-ai/glm-5.3-flash",
    "name": "Z.ai: GLM 5.3 Flash",
    "pricing": {
-    "completion": "0.0000005",
-    "input_cache_read": "0.00000003",
-    "prompt": "0.00000015"
+    "completion": "0.0000000923",
+    "input_cache_read": "0.0000000285",
+    "prompt": "0.0000000285"
    },
    "reasoning": {
     "default_effort": "max",
@@ -5257,9 +5620,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1048575,
+    "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 943717
+    "max_completion_tokens": 131072
    }
   },
   {
@@ -5524,8 +5887,8 @@
    "name": "Z.ai: GLM Latest",
    "pricing": {
     "completion": "0.0000014",
-    "input_cache_read": "0.000000078",
-    "prompt": "0.000000079"
+    "input_cache_read": "0.0000000689",
+    "prompt": "0.0000000699"
    },
    "reasoning": {
     "default_effort": "max",
@@ -5617,9 +5980,9 @@
    "id": "z-ai/glm-5.3",
    "name": "Z.ai: GLM 5.3",
    "pricing": {
-    "completion": "0.0000014",
-    "input_cache_read": "0.000000078",
-    "prompt": "0.000000079"
+    "completion": "0.0000036",
+    "input_cache_read": "0.000000076",
+    "prompt": "0.00000008"
    },
    "reasoning": {
     "default_effort": "max",
@@ -5731,14 +6094,14 @@
     ],
     "tokenizer": "Qwen"
    },
-   "context_length": 1000000,
+   "context_length": 1024000,
    "expiration_date": null,
    "id": "qwen/qwen3.8-27b",
    "name": "Qwen: Qwen3.8 27B",
    "pricing": {
-    "completion": "0.0000025",
-    "input_cache_read": "0.00000009",
-    "prompt": "0.0000002"
+    "completion": "0.000001875",
+    "input_cache_read": "0.0000000375",
+    "prompt": "0.00000015"
    },
    "reasoning": {
     "default_effort": "xhigh",
@@ -6039,9 +6402,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1010000,
+    "context_length": 1000000,
     "is_moderated": false,
-    "max_completion_tokens": 909000
+    "max_completion_tokens": 131072
    }
   },
   {
@@ -6120,90 +6483,9 @@
    "id": "deepseek/deepseek-v4-pro-0813",
    "name": "DeepSeek: DeepSeek V4 Pro 0813",
    "pricing": {
-    "completion": "0.00000198",
-    "input_cache_read": "0.000000022",
-    "overrides": [
-     {
-      "completion": "0.00000198",
-      "input_cache_read": "0.000000022",
-      "prompt": "0.00000066",
-      "utc_days": [
-       "saturday",
-       "sunday"
-      ]
-     },
-     {
-      "completion": "0.00000198",
-      "input_cache_read": "0.000000022",
-      "prompt": "0.00000066",
-      "utc_days": [
-       "monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday"
-      ],
-      "utc_end": 100,
-      "utc_start": 0
-     },
-     {
-      "completion": "0.00000396",
-      "input_cache_read": "0.000000044",
-      "prompt": "0.00000132",
-      "utc_days": [
-       "monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday"
-      ],
-      "utc_end": 400,
-      "utc_start": 100
-     },
-     {
-      "completion": "0.00000198",
-      "input_cache_read": "0.000000022",
-      "prompt": "0.00000066",
-      "utc_days": [
-       "monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday"
-      ],
-      "utc_end": 600,
-      "utc_start": 400
-     },
-     {
-      "completion": "0.00000396",
-      "input_cache_read": "0.000000044",
-      "prompt": "0.00000132",
-      "utc_days": [
-       "monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday"
-      ],
-      "utc_end": 1000,
-      "utc_start": 600
-     },
-     {
-      "completion": "0.00000198",
-      "input_cache_read": "0.000000022",
-      "prompt": "0.00000066",
-      "utc_days": [
-       "monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday"
-      ],
-      "utc_end": 0,
-      "utc_start": 1000
-     }
-    ],
-    "prompt": "0.00000066"
+    "completion": "0.000004",
+    "input_cache_read": "0.00000011",
+    "prompt": "0.000000115"
    },
    "reasoning": {
     "default_effort": "high",
@@ -6240,7 +6522,7 @@
    "top_provider": {
     "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 393216
+    "max_completion_tokens": 943718
    }
   },
   {
@@ -6307,6 +6589,57 @@
     "context_length": 500000,
     "is_moderated": false,
     "max_completion_tokens": 450000
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Other"
+   },
+   "context_length": 128000,
+   "expiration_date": null,
+   "id": "liquid/lfm-2.5-2.6b",
+   "name": "LiquidAI: LFM2.5-2.6B",
+   "pricing": {
+    "completion": "0.0000005",
+    "input_cache_read": "0.00000004",
+    "prompt": "0.00000035"
+   },
+   "reasoning": {
+    "mandatory": true
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "top_provider": {
+    "context_length": 128000,
+    "is_moderated": false,
+    "max_completion_tokens": 8192
    }
   },
   {
@@ -6683,9 +7016,9 @@
    "id": "~deepseek/deepseek-v4-flash-latest",
    "name": "DeepSeek: DeepSeek V4 Flash Latest",
    "pricing": {
-    "completion": "0.0000001729",
-    "input_cache_read": "0.0000000275",
-    "prompt": "0.0000000422"
+    "completion": "0.0000003",
+    "input_cache_read": "0.000000035",
+    "prompt": "0.000000059"
    },
    "reasoning": {
     "default_effort": "high",
@@ -6745,9 +7078,9 @@
    "id": "deepseek/deepseek-v4-flash-0731",
    "name": "DeepSeek: DeepSeek V4 Flash 0731",
    "pricing": {
-    "completion": "0.00000013332",
-    "input_cache_read": "0.000000001414",
-    "prompt": "0.00000004444"
+    "completion": "0.0000003",
+    "input_cache_read": "0.000000035",
+    "prompt": "0.000000059"
    },
    "reasoning": {
     "default_effort": "high",
@@ -6787,7 +7120,7 @@
    "top_provider": {
     "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 131072
+    "max_completion_tokens": 943718
    }
   },
   {
@@ -6865,7 +7198,7 @@
     "tokenizer": "Other"
    },
    "context_length": 1048576,
-   "expiration_date": null,
+   "expiration_date": "2026-11-04",
    "id": "thinkingmachines/inkling-small:free",
    "name": "Thinking Machines: Inkling Small (free)",
    "pricing": {
@@ -7128,83 +7461,6 @@
     "top_k",
     "top_logprobs",
     "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 32768
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 1048576,
-   "expiration_date": "2026-10-31",
-   "id": "poolside/laguna-s-2.1",
-   "name": "Poolside: Laguna S 2.1",
-   "pricing": {
-    "completion": "0.00000018",
-    "input_cache_read": "0.000000009",
-    "prompt": "0.00000009"
-   },
-   "reasoning": {
-    "default_enabled": true,
-    "mandatory": false
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "temperature",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 1048576,
-    "is_moderated": false,
-    "max_completion_tokens": 131072
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 262144,
-   "expiration_date": "2026-10-31",
-   "id": "poolside/laguna-s-2.1:free",
-   "name": "Poolside: Laguna S 2.1 (free)",
-   "pricing": {
-    "completion": "0",
-    "prompt": "0"
-   },
-   "reasoning": {
-    "default_enabled": true,
-    "mandatory": false
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "temperature",
-    "tool_choice",
-    "tools"
    ],
    "top_provider": {
     "context_length": 262144,
@@ -7578,7 +7834,7 @@
     "tokenizer": "Other"
    },
    "context_length": 1048576,
-   "expiration_date": null,
+   "expiration_date": "2026-11-04",
    "id": "thinkingmachines/inkling:free",
    "name": "Thinking Machines: Inkling (free)",
    "pricing": {
@@ -7622,62 +7878,6 @@
     "input_modalities": [
      "text",
      "image",
-     "audio",
-     "file",
-     "video"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file+audio+video->text+image",
-    "output_modalities": [
-     "text",
-     "image"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 2000000,
-   "expiration_date": null,
-   "id": "openrouter/auto-beta",
-   "name": "Auto Router (Beta)",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "min_p",
-    "prediction",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_a",
-    "top_k",
-    "top_logprobs",
-    "top_p",
-    "web_search_options"
-   ],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
-     "image",
      "video"
     ],
     "instruct_type": null,
@@ -7692,9 +7892,9 @@
    "id": "moonshotai/kimi-k3",
    "name": "MoonshotAI: Kimi K3",
    "pricing": {
-    "completion": "0.0000108",
-    "input_cache_read": "0.00000021",
-    "prompt": "0.000000239"
+    "completion": "0.000015",
+    "input_cache_read": "0.000000182",
+    "prompt": "0.000000192"
    },
    "reasoning": {
     "default_effort": "max",
@@ -8431,7 +8631,7 @@
    ],
    "top_provider": {
     "context_length": 1050000,
-    "is_moderated": true,
+    "is_moderated": false,
     "max_completion_tokens": 128000
    }
   },
@@ -8715,16 +8915,18 @@
    "pricing": {
     "completion": "0.000006",
     "input_cache_read": "0.0000005",
+    "input_cache_write": "0",
     "overrides": [
      {
       "completion": "0.000012",
       "input_cache_read": "0.000001",
+      "input_cache_write": "0",
       "min_prompt_tokens": 200000,
       "prompt": "0.000004"
      }
     ],
     "prompt": "0.000002",
-    "web_search": "0.005"
+    "web_search": "0.01"
    },
    "reasoning": {
     "default_effort": "high",
@@ -8745,16 +8947,18 @@
     "reasoning_effort",
     "response_format",
     "seed",
+    "stop",
     "structured_outputs",
     "temperature",
     "tool_choice",
     "tools",
+    "top_k",
     "top_logprobs",
     "top_p"
    ],
    "top_provider": {
     "context_length": 500000,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 450000
    }
   },
@@ -8855,8 +9059,8 @@
    "id": "tencent/hy3",
    "name": "Tencent: Hy3",
    "pricing": {
-    "completion": "0.00000033",
-    "input_cache_read": "0.000000020625",
+    "completion": "0.000000528",
+    "input_cache_read": "0.000000033",
     "overrides": [
      {
       "completion": "0.000000528",
@@ -8873,7 +9077,7 @@
       "utc_start": 1600
      }
     ],
-    "prompt": "0.0000000825"
+    "prompt": "0.000000132"
    },
    "reasoning": {
     "default_effort": "high",
@@ -8910,83 +9114,6 @@
     "context_length": 262144,
     "is_moderated": false,
     "max_completion_tokens": 128000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 262144,
-   "expiration_date": "2026-10-31",
-   "id": "poolside/laguna-xs-2.1",
-   "name": "Poolside: Laguna XS 2.1",
-   "pricing": {
-    "completion": "0.00000012",
-    "input_cache_read": "0.00000003",
-    "prompt": "0.00000006"
-   },
-   "reasoning": {
-    "default_enabled": true,
-    "mandatory": false
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "temperature",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 32768
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 262144,
-   "expiration_date": "2026-10-31",
-   "id": "poolside/laguna-xs-2.1:free",
-   "name": "Poolside: Laguna XS 2.1 (free)",
-   "pricing": {
-    "completion": "0",
-    "prompt": "0"
-   },
-   "reasoning": {
-    "default_enabled": true,
-    "mandatory": false
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "temperature",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 32768
    }
   },
   {
@@ -9373,9 +9500,9 @@
    "id": "z-ai/glm-5.2",
    "name": "Z.ai: GLM 5.2",
    "pricing": {
-    "completion": "0.000007",
-    "input_cache_read": "0.000000033",
-    "prompt": "0.0000000341"
+    "completion": "0.0000068",
+    "input_cache_read": "0.000000005",
+    "prompt": "0.000000006"
    },
    "reasoning": {
     "default_effort": "high",
@@ -9419,33 +9546,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 1000000,
-   "expiration_date": null,
-   "id": "openrouter/fusion",
-   "name": "OpenRouter: Fusion",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text",
      "image"
     ],
@@ -9461,9 +9561,9 @@
    "id": "moonshotai/kimi-k2.7-code",
    "name": "MoonshotAI: Kimi K2.7 Code",
    "pricing": {
-    "completion": "0.00000335",
+    "completion": "0.0000035",
     "input_cache_read": "0.00000015",
-    "prompt": "0.0000006712"
+    "prompt": "0.0000006"
    },
    "reasoning": {
     "default_enabled": true,
@@ -10129,7 +10229,7 @@
    ],
    "top_provider": {
     "context_length": 1000000,
-    "is_moderated": true,
+    "is_moderated": false,
     "max_completion_tokens": 128000
    }
   },
@@ -11100,9 +11200,9 @@
    "id": "~moonshotai/kimi-latest",
    "name": "MoonshotAI: Kimi Latest",
    "pricing": {
-    "completion": "0.000024",
-    "input_cache_read": "0.000000228",
-    "prompt": "0.000000238"
+    "completion": "0.0000093388",
+    "input_cache_read": "0.00000018",
+    "prompt": "0.0000001824"
    },
    "reasoning": {
     "default_effort": "max",
@@ -11397,8 +11497,8 @@
    "id": "qwen/qwen3.6-35b-a3b",
    "name": "Qwen: Qwen3.6 35B A3B",
    "pricing": {
-    "completion": "0.00000095",
-    "input_cache_read": "0.00000005",
+    "completion": "0.0000009",
+    "input_cache_read": "0.000000025",
     "prompt": "0.0000001"
    },
    "reasoning": {
@@ -11451,9 +11551,8 @@
    "id": "qwen/qwen3.6-27b",
    "name": "Qwen: Qwen3.6 27B",
    "pricing": {
-    "completion": "0.000002",
-    "input_cache_read": "0.000000025",
-    "prompt": "0.00000025"
+    "completion": "0.0000027",
+    "prompt": "0.00000045"
    },
    "reasoning": {
     "default_enabled": true,
@@ -11742,9 +11841,9 @@
    "id": "deepseek/deepseek-v4-pro",
    "name": "DeepSeek: DeepSeek V4 Pro 0423",
    "pricing": {
-    "completion": "0.000001588272",
-    "input_cache_read": "0.000000066178",
-    "prompt": "0.000000794136"
+    "completion": "0.0000032",
+    "input_cache_read": "0.000000135",
+    "prompt": "0.0000016"
    },
    "reasoning": {
     "default_effort": "high",
@@ -11779,9 +11878,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1024000,
+    "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 384000
+    "max_completion_tokens": 393216
    }
   },
   {
@@ -11909,9 +12008,9 @@
    "id": "xiaomi/mimo-v2.5-pro",
    "name": "Xiaomi: MiMo-V2.5-Pro",
    "pricing": {
-    "completion": "0.000000609",
-    "input_cache_read": "0.0000000028",
-    "prompt": "0.0000003045"
+    "completion": "0.0000018",
+    "input_cache_read": "0.000000096",
+    "prompt": "0.00000048"
    },
    "reasoning": {
     "mandatory": false
@@ -11931,9 +12030,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1050000,
+    "context_length": 262144,
     "is_moderated": false,
-    "max_completion_tokens": 945000
+    "max_completion_tokens": 235929
    }
   },
   {
@@ -11956,9 +12055,9 @@
    "id": "xiaomi/mimo-v2.5",
    "name": "Xiaomi: MiMo-V2.5",
    "pricing": {
-    "completion": "0.000000238",
-    "input_cache_read": "0.00000000255",
-    "prompt": "0.000000119"
+    "completion": "0.000002",
+    "input_cache_read": "0.00000008",
+    "prompt": "0.0000004"
    },
    "reasoning": {
     "mandatory": false
@@ -11980,9 +12079,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 1050000,
+    "context_length": 1000000,
     "is_moderated": false,
-    "max_completion_tokens": 945000
+    "max_completion_tokens": 65536
    }
   },
   {
@@ -12095,58 +12194,6 @@
     "context_length": 1000000,
     "is_moderated": true,
     "max_completion_tokens": 128000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 2000000,
-   "expiration_date": null,
-   "id": "openrouter/pareto-code",
-   "name": "Pareto Code Router",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logit_bias",
-    "logprobs",
-    "max_completion_tokens",
-    "max_tokens",
-    "min_p",
-    "parallel_tool_calls",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_a",
-    "top_k",
-    "top_logprobs",
-    "top_p",
-    "verbosity"
-   ],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
    }
   },
   {
@@ -12389,9 +12436,9 @@
    "id": "google/gemma-4-26b-a4b-it",
    "name": "Google: Gemma 4 26B A4B ",
    "pricing": {
-    "completion": "0.000000225",
-    "input_cache_read": "0.0000000375",
-    "prompt": "0.0000000675"
+    "completion": "0.0000003",
+    "input_cache_read": "0.00000005",
+    "prompt": "0.0000001"
    },
    "reasoning": {
     "default_enabled": false,
@@ -12402,6 +12449,7 @@
     "include_reasoning",
     "logit_bias",
     "logprobs",
+    "max_completion_tokens",
     "max_tokens",
     "min_p",
     "presence_penalty",
@@ -12421,7 +12469,7 @@
    "top_provider": {
     "context_length": 262144,
     "is_moderated": false,
-    "max_completion_tokens": 235929
+    "max_completion_tokens": 32768
    }
   },
   {
@@ -12498,6 +12546,7 @@
     "include_reasoning",
     "logit_bias",
     "logprobs",
+    "max_completion_tokens",
     "max_tokens",
     "min_p",
     "presence_penalty",
@@ -12663,46 +12712,6 @@
     "context_length": 202752,
     "is_moderated": false,
     "max_completion_tokens": 131072
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 262144,
-   "expiration_date": "2026-10-26",
-   "id": "arcee-ai/trinity-large-thinking",
-   "name": "Arcee AI: Trinity Large Thinking",
-   "pricing": {
-    "completion": "0.0000008",
-    "input_cache_read": "0.00000006",
-    "prompt": "0.00000025"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_k",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 80000
    }
   },
   {
@@ -13261,59 +13270,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "image"
-    ],
-    "instruct_type": null,
-    "modality": "text+image->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Mistral"
-   },
-   "context_length": 262144,
-   "expiration_date": null,
-   "id": "mistralai/mistral-small-2603:batch",
-   "name": "Mistral: Mistral Small 4 (batch)",
-   "pricing": {
-    "completion": "0.0000003",
-    "input_cache_read": "0.0000000075",
-    "prompt": "0.000000075"
-   },
-   "reasoning": {
-    "default_effort": "high",
-    "default_enabled": false,
-    "mandatory": false,
-    "supported_efforts": [
-     "high",
-     "none"
-    ]
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "max_tokens",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 209715
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -13365,7 +13321,7 @@
     ],
     "tokenizer": "Other"
    },
-   "context_length": 262144,
+   "context_length": 1048576,
    "expiration_date": null,
    "id": "nvidia/nemotron-3-super-120b-a12b",
    "name": "NVIDIA: Nemotron 3 Super",
@@ -13408,59 +13364,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 262144,
+    "context_length": 1048576,
     "is_moderated": false,
-    "max_completion_tokens": 235929
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 262144,
-   "expiration_date": null,
-   "id": "nvidia/nemotron-3-super-120b-a12b:free",
-   "name": "NVIDIA: Nemotron 3 Super (free)",
-   "pricing": {
-    "completion": "0",
-    "prompt": "0"
-   },
-   "reasoning": {
-    "default_effort": "medium",
-    "default_enabled": true,
-    "mandatory": false,
-    "supported_efforts": [
-     "medium",
-     "low",
-     "none"
-    ],
-    "supports_max_tokens": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "reasoning_effort",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 235929
+    "max_completion_tokens": 262144
    }
   },
   {
@@ -13553,6 +13459,7 @@
     "include_reasoning",
     "logit_bias",
     "logprobs",
+    "max_completion_tokens",
     "max_tokens",
     "min_p",
     "presence_penalty",
@@ -14110,9 +14017,8 @@
    "id": "qwen/qwen3.5-27b",
    "name": "Qwen: Qwen3.5-27B",
    "pricing": {
-    "completion": "0.00000216",
-    "input_cache_read": "0.00000027",
-    "prompt": "0.00000027"
+    "completion": "0.0000026",
+    "prompt": "0.00000026"
    },
    "reasoning": {
     "mandatory": false
@@ -14141,7 +14047,7 @@
    "top_provider": {
     "context_length": 262144,
     "is_moderated": false,
-    "max_completion_tokens": 65536
+    "max_completion_tokens": 81920
    }
   },
   {
@@ -14163,8 +14069,8 @@
    "id": "qwen/qwen3.5-122b-a10b",
    "name": "Qwen: Qwen3.5-122B-A10B",
    "pricing": {
-    "completion": "0.0000032",
-    "prompt": "0.0000004"
+    "completion": "0.00000208",
+    "prompt": "0.00000026"
    },
    "reasoning": {
     "mandatory": false
@@ -15035,55 +14941,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "image"
-    ],
-    "instruct_type": null,
-    "modality": "text+image->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openrouter/free",
-   "name": "Free Models Router",
-   "pricing": {
-    "completion": "0",
-    "prompt": "0"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logprobs",
-    "max_completion_tokens",
-    "max_tokens",
-    "min_p",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_k",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -15172,60 +15029,6 @@
     "context_length": 262144,
     "is_moderated": false,
     "max_completion_tokens": 235929
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 131072,
-   "expiration_date": null,
-   "id": "upstage/solar-pro-3",
-   "name": "Upstage: Solar Pro 3",
-   "pricing": {
-    "completion": "0.0000006",
-    "input_cache_read": "0.000000015",
-    "prompt": "0.00000015"
-   },
-   "reasoning": {
-    "default_effort": "medium",
-    "default_enabled": false,
-    "mandatory": false,
-    "supported_efforts": [
-     "high",
-     "medium",
-     "low",
-     "minimal",
-     "none"
-    ]
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "max_tokens",
-    "parallel_tool_calls",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "response_format",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 131072,
-    "is_moderated": false,
-    "max_completion_tokens": 117964
    }
   },
   {
@@ -15642,13 +15445,13 @@
     "tokenizer": "Other"
    },
    "context_length": 204800,
-   "expiration_date": null,
+   "expiration_date": "2026-12-31",
    "id": "z-ai/glm-4.7",
    "name": "Z.ai: GLM 4.7",
    "pricing": {
-    "completion": "0.00000198",
-    "input_cache_read": "0.000000099",
-    "prompt": "0.00000054"
+    "completion": "0.0000022",
+    "input_cache_read": "0.00000011",
+    "prompt": "0.0000006"
    },
    "reasoning": {
     "default_enabled": true,
@@ -15675,7 +15478,7 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 204800,
+    "context_length": 202752,
     "is_moderated": false,
     "max_completion_tokens": 131072
    }
@@ -15819,6 +15622,7 @@
    "name": "NVIDIA: Nemotron 3 Nano 30B A3B",
    "pricing": {
     "completion": "0.00000024",
+    "input_cache_read": "0.000000012",
     "prompt": "0.00000006"
    },
    "reasoning": {
@@ -16224,33 +16028,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 128000,
-   "expiration_date": null,
-   "id": "openrouter/bodybuilder",
-   "name": "Body Builder (beta)",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text",
      "image"
     ],
@@ -16437,47 +16214,6 @@
     ],
     "tokenizer": "Mistral"
    },
-   "context_length": 262144,
-   "expiration_date": null,
-   "id": "mistralai/ministral-8b-2512:batch",
-   "name": "Mistral: Ministral 3 8B 2512 (batch)",
-   "pricing": {
-    "completion": "0.000000075",
-    "input_cache_read": "0.0000000075",
-    "prompt": "0.000000075"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 209715
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
-     "image"
-    ],
-    "instruct_type": null,
-    "modality": "text+image->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Mistral"
-   },
    "context_length": 131072,
    "expiration_date": null,
    "id": "mistralai/ministral-3b-2512",
@@ -16551,48 +16287,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "image",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Mistral"
-   },
-   "context_length": 262144,
-   "expiration_date": null,
-   "id": "mistralai/mistral-large-2512:batch",
-   "name": "Mistral: Mistral Large 3 2512 (batch)",
-   "pricing": {
-    "completion": "0.00000075",
-    "input_cache_read": "0.000000025",
-    "prompt": "0.00000025"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 209715
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -16607,9 +16301,9 @@
    "id": "deepseek/deepseek-v3.2",
    "name": "DeepSeek: DeepSeek V3.2",
    "pricing": {
-    "completion": "0.00000042",
-    "input_cache_read": "0.000000028",
-    "prompt": "0.00000028"
+    "completion": "0.00000038",
+    "input_cache_read": "0.00000013",
+    "prompt": "0.00000026"
    },
    "reasoning": {
     "default_enabled": false,
@@ -16637,9 +16331,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 131072,
+    "context_length": 163840,
     "is_moderated": false,
-    "max_completion_tokens": 65536
+    "max_completion_tokens": 147456
    }
   },
   {
@@ -17023,7 +16717,6 @@
    "supported_parameters": [
     "frequency_penalty",
     "include_reasoning",
-    "logprobs",
     "max_tokens",
     "presence_penalty",
     "reasoning",
@@ -17036,7 +16729,6 @@
     "tool_choice",
     "tools",
     "top_k",
-    "top_logprobs",
     "top_p"
    ],
    "top_provider": {
@@ -17234,70 +16926,18 @@
     "mandatory": true
    },
    "supported_parameters": [
-    "frequency_penalty",
     "include_reasoning",
-    "logprobs",
     "max_tokens",
-    "presence_penalty",
     "reasoning",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
     "temperature",
     "tool_choice",
     "tools",
-    "top_k",
-    "top_logprobs",
     "top_p"
    ],
    "top_provider": {
     "context_length": 204800,
     "is_moderated": false,
     "max_completion_tokens": 131072
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Other"
-   },
-   "context_length": 131000,
-   "expiration_date": null,
-   "id": "ibm-granite/granite-4.0-h-micro",
-   "name": "IBM: Granite 4.0 Micro",
-   "pricing": {
-    "completion": "0.000000112",
-    "prompt": "0.000000017"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "min_p",
-    "presence_penalty",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "temperature",
-    "top_k",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 131000,
-    "is_moderated": false,
-    "max_completion_tokens": 117900
    }
   },
   {
@@ -17786,9 +17426,9 @@
    "id": "z-ai/glm-4.6",
    "name": "Z.ai: GLM 4.6",
    "pricing": {
-    "completion": "0.0000022",
-    "input_cache_read": "0.00000011",
-    "prompt": "0.00000055"
+    "completion": "0.000002",
+    "input_cache_read": "0.0000001",
+    "prompt": "0.0000005"
    },
    "reasoning": {
     "mandatory": false
@@ -17813,7 +17453,7 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 204800,
+    "context_length": 202752,
     "is_moderated": false,
     "max_completion_tokens": 131072
    }
@@ -18127,7 +17767,6 @@
     "max_tokens",
     "reasoning",
     "response_format",
-    "stop",
     "structured_outputs",
     "temperature",
     "tool_choice",
@@ -18214,59 +17853,12 @@
    },
    "context_length": 262144,
    "expiration_date": null,
-   "id": "qwen/qwen3-next-80b-a3b-thinking",
-   "name": "Qwen: Qwen3 Next 80B A3B Thinking",
-   "pricing": {
-    "completion": "0.0000012",
-    "prompt": "0.00000015"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logprobs",
-    "max_tokens",
-    "presence_penalty",
-    "reasoning",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_k",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 262144,
-    "is_moderated": false,
-    "max_completion_tokens": 235929
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Qwen3"
-   },
-   "context_length": 262144,
-   "expiration_date": null,
    "id": "qwen/qwen3-next-80b-a3b-instruct",
    "name": "Qwen: Qwen3 Next 80B A3B Instruct",
    "pricing": {
     "completion": "0.0000011",
-    "prompt": "0.00000009"
+    "input_cache_read": "0.00000007",
+    "prompt": "0.0000001"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -18290,7 +17882,7 @@
    "top_provider": {
     "context_length": 262144,
     "is_moderated": false,
-    "max_completion_tokens": 16384
+    "max_completion_tokens": 235929
    }
   },
   {
@@ -18352,6 +17944,7 @@
    "name": "Nous: Hermes 4 405B",
    "pricing": {
     "completion": "0.000003",
+    "input_cache_read": "0.0000002",
     "prompt": "0.000001"
    },
    "reasoning": {
@@ -18426,7 +18019,7 @@
    "top_provider": {
     "context_length": 163840,
     "is_moderated": false,
-    "max_completion_tokens": 32768
+    "max_completion_tokens": 147456
    }
   },
   {
@@ -18475,48 +18068,6 @@
    "architecture": {
     "input_modalities": [
      "text",
-     "image",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Mistral"
-   },
-   "context_length": 131072,
-   "expiration_date": null,
-   "id": "mistralai/mistral-medium-3.1:batch",
-   "name": "Mistral: Mistral Medium 3.1 (batch)",
-   "pricing": {
-    "completion": "0.000001",
-    "input_cache_read": "0.00000002",
-    "prompt": "0.0000002"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 131072,
-    "is_moderated": false,
-    "max_completion_tokens": 104857
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
      "image"
     ],
     "instruct_type": null,
@@ -18527,7 +18078,7 @@
     "tokenizer": "Other"
    },
    "context_length": 65536,
-   "expiration_date": null,
+   "expiration_date": "2026-12-31",
    "id": "z-ai/glm-4.5v",
    "name": "Z.ai: GLM 4.5V",
    "pricing": {
@@ -18892,9 +18443,9 @@
    "id": "openai/gpt-oss-120b",
    "name": "OpenAI: gpt-oss-120b",
    "pricing": {
-    "completion": "0.0000006",
-    "input_cache_read": "0.000000075",
-    "prompt": "0.00000015"
+    "completion": "0.000000098",
+    "input_cache_read": "0.000000024",
+    "prompt": "0.000000026"
    },
    "reasoning": {
     "default_effort": "medium",
@@ -19006,9 +18557,9 @@
    "id": "openai/gpt-oss-20b",
    "name": "OpenAI: gpt-oss-20b",
    "pricing": {
-    "completion": "0.00000009",
-    "input_cache_read": "0.000000009",
-    "prompt": "0.000000018"
+    "completion": "0.00000013",
+    "input_cache_read": "0.00000003",
+    "prompt": "0.00000003"
    },
    "reasoning": {
     "default_effort": "medium",
@@ -19044,7 +18595,7 @@
    "top_provider": {
     "context_length": 131072,
     "is_moderated": false,
-    "max_completion_tokens": 32768
+    "max_completion_tokens": 117964
    }
   },
   {
@@ -19239,48 +18790,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Mistral"
-   },
-   "context_length": 256000,
-   "expiration_date": null,
-   "id": "mistralai/codestral-2508:batch",
-   "name": "Mistral: Codestral 2508 (batch)",
-   "pricing": {
-    "completion": "0.00000045",
-    "input_cache_read": "0.000000015",
-    "prompt": "0.00000015"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "max_tokens",
-    "prediction",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 256000,
-    "is_moderated": false,
-    "max_completion_tokens": 204800
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -19295,8 +18804,8 @@
    "id": "qwen/qwen3-coder-30b-a3b-instruct",
    "name": "Qwen: Qwen3 Coder 30B A3B Instruct",
    "pricing": {
-    "completion": "0.00000028",
-    "prompt": "0.00000007"
+    "completion": "0.0000006",
+    "prompt": "0.00000015"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -19312,7 +18821,7 @@
    ],
    "top_provider": {
     "context_length": 262144,
-    "is_moderated": false,
+    "is_moderated": true,
     "max_completion_tokens": 235929
    }
   },
@@ -19334,7 +18843,8 @@
    "name": "Qwen: Qwen3 30B A3B Instruct 2507",
    "pricing": {
     "completion": "0.0000003",
-    "prompt": "0.00000009"
+    "input_cache_read": "0.0000001",
+    "prompt": "0.0000001"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -19512,7 +19022,6 @@
    "supported_parameters": [
     "frequency_penalty",
     "logit_bias",
-    "logprobs",
     "max_tokens",
     "min_p",
     "presence_penalty",
@@ -19525,7 +19034,6 @@
     "tool_choice",
     "tools",
     "top_k",
-    "top_logprobs",
     "top_p"
    ],
    "top_provider": {
@@ -19647,8 +19155,9 @@
    "id": "qwen/qwen3-235b-a22b-2507",
    "name": "Qwen: Qwen3 235B A22B Instruct 2507",
    "pricing": {
-    "completion": "0.00000055",
-    "prompt": "0.00000009"
+    "completion": "0.0000008",
+    "input_cache_read": "0.00000005",
+    "prompt": "0.00000014"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -19670,9 +19179,9 @@
     "top_p"
    ],
    "top_provider": {
-    "context_length": 262144,
+    "context_length": 131072,
     "is_moderated": false,
-    "max_completion_tokens": 16384
+    "max_completion_tokens": 117964
    }
   },
   {
@@ -20468,54 +19977,6 @@
    },
    "context_length": 200000,
    "expiration_date": null,
-   "id": "openai/o4-mini-high",
-   "name": "OpenAI: o4 Mini High",
-   "pricing": {
-    "completion": "0.0000044",
-    "input_cache_read": "0.000000275",
-    "prompt": "0.0000011",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "default_effort": "high",
-    "mandatory": true,
-    "supported_efforts": [
-     "high"
-    ]
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "reasoning_effort",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "image",
-     "text",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
    "id": "openai/o3",
    "name": "OpenAI: o3",
    "pricing": {
@@ -20565,49 +20026,6 @@
     "completion": "0.000004",
     "input_cache_read": "0.00000025",
     "prompt": "0.000001",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "image",
-     "text",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openai/o4-mini",
-   "name": "OpenAI: o4 Mini",
-   "pricing": {
-    "completion": "0.0000044",
-    "input_cache_read": "0.000000275",
-    "prompt": "0.0000011",
     "web_search": "0.01"
    },
    "reasoning": {
@@ -20854,13 +20272,12 @@
    "name": "OpenAI: GPT-4.1 Nano",
    "pricing": {
     "completion": "0.0000004",
-    "input_cache_read": "0.000000025",
+    "input_cache_read": "0.00000003",
     "prompt": "0.0000001",
     "web_search": "0.01"
    },
    "supported_parameters": [
     "max_completion_tokens",
-    "max_tokens",
     "response_format",
     "seed",
     "structured_outputs",
@@ -20871,8 +20288,8 @@
    ],
    "top_provider": {
     "context_length": 1047576,
-    "is_moderated": true,
-    "max_completion_tokens": 32768
+    "is_moderated": false,
+    "max_completion_tokens": 942818
    }
   },
   {
@@ -21050,46 +20467,6 @@
    "architecture": {
     "input_modalities": [
      "text",
-     "image",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openai/o1-pro",
-   "name": "OpenAI: o1-pro",
-   "pricing": {
-    "completion": "0.0006",
-    "prompt": "0.00015",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "response_format",
-    "seed",
-    "structured_outputs"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
      "image"
     ],
     "instruct_type": null,
@@ -21149,9 +20526,8 @@
    "id": "google/gemma-3-4b-it",
    "name": "Google: Gemma 3 4B",
    "pricing": {
-    "completion": "0.00000005",
-    "input_cache_read": "0.00000002",
-    "prompt": "0.00000004"
+    "completion": "0.0000001",
+    "prompt": "0.00000005"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -21173,7 +20549,7 @@
    "top_provider": {
     "context_length": 131072,
     "is_moderated": false,
-    "max_completion_tokens": 117964
+    "max_completion_tokens": 16384
    }
   },
   {
@@ -21557,53 +20933,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openai/o3-mini-high",
-   "name": "OpenAI: o3 Mini High",
-   "pricing": {
-    "completion": "0.0000044",
-    "input_cache_read": "0.00000055",
-    "prompt": "0.0000011",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "default_effort": "high",
-    "mandatory": true,
-    "supported_efforts": [
-     "high"
-    ]
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "reasoning_effort",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -21727,48 +21056,6 @@
     "context_length": 1000000,
     "is_moderated": false,
     "max_completion_tokens": 32768
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openai/o3-mini",
-   "name": "OpenAI: o3 Mini",
-   "pricing": {
-    "completion": "0.0000044",
-    "input_cache_read": "0.00000055",
-    "prompt": "0.0000011",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
    }
   },
   {
@@ -22010,49 +21297,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "image",
-     "file"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 200000,
-   "expiration_date": null,
-   "id": "openai/o1",
-   "name": "OpenAI: o1",
-   "pricing": {
-    "completion": "0.00006",
-    "input_cache_read": "0.0000075",
-    "prompt": "0.000015",
-    "web_search": "0.01"
-   },
-   "reasoning": {
-    "mandatory": true
-   },
-   "supported_parameters": [
-    "include_reasoning",
-    "max_tokens",
-    "reasoning",
-    "response_format",
-    "seed",
-    "structured_outputs",
-    "tool_choice",
-    "tools"
-   ],
-   "top_provider": {
-    "context_length": 200000,
-    "is_moderated": true,
-    "max_completion_tokens": 100000
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -22105,8 +21349,9 @@
    "id": "meta-llama/llama-3.3-70b-instruct",
    "name": "Meta: Llama 3.3 70B Instruct",
    "pricing": {
-    "completion": "0.00000032",
-    "prompt": "0.0000001"
+    "completion": "0.00000052",
+    "input_cache_read": "0.0000001",
+    "prompt": "0.0000002"
    },
    "supported_parameters": [
     "frequency_penalty",
@@ -22130,7 +21375,7 @@
    "top_provider": {
     "context_length": 131072,
     "is_moderated": false,
-    "max_completion_tokens": 16384
+    "max_completion_tokens": 128000
    }
   },
   {
@@ -22741,87 +21986,6 @@
     "input_modalities": [
      "text"
     ],
-    "instruct_type": "chatml",
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Llama3"
-   },
-   "context_length": 131072,
-   "expiration_date": "2026-11-02",
-   "id": "nousresearch/hermes-3-llama-3.1-70b",
-   "name": "Nous: Hermes 3 70B Instruct",
-   "pricing": {
-    "completion": "0.0000007",
-    "prompt": "0.0000007"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "max_tokens",
-    "min_p",
-    "presence_penalty",
-    "repetition_penalty",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "top_k",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 131072,
-    "is_moderated": false,
-    "max_completion_tokens": 16384
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": "chatml",
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "Llama3"
-   },
-   "context_length": 131072,
-   "expiration_date": "2026-11-02",
-   "id": "nousresearch/hermes-3-llama-3.1-405b",
-   "name": "Nous: Hermes 3 405B Instruct",
-   "pricing": {
-    "completion": "0.000001",
-    "prompt": "0.000001"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "max_tokens",
-    "min_p",
-    "presence_penalty",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "top_k",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 131072,
-    "is_moderated": false,
-    "max_completion_tokens": 16384
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
     "instruct_type": "llama3",
     "modality": "text->text",
     "output_modalities": [
@@ -22921,7 +22085,7 @@
     "tokenizer": "Llama3"
    },
    "context_length": 131072,
-   "expiration_date": null,
+   "expiration_date": "2026-11-03",
    "id": "meta-llama/llama-3.1-70b-instruct",
    "name": "Meta: Llama 3.1 70B Instruct",
    "pricing": {
@@ -23298,8 +22462,6 @@
     "logit_bias",
     "logprobs",
     "max_completion_tokens",
-    "max_tokens",
-    "prediction",
     "presence_penalty",
     "response_format",
     "seed",
@@ -23405,49 +22567,6 @@
     "context_length": 65536,
     "is_moderated": false,
     "max_completion_tokens": 52428
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text",
-     "image"
-    ],
-    "instruct_type": null,
-    "modality": "text+image->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 128000,
-   "expiration_date": null,
-   "id": "openai/gpt-4-turbo",
-   "name": "OpenAI: GPT-4 Turbo",
-   "pricing": {
-    "completion": "0.00003",
-    "prompt": "0.00001"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 128000,
-    "is_moderated": true,
-    "max_completion_tokens": 4096
    }
   },
   {
@@ -23580,102 +22699,6 @@
   {
    "architecture": {
     "input_modalities": [
-     "text",
-     "image",
-     "audio",
-     "file",
-     "video"
-    ],
-    "instruct_type": null,
-    "modality": "text+image+file+audio+video->text+image",
-    "output_modalities": [
-     "text",
-     "image"
-    ],
-    "tokenizer": "Router"
-   },
-   "context_length": 2000000,
-   "expiration_date": null,
-   "id": "openrouter/auto",
-   "name": "Auto Router",
-   "pricing": {
-    "completion": "-1",
-    "prompt": "-1"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "include_reasoning",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "min_p",
-    "prediction",
-    "presence_penalty",
-    "reasoning",
-    "reasoning_effort",
-    "repetition_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_a",
-    "top_k",
-    "top_logprobs",
-    "top_p",
-    "web_search_options"
-   ],
-   "top_provider": {
-    "context_length": null,
-    "is_moderated": false,
-    "max_completion_tokens": null
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": "chatml",
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 4095,
-   "expiration_date": null,
-   "id": "openai/gpt-3.5-turbo-instruct",
-   "name": "OpenAI: GPT-3.5 Turbo Instruct",
-   "pricing": {
-    "completion": "0.000002",
-    "prompt": "0.0000015"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 4095,
-    "is_moderated": true,
-    "max_completion_tokens": 3685
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
      "text"
     ],
     "instruct_type": null,
@@ -23698,7 +22721,6 @@
     "logit_bias",
     "logprobs",
     "max_completion_tokens",
-    "max_tokens",
     "presence_penalty",
     "response_format",
     "seed",
@@ -23859,91 +22881,6 @@
     ],
     "tokenizer": "GPT"
    },
-   "context_length": 16385,
-   "expiration_date": null,
-   "id": "openai/gpt-3.5-turbo",
-   "name": "OpenAI: GPT-3.5 Turbo",
-   "pricing": {
-    "completion": "0.0000015",
-    "prompt": "0.0000005"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 16385,
-    "is_moderated": true,
-    "max_completion_tokens": 4096
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
-   "context_length": 16385,
-   "expiration_date": null,
-   "id": "openai/gpt-3.5-turbo:batch",
-   "name": "OpenAI: GPT-3.5 Turbo (batch)",
-   "pricing": {
-    "completion": "0.00000075",
-    "prompt": "0.00000025",
-    "web_search": "0.01"
-   },
-   "supported_parameters": [
-    "frequency_penalty",
-    "logit_bias",
-    "logprobs",
-    "max_tokens",
-    "presence_penalty",
-    "response_format",
-    "seed",
-    "stop",
-    "structured_outputs",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_logprobs",
-    "top_p"
-   ],
-   "top_provider": {
-    "context_length": 16385,
-    "is_moderated": true,
-    "max_completion_tokens": 4096
-   }
-  },
-  {
-   "architecture": {
-    "input_modalities": [
-     "text"
-    ],
-    "instruct_type": null,
-    "modality": "text->text",
-    "output_modalities": [
-     "text"
-    ],
-    "tokenizer": "GPT"
-   },
    "context_length": 8191,
    "expiration_date": null,
    "id": "openai/gpt-4",
@@ -23957,12 +22894,10 @@
     "logit_bias",
     "logprobs",
     "max_completion_tokens",
-    "max_tokens",
     "presence_penalty",
     "response_format",
     "seed",
     "stop",
-    "structured_outputs",
     "temperature",
     "tool_choice",
     "tools",
@@ -23973,6 +22908,357 @@
     "context_length": 8191,
     "is_moderated": false,
     "max_completion_tokens": 4096
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "audio",
+     "file",
+     "image",
+     "text",
+     "video"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file+audio+video->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 1000000,
+   "expiration_date": null,
+   "id": "typesafe/jev-router",
+   "name": "TypeSafe: Jev Router",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_a",
+    "top_k",
+    "top_logprobs",
+    "top_p",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": 65536
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 1000000,
+   "expiration_date": null,
+   "id": "nvidia/switchyard",
+   "name": "NVIDIA: Switchyard",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image",
+     "audio",
+     "file",
+     "video"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file+audio+video->text+image",
+    "output_modalities": [
+     "text",
+     "image"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 2000000,
+   "expiration_date": null,
+   "id": "openrouter/auto-beta",
+   "name": "Auto Router (Beta)",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_a",
+    "top_k",
+    "top_logprobs",
+    "top_p",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": 65536
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 1000000,
+   "expiration_date": null,
+   "id": "openrouter/fusion",
+   "name": "OpenRouter: Fusion",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 2000000,
+   "expiration_date": null,
+   "id": "openrouter/pareto-code",
+   "name": "Pareto Code Router",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_a",
+    "top_k",
+    "top_logprobs",
+    "top_p",
+    "verbosity"
+   ],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "instruct_type": null,
+    "modality": "text+image->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 200000,
+   "expiration_date": null,
+   "id": "openrouter/free",
+   "name": "Free Models Router",
+   "pricing": {
+    "completion": "0",
+    "prompt": "0"
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logprobs",
+    "max_completion_tokens",
+    "max_tokens",
+    "min_p",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_k",
+    "top_logprobs",
+    "top_p"
+   ],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text"
+    ],
+    "instruct_type": null,
+    "modality": "text->text",
+    "output_modalities": [
+     "text"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 128000,
+   "expiration_date": null,
+   "id": "openrouter/bodybuilder",
+   "name": "Body Builder (beta)",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
+   }
+  },
+  {
+   "architecture": {
+    "input_modalities": [
+     "text",
+     "image",
+     "audio",
+     "file",
+     "video"
+    ],
+    "instruct_type": null,
+    "modality": "text+image+file+audio+video->text+image",
+    "output_modalities": [
+     "text",
+     "image"
+    ],
+    "tokenizer": "Router"
+   },
+   "context_length": 2000000,
+   "expiration_date": null,
+   "id": "openrouter/auto",
+   "name": "Auto Router",
+   "pricing": {
+    "completion": "-1",
+    "prompt": "-1"
+   },
+   "supported_parameters": [
+    "frequency_penalty",
+    "include_reasoning",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "min_p",
+    "prediction",
+    "presence_penalty",
+    "reasoning",
+    "reasoning_effort",
+    "repetition_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_a",
+    "top_k",
+    "top_logprobs",
+    "top_p",
+    "web_search_options"
+   ],
+   "top_provider": {
+    "context_length": null,
+    "is_moderated": false,
+    "max_completion_tokens": null
    }
   }
  ]
