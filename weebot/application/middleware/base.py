@@ -58,14 +58,39 @@ class ToolCallResult:
         return cls()
 
 
+@dataclass
+class ToolCall:
+    """A tool call about to run: the name the executor resolved and its coerced arguments."""
+
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Deny:
+    """Returned by ``before_tool_call`` to stop a call; ``reason`` reaches the model."""
+
+    reason: str
+
+
 class Middleware(ABC):
     """Base class for agent middleware.
 
-    Middleware can intercept three lifecycle events:
+    Middleware can intercept five lifecycle events:
     1. before_request — before the LLM is called (can modify messages/tools)
     2. after_response — after the LLM responds (can modify response)
     3. after_tool_call — after each tool call in the step (can modify result)
+    4. before_tool_call — before a tool runs (can rewrite the call or deny it)
+    5. transform_tool_result — after a tool ran and its output was truncated (can rewrite it)
     """
+
+    async def before_tool_call(self, call: ToolCall) -> ToolCall | Deny:
+        """Called before a tool runs. Return the (possibly rewritten) call, or ``Deny``."""
+        return call
+
+    async def transform_tool_result(self, call: ToolCall, result: Any) -> Any:
+        """Called with the ``ToolResult`` the executor is about to return. Return the result."""
+        return result
 
     @abstractmethod
     def name(self) -> str:

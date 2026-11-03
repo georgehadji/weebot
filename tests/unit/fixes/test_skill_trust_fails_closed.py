@@ -34,9 +34,18 @@ def test_a_misspelled_trust_is_quarantined(tmp_path):
     assert _load(tmp_path)["typo"].metadata.trust == "quarantined"
 
 
-def test_a_missing_trust_is_still_human_authored(tmp_path):
+def test_a_missing_trust_outside_builtin_is_a_candidate(tmp_path):
     _write(tmp_path, "hand")
-    assert _load(tmp_path)["hand"].metadata.trust == "trusted"
+    assert _load(tmp_path)["hand"].metadata.trust == "candidate"
+
+
+def test_a_missing_trust_in_builtin_is_trusted():
+    from pathlib import Path
+
+    from weebot.application.skills.skill_registry import _BUILTIN_DIR, _trust_tier
+
+    assert _trust_tier(None, _BUILTIN_DIR / "x" / "SKILL.md") == "trusted"
+    assert _trust_tier(None, Path("/elsewhere/x/SKILL.md")) == "candidate"
 
 
 def _importer():

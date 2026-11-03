@@ -31,6 +31,7 @@ from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noq
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
 from weebot.application.di.keys import (  # noqa: E402
     ACR_ROUTER,
+    DELEGATION_GUARD,
     LEARNING_SKILL_STORE,
     LLM_POOL,
     SESSION_COST_METER,
@@ -385,6 +386,15 @@ class Container(
 
         self.register(SESSION_COST_METER, _create_session_cost_meter)
 
+        def _create_delegation_guard():
+            from weebot.application.services.delegation_guard import DelegationGuard
+            from weebot.config.secret_accessor import SecretAccessor
+            from weebot.domain.models.delegation import DelegationPolicy
+
+            return DelegationGuard(DelegationPolicy.from_mapping(SecretAccessor.environ_view()))
+
+        self.register(DELEGATION_GUARD, _create_delegation_guard)
+
         # Credit balance + live model list for the cascade (phase 3.1). These
         # were raw httpx calls to openrouter.ai inside CascadeExecutor.
         def _create_provider_account():
@@ -504,10 +514,14 @@ class Container(
             injection_scan=scan_for_injection,
             # Plan 2.2: an outbound action a retried flow already took is not repeated.
             effect_ledger=self._effect_ledger(),
+            # H5: copy the workspace before a step's first file-changing call (flag, default on).
+            workspace_checkpoints=self._workspace_checkpoints(),
             # Plan 2.4: past the soft cost limit the cascade skips PREMIUM models.
             cost_meter=self._maybe_get(SESSION_COST_METER),
             memory_snapshot=PersistentMemoryTool.load_snapshot,
             acr_router=self._maybe_get(ACR_ROUTER),
+            # H7: output past the cap goes to a file; the model gets a head, a tail and the path.
+            **self._spillover_kwargs(),
         )
         if context is not None:
             kwargs.update(context.executor_kwargs())
@@ -680,13 +694,29 @@ class Container(
             return self._build_plan_act_flow_for_session(s)
 
         from weebot.application.ports.llm_port import LLMPort
+        from weebot.application.services.delegation_guard import current_depth
+        from weebot.domain.models.delegation import child_tool_names
 
-        tools = registry.create_tool_collection(
-            role="admin",
-            sandbox_port=sandbox,
-            llm_port=self._maybe_get(LLMPort),
-            flow_factory=_flow_factory,
-        )
+        guard = self.get(DELEGATION_GUARD)
+        by_names: dict[tuple[str, ...], Any] = {}
+
+        def _tools_for(spec):
+            """The child's tools: its role's, narrowed to spec.tools, minus the policy's blocked."""
+            names = child_tool_names(
+                registry.get_tools_for_role(spec.role.value),
+                spec.tools,
+                guard.policy,
+                current_depth() + 1,
+            )
+            key = tuple(names)
+            if key not in by_names:
+                by_names[key] = registry.create_tool_collection_from_names(
+                    names,
+                    sandbox_port=sandbox,
+                    llm_port=self._maybe_get(LLMPort),
+                    flow_factory=_flow_factory,
+                )
+            return by_names[key]
 
         from weebot.config.model_refs import MODEL_CASCADE_TIER2
         from weebot.config.model_refs import SUBAGENT_TIER_MODEL as _TIER_MODEL
@@ -713,11 +743,13 @@ class Container(
 
         return SubAgentFactory(
             llm=self.get(LLMPort),
-            tools=tools,
+            tools=None,
             cost_tracker=self.get(SubAgentCostTrackerPort),
             swarm_bus=self._maybe_get(SwarmEventBusPort),
             flow_factory=_build_sub_flow,
             cost_meter=self._maybe_get(SESSION_COST_METER),
+            tools_for=_tools_for,
+            guard=guard,
         )
 
     def build_hyper_agent_flow(self, session, model=None):

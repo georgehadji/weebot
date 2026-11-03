@@ -89,6 +89,9 @@ BROWSER_PAGE_TIMEOUT: int = 30000
 MAX_TOOL_OUTPUT_CHARS: int = 20_000
 """Max characters in a single tool result before truncation."""
 
+TURN_OUTPUT_BUDGET_CHARS: int = 60_000
+"""Characters of tool output one turn may add before later results spill to a 2K preview (H7)."""
+
 SUBAGENT_MAX_STEPS: int = 15
 """Max tool-call iterations for sub-agents spawned by DispatchAgentsTool."""
 

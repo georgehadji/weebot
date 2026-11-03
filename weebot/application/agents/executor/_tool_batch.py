@@ -24,7 +24,14 @@ from weebot.application.agents.executor._error_handler import (
     parse_args_for_event,
     tool_signature,
 )
+from weebot.application.agents.executor._loop_detectors import (
+    DuplicateResultStub,
+    GuardConfig,
+    Verdict,
+)
 from weebot.application.agents.executor._step_result_handler import feed_vision, pause_events
+from weebot.application.services.spillover import spill_over_budget, turn_budget
+from weebot.core.log_context import session_id_var
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -106,7 +113,8 @@ class BatchOutcome:
 class ToolBatchRunner:
     """Runs one step's tool batches, remembering what happened in the earlier ones."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: GuardConfig | None = None) -> None:
+        self._stubs = DuplicateResultStub((config or GuardConfig()).stub_min_chars)
         self.tool_calls_attempted = 0
         self.tool_calls_succeeded = 0
         self._semantic_loop_recoveries = 0
@@ -121,11 +129,16 @@ class ToolBatchRunner:
         guard: Any,
         *,
         step_result: str,
+        notes: list[str] | None = None,
     ) -> BatchOutcome:
-        """Pre-flight, execute and process one batch of tool calls."""
-        outcome = BatchOutcome(step_result=step_result)
+        """Pre-flight, execute and process one batch of tool calls.
 
-        prepared = self._preflight(executor, step, tool_calls, guard, outcome)
+        *notes* are recovery hints the caller already has; they follow the tool messages.
+        """
+        outcome = BatchOutcome(step_result=step_result)
+        hints: list[str] = list(notes or [])
+
+        prepared = self._preflight(executor, step, tool_calls, guard, outcome, hints)
         if outcome.abort_step:
             return outcome
 
@@ -134,7 +147,16 @@ class ToolBatchRunner:
             f"Mismatched result count {len(results)} vs tool call count {len(prepared)}"
         )
 
-        hints: list[str] = []
+        store = executor._spillover_store
+        if store is not None:
+            await spill_over_budget(
+                store,
+                session_id_var.get() or "unknown",
+                [tc["function"]["name"] for tc in prepared],
+                results,
+                turn_budget(),
+            )
+
         for tool_call, result in zip(prepared, results, strict=False):
             await self._process_one(executor, step, tool_call, result, guard, outcome, hints)
             if outcome.abort_step:
@@ -156,22 +178,30 @@ class ToolBatchRunner:
         tool_calls: list[dict],
         guard: Any,
         outcome: BatchOutcome,
+        hints: list[str],
     ) -> list[dict]:
-        """Record signatures, emit CALLING, and stop on an identical repeat."""
+        """Record signatures, emit CALLING, and stop on an identical repeat or a cycle."""
         prepared: list[dict] = []
         for tool_call in tool_calls:
             tool_name = tool_call["function"]["name"]
             raw_arguments = tool_call["function"].get("arguments", "{}")
-            guard.record_tool_call(tool_signature(tool_name, raw_arguments))
+            cycle = guard.record_tool_call(tool_signature(tool_name, raw_arguments))
 
+            reason = None
             if guard.is_tool_signature_loop():
+                reason = f"repeated identical tool call '{tool_name}'"
+            elif cycle is not None and cycle.kind is Verdict.STOP:
+                reason = cycle.message
+            if reason:
                 outcome.loop_error = guard.build_stuck_error(
-                    reason=f"repeated identical tool call '{tool_name}'",
+                    reason=reason,
                     step_description=step.description,
                 )
                 outcome.events.append(ErrorEvent(error=outcome.loop_error))
                 outcome.abort_step = True
                 return prepared
+            if cycle is not None:
+                hints.append(cycle.message)
             outcome.events.append(
                 ToolEvent(
                     tool_call_id=tool_call["id"],
@@ -242,7 +272,11 @@ class ToolBatchRunner:
             outcome.abort_step = True
             return
 
-        tool_content = await executor._present_tool_output(tool_name, result)
+        # A repeat of an earlier result becomes a pointer; the UI event above kept the text.
+        stub = None if result.is_error else self._stubs.observe(
+            self.tool_calls_attempted, result.output or ""
+        )
+        tool_content = stub or await executor._present_tool_output(tool_name, result)
         executor._conversation_buffer.append(
             {"role": "tool", "content": tool_content, "tool_call_id": tool_call["id"]}
         )

@@ -6,6 +6,15 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 
+from weebot.application.agents.executor._loop_detectors import (
+    CycleDetector,
+    EmptyResponseBudget,
+    GuardConfig,
+    GuardVerdict,
+    RepetitionGuard,
+    WallClockWrapUp,
+)
+
 logger = logging.getLogger(__name__)
 
 # Default limits
@@ -14,10 +23,9 @@ logger = logging.getLogger(__name__)
 # finished — the literal "Step completed (budget cap)." came from that summary's fallback.
 # MAX_EXECUTOR_STEPS (50) still bounds each step, and the loop guards below still catch
 # repetition, so this raises room to work rather than removing a guard.
-DEFAULT_MAX_TOOL_CALLS_PER_STEP = 24
+# The numbers live in GuardConfig (_loop_detectors.py); these names are what others import.
+DEFAULT_MAX_TOOL_CALLS_PER_STEP = GuardConfig().max_tool_calls_per_step
 _MAX_TOOL_CALLS_PER_STEP = DEFAULT_MAX_TOOL_CALLS_PER_STEP  # back-compat for older imports
-_MAX_REPEATED_ASSISTANT_TURNS = 2
-_REPEATED_TOOL_SIGNATURE_LIMIT = 4
 
 # Conversation-buffer size needed for one step to run its full tool budget.
 # The buffer is cleared per step, then holds: the anchoring context message
@@ -56,9 +64,9 @@ class IterationGuard:
 
     Usage::
 
-        guard = IterationGuard(step_budget=step_budget)
+        guard = IterationGuard(step_id, GuardConfig())
         while guard.should_continue():
-            guard.record_iteration()
+            guard.record_loop_turn()
             # ... execute tool call ...
             guard.record_tool_call(tc_signature)
             if guard.is_stuck():
@@ -71,23 +79,24 @@ class IterationGuard:
                 break
     """
 
-    def __init__(
-        self,
-        step_id: str,
-        max_tool_calls_per_step: int = DEFAULT_MAX_TOOL_CALLS_PER_STEP,
-        max_repeated_assistant_turns: int = _MAX_REPEATED_ASSISTANT_TURNS,
-        repeated_tool_signature_limit: int = _REPEATED_TOOL_SIGNATURE_LIMIT,
-    ):
+    def __init__(self, step_id: str, config: GuardConfig | None = None):
+        cfg = config or GuardConfig()
         self._step_id = step_id
-        self._max_tool_calls = max_tool_calls_per_step
-        self._max_repeated_assistant = max_repeated_assistant_turns
-        self._repeated_tool_sig_limit = repeated_tool_signature_limit
+        self._max_tool_calls = cfg.max_tool_calls_per_step
+        self._max_repeated_assistant = cfg.max_repeated_assistant_turns
+        self._repeated_tool_sig_limit = cfg.repeated_tool_signature_limit
         self.state = IterationGuardState()
+        self._cycles = CycleDetector(cfg.cycle_periods)
+        self._empty = EmptyResponseBudget(
+            cfg.empty_max_retries, cfg.empty_cost_ratio, cfg.empty_cost_cap_usd
+        )
+        self._repetition = RepetitionGuard(cfg.repetition_threshold, cfg.repetition_window)
+        self._wall_clock = WallClockWrapUp(cfg.wall_clock_budget_s, cfg.wrap_up_ratio)
 
     # ── Events ────────────────────────────────────────────────────
 
-    def record_iteration(self) -> None:
-        """Increment tool-call counter; call once per while-loop body."""
+    def record_loop_turn(self) -> None:
+        """Count one pass of the step's loop; the cap compares it with the tool-call limit."""
         self.state.tool_call_count += 1
 
     def record_assistant_turn(self, normalized_text: str) -> None:
@@ -98,14 +107,28 @@ class IterationGuard:
             self.state.repeated_assistant_turns = 0
         self.state.last_assistant_text = normalized_text
 
-    def record_tool_call(self, signature: str) -> None:
-        """Track tool-call signature for repeated-signature detection."""
+    def record_tool_call(self, signature: str) -> GuardVerdict | None:
+        """Track tool-call signature for repeated-signature detection; report a cycle."""
         self.state.recent_tool_signatures.append(signature)
         if signature and signature == self.state.last_tool_signature:
             self.state.repeated_tool_calls += 1
         else:
             self.state.repeated_tool_calls = 0
         self.state.last_tool_signature = signature
+        return self._cycles.observe(signature)
+
+    def observe_assistant_text(self, text: str) -> list[str]:
+        """Notes for the model when this turn's text repeats the last turns' (H11)."""
+        verdict = self._repetition.observe(text or "")
+        return [verdict.message] if verdict else []
+
+    def observe_empty_reply(self, turn_cost: float, step_cost: float) -> GuardVerdict:
+        """RETRY while the wasted spend stays small, otherwise STOP (H11)."""
+        return self._empty.observe(turn_cost, step_cost)
+
+    def wrap_up_note(self) -> str | None:
+        """The one note asking the model to finish, once the step's time is mostly used."""
+        return self._wall_clock.observe()
 
     # ── Queries ───────────────────────────────────────────────────
 

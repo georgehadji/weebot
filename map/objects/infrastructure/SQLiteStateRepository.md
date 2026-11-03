@@ -5,8 +5,8 @@ code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
 status: verified
-verified: 2026-11-02
-commit: a824d62a
+verified: 2026-11-03
+commit: e7c91b6a
 ---
 
 # SQLiteStateRepository
@@ -62,7 +62,7 @@ Consequence: `InMemoryStateRepository` implements the port but none of the roles
 
 ## Connected to
 - **Implements** `StateRepositoryPort` (`application/ports/state_repo_port.py`); 67 files under `weebot/` mention the port (grep 2026-10-30). Other implementers: `persistence/in_memory_state_repo.py`, `persistence/postgresql/state_repo.py`.
-- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:164`. `cli/main.py:71-72` tells callers not to construct it directly.
+- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:164`. `cli/main.py:72-73` tells callers not to construct it directly.
 - **Pool:** `persistence/connection_pool.py` (`SQLiteConnectionPool`, shared with the event store through `get_or_create_pool`).
 - **Looks like but is not:** the other port implementers above; the **event store** (a separate DB file and table, see its card); PostgreSQL adapters under `persistence/postgresql/` (scaffolded, not covered).
 

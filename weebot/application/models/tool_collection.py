@@ -283,6 +283,8 @@ class ToolCollection:
                 strategy = getattr(tool_obj, "truncation_strategy", "head")
                 if result.output and len(result.output) > MAX_TOOL_OUTPUT_CHARS:
                     original_length = len(result.output)
+                    # Transient: the spillover middleware (H7) stores it and pops it.
+                    result.metadata["full_output"] = result.output
                     result.output = _truncate(result.output, MAX_TOOL_OUTPUT_CHARS, strategy)
                     result.metadata["truncated"] = True
                     result.metadata["original_length"] = original_length

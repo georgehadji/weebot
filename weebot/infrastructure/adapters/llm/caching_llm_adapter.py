@@ -12,6 +12,7 @@ Only applies to Anthropic models that support prompt caching
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
@@ -20,27 +21,15 @@ from weebot.infrastructure.adapters.llm.anthropic_caching_adapter import Anthrop
 
 logger = logging.getLogger(__name__)
 
-# Substring markers for Anthropic models that support prompt caching.
-# Prompt caching started with Claude 3.5 (Haiku, Sonnet) and Claude 3 Opus.
-# Claude 4+ also supports it. Conservative list to avoid false positives.
-_CACHING_MODEL_MARKERS: tuple[str, ...] = (
-    "claude-3-5",  # 3.5 Haiku, 3.5 Sonnet, and future 3.5.x models
-    "claude-3-opus",  # 3 Opus
-    "claude-4",  # 4 Sonnet, 4 Opus, and future 4.x models
-)
+# Every Claude family that takes cache_control except Claude 2 and Instant (H2). The old
+# substring markers ("claude-3-5", "claude-4") matched no id in model_refs ("claude-sonnet-5.5"),
+# so the wrapper never ran. An optional "anthropic/" prefix covers OpenRouter-style ids.
+_CLAUDE_CACHEABLE = re.compile(r"^(?:anthropic/)?claude-(?!2|instant)", re.IGNORECASE)
 
 
 def supports_prompt_caching(model: str) -> bool:
-    """Best-effort check whether *model* supports Anthropic prompt caching.
-
-    Uses conservative substring matching over known caching-capable model
-    families. A false negative just skips the cache breakpoint injection
-    (safe — no caching), while a false positive would silently produce no
-    benefit (unrecognized models ignore cache_control). Both outcomes are
-    safe; we err on the side of false negatives.
-    """
-    m = (model or "").lower()
-    return any(marker in m for marker in _CACHING_MODEL_MARKERS)
+    """True for Claude models that accept ``cache_control`` breakpoints."""
+    return bool(_CLAUDE_CACHEABLE.match(model or ""))
 
 
 class CachingLLMAdapter(LLMPort):
@@ -52,7 +41,7 @@ class CachingLLMAdapter(LLMPort):
     messages for Anthropic's prompt caching.
 
     Caching is only applied when:
-    1. The ``enabled`` flag is ``True`` (controlled by ``LLM_ENABLE_CACHING``).
+    1. The ``enabled`` flag is ``True`` (controlled by ``LLM_ENABLE_PROMPT_CACHING``).
     2. The model name indicates Anthropic model support.
 
     All other ``LLMPort`` methods and keyword arguments pass through
@@ -117,37 +106,33 @@ class CachingLLMAdapter(LLMPort):
         return response
 
 
-def _log_cache_telemetry(model: str, response: LLMResponse) -> None:
-    """Emit WARN when input tokens are unusually low for a caching-enabled model.
+def cache_read_ratio(usage: dict[str, int] | None) -> float | None:
+    """Share of input tokens served from the provider's prompt cache, or None if unreported.
 
-    A very low input-token count (< 50) on a model that should benefit from
-    prompt caching suggests the cache was evicted, the system prompt was
-    rebuilt, or the conversation is in its first turn with a cold cache.
-
-    This is a best-effort heuristic — the real signal comes from
-    provider-specific response headers (``x-amzn-cache-hit`` for Bedrock,
-    ``cf-cache-status`` for Cloudflare, etc.). Cross-call trend analysis
-    would be more robust; this simple threshold is a cheap first pass.
+    OpenAI-style usage counts cached tokens inside ``prompt_tokens``. Anthropic's
+    ``input_tokens`` excludes them; its adapter marks that with ``cache_write_tokens``.
     """
-    usage = None
-    if hasattr(response, "usage") and response.usage:
-        usage = response.usage
+    if not usage:
+        return None
+    prompt = usage.get("prompt_tokens", 0) or 0
+    cached = usage.get("cached_tokens", 0) or 0
+    total = prompt + cached if "cache_write_tokens" in usage else prompt
+    return cached / total if total else None
 
-    if usage is None:
+
+def _log_cache_telemetry(model: str, response: LLMResponse) -> None:
+    """Log the cache-read ratio and count cache-read tokens (H2).
+
+    The old version read ``usage["input_tokens"]``, a key no adapter emits, so it saw 0 on
+    every call and warned every time.
+    """
+    usage = getattr(response, "usage", None)
+    ratio = cache_read_ratio(usage)
+    if ratio is None:
         return
+    cached = usage.get("cached_tokens", 0) or 0
+    logger.debug("Prompt cache: %s read ratio %.2f (%d tokens)", model, ratio, cached)
+    if cached:
+        from weebot.infrastructure.observability import metrics
 
-    # LLMResponse.usage is always a dict[str, int] — no non-dict branch.
-    if isinstance(usage, dict):
-        input_tokens = usage.get("input_tokens", 0) or 0
-    else:
-        input_tokens = 0
-
-    # If the input tokens are very low (< 50), the system prompt may have
-    # been regenerated or the cache was cold. Log at WARN for observability.
-    if input_tokens is not None and input_tokens < 50:
-        logger.warning(
-            "CachingLLMAdapter: unusually low input token count (%d) for %s — "
-            "possible cache miss or system-prompt rebuild",
-            input_tokens,
-            model,
-        )
+        metrics.llm_cache_read_tokens_total.labels(model=model).inc(cached)
