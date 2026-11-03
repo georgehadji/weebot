@@ -35,6 +35,7 @@ from weebot.application.di.keys import (  # noqa: E402
     LEARNING_SKILL_STORE,
     LLM_POOL,
     MEMORY_SNAPSHOT_CACHE,
+    PROMPT_PREFIX_STORE,
     SESSION_COST_METER,
     SKILL_PROMOTION_GATE,
     STEP_EVALUATOR,
@@ -520,6 +521,7 @@ class Container(
             cost_meter=self._maybe_get(SESSION_COST_METER),
             # H24a: read once per session, so a memory write cannot move a running prefix.
             memory_snapshot=self.get(MEMORY_SNAPSHOT_CACHE).get,
+            prompt_prefix=self.get(PROMPT_PREFIX_STORE),
             acr_router=self._maybe_get(ACR_ROUTER),
             # H7: output past the cap goes to a file; the model gets a head, a tail and the path.
             **self._spillover_kwargs(),

@@ -34,7 +34,7 @@ Format: name — source — status — card
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — stale 2026-10-31 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-11-03 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox, ModalSandboxBackend) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-11-02 — [card](infrastructure/Sandbox.md)
-- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — verified 2026-11-03 — [card](infrastructure/SQLiteStateRepository.md)
+- SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-11-03 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
 - Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-11-02 — [card](interfaces/ChatGateways.md)

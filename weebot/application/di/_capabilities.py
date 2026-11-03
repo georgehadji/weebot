@@ -71,6 +71,9 @@ class CapabilitiesMixin:
         from weebot.application.di.keys import MEMORY_SNAPSHOT_CACHE
 
         self.register(MEMORY_SNAPSHOT_CACHE, self._create_memory_snapshot_cache)
+        from weebot.application.di.keys import PROMPT_PREFIX_STORE
+
+        self.register(PROMPT_PREFIX_STORE, self._create_prompt_prefix_store)
         from weebot.application.di.keys import STRATEGY_TRANSFER
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"
@@ -85,6 +88,15 @@ class CapabilitiesMixin:
         return MemorySnapshotCache(
             PersistentMemoryTool.load_snapshot,
             frozen=lambda: is_enabled("MEMORY_SNAPSHOT_FREEZE_ENABLED"),
+        )
+
+    @staticmethod
+    def _create_prompt_prefix_store():
+        from weebot.infrastructure.adapters.prompt_prefix_store import InMemoryPromptPrefixStore
+        from weebot.infrastructure.observability.metrics import prompt_prefix_changes_total
+
+        return InMemoryPromptPrefixStore(
+            on_change=lambda reason: prompt_prefix_changes_total.labels(reason=reason).inc()
         )
 
     @staticmethod

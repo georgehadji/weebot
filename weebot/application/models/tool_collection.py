@@ -13,6 +13,8 @@ import logging
 import time
 from typing import Any
 
+from weebot.application.models.prompt_layout import canonical_tools
+
 logger = logging.getLogger(__name__)
 
 from weebot.application.services.tool_call_repair import fuzzy_match_tool_name
@@ -190,7 +192,9 @@ class ToolCollection:
                 )
                 spec["function"]["description"] = enhanced
             params.append(spec)
-        return params
+        # Sorted by name with sorted keys: the same set is the same bytes, so the provider's
+        # prompt cache can match the tools block (H10).
+        return canonical_tools(params)
 
     def resolve_name(self, name: str) -> str | None:
         """The registered tool *name* means: itself, or its fuzzy match (typos, casing).

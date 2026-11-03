@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections import deque
+from collections import OrderedDict, deque
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
@@ -26,6 +26,7 @@ from weebot.application.agents.executor._turn import next_turn, retry_empty_turn
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.prompt_prefix_port import PromptPrefixStore
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.ponytail_post_processor import PonytailPostProcessor
 from weebot.application.services.step_budget import StepBudget
@@ -109,6 +110,7 @@ class ExecutorAgent:
         # Awaitable taking the session id and returning the persistent-memory snapshot for the
         # system prompt; the composition root supplies it, so the executor imports no tool.
         memory_snapshot: Callable[[str], Awaitable[str]] | None = None,
+        prompt_prefix: PromptPrefixStore | None = None,
         # Shared AdaptiveCapabilityRouter: ranks models per step and learns from outcomes.
         acr_router: Any | None = None,
     ):
@@ -117,6 +119,7 @@ class ExecutorAgent:
         self._cost_meter = cost_meter
         self._guard_config = guard_config or GuardConfig()
         self._memory_snapshot = memory_snapshot
+        self._prompt_prefix = prompt_prefix
         self._injection_scan = injection_scan
         self._llm = llm
         self._tools = tools
@@ -153,6 +156,8 @@ class ExecutorAgent:
         self._skills_used: list[str] = []  # candidate skills injected into this step
         self._max_context_turns = max_context_turns
         self._system_prompt: str | None = None
+        # (session, scope) -> the system prompt's stable parts, built at the first step (H10)
+        self._frozen_system: OrderedDict[tuple[str, str], tuple[str, str]] = OrderedDict()
         self._conversation_buffer: deque[dict[str, Any]] = deque(maxlen=max_context_turns)
         self._facts: dict[str, Any] = {}
         self._should_terminate = False
@@ -441,21 +446,35 @@ class ExecutorAgent:
 
         return VISION_IN_LOOP_ENABLED and VISION_REFLECTION_ENABLED
 
-    _tool_note: str = ""
+    # The plan whose tool scope was pinned (WEEBOT_TOOL_SCOPE_GRANULARITY=plan), and that scope.
+    _plan_tool_scope: tuple[Plan, frozenset[str]] | None = None
 
-    def _scope_tools_for(self, step: Step) -> str:
+    def _scope_tools_for(self, step: Step, plan: Plan | None = None) -> str:
         """Send this step only the tool definitions it needs (ICM B1); return the
-        line naming the rest, which stay callable. All ~171 used to go every call."""
-        from weebot.config.feature_flags import TOOL_SCOPE_ENABLED
+        line naming the rest, which stay callable. All ~171 used to go every call.
+
+        With ``WEEBOT_TOOL_SCOPE_GRANULARITY=plan`` the list is the union of every step of
+        *plan*, chosen once, so the tools block does not change between steps (H10, D3).
+        """
+        from weebot.config import feature_flags
 
         if self._tools is None or not hasattr(self._tools, "set_visible"):
             return ""
-        if not TOOL_SCOPE_ENABLED:
+        if not feature_flags.TOOL_SCOPE_ENABLED:
             self._tools.set_visible(None)
             return ""
         from weebot.application.services.tool_scope import select_tools
 
-        self._tools.set_visible(select_tools(step.description, {t.name for t in self._tools}))
+        available = {t.name for t in self._tools}
+        if feature_flags.TOOL_SCOPE_GRANULARITY == "plan" and plan is not None and plan.steps:
+            if self._plan_tool_scope is None or self._plan_tool_scope[0] is not plan:
+                union: set[str] = set()
+                for s in plan.steps:
+                    union |= select_tools(s.description, available)
+                self._plan_tool_scope = (plan, frozenset(union))
+            self._tools.set_visible(set(self._plan_tool_scope[1]))
+        else:
+            self._tools.set_visible(select_tools(step.description, available))
         hidden = self._tools.hidden_names()
         if not hidden:
             return ""
@@ -479,11 +498,10 @@ class ExecutorAgent:
         self._should_terminate = False
         self._conversation_buffer.clear()
 
-        primed = prime_step(self, step, session_id)
-        self._tool_note = primed.tool_note
+        primed = prime_step(self, step, session_id, plan)
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
-        await build_step_prompts(self, plan, step, user_input)
+        await build_step_prompts(self, plan, step, user_input, primed.tool_note)
 
         guard = IterationGuard(step.id, self._guard_config)
         batch = ToolBatchRunner(self._guard_config)
@@ -602,7 +620,7 @@ class ExecutorAgent:
         from weebot.application.agents.executor._tool_pairing import sanitize_tool_call_pairing
 
         messages = sanitize_tool_call_pairing(
-            [{"role": "system", "content": self._system_prompt + self._tool_note}]
+            [{"role": "system", "content": self._system_prompt}]
             + list(self._conversation_buffer)
         )
         try:

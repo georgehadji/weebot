@@ -4,9 +4,9 @@ name: SQLiteStateRepository
 code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-11-03
-commit: e7c91b6a
+commit: 74ebf637
 ---
 
 # SQLiteStateRepository
@@ -58,11 +58,11 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `find_plan_templates_by_hash`, `list_all_plan_templates` | `domain/services/plan_template_cache.py` (domain layer) |
 | `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:382`) |
 
-Consequence: `InMemoryStateRepository` implements the port but none of the roles, while the PostgreSQL repo takes them from `PostgresRoleStores` (`persistence/postgresql/_role_stores.py:77`; grep 2026-10-30). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-99`), get `None` on a repository without it, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:128-131`.
+Consequence: `InMemoryStateRepository` implements the port but none of the roles, while the PostgreSQL repo takes them from `PostgresRoleStores` (`persistence/postgresql/_role_stores.py:77`; grep 2026-10-30). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-99`), get `None` on a repository without it, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:[stale 128-131]`.
 
 ## Connected to
 - **Implements** `StateRepositoryPort` (`application/ports/state_repo_port.py`); 67 files under `weebot/` mention the port (grep 2026-10-30). Other implementers: `persistence/in_memory_state_repo.py`, `persistence/postgresql/state_repo.py`.
-- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:164`. `cli/main.py:72-73` tells callers not to construct it directly.
+- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:172`. `cli/main.py:72-73` tells callers not to construct it directly.
 - **Pool:** `persistence/connection_pool.py` (`SQLiteConnectionPool`, shared with the event store through `get_or_create_pool`).
 - **Looks like but is not:** the other port implementers above; the **event store** (a separate DB file and table, see its card); PostgreSQL adapters under `persistence/postgresql/` (scaffolded, not covered).
 

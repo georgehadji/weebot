@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -99,7 +100,9 @@ async def test_the_save_note_is_dropped_when_the_freeze_is_off(memory):
 
 def _executor(*, repo=None, snapshot=None, session="s1"):
     return SimpleNamespace(
-        _scope_tools_for=lambda step: "",
+        _frozen_system=OrderedDict(),
+        _tools=None,
+        _prompt_prefix=None,
         _load_prompt=lambda: "base",
         _harness_instruction_block=None,
         _skill_prompt=None,
@@ -118,7 +121,7 @@ def _executor(*, repo=None, snapshot=None, session="s1"):
 
 async def _build(executor):
     step = SimpleNamespace(description="do it", context_scope=None)
-    with patch.object(_step_setup, "_seed_conversation", lambda *a: None):
+    with patch.object(_step_setup, "_seed_conversation", lambda *a, **k: None):
         await _step_setup.build_step_prompts(executor, plan=None, step=step, user_input=None)
 
 
