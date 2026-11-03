@@ -8,12 +8,26 @@ vision reflection.
 from __future__ import annotations
 
 import logging
-from typing import Any
 from collections import deque
+from collections.abc import Callable
+from typing import Any
 
+from weebot.application.services.context_passes import (
+    TokenBudget,
+    compress_messages,
+    default_passes,
+)
 from weebot.application.services.context_tokenizer import ContextTokenizer
 
 logger = logging.getLogger(__name__)
+
+
+def catalog_window(model: str | None, default: int) -> int:
+    """The catalog's context window for *model*, or *default* when the model is unknown."""
+    from weebot.config.model_catalog import MODELS
+
+    cfg = MODELS.get(model or "")
+    return cfg.context_window if cfg else default
 
 
 class ContextCompressor:
@@ -32,6 +46,7 @@ class ContextCompressor:
         llm=None,  # LLMPort
         model: str | None = None,
         compressor=None,  # ConversationCompressor | None
+        window_for: Callable[[str | None, int], int] = catalog_window,
     ) -> None:
         self._conversation_buffer = conversation_buffer
         self._auto_compress = auto_compress
@@ -39,6 +54,8 @@ class ContextCompressor:
         self._llm = llm
         self._model = model
         self._compressor = compressor
+        self._window_for = window_for
+        self._last_model: str | None = None
         self._total_prompt_tokens: int = 0
         self._total_completion_tokens: int = 0
         self._last_expected_outcome: str | None = None
@@ -59,6 +76,9 @@ class ContextCompressor:
         Called as a post-success callback from CascadeExecutor and from
         vision reflection calls. Handles both object-attribute and dict usage.
         """
+        answered = getattr(resp, "model", None)
+        if isinstance(answered, str) and answered != "unknown":
+            self._last_model = answered
         if hasattr(resp, "usage") and resp.usage:
             usage = resp.usage
             if isinstance(usage, dict):
@@ -78,26 +98,33 @@ class ContextCompressor:
                     exc,
                 )
 
-    async def force_compress(self) -> bool:
+    async def force_compress(self, ratio: float = 0.5) -> bool:
         """Compress now, whatever the size (H3). True when the buffer got smaller.
 
-        The 0.75 trigger trusts the configured window; a provider that just rejected the
-        request for length has told us the real window is smaller.
+        The trigger trusts the model's catalog window; a provider that just rejected the
+        request for length has told us the real window is smaller. Compresses as if the
+        window were `ratio` of its size.
         """
-        tokenizer = ContextTokenizer()
-        before = tokenizer.estimate_messages_tokens(list(self._conversation_buffer))
-        await self._maybe_compress(threshold=0.0)
-        return tokenizer.estimate_messages_tokens(list(self._conversation_buffer)) < before
+        before = ContextTokenizer().estimate_messages_tokens(list(self._conversation_buffer))
+        await self._compress(window_ratio=ratio)
+        return ContextTokenizer().estimate_messages_tokens(list(self._conversation_buffer)) < before
 
-    async def _maybe_compress(self, threshold: float = 0.75) -> None:
-        """Summarize the middle of the conversation buffer when approaching limit."""
+    def window(self) -> int:
+        """Context window of the model that last answered, else the configured one."""
+        return self._window_for(self._last_model or self._model, self._context_window)
+
+    async def _maybe_compress(self) -> None:
+        """Compress the conversation buffer when it passes the trigger for the model's window."""
+        await self._compress()
+
+    async def _compress(self, window_ratio: float | None = None) -> None:
         conversation = list(self._conversation_buffer)
         if not conversation:
             return
-
+        window = self.window()
+        budget = TokenBudget(window=int(window * (window_ratio or 1.0)))
         estimated_tokens = ContextTokenizer().estimate_messages_tokens(conversation)
-
-        if estimated_tokens < self._context_window * threshold:
+        if window_ratio is None and estimated_tokens < budget.trigger_tokens:
             return
 
         try:
@@ -108,32 +135,16 @@ class ContextCompressor:
 
                 self._compressor = ConversationCompressor(llm=self._llm, cheap_model=self._model)
 
-            keep_first = max(1, len(conversation) // 4)
-            keep_last = max(1, len(conversation) // 4)
-            middle = (
-                conversation[keep_first:-keep_last] if keep_last > 0 else conversation[keep_first:]
+            compressed = await compress_messages(
+                conversation, budget, default_passes(self._compressor.summarize)
             )
-            if not middle:
-                return
-
-            # compress() returns a full message list (head + summary + tail),
-            # not a summary string. Wrapping it in {"content": summary} put
-            # the repr of a list of dicts into the buffer and shipped it to
-            # the provider as context -- larger than what it replaced, and
-            # unreadable. See side_constraint_integrity_plan.md 8.2.
-            compressed_middle = await self._compressor.compress(middle)
-            if compressed_middle:
+            if compressed != conversation:
                 self._conversation_buffer.clear()
-                for msg in conversation[:keep_first]:
-                    self._conversation_buffer.append(msg)
-                for msg in compressed_middle:
-                    self._conversation_buffer.append(msg)
-                for msg in conversation[-keep_last:]:
-                    self._conversation_buffer.append(msg)
+                self._conversation_buffer.extend(compressed)
                 logger.info(
-                    "Compressed conversation: %d -> %d messages, %d tokens cleared",
+                    "Compressed conversation: %d -> %d messages, %d tokens before",
                     len(conversation),
-                    len(self._conversation_buffer),
+                    len(compressed),
                     estimated_tokens,
                 )
         except Exception as exc:
