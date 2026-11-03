@@ -6,6 +6,8 @@ import asyncio
 import shutil
 from pathlib import Path
 
+from weebot.config.secret_accessor import SecretAccessor
+from weebot.core.child_env import build_child_env
 from weebot.infrastructure.adapters.platform_encoding import safe_decode
 from weebot.application.ports.sandbox_port import (
     SandboxCapability,
@@ -136,9 +138,11 @@ class WSL2Sandbox(SandboxPort):
         wsl_command = self._build_wsl_command(command)
 
         # Merge environment variables
-        merged_env = dict(self._config.env_vars)
-        if env:
-            merged_env.update(env)
+        merged_env = build_child_env(
+            SecretAccessor.environ_view(),
+            declared={**self._config.env_vars, **(env or {})},
+            inherit_proxy=False,
+        )
 
         # Handle working directory
         working_dir = cwd or self._config.working_dir
@@ -153,7 +157,7 @@ class WSL2Sandbox(SandboxPort):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(working_dir) if working_dir is not None else None,
-                env=merged_env if merged_env else None,
+                env=merged_env,
             )
 
             stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)

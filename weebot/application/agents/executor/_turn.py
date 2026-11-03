@@ -21,7 +21,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from weebot.application.agents.executor._recovery import call_with_recovery
 from weebot.application.agents.executor._tool_pairing import sanitize_tool_call_pairing
+from weebot.core.error_classifier import ErrorCategory
+from weebot.core.recovery_ladder import failure_message
 from weebot.domain.exceptions import AllModelsTrippedError, LLMCapacityExhaustedError
 from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent
 
@@ -50,9 +53,12 @@ async def next_turn(executor: ExecutorAgent, step: Step) -> TurnOutcome:
     messages = _assemble_messages(executor)
     messages = await _before_request(executor, messages, step)
 
+    async def rebuild() -> list[dict]:
+        return await _before_request(executor, _assemble_messages(executor), step)
+
     try:
-        response = await executor._cascade.call_with_cascade(
-            messages, description=step.description
+        response, messages = await call_with_recovery(
+            executor, messages, step.description, rebuild
         )
     except LLMCapacityExhaustedError as exc:
         # NOT the branch below. That one tells the user to check their credits and API
@@ -79,11 +85,8 @@ async def next_turn(executor: ExecutorAgent, step: Step) -> TurnOutcome:
                 ErrorEvent(error=str(exc)),
                 MessageEvent(
                     role="assistant",
-                    message=(
-                        "All AI models are currently unavailable. Please:\n"
-                        "1. Check your OpenRouter credits at https://openrouter.ai/credits\n"
-                        "2. Verify your OPENROUTER_API_KEY is valid\n"
-                        "3. Wait a few minutes for circuit breakers to cool down and retry"
+                    message=failure_message(
+                        ErrorCategory(exc.category) if hasattr(exc, "category") else None
                     ),
                 ),
             ],

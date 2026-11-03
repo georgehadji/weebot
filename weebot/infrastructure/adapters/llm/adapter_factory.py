@@ -44,6 +44,7 @@ class AdapterFactory:
     - LLM_ENABLE_CIRCUIT_BREAKER: Enable circuit breaker (default: true)
     - LLM_ENABLE_RETRY: Enable retry with backoff (default: true)
     - LLM_ENABLE_CACHING: Enable response caching (default: false)
+    - LLM_ENABLE_PROMPT_CACHING: Inject Claude cache_control breakpoints (default: true)
     """
 
     # Default model names sourced from weebot.config.model_refs
@@ -86,6 +87,7 @@ class AdapterFactory:
         enable_circuit_breaker: bool | None = None,
         enable_retry: bool | None = None,
         enable_caching: bool | None = None,
+        enable_prompt_caching: bool | None = None,
     ):
         """
         Initialize adapter factory.
@@ -94,7 +96,8 @@ class AdapterFactory:
             default_timeout: Default timeout for all adapters (overrides env)
             enable_circuit_breaker: Enable circuit breaker (overrides env)
             enable_retry: Enable retry (overrides env)
-            enable_caching: Enable caching (overrides env)
+            enable_caching: Enable response caching (overrides env)
+            enable_prompt_caching: Enable Claude prompt caching (overrides env)
         """
         self._default_timeout = self._get_config("LLM_TIMEOUT", default_timeout, 60.0, float)
         self._enable_circuit_breaker = self._get_config(
@@ -102,6 +105,9 @@ class AdapterFactory:
         )
         self._enable_retry = self._get_config("LLM_ENABLE_RETRY", enable_retry, True, bool)
         self._enable_caching = self._get_config("LLM_ENABLE_CACHING", enable_caching, False, bool)
+        self._enable_prompt_caching = self._get_config(
+            "LLM_ENABLE_PROMPT_CACHING", enable_prompt_caching, True, bool
+        )
 
         # Cache for created adapters
         self._adapters: dict[str, LLMPort] = {}
@@ -186,13 +192,9 @@ class AdapterFactory:
         # Injects cache_control breakpoints for Anthropic prompt caching
         # when enabled + model supports it.
         #
-        # NOTE: LLM_ENABLE_CACHING / enable_caching gates TWO caches:
-        #   1. Prompt caching (here) — Anthropic cache_control breakpoints
-        #   2. Response caching (ResilientLLMAdapter below) — LLMCache dedup
-        # These share a single knob by design. If separated in the future,
-        # use distinct flags (e.g. LLM_ENABLE_PROMPT_CACHING / LLM_ENABLE_RESPONSE_CACHING).
-        _do_cache = enable_caching if enable_caching is not None else self._enable_caching
-        if _do_cache and supports_prompt_caching(model):
+        # Prompt caching and response caching have separate flags (H2):
+        # LLM_ENABLE_PROMPT_CACHING here, LLM_ENABLE_CACHING for ResilientLLMAdapter below.
+        if self._enable_prompt_caching and supports_prompt_caching(model):
             inner_adapter = CachingLLMAdapter(
                 inner_adapter=inner_adapter, model=model, enabled=True
             )

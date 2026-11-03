@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -12,6 +11,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
+from weebot.config.secret_accessor import SecretAccessor
+from weebot.core.child_env import build_child_env
 from weebot.core.mcp_naming import build_namespaced_name
 
 try:
@@ -160,7 +161,12 @@ class MCPClientManager:
         timeout = config.get("timeout_seconds", 30)
         if not command:
             raise ValueError(f"Server {server_name} missing command")
-        params = StdioServerParameters(command=command, args=args, env={**os.environ, **env})
+        child_env = build_child_env(
+            SecretAccessor.environ_view(),
+            declared=env,
+            passthrough=config.get("env_passthrough", ()),
+        )
+        params = StdioServerParameters(command=command, args=args, env=child_env)
         transport = await stack.enter_async_context(stdio_client(params))
         read_stream, write_stream = transport
         session = await stack.enter_async_context(

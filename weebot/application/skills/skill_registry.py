@@ -245,11 +245,23 @@ class SkillRegistry:
 # ── module-level helpers ────────────────────────────────────────────
 
 
+_BUILTIN_DIR = (Path(__file__).parent.parent.parent / "skills" / "builtin").resolve()
+
+
+def _is_builtin(filepath: Path) -> bool:
+    try:
+        return Path(filepath).resolve().is_relative_to(_BUILTIN_DIR)
+    except OSError:
+        return False
+
+
 def _trust_tier(raw, filepath: Path) -> str:
-    """No trust key: a human wrote the file (trusted). A value that is set but
-    not a tier (a typo like "quarantine") fails closed (F42)."""
+    """Tier for a skill file (H42). Shipped skills with no key are trusted; any other
+    file with no key is a candidate, since `weebot skill install` copies SKILL.md
+    verbatim and an imported skill must not arrive pre-trusted. A value that is set
+    but not a tier (a typo like "quarantine") fails closed (F42)."""
     if raw is None:
-        return "trusted"
+        return "trusted" if _is_builtin(filepath) else "candidate"
     if raw not in ("quarantined", "candidate", "trusted"):
         _log.warning("Skill %s: unknown trust %r, quarantined", filepath, raw)
         return "quarantined"

@@ -78,7 +78,18 @@ class ContextCompressor:
                     exc,
                 )
 
-    async def _maybe_compress(self) -> None:
+    async def force_compress(self) -> bool:
+        """Compress now, whatever the size (H3). True when the buffer got smaller.
+
+        The 0.75 trigger trusts the configured window; a provider that just rejected the
+        request for length has told us the real window is smaller.
+        """
+        tokenizer = ContextTokenizer()
+        before = tokenizer.estimate_messages_tokens(list(self._conversation_buffer))
+        await self._maybe_compress(threshold=0.0)
+        return tokenizer.estimate_messages_tokens(list(self._conversation_buffer)) < before
+
+    async def _maybe_compress(self, threshold: float = 0.75) -> None:
         """Summarize the middle of the conversation buffer when approaching limit."""
         conversation = list(self._conversation_buffer)
         if not conversation:
@@ -86,7 +97,7 @@ class ContextCompressor:
 
         estimated_tokens = ContextTokenizer().estimate_messages_tokens(conversation)
 
-        if estimated_tokens < self._context_window * 0.75:
+        if estimated_tokens < self._context_window * threshold:
             return
 
         try:

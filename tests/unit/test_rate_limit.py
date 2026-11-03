@@ -71,8 +71,8 @@ class TestTierMapping:
 
     def test_webhook_tier(self):
         assert _get_tier("/api/webhook/run") == "webhook"
-        assert _get_tier("/api/discord/events") == "webhook"
-        assert _get_tier("/api/slack/commands") == "webhook"
+        assert _get_tier("/api/gateway/discord/events") == "webhook"
+        assert _get_tier("/api/gateway/slack/commands") == "webhook"
 
     def test_expensive_tier(self):
         assert _get_tier("/api/flow/run", "POST") == "expensive"
