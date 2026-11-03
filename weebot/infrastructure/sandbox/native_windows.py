@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import shutil
 import subprocess
 import sys
@@ -12,6 +11,8 @@ import threading
 import time
 from pathlib import Path
 
+from weebot.config.secret_accessor import SecretAccessor
+from weebot.core.child_env import build_child_env
 from weebot.infrastructure.adapters.platform_encoding import safe_decode
 from weebot.application.ports.sandbox_port import (
     SandboxCapability,
@@ -66,18 +67,12 @@ def _build_child_env(config: SandboxConfig, extra: dict[str, str] | None = None)
     Returns:
         A dict suitable for passing as ``env`` to ``asyncio.create_subprocess_exec``.
     """
-    env: dict[str, str] = {}
-    for key in _ALLOWLISTED_ENV_VARS:
-        val = os.environ.get(key)
-        if val is not None:
-            env[key] = val
-
-    # Config-declared env_vars override allowlist defaults
-    env.update(config.env_vars)
-
-    # Caller-supplied vars overlay everything
-    if extra:
-        env.update(extra)
+    env = build_child_env(
+        SecretAccessor.environ_view(),
+        declared={**config.env_vars, **(extra or {})},
+        passthrough=_ALLOWLISTED_ENV_VARS,
+        inherit_proxy=False,
+    )
 
     # Network gating: best-effort proxy blockade when network is disabled and
     # this call was not cleared for network (W3.9). Raw sockets bypass it.
@@ -237,7 +232,7 @@ class NativeWindowsSandbox(SandboxPort):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(working_dir) if working_dir is not None else None,
-                env=merged_env if merged_env else None,
+                env=merged_env,
             )
         except NotImplementedError:
             # This event loop cannot start subprocesses (uvicorn --reload builds a
@@ -325,7 +320,7 @@ class NativeWindowsSandbox(SandboxPort):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=str(working_dir) if working_dir is not None else None,
-                env=env if env else None,
+                env=env,
             )
         except Exception as e:
             return SandboxResult(

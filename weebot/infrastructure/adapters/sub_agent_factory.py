@@ -52,9 +52,13 @@ class SubAgentFactory(SubAgentFactoryPort):
         swarm_bus: SwarmEventBusPort | None = None,
         flow_factory: callable | None = None,
         cost_meter: Any | None = None,  # SessionCostMeter: rolls a child's spend up to its parent
+        tools_for: callable | None = None,  # spec -> ToolCollection scoped to its role (H4)
+        guard: Any | None = None,  # DelegationGuard: depth, count, concurrency (H4)
     ) -> None:
         self._llm = llm
         self._tools = tools
+        self._tools_for = tools_for
+        self._guard = guard
         self._cost_tracker = cost_tracker
         self._swarm_bus = swarm_bus
         self._flow_factory = flow_factory
@@ -67,12 +71,13 @@ class SubAgentFactory(SubAgentFactoryPort):
             agent_id=spec.role.value,
             status=SessionStatus.RUNNING,
         )
+        from weebot.core.log_context import session_id_var
+
+        parent_id = session_id_var.get() or ""
         if self._cost_meter is not None:
             # The calling step's session is the parent. Without this link the child's
             # calls were totalled under its own id and the parent's limits never saw them.
-            from weebot.core.log_context import session_id_var
-
-            self._cost_meter.link(session.id, session_id_var.get() or "")
+            self._cost_meter.link(session.id, parent_id)
         # Build PlanActFlow inline to avoid circular imports at module level
         flow = self._build_flow(session, spec)
         start = time.monotonic()
@@ -85,7 +90,7 @@ class SubAgentFactory(SubAgentFactoryPort):
             if spec.strategy == DispatchStrategy.FRESH_MIND:
                 prompt = f"[FRESH CONTEXT — no prior session history]\n\n{spec.prompt}"
 
-            gen = flow.run(prompt)
+            gen = self._guarded(flow.run(prompt), parent_id)
             while True:
                 try:
                     event = await asyncio.wait_for(gen.__anext__(), timeout=spec.timeout_seconds)
@@ -175,10 +180,21 @@ class SubAgentFactory(SubAgentFactoryPort):
             return results[0]
         return max(successes, key=lambda r: len(r.summary))
 
+    async def _guarded(self, events, parent_id: str):
+        """Run the child's events inside the delegation policy (depth, count, bulkhead)."""
+        if self._guard is None:
+            async for event in events:
+                yield event
+            return
+        async with self._guard.enter(parent_id):
+            async for event in events:
+                yield event
+
     def _build_flow(self, session: Session, spec: SubAgentSpec):
         """Build a PlanActFlow for a sub-agent session."""
         if self._flow_factory is None:
             raise RuntimeError(
                 "SubAgentFactory requires a flow_factory. " "Inject via __init__(flow_factory=...)."
             )
-        return self._flow_factory(session, spec, self._llm, self._tools)
+        tools = self._tools_for(spec) if self._tools_for is not None else self._tools
+        return self._flow_factory(session, spec, self._llm, tools)

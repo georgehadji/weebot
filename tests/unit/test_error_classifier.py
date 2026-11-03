@@ -26,7 +26,10 @@ class TestRecoveryActionLadder:
 
     def test_all_recovery_actions_used(self):
         """Every RecoveryAction value must be mapped to at least one category."""
+        from weebot.core.recovery_ladder import LADDERS
+
         used = set(_RECOMMENDED_ACTION.values())
+        used |= {rung.action for rungs in LADDERS.values() for rung in rungs}
         for action in RecoveryAction:
             assert action in used, f"RecoveryAction.{action.name} is not used by any category"
 
@@ -286,12 +289,12 @@ class TestStructural:
     """Verify taxonomy integrity."""
 
     def test_11_categories(self):
-        """Must have exactly 11 ErrorCategory values."""
-        assert len(ErrorCategory) == 11
+        """Must have exactly 16 ErrorCategory values (11 + the 5 recovery-ladder ones)."""
+        assert len(ErrorCategory) == 16
 
     def test_5_recovery_actions(self):
-        """Must have exactly 5 RecoveryAction values."""
-        assert len(RecoveryAction) == 6
+        """Must have exactly 8 RecoveryAction values."""
+        assert len(RecoveryAction) == 8
 
     def test_patterns_are_nonempty(self):
         """Every pattern must be a non-empty string."""

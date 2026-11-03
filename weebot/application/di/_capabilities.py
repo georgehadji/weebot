@@ -51,6 +51,22 @@ class CapabilitiesMixin:
 
         checkpoints_db = str(Path(db_path).parent / "flow_checkpoints.db")
         self.register(CheckpointPort, lambda: SQLiteCheckpointStore(db_path=checkpoints_db))
+        # Undoable workspace file checkpoints, bound always so a session delete purges them
+        # whether or not WEEBOT_FILE_CHECKPOINTS is on now (H5).
+        from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
+        from weebot.infrastructure.checkpoints.shadow_git import (
+            DEFAULT_CHECKPOINT_DIR,
+            ShadowGitCheckpointAdapter,
+        )
+
+        self.register(
+            WorkspaceCheckpointPort, lambda: ShadowGitCheckpointAdapter(DEFAULT_CHECKPOINT_DIR)
+        )
+        # Tool output too long for the context, kept on disk (H7); a session delete purges it.
+        from weebot.application.ports.spillover_store_port import SpilloverStorePort
+        from weebot.infrastructure.spillover.file_store import FileSpilloverStore
+
+        self.register(SpilloverStorePort, lambda: FileSpilloverStore())
         from weebot.application.di.keys import STRATEGY_TRANSFER
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"

@@ -42,3 +42,14 @@ from weebot.interfaces.web.rate_limit import _get_tier
 )
 def test_tier_by_method_and_path(method, path, tier):
     assert _get_tier(path, method) == tier
+
+
+def test_mounted_gateway_routers_are_webhook_tier():
+    """The tier table keyed /api/discord/ etc., but the routers mount at /api/gateway/<x>/."""
+    from weebot.interfaces.web.routers.discord_webhook import router as discord
+    from weebot.interfaces.web.routers.slack_webhook import router as slack
+    from weebot.interfaces.web.routers.whatsapp_webhook import router as whatsapp
+
+    for router in (discord, slack, whatsapp):
+        assert _get_tier(f"{router.prefix}/x", "POST") == "webhook", router.prefix
+    assert _get_tier("/api/gateway/telegram/x", "POST") == "webhook"

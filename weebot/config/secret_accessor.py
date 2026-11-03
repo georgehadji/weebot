@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
+from types import MappingProxyType
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,14 @@ class SecretAccessor:
         if cls._source is not None:
             return cls._source
         return dict(os.environ)
+
+    @classmethod
+    def environ_view(cls) -> Mapping[str, str]:
+        """Read-only copy of the environment, for ``core.child_env.build_child_env`` (H1).
+
+        Not an accessor for secrets: the child-env allowlist decides what leaves.
+        """
+        return MappingProxyType(dict(cls._get_source()))
 
     # ------------------------------------------------------------------
     # Public accessors

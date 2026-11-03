@@ -87,6 +87,27 @@ class AllModelsTrippedError(WeebotError):
         self.severity = ErrorSeverity.CRITICAL
 
 
+class RecoverableLLMError(AllModelsTrippedError):
+    """The cascade is spent, but the cause is one the executor can act on (H3).
+
+    A subclass of ``AllModelsTrippedError`` so handlers that only know the terminal case
+    still catch it. ``category`` is an ``ErrorCategory`` value (a string: the domain does
+    not import ``weebot.core``); ``retry_after`` is a provider hint in seconds.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str,
+        retry_after: float | None = None,
+        **kwargs,
+    ):
+        super().__init__(message, **kwargs)
+        self.category = category
+        self.retry_after = retry_after
+
+
 class LLMCapacityExhaustedError(WeebotError):
     """Raised when no LLM concurrency slot frees up within the acquire timeout.
 

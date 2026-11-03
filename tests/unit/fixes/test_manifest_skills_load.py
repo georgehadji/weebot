@@ -2,7 +2,7 @@
 
 SkillRegistry read only SKILL.md, so seven built-ins (web_research,
 multi_llm_orchestrator, reasoner, ...) and everything skill_converter writes
-never loaded. Trust follows the SKILL.md rule: missing = trusted (hand-written),
+never loaded. Trust follows the SKILL.md rule: missing = candidate outside builtin (H42),
 unknown = quarantined.
 """
 
@@ -34,7 +34,7 @@ def test_a_manifest_package_loads_with_its_prompt(tmp_path):
     _pkg(tmp_path, "web_research")
     skill = _load(tmp_path)["web_research"]
     assert skill.description == "desc" and skill.content == "Do the thing."
-    assert skill.metadata.trust == "trusted" and skill.metadata.emoji == "x"
+    assert skill.metadata.trust == "candidate" and skill.metadata.emoji == "x"
 
 
 def test_an_unknown_manifest_trust_is_quarantined(tmp_path):

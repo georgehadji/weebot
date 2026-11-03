@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from weebot.infrastructure.adapters.llm.caching_llm_adapter import (
     CachingLLMAdapter,
+    cache_read_ratio,
     supports_prompt_caching,
-    _CACHING_MODEL_MARKERS,
 )
 from weebot.domain.models.llm_response import LLMResponse
 
@@ -21,16 +21,18 @@ class TestSupportsPromptCaching:
         [
             # Positive matches (should return True)
             ("claude-3-5-haiku", True),
-            ("claude-3-5-sonnet", True),
             ("claude-3-opus", True),
+            ("claude-3-haiku", True),
             ("claude-4-sonnet", True),
-            ("claude-4-opus", True),
-            ("anthropic/claude-3-5-sonnet", True),
-            ("anthropic/claude-4-sonnet-20250514", True),
-            ("claude-3-5-sonnet-20241022", True),
+            ("anthropic/claude-sonnet-5.5", True),
+            ("anthropic/claude-opus-5.5", True),
+            ("anthropic/claude-haiku-5.5", True),
+            ("claude-sonnet-5-5", True),
+            ("Anthropic/Claude-Sonnet-5.5", True),
             # Negative matches (should return False)
-            ("claude-3-haiku", False),  # v3, not 3.5 — no prompt caching
-            ("claude-3-sonnet", False),  # v3, not 3.5
+            ("claude-2.1", False),
+            ("anthropic/claude-2", False),
+            ("claude-instant-1.2", False),
             ("gpt-4o", False),
             ("gpt-4.1", False),
             ("deepseek-v4-flash", False),
@@ -48,16 +50,26 @@ class TestSupportsPromptCaching:
             result is expected
         ), f"supports_prompt_caching({model!r}) should be {expected}, got {result}"
 
-    def test_markers_are_nonempty(self):
-        """CACHING_MODEL_MARKERS must contain at least one marker."""
-        assert len(_CACHING_MODEL_MARKERS) > 0
-        for marker in _CACHING_MODEL_MARKERS:
-            assert isinstance(marker, str) and len(marker) > 0
+    def test_every_allowed_claude_model_is_cacheable(self):
+        """Pinned to the live allow-list: the old markers matched none of these (H2)."""
+        from weebot.config import model_refs
 
-    def test_markers_are_lowercase(self):
-        """All markers must be lowercase (matching normalizes to lowercase)."""
-        for marker in _CACHING_MODEL_MARKERS:
-            assert marker == marker.lower(), f"Marker {marker!r} is not lowercase"
+        for ref in (model_refs._SONNET, model_refs._OPUS, model_refs._HAIKU):
+            assert supports_prompt_caching(ref), ref
+
+
+class TestCacheReadRatio:
+    def test_openai_style_counts_cached_inside_prompt(self):
+        assert cache_read_ratio({"prompt_tokens": 1000, "cached_tokens": 800}) == 0.8
+
+    def test_anthropic_style_adds_cached_to_uncached_input(self):
+        usage = {"prompt_tokens": 200, "cached_tokens": 800, "cache_write_tokens": 0}
+        assert cache_read_ratio(usage) == 0.8
+
+    def test_no_usage_or_no_tokens_is_none(self):
+        assert cache_read_ratio(None) is None
+        assert cache_read_ratio({}) is None
+        assert cache_read_ratio({"prompt_tokens": 0}) is None
 
 
 # ── CachingLLMAdapter ────────────────────────────────────────────────────────
@@ -150,29 +162,25 @@ class TestCachingLLMAdapter:
         assert kwargs["max_tokens"] == 1000
 
     @pytest.mark.asyncio
-    async def test_cache_telemetry_low_input_warning(self, mock_inner, sample_messages, caplog):
-        """When input tokens are very low, a WARN is emitted for cache-miss telemetry."""
-        # Override mock to return very low input token count
+    async def test_cache_read_tokens_are_counted(self, mock_inner, sample_messages):
+        """Cached tokens reach the Prometheus counter; the old telemetry read a key no adapter sets."""
+        from weebot.infrastructure.observability import metrics
+
         mock_inner.chat = AsyncMock(
             return_value=LLMResponse(
-                content="short response",
+                content="ok",
                 tool_calls=None,
                 model="claude-3-5-sonnet",
-                usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+                usage={"prompt_tokens": 1000, "cached_tokens": 800, "completion_tokens": 5},
             )
         )
-
+        counter = metrics.llm_cache_read_tokens_total.labels(model="claude-3-5-sonnet")
+        before = counter._value.get()
         adapter = CachingLLMAdapter(
             inner_adapter=mock_inner, model="claude-3-5-sonnet", enabled=True
         )
-
-        import logging
-
-        with caplog.at_level(logging.WARNING):
-            await adapter.chat(messages=sample_messages)
-
-        assert "CachingLLMAdapter" in caplog.text
-        assert "unusually low input token count" in caplog.text
+        await adapter.chat(messages=sample_messages)
+        assert counter._value.get() - before == 800
 
     @pytest.mark.asyncio
     async def test_cache_telemetry_no_warning_for_normal_input(
@@ -188,7 +196,7 @@ class TestCachingLLMAdapter:
         with caplog.at_level(logging.WARNING):
             await adapter.chat(messages=sample_messages)
 
-        assert "unusually low input token count" not in caplog.text
+        assert "CachingLLMAdapter" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_cache_telemetry_no_warning_when_disabled(
@@ -213,7 +221,7 @@ class TestCachingLLMAdapter:
         with caplog.at_level(logging.WARNING):
             await adapter.chat(messages=sample_messages)
 
-        assert "unusually low input token count" not in caplog.text
+        assert "CachingLLMAdapter" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_model_override_suppresses_caching_for_non_anthropic(

@@ -27,6 +27,7 @@ from weebot.config.token_bounds import completion_bound
 from weebot.core.cascade_plan import build_cascade_plan
 from weebot.core.error_classifier import ErrorCategory, ErrorClassifier
 from weebot.application.strategies.llm_pool import unwrap_llm
+from weebot.application.agents.executor._recovery import terminal_error
 from weebot.application.agents.executor._session_scope import keep_private
 from weebot.application.services.context_tokenizer import ContextTokenizer
 
@@ -715,9 +716,7 @@ class CascadeExecutor:
                 return rescue_model
 
         # ── Terminal ────────────────────────────────────────────────
-        from weebot.domain.exceptions import AllModelsTrippedError
-
-        raise AllModelsTrippedError(ALL_MODELS_TRIPPED_MESSAGE)
+        raise terminal_error(first_error, ALL_MODELS_TRIPPED_MESSAGE)
 
     # ── Live model rescue ───────────────────────────────────────────
 

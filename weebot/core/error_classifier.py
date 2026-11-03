@@ -31,6 +31,12 @@ class ErrorCategory(Enum):
     BAD_REQUEST = "bad_request"  # NEW: malformed request (400)
     SERVER_ERROR = "server_error"  # NEW: provider-side 5xx (distinct from network)
     TIMEOUT = "timeout"  # NEW: request timeout (distinct from network)
+    # Recovery-ladder categories (H3): each has its own ladder in core/recovery_ladder.py.
+    PAYLOAD_TOO_LARGE = "payload_too_large"  # HTTP 413: bytes, not tokens
+    MULTIMODAL_UNSUPPORTED = "multimodal_unsupported"  # model cannot take the images sent
+    RATE_LIMIT_UPSTREAM = "rate_limit_upstream"  # router says the provider behind it is throttled
+    QUOTA_EXHAUSTED = "quota_exhausted"  # account out of credit; another model will not help
+    TOOL_SCHEMA_REJECTED = "tool_schema_rejected"  # provider refused the tool definitions
     UNKNOWN = "unknown"
 
 
@@ -44,6 +50,8 @@ class RecoveryAction(Enum):
     RETRY = "retry"  # Retry same model with backoff
     BACKOFF = "backoff"  # Retry with longer backoff (rate limit)
     FALLBACK_MODEL = "fallback_model"  # Try a different model
+    STRIP_MEDIA = "strip_media"  # Replace images with a text placeholder, then retry
+    LARGER_CONTEXT_MODEL = "larger_context_model"  # Retry on a model with a bigger window
     FAIL_FAST = "fail_fast"  # Don't retry, raise immediately
     ESCALATE = "escalate"  # Don't retry, escalate to next handler
 
@@ -57,6 +65,26 @@ def _code(digits: str) -> str:
 
 # First-match-wins. Order matters: more specific patterns before generic ones.
 _PATTERNS: list[tuple[str, ErrorCategory]] = [
+    # Recovery-ladder categories come first: their wording overlaps the generic ones below.
+    (r"payload.{0,10}too.{0,10}large|entity.too.large|" + _code("413"),
+     ErrorCategory.PAYLOAD_TOO_LARGE),
+    (
+        r"(does(n.t| not)|not).{0,15}support.{0,25}(image|vision|multimodal)|"
+        r"(image|vision).{0,25}(not.supported|unsupported)",
+        ErrorCategory.MULTIMODAL_UNSUPPORTED,
+    ),
+    (
+        r"insufficient.{0,12}(credit|quota|balance|funds)|exceeded.{0,15}your.{0,10}quota|"
+        r"out.of.credits",
+        ErrorCategory.QUOTA_EXHAUSTED,
+    ),
+    (r"rate.?limited.upstream|upstream.{0,40}(rate.?limit|" + _code("429") + ")",
+     ErrorCategory.RATE_LIMIT_UPSTREAM),
+    (
+        r"tools?.{0,25}(schema|definitions?|parameters?).{0,25}(invalid|rejected|unsupported)|"
+        r"(does(n.t| not)|not).{0,15}support.{0,15}(tool|function)",
+        ErrorCategory.TOOL_SCHEMA_REJECTED,
+    ),
     # Context length — must be before generic model errors
     (r"context.{0,30}(length|window|limit|exceed|too.long)", ErrorCategory.CONTEXT_LENGTH),
     (r"maximum.{0,20}token", ErrorCategory.CONTEXT_LENGTH),
@@ -104,6 +132,11 @@ _RECOMMENDED_ACTION: dict[ErrorCategory, RecoveryAction] = {
     ErrorCategory.BAD_REQUEST: RecoveryAction.FAIL_FAST,
     ErrorCategory.SERVER_ERROR: RecoveryAction.RETRY,
     ErrorCategory.TIMEOUT: RecoveryAction.RETRY,
+    ErrorCategory.PAYLOAD_TOO_LARGE: RecoveryAction.COMPRESS,
+    ErrorCategory.MULTIMODAL_UNSUPPORTED: RecoveryAction.STRIP_MEDIA,
+    ErrorCategory.RATE_LIMIT_UPSTREAM: RecoveryAction.BACKOFF,
+    ErrorCategory.QUOTA_EXHAUSTED: RecoveryAction.FAIL_FAST,
+    ErrorCategory.TOOL_SCHEMA_REJECTED: RecoveryAction.ESCALATE,  # same schema fails again
     ErrorCategory.UNKNOWN: RecoveryAction.RETRY,
 }
 
@@ -148,12 +181,16 @@ class ErrorClassifier:
 
     @classmethod
     def is_retryable(cls, exc: BaseException) -> bool:
-        """True when the error can be retried (not fail-fast or escalate)."""
+        """True when the same request may succeed if sent again to the same model.
+
+        COMPRESS is not: the payload is the problem, so a retry repeats the failure, and the
+        executor's recovery ladder acts on it instead (H3). FALLBACK_MODEL stays retryable
+        because its main member, a 503, is often gone on the next try.
+        """
         action = cls.recommend_action(exc)
         return action in (
             RecoveryAction.RETRY,
             RecoveryAction.BACKOFF,
-            RecoveryAction.COMPRESS,
             RecoveryAction.FALLBACK_MODEL,
         )
 

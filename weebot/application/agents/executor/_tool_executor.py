@@ -18,6 +18,9 @@ from collections import deque
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.agents.executor._session_scope import SessionScope, get_session_scope
 from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
+from weebot.application.agents.executor._turn_checkpoint import checkpoint_before_change
+from weebot.application.middleware.base import Deny
+from weebot.application.services.tool_arg_coercion import Coercion, coerce_args
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -184,7 +187,11 @@ class ToolExecutor:
         egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
         effect_ledger=None,  # EffectLedger | None — outbound actions already taken (ORCH-2)
         session_scope: SessionScope | None = None,
+        workspace_checkpoints=None,  # WorkspaceCheckpointPort | None (H5)
+        middleware_chain=None,  # MiddlewareChain | None: before_tool_call, transform_tool_result
     ) -> None:
+        self._middleware_chain = middleware_chain
+        self._workspace_checkpoints = workspace_checkpoints
         self._effect_ledger = effect_ledger
         self._current_step_scope: str = ""
         self._tools = tools
@@ -422,6 +429,22 @@ class ToolExecutor:
 
         # Determine effective timeout
         tool_obj = self._tools.get_tool(name)
+        # H16: fit the arguments to the tool's own schema ("3" -> 3), then let middleware
+        # rewrite or deny the call. Every check below sees the coerced arguments.
+        schema = getattr(tool_obj, "parameters", None)
+        coerced: tuple[Coercion, ...] = ()
+        if isinstance(schema, dict):
+            args, coerced = coerce_args(schema, args)
+            if coerced:
+                logger.info("coerced %d argument(s) for %s", len(coerced), name)
+        chain = self._middleware_chain
+        tool_call = None
+        if chain is not None and not chain.is_empty():
+            outcome = await chain.apply_before_tool_call(name, args)
+            if isinstance(outcome, Deny):
+                msg = f"Tool call '{name}' was denied: {outcome.reason}"
+                return ToolResult.error_result(error=msg, output=msg, tool_name=name)
+            tool_call, args = outcome, outcome.arguments
         timeout = float(getattr(tool_obj, "default_timeout_seconds", 60) if tool_obj else 60)
         if "timeout" in args:
             with contextlib.suppress(ValueError, TypeError):
@@ -539,6 +562,8 @@ class ToolExecutor:
 
                     approved_call = call_fingerprint(name, args)
 
+        await checkpoint_before_change(self, name, args)
+
         import time as _timer
 
         from weebot.application.ports.sandbox_port import network_cleared_for_call
@@ -635,6 +660,14 @@ class ToolExecutor:
             # install) put third-party text where the model reads it next (F20).
             self._untrusted_context_active = True
         await self._flush_flags()
+        if coerced:
+            result.metadata["coerced"] = [
+                {"path": c.path, "rule": c.rule, "before": c.before, "after": c.after}
+                for c in coerced
+            ]
+        if tool_call is not None:
+            result = await chain.apply_transform_tool_result(tool_call, result)
+        result.metadata.pop("full_output", None)  # never leaves the executor (H7)
         return result
 
     def taint_session(self, tool_name: str, is_error: bool) -> None:

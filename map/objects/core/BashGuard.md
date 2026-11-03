@@ -5,8 +5,8 @@ code: BashGuard, RiskLevel
 cluster: core
 universe: live
 status: verified
-verified: 2026-11-02
-commit: a824d62a
+verified: 2026-11-03
+commit: 8e3b6523
 ---
 
 # BashGuard
@@ -41,7 +41,7 @@ Consequences (read from source, not run):
 - `CommandSecurityAnalyzer.analyze` returns early only on DANGEROUS from layers 1-3 and otherwise returns the layer 4 verdict alone (`tools/bash_security.py:312-336`). Layers 1-3 can only return SAFE or DANGEROUS, so nothing is dropped today; a future SUSPICIOUS rule in those layers would be. See its own card.
 
 ## Connected to
-- **Wired in** `BashTool.__init__` (`bash_tool.py:147`) and `PythonExecuteTool.__init__` (`python_tool.py:117`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:59`).
+- **Wired in** `BashTool.__init__` (`bash_tool.py:147`) and `PythonExecuteTool.__init__` (`python_tool.py:117`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:63`).
 - **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:94`) (own cards, all in this folder).
 - **Looks like but is not:** `ExecApprovalPolicy` (a different rule table, PowerShell-oriented, modes not levels); `CommandRiskLevel` (3 levels, analyzer).
 

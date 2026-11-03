@@ -4,9 +4,9 @@ name: PlanActFlow
 code: PlanActFlow
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-11-02
-commit: db304f26
+commit: e7c91b6a
 ---
 
 # PlanActFlow
@@ -36,7 +36,7 @@ Other members: `set_state` (`plan_act_flow.py:291-332`) records per-state durati
 
 ## Connected to
 - **Uses:** `FlowRouter`, `FlowState` subclasses, `PlannerAgent` (`_plan_act_wiring.py:238`), `ExecutorAgent` (`self._summary_executor`), `Mediator` and `StateRepositoryPort` (assigned by `wire_ports`, `_plan_act_wiring.py:132-133`), `ToolAssembler`, `ContinuationDetector`.
-- **Constructed at:** `weebot/application/di/__init__.py:423, 696`, `weebot/application/di/_agent_tools.py:83`, `weebot/application/di/_skillopt.py:253, 331`, `weebot/application/flows/flow_builder.py:172` (the builder behind the container's `create_flow`; it moved out of `interfaces/factories.py`), `weebot/interfaces/factories.py:319`, `weebot/application/flows/harness_opt_flow.py:295`.
+- **Constructed at:** `weebot/application/di/__init__.py:433, 724`, `weebot/application/di/_agent_tools.py:[stale 83]`, `weebot/application/di/_skillopt.py:253, 331`, `weebot/application/flows/flow_builder.py:172` (the builder behind the container's `create_flow`; it moved out of `interfaces/factories.py`), `weebot/interfaces/factories.py:319`, `weebot/application/flows/harness_opt_flow.py:295`.
 - **Looks like but is not:** the other flows beside it in `application/flows/` (`chat_flow.py`, `skill_opt_flow.py`, `harness_opt_flow.py`, `harness_generation_flow.py`, `hyper_agent_flow.py`), separate classes not covered by this card. `ChatFlow` reuses `IdleState`/`ChatMessageState`.
 
 ## If you change this

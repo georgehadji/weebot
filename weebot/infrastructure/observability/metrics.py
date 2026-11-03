@@ -55,6 +55,10 @@ mcp_rate_limits_hit_total = Counter(
     "weebot_mcp_rate_limits_hit_total", "Total MCP rate limit rejections", ["tool"]
 )
 
+llm_cache_read_tokens_total = Counter(
+    "weebot_llm_cache_read_tokens_total", "Input tokens served from the prompt cache", ["model"]
+)
+
 # ── Security ──
 bash_guard_events_total = Counter(
     "weebot_bash_guard_events_total",

@@ -51,9 +51,9 @@ _PATH_TIERS: dict[str, str] = {
     "/api/behavior/": "mutating",
     # Webhook
     "/api/webhook/": "webhook",
-    "/api/discord/": "webhook",
-    "/api/slack/": "webhook",
-    "/api/whatsapp/": "webhook",
+    # Every gateway router mounts under /api/gateway/<platform>/ (H41); the old per-platform
+    # prefixes matched nothing, so real webhooks were charged to the 20/min mutating tier.
+    "/api/gateway/": "webhook",
     # Expensive
     "/api/flow/": "expensive",
 }

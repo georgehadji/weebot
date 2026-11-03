@@ -28,6 +28,7 @@ def _executor(results):
         _tools=None,
         _conversation_buffer=[],
         _middleware_chain=None,
+        _spillover_store=None,
         _facts={},
         _present_tool_output=AsyncMock(side_effect=lambda name, result: str(result)),
         _vision_enabled=lambda: False,

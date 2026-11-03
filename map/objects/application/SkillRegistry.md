@@ -4,9 +4,9 @@ name: SkillRegistry
 code: SkillRegistry
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-10-31
-commit: 85a51bdd
+commit: 8e3b6523
 ---
 
 # SkillRegistry
@@ -19,11 +19,11 @@ A skill is data on disk, not code, so the registry is a directory scan plus a pa
 ## Shape
 - `__init__(search_paths=None)` (`skill_registry.py:30-32`): default paths are `./.weebot/skills`, `~/.weebot/skills`, then `weebot/skills/builtin`, each only if it exists **at construction time** (`skill_registry.py:47-62`). `add_search_path` adds one later (`skill_registry.py:34-45`).
 - `load_all()` (`skill_registry.py:64-100`): for each search path, each subdirectory with a `SKILL.md` (or, failing that, a `manifest.json`, `skill_registry.py:78-80`); a rescan merges over the dict, keeping in-memory skills absent from disk (`skill_registry.py:100`).
-- `_parse_skill` (`skill_registry.py:114-186`): needs a leading `---` block; name falls back to the folder name; `metadata.openclaw` and `metadata.hermes` keys are merged into `SkillMetadata`; trust tier and provenance are read from `metadata` (`skill_registry.py:144-154`); `references/**/*.md` are listed, not loaded (`skill_registry.py:184, 259-269`). `_parse_manifest` builds a `Skill` from `manifest.json` plus its prompt file (`skill_registry.py:188-211`).
+- `_parse_skill` (`skill_registry.py:114-186`): needs a leading `---` block; name falls back to the folder name; `metadata.openclaw` and `metadata.hermes` keys are merged into `SkillMetadata`; trust tier and provenance are read from `metadata` (`skill_registry.py:144-154`); `references/**/*.md` are listed, not loaded (`skill_registry.py:184, 271-281`). `_parse_manifest` builds a `Skill` from `manifest.json` plus its prompt file (`skill_registry.py:188-211`).
 - Reads: `get` and `get_skill` (same body, `skill_registry.py:110-112, 213-214`), `list_names`, `list_all`, `list_skills` (`skill_registry.py:102-108, 224-225`), `get_active_skills` (env-ready skills, `skill_registry.py:227-229`), `build_system_prompt_extensions` (`skill_registry.py:231-242`). Writes: `update_skill` (`skill_registry.py:216-218`) and `remove_skill`, which forgets a name in memory (`skill_registry.py:220-222`).
 
 Consequences (read from source, not run):
-- **Missing trust means trusted; a bad value means quarantined.** A skill with no `metadata.trust` loads as `trusted`, matching the model default (`_trust_tier`, `skill_registry.py:248-256`; `weebot/domain/models/skill.py:107-109`). A value that is set but outside the three tiers is logged and quarantined (F42), so a typo such as `trust: quarantine` closes the gate. The retrievers' only trust gate is `is_injectable`, true for `trusted` and `candidate` (`weebot/domain/models/skill.py:290-298`; `application/services/bm25_skill_retriever.py:76`, `semantic_skill_retriever.py:137`), so any `SKILL.md` without a trust key placed in the working directory's `.weebot/skills` is injected into the live executor prompt.
+- **Missing trust means candidate outside the built-in directory; a bad value means quarantined.** A skill with no `metadata.trust` loads as `candidate`, or `trusted` only when it ships under `weebot/skills/builtin` (`_trust_tier`, `_is_builtin`, `weebot/application/skills/skill_registry.py`; H42). A value that is set but outside the three tiers is logged and quarantined (F42). The retrievers' only trust gate is `is_injectable`, true for `trusted` and `candidate` (`weebot/domain/models/skill.py:290-298`), so a `candidate` skill is still retrievable but unreviewed.
 - **Project skills win name collisions.** Paths load project, then user, then built-in, and within one scan the first path wins (F71, `skill_registry.py:52-61, 95-99`). A shadowed skill is logged at info level (`skill_registry.py:95-97`).
 - **`manifest.json` skills load here too (F52).** A folder with no `SKILL.md` but a `manifest.json` goes through `_parse_manifest` (`skill_registry.py:78-80, 87-91`). Seven built-ins ship only `manifest.json` + `prompt.md`: `berb-research`, `competitive_analysis`, `design-taste`, `multi_llm_orchestrator`, `reasoner`, `skill-author`, `web_research` (directory listing 2026-10-31). `SkillPackager` (`application/skills/skill_packager.py:42-50`) and the format detector (`application/skills/format_detector.py:44-45`) also handle that format.
 - An unreadable file returns `None` with no log (`skill_registry.py:116-119`); a bad `provenance` mapping falls back to an empty `SkillProvenance` with no log (`skill_registry.py:146-154`).

@@ -6,7 +6,7 @@ by hand (`make check` fails on drift). Benchmark tasks are in `evals/` (see
 
 Format: date — record — note
 
-## open (20)
+## open (22)
 
 - 2026-10-25 — [Defect Hunt V7.1 — Final Summary Report](audits/defect_hunt_v71_final_summary.md)
 - 2026-10-25 — [Wave 1 — Security and Trust Boundary](audits/defect_hunt_v71_w1_security.md)
@@ -25,6 +25,8 @@ Format: date — record — note
 - 2026-08-03 — [Bilevel Autoresearch → weebot: Implementation Plan](specs/bilevel_autoresearch_implementation_plan.md) — phase 3 mechanism selection and phase 4 L1.5 instrumentation not built
 - 2026-06-30 — [Implementation Plan — "Code as Agent Harness" Enhancements & Fixes](specs/code_as_harness_implementation_plan.md) — phases 2-4 missing (misalignment_signature_mapper, action_evidence, action_capability)
 - 2026-10-25 — [Autonomous Defect-Hunt (V7.1) — Whole-Backend Execution Plan, Round 2](specs/defect_hunt_v7_1_execution_plan.md)
+- 2026-11-03 — [Hermes v0.22 parity: implementation plan](specs/hermes_v022_parity_implementation_plan.md) — implementation plan for the H1-H42 parity backlog of hermes_v022_weebot_comparison.md; phases 0-6, one design per item (paradigm, patterns, interfaces, files, tests, gates); nothing started
+- 2026-11-03 — [Hermes-Agent v0.22 → Weebot: capability audit, comparison and parity plan](specs/hermes_v022_weebot_comparison.md) — Hermes ~v0.22 vs Weebot; 43-dimension matrix; phased parity backlog H1-H40
 - 2026-06-15 — [Memento-Skills → weebot: Deployment-Time Learning Implementation Plan](specs/memento_skills_implementation_plan.md) — phase 3 semantic retrieval (EmbeddingSkillRetriever, HybridSkillRetriever) not built
 - 2026-09-05 — [Review Gate & Residual Work — Execution Plan](specs/review_gate_and_residual_work_plan.md) — A3 distinct agent identity and CODEOWNERS (needs a human to register a GitHub App)
 - 2026-06-30 — [WeeBot Unified Implementation Plan — Hermes + OpenClaw, De-conflicted](specs/weebot_unified_implementation_plan.md) — P1-P4 pending (plugin platform, Environment port, ACP bridge, credential pool)
