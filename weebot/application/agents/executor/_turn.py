@@ -21,9 +21,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from weebot.application.agents.executor._loop_detectors import Verdict
 from weebot.application.agents.executor._recovery import call_with_recovery
 from weebot.application.agents.executor._tool_pairing import sanitize_tool_call_pairing
 from weebot.core.error_classifier import ErrorCategory
+from weebot.core.log_context import session_id_var
 from weebot.core.recovery_ladder import failure_message
 from weebot.domain.exceptions import AllModelsTrippedError, LLMCapacityExhaustedError
 from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent
@@ -106,6 +108,31 @@ async def next_turn(executor: ExecutorAgent, step: Step) -> TurnOutcome:
         assistant_content=content,
         thought=content.strip(),
     )
+
+
+def spend_so_far(executor: ExecutorAgent) -> float:
+    """What this session has spent, or 0.0 without a cost meter."""
+    meter = executor._cost_meter
+    return meter.spent(session_id_var.get() or "") if meter is not None else 0.0
+
+
+def retry_empty_turn(
+    executor: ExecutorAgent, guard: Any, turn: TurnOutcome, spent_before: float, step_start: float
+) -> bool:
+    """True if *turn* was an empty reply that should be asked again (H11).
+
+    The empty assistant message is dropped and a nudge takes its place. Without a cost
+    meter the spend is unknown, so the budget is zero and the reply stands.
+    """
+    if (turn.assistant_content or "").strip():
+        return False
+    now = spend_so_far(executor)
+    verdict = guard.observe_empty_reply(now - spent_before, now - step_start)
+    if verdict.kind is not Verdict.RETRY:
+        return False
+    executor._conversation_buffer.pop()
+    executor._conversation_buffer.append({"role": "user", "content": verdict.message})
+    return True
 
 
 def _assemble_messages(executor: ExecutorAgent) -> list[dict]:

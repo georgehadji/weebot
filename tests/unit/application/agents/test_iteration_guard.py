@@ -20,10 +20,10 @@ def test_the_cap_allows_the_full_default_rounds_then_stops():
     guard = IterationGuard(step_id="s1")
 
     for _ in range(DEFAULT_MAX_TOOL_CALLS_PER_STEP):
-        guard.record_iteration()
+        guard.record_loop_turn()
         assert not guard.is_tool_call_budget_exhausted()
 
-    guard.record_iteration()
+    guard.record_loop_turn()
 
     assert guard.is_tool_call_budget_exhausted()
 
@@ -33,7 +33,8 @@ def test_the_default_cap_is_at_least_24():
     assert DEFAULT_MAX_TOOL_CALLS_PER_STEP >= 24
 
 
-def test_the_executor_passes_the_shared_cap_instead_of_a_literal():
+def test_the_executor_takes_its_limits_from_the_shared_config_not_literals():
     src = Path("weebot/application/agents/executor/_base.py").read_text(encoding="utf-8")
-    assert "max_tool_calls_per_step=DEFAULT_MAX_TOOL_CALLS_PER_STEP" in src
+    assert "IterationGuard(step.id, self._guard_config)" in src
     assert "max_tool_calls_per_step=12" not in src
+    assert "repeated_tool_signature_limit=4" not in src

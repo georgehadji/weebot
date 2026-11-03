@@ -15,13 +15,13 @@ if TYPE_CHECKING:
 
 from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
-    DEFAULT_MAX_TOOL_CALLS_PER_STEP,
     IterationGuard,
 )
+from weebot.application.agents.executor._loop_detectors import GuardConfig
 from weebot.application.agents.executor._system_prompt import load_executor_system_prompt
 from weebot.application.agents.executor._step_setup import build_step_prompts, prime_step
 from weebot.application.agents.executor._tool_batch import ToolBatchRunner
-from weebot.application.agents.executor._turn import next_turn
+from weebot.application.agents.executor._turn import next_turn, retry_empty_turn, spend_so_far
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
@@ -105,6 +105,7 @@ class ExecutorAgent:
         # SpilloverStorePort: holds the full text of a turn's overflow tool output (H7).
         spillover_store: Any | None = None,
         cost_meter: Any | None = None,  # SessionCostMeter: soft limit skips PREMIUM models
+        guard_config: GuardConfig | None = None,  # loop-guard numbers (H11); None = defaults
         # Awaitable returning the persistent-memory snapshot for the system prompt; the
         # composition root supplies it, so the executor imports no tool (plan 3.4).
         memory_snapshot: Callable[[], Awaitable[str]] | None = None,
@@ -113,6 +114,8 @@ class ExecutorAgent:
     ):
         self._acr_router = acr_router
         self._spillover_store = spillover_store
+        self._cost_meter = cost_meter
+        self._guard_config = guard_config or GuardConfig()
         self._memory_snapshot = memory_snapshot
         self._injection_scan = injection_scan
         self._llm = llm
@@ -482,13 +485,9 @@ class ExecutorAgent:
 
         await build_step_prompts(self, plan, step, user_input)
 
-        guard = IterationGuard(
-            step_id=step.id,
-            max_tool_calls_per_step=DEFAULT_MAX_TOOL_CALLS_PER_STEP,
-            max_repeated_assistant_turns=2,
-            repeated_tool_signature_limit=4,
-        )
-        batch = ToolBatchRunner()
+        guard = IterationGuard(step.id, self._guard_config)
+        batch = ToolBatchRunner(self._guard_config)
+        step_spend_start = spend_so_far(self)
         step_result = ""
         loop_error: str | None = None
         abort_step = False
@@ -502,7 +501,7 @@ class ExecutorAgent:
 
         self._step_budget.reset()
         while self._step_budget.consume():
-            guard.record_iteration()
+            guard.record_loop_turn()
 
             if guard.is_tool_call_budget_exhausted():
                 logger.warning(
@@ -519,6 +518,11 @@ class ExecutorAgent:
             # Pre-call compaction: ensure the LLM sees compacted context.
             await self._context_compressor._maybe_compress()
 
+            # A user-role note: the system prompt stays byte-stable for the prompt cache.
+            if (wrap_up := guard.wrap_up_note()) is not None:
+                self._conversation_buffer.append({"role": "user", "content": wrap_up})
+
+            spend_before = spend_so_far(self)
             turn = await next_turn(self, step)
             for event in turn.events:
                 yield event
@@ -532,6 +536,8 @@ class ExecutorAgent:
                 )
 
             if not turn.response.tool_calls:
+                if retry_empty_turn(self, guard, turn, spend_before, step_spend_start):
+                    continue
                 guard.record_assistant_turn(normalize_text(turn.assistant_content))
                 step_result = turn.assistant_content or "No result"
                 kind = classify_reply(step_result)
@@ -561,6 +567,7 @@ class ExecutorAgent:
                 list(turn.response.tool_calls),
                 guard,
                 step_result=step_result,
+                notes=guard.observe_assistant_text(turn.assistant_content),
             )
             for event in outcome.events:
                 yield event

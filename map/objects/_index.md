@@ -19,6 +19,7 @@ Format: name — source — status — card
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-02 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-11-02 — [card](application/FlowState.md)
+- LoopDetectors (GuardConfig, CycleDetector, DuplicateResultStub, EmptyResponseBudget, RepetitionGuard, WallClockWrapUp, IterationGuard) — `docs/adr/021-loop-guardrails-v2.md` — stub — [card](application/LoopDetectors.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
