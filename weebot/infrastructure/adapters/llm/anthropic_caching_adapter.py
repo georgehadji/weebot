@@ -119,7 +119,7 @@ class AnthropicCachingAdapter:
         If enabled:
         1. Normalizes tool_call argument JSON for bit-stable prefixes
         2. Adds ``cache_control: {"type": "ephemeral"}`` to the last system
-           message and the last user message before any assistant response
+           message and the last user message before the newest assistant turn
         """
         if not self._enabled:
             return messages
@@ -139,20 +139,18 @@ class AnthropicCachingAdapter:
                 cache_markers_added += 1
                 break
 
-        # 2. Cache the last user message before any assistant responses
+        # 2. Cache the last user message before the newest assistant turn: everything up to
+        #    it was in the previous request, so the next request reads it from the cache (H10).
         if cache_markers_added < self._max_cached_sections:
-            first_assistant = -1
-            for i, msg in enumerate(result):
-                if msg.get("role") == "assistant":
-                    first_assistant = i
+            newest_assistant = -1
+            for i in range(len(result) - 1, -1, -1):
+                if result[i].get("role") == "assistant":
+                    newest_assistant = i
                     break
 
-            if first_assistant > 0:
-                for i in range(first_assistant - 1, -1, -1):
-                    if (
-                        result[i].get("role") == "user"
-                        and cache_markers_added < self._max_cached_sections
-                    ):
+            if newest_assistant > 0:
+                for i in range(newest_assistant - 1, -1, -1):
+                    if result[i].get("role") == "user":
                         result[i] = {**result[i], "cache_control": {"type": "ephemeral"}}
                         cache_markers_added += 1
                         break

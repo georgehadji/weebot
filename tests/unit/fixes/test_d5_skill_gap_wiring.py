@@ -8,6 +8,7 @@ step setup records the gap from it.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -29,7 +30,9 @@ class _Retriever:
 
 def _executor(retriever) -> SimpleNamespace:
     return SimpleNamespace(
-        _scope_tools_for=lambda step: "",
+        _frozen_system=OrderedDict(),
+        _tools=None,
+        _prompt_prefix=None,
         _user_profile_cache="",
         _load_prompt=lambda: "base",
         _harness_instruction_block=None,
@@ -50,7 +53,7 @@ def _executor(retriever) -> SimpleNamespace:
 async def _build(executor) -> None:
     step = SimpleNamespace(description="deploy the docker image", context_scope=None)
     with (
-        patch.object(_step_setup, "_seed_conversation", lambda *a: None),
+        patch.object(_step_setup, "_seed_conversation", lambda *a, **k: None),
         patch("weebot.config.feature_flags.SKILL_GAP_TRIGGER_ENABLED", True),
     ):
         await _step_setup.build_step_prompts(executor, plan=None, step=step, user_input=None)

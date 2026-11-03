@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from weebot.domain.services.skill_promotion_gate import SkillPromotionGate
     from weebot.application.services.delegation_guard import DelegationGuard
     from weebot.application.services.memory_snapshot_cache import MemorySnapshotCache
+    from weebot.application.ports.prompt_prefix_port import PromptPrefixStore
     from weebot.application.services.session_cost import SessionCostMeter
     from weebot.application.strategies.llm_pool import LLMPool
 
@@ -46,6 +47,8 @@ LLM_POOL: Key[LLMPool] = Key("llm_pool")
 SESSION_COST_METER: Key[SessionCostMeter] = Key("session_cost_meter")
 # The persistent-memory text each session read at its first step (H24a); a delete forgets it.
 MEMORY_SNAPSHOT_CACHE: Key[MemorySnapshotCache] = Key("memory_snapshot_cache")
+# What each session last sent as its request prefix; a change is counted (H10).
+PROMPT_PREFIX_STORE: Key[PromptPrefixStore] = Key("prompt_prefix_store")
 # The skill store live steps count candidate-skill uses against (RecordSkillUseHandler).
 LEARNING_SKILL_STORE: Key[SkillStorePort] = Key("learning_skill_store")
 # One model router for every step executor, so what it learns is shared and stored.

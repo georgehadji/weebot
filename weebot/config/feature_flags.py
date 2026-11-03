@@ -288,6 +288,13 @@ def require(flag_name: str) -> None:
 # needs (core + category + named services); the rest stay callable by name.
 # Every call used to carry all ~171 (~49k tokens). WEEBOT_TOOL_SCOPE=false sends all.
 TOOL_SCOPE_ENABLED: bool = _env_bool("WEEBOT_TOOL_SCOPE", default=True)
+# "step" re-scopes the tool list at every step (ADR-008); "plan" scopes it once, to the union
+# of the plan's steps, so the tools block stays the same and the prompt cache holds (H10, D3).
+TOOL_SCOPE_GRANULARITY: str = (
+    "plan"
+    if os.environ.get("WEEBOT_TOOL_SCOPE_GRANULARITY", "").strip().lower() == "plan"
+    else "step"
+)
 
 
 # A live session edits the repository the web API runs from, and uvicorn's reloader
