@@ -310,7 +310,7 @@ describe("/ops live log", () => {
     await openLiveTab();
     act(() => sockets.last.accept());
     act(() => sockets.last.emit({ type: "t", timestamp: "2026-10-31T10:11:12Z" }));
-    expect(screen.getByText(/10:11:12/)).toBeTruthy();
+    expect(screen.getByText("10:11:12 AM")).toBeTruthy(); // exact: the raw frame text also holds 10:11:12Z
     expect(document.querySelector('span.truncate[title*="\\"type\\":\\"t\\""]')).not.toBeNull();
   });
 
