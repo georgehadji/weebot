@@ -93,11 +93,13 @@ function PaletteBody({ onClose }: Pick<CommandPaletteProps, "onClose">) {
             }
           }}
           placeholder="Type a command…"
+          autoComplete="off"
+          spellCheck={false}
           className="flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
           aria-label="Search commands"
         />
       </div>
-      <ul id={LISTBOX_ID} role="listbox" aria-label="Commands" className="max-h-80 overflow-y-auto p-1.5">
+      <ul id={LISTBOX_ID} role="listbox" aria-label="Commands" className="max-h-80 overflow-y-auto overscroll-contain p-1.5">
         {filtered.length === 0 ? (
           <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">
             No matching commands.
@@ -117,7 +119,7 @@ function PaletteBody({ onClose }: Pick<CommandPaletteProps, "onClose">) {
               )}
             >
               <span>{command.title}</span>
-              {command.shortcut && <span className="text-xs text-muted-foreground">{command.shortcut}</span>}
+              {command.shortcut && <kbd className="font-sans text-xs text-muted-foreground">{command.shortcut}</kbd>}
             </li>
           ))
         )}

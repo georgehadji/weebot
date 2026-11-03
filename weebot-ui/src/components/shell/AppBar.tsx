@@ -6,13 +6,14 @@
  * and actions move into a dialog behind a menu button.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bot, Bug, Command, Menu, Moon, Plus, Settings, Sun } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useAnnounce } from "@/providers/AnnouncerProvider";
 import { useShell } from "@/providers/ShellProvider";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -25,6 +26,14 @@ const NAV_LINKS = [
 
 const SHOW_DEBUG = process.env.NODE_ENV !== "production";
 
+/** What the h1 says when the page has not named itself: the nav entry for the route, else the app. */
+function routeName(pathname: string | null): string {
+  if (!pathname || pathname === "/") return "New conversation";
+  if (pathname.startsWith("/settings")) return "Settings";
+  if (pathname.startsWith("/debug")) return "WebSocket debug";
+  return NAV_LINKS.find(({ href }) => pathname.startsWith(href))?.label ?? "Weebot";
+}
+
 export function AppBar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
@@ -33,6 +42,17 @@ export function AppBar() {
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
   const themeLabel = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+  const announce = useAnnounce();
+
+  // Live/Offline is news only when it changes: a page that opens already live says nothing.
+  const connected = slots.isConnected;
+  const lastConnected = useRef(connected);
+  useEffect(() => {
+    if (connected !== undefined && lastConnected.current !== undefined && connected !== lastConnected.current) {
+      announce(connected ? "Live" : "Offline");
+    }
+    lastConnected.current = connected;
+  }, [connected, announce]);
 
   return (
     <header className="flex h-topbar shrink-0 items-center gap-2 border-b bg-background px-3">
@@ -47,9 +67,9 @@ export function AppBar() {
         ))}
       </nav>
 
-      {slots.title && (
-        <h1 className="ml-2 min-w-0 flex-1 truncate border-l pl-3 text-sm font-medium">{slots.title}</h1>
-      )}
+      <h1 className="ml-2 min-w-0 flex-1 truncate border-l pl-3 text-sm font-medium">
+        {slots.title || routeName(pathname)}
+      </h1>
 
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {slots.isConnected !== undefined && (
@@ -69,7 +89,7 @@ export function AppBar() {
           variant="outline"
           size="sm"
           onClick={() => setPaletteOpen(true)}
-          aria-label="Open command palette (Ctrl or Command K)"
+          aria-label="K, open command palette"
           aria-keyshortcuts="Control+K Meta+K"
           className="gap-1"
         >
@@ -80,7 +100,7 @@ export function AppBar() {
         <div className="hidden items-center gap-1.5 lg:flex">
           <Link href="/" className={buttonVariants({ variant: "outline", size: "sm" })}>
             <Plus className="h-4 w-4" aria-hidden="true" />
-            New session
+            New Session
           </Link>
           <Button variant="ghost" size="icon-sm" aria-label={themeLabel} title={themeLabel} onClick={toggleTheme}>
             {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
@@ -101,6 +121,7 @@ export function AppBar() {
           className="lg:hidden"
           aria-label="Open menu"
           aria-haspopup="dialog"
+          aria-expanded={menuOpen}
           onClick={() => setMenuPath(pathname)}
         >
           <Menu className="h-4 w-4" aria-hidden="true" />
@@ -122,7 +143,7 @@ export function AppBar() {
           <div className="flex flex-col gap-1 border-t pt-3">
             <Link href="/" className={buttonVariants({ variant: "outline" })}>
               <Plus className="h-4 w-4" aria-hidden="true" />
-              New session
+              New Session
             </Link>
             <Link href="/settings" className={buttonVariants({ variant: "ghost" })}>
               <Settings className="h-4 w-4" aria-hidden="true" />

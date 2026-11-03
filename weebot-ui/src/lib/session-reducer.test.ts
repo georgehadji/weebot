@@ -170,3 +170,32 @@ describe("optimistic user messages", () => {
     expect((state.eventsById.get("a1") as MessageEvent).delivery).toBeUndefined();
   });
 });
+
+describe("toolCallsNewestFirst (the tool-call index)", () => {
+  const ids = (s: ReturnType<typeof reduceSessionEvents>) => s.toolCallsNewestFirst.map((c) => c.tool_call_id);
+
+  it("lists calls newest first, one entry per call", () => {
+    const state = reduceSessionEvents([
+      toolEvent("e1", "c1", "calling"),
+      message("m1", "between"),
+      toolEvent("e2", "c2", "calling"),
+    ]);
+    expect(ids(state)).toEqual(["c2", "c1"]);
+  });
+
+  it("a later event for a call replaces it in place and keeps its slot", () => {
+    const state = reduceSessionEvents([
+      toolEvent("e1", "c1", "calling"),
+      toolEvent("e2", "c2", "calling"),
+      toolEvent("e3", "c1", "called", "out"),
+    ]);
+    expect(ids(state)).toEqual(["c2", "c1"]);
+    expect(state.toolCallsNewestFirst[1]).toMatchObject({ status: "called", result: "out" });
+  });
+
+  it("a replayed event changes nothing, and non-tool events do not touch the index", () => {
+    const state = reduceSessionEvents([toolEvent("e1", "c1", "called")]);
+    expect(sessionReducer(state, toolEvent("e1", "c1", "calling"))).toBe(state);
+    expect(sessionReducer(state, message("m1", "hi")).toolCallsNewestFirst).toBe(state.toolCallsNewestFirst);
+  });
+});

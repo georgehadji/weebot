@@ -24,10 +24,19 @@ export function PlanChecklist({ steps }: { steps: ChecklistStep[] }) {
   return (
     <div className="space-y-3 p-3">
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-muted-foreground">{`${done} of ${steps.length} done`}</p>
-        <div aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-surface-2">
+        <p className="text-xs font-medium tabular-nums text-muted-foreground">{`${done} of ${steps.length} done`}</p>
+        {/* Read on demand; the per-step "Step completed" announcements already cover live updates. */}
+        <div
+          role="progressbar"
+          aria-label="Plan progress"
+          aria-valuemin={0}
+          aria-valuemax={steps.length}
+          aria-valuenow={done}
+          aria-valuetext={`${done} of ${steps.length} done`}
+          className="h-1 overflow-hidden rounded-full bg-surface-2"
+        >
           <div
-            className="h-full rounded-full bg-primary transition-[width]"
+            className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
             style={{ width: `${steps.length ? (done / steps.length) * 100 : 0}%` }}
           />
         </div>

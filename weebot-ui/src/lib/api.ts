@@ -1,30 +1,14 @@
+import { apiBase, apiKey as storedApiKey } from "@/lib/settings";
 import { AgentEvent, ModelInfo, RoleModel, Session } from "@/types/events";
 
 /** Same-origin API base by default; respects an explicitly configured backend. */
 export function getApiBase(): string {
-  if (typeof window === "undefined") return "/api";
-  try {
-    const configured = localStorage.getItem("weebot_backend_url")?.trim();
-    if (!configured) return "/api";
-    return `${configured.replace(/\/$/, "")}/api`;
-  } catch {
-    return "/api";
-  }
-}
-
-/** Read API key from sessionStorage (set via ConnectionStatus component). */
-function _getApiKey(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return sessionStorage.getItem("weebot_api_key");
-  } catch {
-    return null;
-  }
+  return apiBase();
 }
 
 /** The X-API-Key header for calls made outside fetchApi (empty when no key is set). */
 export function authHeaders(): Record<string, string> {
-  const apiKey = _getApiKey();
+  const apiKey = storedApiKey();
   return apiKey ? { "X-API-Key": apiKey } : {};
 }
 
@@ -33,7 +17,7 @@ export function authHeaders(): Record<string, string> {
  * as `bearer.<key>`, next to the marker `weebot.v1` the server answers with. It used to be
  * `?token=`, which uvicorn writes to its access log.
  */
-export function openSocket(url: string, apiKey: string | null = _getApiKey()): WebSocket {
+export function openSocket(url: string, apiKey: string | null = storedApiKey()): WebSocket {
   if (!apiKey) return new WebSocket(url);
   try {
     return new WebSocket(url, ["weebot.v1", `bearer.${apiKey}`]);
@@ -47,7 +31,7 @@ export function openSocket(url: string, apiKey: string | null = _getApiKey()): W
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const apiKey = _getApiKey();
+  const apiKey = storedApiKey();
 
   const mergedHeaders: Record<string, string> = {
     "Content-Type": "application/json",

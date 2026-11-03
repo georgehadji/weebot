@@ -3,11 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { openSocket } from "@/lib/api";
+import { formatTime } from "@/lib/format";
+import { useIntlContext } from "@/hooks/useIntlContext";
+
+/** A log line with an identity assigned once, when it is ingested, so list keys never shift. */
+export interface DebugLogLine {
+  id: number;
+  text: string;
+}
 
 interface WebSocketDebugHook {
   isConnected: boolean;
   error: string | null;
-  logs: string[];
+  logs: DebugLogLine[];
   connect: () => void;
   disconnect: () => void;
   send: (msg: string) => boolean;
@@ -19,14 +27,21 @@ const WS_BASE = ENDPOINTS.ws;
 export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<DebugLogLine[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const logsRef = useRef<string[]>([]);
+  const logsRef = useRef<DebugLogLine[]>([]);
+  const nextId = useRef(0);
+  // A ref, so a locale change does not rebuild addLog and with it reconnect the socket.
+  const ctx = useIntlContext();
+  const intl = useRef(ctx);
+  useEffect(() => {
+    intl.current = ctx;
+  });
 
   const addLog = useCallback((msg: string) => {
-    const time = new Date().toLocaleTimeString();
+    const time = formatTime(new Date(), intl.current) ?? "";
     const entry = `[${time}] ${msg}`;
-    logsRef.current = [...logsRef.current.slice(-49), entry]; // Keep last 50
+    logsRef.current = [...logsRef.current.slice(-49), { id: nextId.current++, text: entry }]; // Keep last 50
     setLogs(logsRef.current);
     console.log(entry);
   }, []);
@@ -38,7 +53,7 @@ export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
     }
 
     const url = sessionId ? `${WS_BASE}/sessions/${sessionId}` : WS_BASE;
-    addLog(`Connecting to ${url}...`);
+    addLog(`Connecting to ${url}…`);
 
     try {
       const ws = openSocket(url);
@@ -73,7 +88,7 @@ export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
-      addLog("Disconnecting...");
+      addLog("Disconnecting…");
       wsRef.current.close(1000, "User disconnect");
       wsRef.current = null;
     }

@@ -9,7 +9,7 @@
  * (`useShellSlots({ dockSessionId })`) and this layout renders its details.
  */
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,10 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
           open={railPath === pathname}
           onOpenChange={(open) => setRailPath(open ? pathname : null)}
         >
-          <SessionRail />
+          {/* The rail reads ?q= (useSearchParams), which needs a Suspense boundary on static routes. */}
+          <Suspense fallback={<div aria-hidden="true" className="h-full w-rail border-r bg-surface-1" />}>
+            <SessionRail />
+          </Suspense>
         </ResponsivePanel>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>

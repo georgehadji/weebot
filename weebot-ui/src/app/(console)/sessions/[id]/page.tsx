@@ -28,6 +28,7 @@ export default function SessionPage() {
   const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const { isConnected } = useSessionEvents(sessionId);
   const presence = useSessionPresence();
@@ -45,6 +46,7 @@ export default function SessionPage() {
     const load = async () => {
       setLoading(true);
       setLoadError(null);
+      setEventsError(null);
       try {
         const data = await api.sessions.get(sessionId);
         if (cancelled) return;
@@ -61,9 +63,10 @@ export default function SessionPage() {
       try {
         const events = await api.sessions.events(sessionId);
         if (!cancelled) setInitialEvents(events);
-      } catch {
-        // The session remains usable if its historical event stream is
-        // temporarily unavailable; live events can still reconnect.
+      } catch (e) {
+        // The session stays usable (live events can still reconnect), but an empty history
+        // must not pass for the real one: say so and offer a retry.
+        if (!cancelled) setEventsError(e instanceof Error ? e.message : "The history request failed.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,15 +80,16 @@ export default function SessionPage() {
   }, [sessionId, reloadKey, streamEpoch]);
 
   useShellSlots({
-    title: loading ? "Loading session" : session ? session.title || "New session" : "Session not found",
+    title: loading ? "Loading session…" : session ? session.title || "New session" : "Session not found",
     isConnected,
     dockSessionId: session ? sessionId : null,
   });
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading session" />
+      <div role="status" className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+        <span className="sr-only">Loading session…</span>
       </div>
     );
   }
@@ -105,7 +109,7 @@ export default function SessionPage() {
     );
   }
 
-  return (
+  const pane = (
     <ConversationPane
       key={sessionId}
       sessionId={sessionId}
@@ -114,5 +118,20 @@ export default function SessionPage() {
       failureReason={failureReason}
       onSessionCreated={(id) => router.push(`/sessions/${id}`)}
     />
+  );
+
+  // The same StateView either way, so the pane keeps its place (no remount) when a banner shows.
+  return (
+    <StateView
+      state={
+        eventsError
+          ? { status: "error", message: eventsError, data: pane }
+          : { status: "ready", data: pane }
+      }
+      errorTitle="Couldn't load this session's history"
+      onRetry={() => setReloadKey((key) => key + 1)}
+    >
+      {(content) => content}
+    </StateView>
   );
 }

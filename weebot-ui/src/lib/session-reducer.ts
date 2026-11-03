@@ -35,6 +35,12 @@ export interface GapMarker {
 export interface SessionViewState {
   eventsById: ReadonlyMap<string, AgentEvent>;
   toolCallsByCallId: ReadonlyMap<string, ToolEvent>;
+  /**
+   * The tool-call index for views that list calls on their own (the dock's Tools tab): the latest
+   * event of every call, newest call first. A call keeps its slot when its `called` update
+   * arrives, so the array is already in display order and consumers neither clone nor reverse.
+   */
+  toolCallsNewestFirst: readonly ToolEvent[];
   gapMarkersByKey: ReadonlyMap<string, GapMarker>;
   displayOrder: readonly DisplayKey[];
 }
@@ -42,6 +48,7 @@ export interface SessionViewState {
 export const initialSessionViewState: SessionViewState = {
   eventsById: new Map(),
   toolCallsByCallId: new Map(),
+  toolCallsNewestFirst: [],
   gapMarkersByKey: new Map(),
   displayOrder: [],
 };
@@ -51,6 +58,12 @@ function toolDisplayKey(toolCallId: string): DisplayKey {
 }
 
 const DROPPED_PATTERN = /^(\d+) event\(s\) dropped/;
+
+/** How many events a "N event(s) dropped" notice says were lost, or null for any other text. */
+export function droppedCount(text: string | undefined): number | null {
+  const match = DROPPED_PATTERN.exec(text ?? "");
+  return match ? parseInt(match[1], 10) : null;
+}
 
 export function sessionReducer(state: SessionViewState, event: AgentEvent): SessionViewState {
   // The SSE drop notice (routers/sse.py) is sent without an id; keyed on `undefined`, every
@@ -76,16 +89,19 @@ export function sessionReducer(state: SessionViewState, event: AgentEvent): Sess
     const toolCallsByCallId = new Map(state.toolCallsByCallId).set(toolEvent.tool_call_id, toolEvent);
     const alreadyDisplayed = state.toolCallsByCallId.has(toolEvent.tool_call_id);
     const displayOrder = alreadyDisplayed ? state.displayOrder : [...state.displayOrder, key];
-    return { ...state, eventsById, toolCallsByCallId, displayOrder };
+    const toolCallsNewestFirst = alreadyDisplayed
+      ? state.toolCallsNewestFirst.map((c) => (c.tool_call_id === toolEvent.tool_call_id ? toolEvent : c))
+      : [toolEvent, ...state.toolCallsNewestFirst];
+    return { ...state, eventsById, toolCallsByCallId, toolCallsNewestFirst, displayOrder };
   }
 
   if (event.type === "notification") {
-    const match = DROPPED_PATTERN.exec((event as { text: string }).text ?? "");
-    if (match) {
+    const dropped = droppedCount((event as { text: string }).text);
+    if (dropped !== null) {
       const gapMarkersByKey = new Map(state.gapMarkersByKey).set(event.id, {
         kind: "gap",
         key: event.id,
-        droppedCount: parseInt(match[1], 10),
+        droppedCount: dropped,
       });
       return {
         ...state,

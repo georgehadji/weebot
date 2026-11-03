@@ -3,13 +3,16 @@
  * The transport hook, API and composer are stubbed; reducer, renderer registry and the
  * stick-to-bottom hook are real.
  */
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentEvent } from "@/types/events";
 
 const h = vi.hoisted(() => ({
   emit: null as null | ((e: unknown) => void),
   history: [] as unknown[],
+  failEvents: false,
+  eventsCalls: 0,
+  announce: vi.fn(),
 }));
 
 vi.mock("@/hooks/useSessionEvents", () => ({
@@ -18,8 +21,17 @@ vi.mock("@/hooks/useSessionEvents", () => ({
     return { isConnected: true };
   },
 }));
-vi.mock("@/lib/api", () => ({ api: { sessions: { events: () => Promise.resolve(h.history) } } }));
-vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => () => {} }));
+vi.mock("@/lib/api", () => ({
+  api: {
+    sessions: {
+      events: () => {
+        h.eventsCalls += 1;
+        return h.failEvents ? Promise.reject(new Error("offline")) : Promise.resolve(h.history);
+      },
+    },
+  },
+}));
+vi.mock("@/providers/AnnouncerProvider", () => ({ useAnnounce: () => h.announce }));
 vi.mock("./Composer", () => ({ Composer: () => null }));
 vi.mock("./RunControls", () => ({ RunControls: () => null }));
 
@@ -42,6 +54,9 @@ function mount(status: "running" | "completed" = "running", initialEvents: Agent
 beforeEach(() => {
   h.history = [];
   h.emit = null;
+  h.failEvents = false;
+  h.eventsCalls = 0;
+  h.announce.mockReset();
 });
 
 describe("D11: events the timeline does not draw are not timeline rows", () => {
@@ -128,5 +143,40 @@ describe("a failed session says why it stopped and how to continue", () => {
   it("is hidden while the session is not failed", () => {
     render(<ConversationPane sessionId="s1" status="running" onSessionCreated={() => {}} />);
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  });
+});
+
+describe("the history refresh failing is shown, with a retry", () => {
+  it("a failed fetch shows an error banner, and Retry fetches again and clears it", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    h.failEvents = true;
+    mount("completed");
+    expect((await screen.findByRole("alert")).textContent).toContain("Couldn’t refresh the conversation");
+    expect(h.eventsCalls).toBe(1);
+
+    h.failEvents = false;
+    h.history = [msg("m1", "recovered")];
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await waitFor(() => expect(text()).toContain("recovered"));
+    expect(h.eventsCalls).toBe(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("waiting states are announced, since the log is not a live region", () => {
+  it("an empty session announces that it is waiting", () => {
+    mount("running");
+    expect(h.announce).toHaveBeenCalledWith("Waiting for events…");
+  });
+
+  it("a session that becomes running announces it once; one opened mid-run says nothing", () => {
+    const { rerender } = mount("completed", [msg("m1", "hi")]);
+    expect(h.announce).not.toHaveBeenCalledWith("Agent is working…");
+    rerender(<ConversationPane sessionId="s1" status="running" onSessionCreated={() => {}} />);
+    expect(h.announce.mock.calls.filter((c) => c[0] === "Agent is working…")).toHaveLength(1);
+
+    h.announce.mockReset();
+    mount("running", [msg("m2", "hi")]);
+    expect(h.announce).not.toHaveBeenCalledWith("Agent is working…");
   });
 });

@@ -9,5 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export const LazyPlanVisualizer = dynamic(
   () => import("./PlanVisualizer").then((m) => m.PlanVisualizer),
-  { ssr: false, loading: () => <Skeleton className="h-48 w-full" aria-label="Loading plan" /> }
+  {
+    ssr: false,
+    loading: () => (
+      <div role="status">
+        <Skeleton className="h-48 w-full" />
+        <span className="sr-only">Loading plan…</span>
+      </div>
+    ),
+  }
 );

@@ -12,10 +12,12 @@ interface MessageRowProps {
 export function MessageRow({ event, onRetry }: MessageRowProps) {
   const isUser = event.role === "user";
   return (
-    <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+    <div
+      className={cn("flex min-w-0 flex-col gap-1", isUser ? "items-end" : "items-start")}
+    >
       <div
         className={cn(
-          "max-w-[70ch] rounded-lg px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap",
+          "max-w-[70ch] min-w-0 rounded-lg px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap",
           isUser
             ? "bg-user text-user-foreground"
             : "bg-agent/10 border border-agent/20 text-foreground",
@@ -26,7 +28,7 @@ export function MessageRow({ event, onRetry }: MessageRowProps) {
       </div>
       {event.delivery === "sending" && (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
           Sending…
         </span>
       )}
@@ -37,7 +39,7 @@ export function MessageRow({ event, onRetry }: MessageRowProps) {
           {onRetry && (
             <Button variant="outline" size="sm" onClick={() => onRetry(event)} className="gap-1">
               <RotateCcw className="h-3 w-3" aria-hidden="true" />
-              Retry
+              Retry Sending
             </Button>
           )}
         </span>

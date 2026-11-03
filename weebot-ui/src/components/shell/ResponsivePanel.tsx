@@ -29,7 +29,9 @@ export function ResponsivePanel({
   inlineClassName,
   children,
 }: ResponsivePanelProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  // Desktop is assumed on the server, so a desktop reader hydrates straight into the inline
+  // column instead of mounting the Dialog tree first; a phone corrects after hydration.
+  const isDesktop = useMediaQuery("(min-width: 768px)", true);
   return (
     <>
       <div className={cn("hidden md:block md:h-full md:overflow-hidden", inlineClassName)}>

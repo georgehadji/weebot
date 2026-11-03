@@ -1,20 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import dynamic from "next/dynamic";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
 import { LazyPlanVisualizer } from "@/components/plan/LazyPlanVisualizer";
-import { api, ActiveSession, openSocket } from "@/lib/api";
+import { api, openSocket } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ENDPOINTS } from "@/lib/endpoints";
+import { formatCurrency, formatNumber, formatTime, plural } from "@/lib/format";
+import { wsUrl } from "@/lib/settings";
 import type { StepStatus } from "@/types/events";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { useIntlContext } from "@/hooks/useIntlContext";
 import { useRemote } from "@/hooks/useRemote";
+import { useStickToBottom } from "@/hooks/useStickToBottom";
+import { useUrlState } from "@/hooks/useUrlState";
 import { remoteData } from "@/types/remote";
 import { StateView } from "@/components/common/StateView";
+import { useAnnounce } from "@/providers/AnnouncerProvider";
+import { useToast } from "@/providers/ToastProvider";
 
 interface OpsMetrics {
   total_sessions: number;
@@ -32,15 +44,19 @@ interface OpsMetrics {
 }
 
 interface LogEntry {
+  /** Assigned once, when the frame is ingested: a sliding window must not re-key its rows. */
+  id: number;
   timestamp: string;
   type: string;
   raw: string;
 }
 
+const LOG_LIMIT = 200;
+const UNDO_CLEAR_MS = 5000;
+const TABS = ["overview", "active", "costs", "plan", "logs"] as const;
+
 function getWsBase(): string {
-  const fallback = ENDPOINTS.ws;
-  if (typeof window === "undefined") return fallback;
-  return localStorage.getItem("weebot_ws_url")?.trim() || fallback;
+  return wsUrl() || ENDPOINTS.ws;
 }
 
 const HEALTH_DOT: Record<string, string> = {
@@ -57,22 +73,55 @@ type OpsHealth = { status: string; components: { name: string; status: string }[
 // Module-level so useRemote gets a stable loader; each source fails on its own.
 const loadHealth = () => api.health.check() as Promise<OpsHealth>;
 const loadMetrics = () => api.dashboard.metrics() as Promise<OpsMetrics>;
+const loadActiveSessions = () =>
+  api.ops.activeSessions(20).then((result) => {
+    if (!result.ok) throw new Error("The server did not return the active sessions");
+    return result.data.sessions;
+  });
 
 const CostChart = dynamic(() => import("@/components/dashboard/CostChart").then((m) => m.CostChart), {
   ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" aria-label="Loading chart" />,
+  loading: () => (
+    <div role="status">
+      <Skeleton className="h-64 w-full" />
+      <span className="sr-only">Loading chart…</span>
+    </div>
+  ),
 });
 
 export default function OpsPage() {
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <h2 className="text-3xl font-bold mb-6">Ops Console</h2>
+      {/* The tab lives in the URL (useSearchParams), which needs a Suspense boundary. */}
+      <Suspense
+        fallback={
+          <div role="status" className="text-sm text-muted-foreground">
+            Loading…
+          </div>
+        }
+      >
+        <OpsConsole />
+      </Suspense>
+    </div>
+  );
+}
+
+function OpsConsole() {
+  const ctx = useIntlContext();
+  const announce = useAnnounce();
+  const { toast } = useToast();
+  const [tabParam, setTab] = useUrlState("tab", "overview");
+  const tab = TABS.find((t) => t === tabParam) ?? "overview";
   const { state: healthState, reload: reloadHealth } = useRemote(loadHealth, 10000);
   const { state: metricsState, reload: reloadMetrics } = useRemote(loadMetrics, 10000);
+  const { state: activeState, reload: reloadActive } = useRemote(loadActiveSessions, 10000);
   const metrics = remoteData(metricsState);
-  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const activeSessions = remoteData(activeState) ?? [];
 
   // Live log stream via global WebSocket
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const logsEndRef = useRef<HTMLDivElement>(null);
-
+  const nextLogId = useRef(0);
   const [wsLive, setWsLive] = useState(false);
 
   useEffect(() => {
@@ -90,11 +139,12 @@ export default function OpsPage() {
         try {
           const data = JSON.parse(evt.data);
           const entry: LogEntry = {
+            id: nextLogId.current++,
             timestamp: data.timestamp || new Date().toISOString(),
             type: data.type || "event",
             raw: JSON.stringify(data),
           };
-          setLogs((prev) => [...prev.slice(-199), entry]);
+          setLogs((prev) => [...prev.slice(-(LOG_LIMIT - 1)), entry]);
         } catch {
           // ignore non-JSON frames
         }
@@ -108,28 +158,27 @@ export default function OpsPage() {
     };
   }, []);
 
+  // Announce the socket only when it changes, never on mount.
+  const lastLive = useRef(wsLive);
   useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs]);
+    if (lastLive.current === wsLive) return;
+    lastLive.current = wsLive;
+    announce(wsLive ? "Live event stream connected" : "Live event stream disconnected. Reconnecting…");
+  }, [wsLive, announce]);
 
-  useEffect(() => {
-    const fetchActiveSessions = async () => {
-      try {
-        const result = await api.ops.activeSessions(20);
-        if (result.ok) setActiveSessions(result.data.sessions);
-      } catch {
-        // ignore
-      }
-    };
-
-    fetchActiveSessions();
-
-    const interval = setInterval(fetchActiveSessions, 10000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const clearLog = useCallback(() => {
+    const cleared = logs;
+    setLogs([]);
+    toast({
+      title: "Log cleared",
+      durationMs: UNDO_CLEAR_MS,
+      action: {
+        label: "Undo",
+        // Frames that arrived in the meantime stay, after the restored ones.
+        onClick: () => setLogs((prev) => [...cleared, ...prev].slice(-LOG_LIMIT)),
+      },
+    });
+  }, [logs, toast]);
 
   const dailyCosts = metrics?.daily_costs || [];
   const modelUsage = metrics?.model_usage || [];
@@ -137,235 +186,262 @@ export default function OpsPage() {
   const totalTokens = metrics?.total_tokens || 0;
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-6">Ops Console</h1>
+    <Tabs value={tab} onValueChange={(next) => setTab(String(next))} className="space-y-6">
+      <TabsList>
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="active">
+          Active Sessions
+          {activeSessions.length > 0 && (
+            <Badge className="ml-2 h-5 px-1.5 text-xs tabular-nums" variant="default">
+              {activeSessions.length}
+            </Badge>
+          )}
+        </TabsTrigger>
+        <TabsTrigger value="costs">Cost Tracking</TabsTrigger>
+        <TabsTrigger value="plan">Plan Visualization</TabsTrigger>
+        <TabsTrigger value="logs">Live Events</TabsTrigger>
+      </TabsList>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="active">
-            Active Sessions
-            {activeSessions.length > 0 && (
-              <Badge className="ml-2 h-5 px-1.5 text-xs" variant="default">
-                {activeSessions.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="costs">Cost Tracking</TabsTrigger>
-          <TabsTrigger value="plan">Plan Visualization</TabsTrigger>
-          <TabsTrigger value="logs">Live Events</TabsTrigger>
-        </TabsList>
+      {/* Overview Tab */}
+      <TabsContent value="overview" className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>System Metrics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StateView state={metricsState} errorTitle="Couldn't load metrics" loadingLabel="Loading metrics" onRetry={reloadMetrics}>
+              {(m) => (
+                <MetricsPanel
+                  metrics={{
+                    activeSessions: m.active_sessions,
+                    totalSessions: m.total_sessions,
+                    avgResponseTime: m.avg_response_time,
+                    cpuUsage: m.cpu_usage,
+                    memoryUsage: m.memory_usage,
+                    dbSize: m.db_size,
+                    requestsPerMinute: m.requests_per_minute,
+                  }}
+                />
+              )}
+            </StateView>
+          </CardContent>
+        </Card>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <div className="grid md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>System Metrics</CardTitle>
+              <CardTitle>Health Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <StateView state={metricsState} errorTitle="Couldn't load metrics" loadingLabel="Loading metrics" onRetry={reloadMetrics}>
-                {(m) => (
-                  <MetricsPanel
-                    metrics={{
-                      activeSessions: m.active_sessions,
-                      totalSessions: m.total_sessions,
-                      avgResponseTime: m.avg_response_time,
-                      cpuUsage: m.cpu_usage,
-                      memoryUsage: m.memory_usage,
-                      dbSize: m.db_size,
-                      requestsPerMinute: m.requests_per_minute,
-                    }}
-                  />
+              <StateView state={healthState} errorTitle="Failed to load health status" loadingLabel="Loading health" onRetry={reloadHealth}>
+                {(health) => (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          HEALTH_DOT[health.status] ?? "bg-status-error"
+                        }`}
+                      />
+                      <span className="font-medium capitalize">{health.status}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {health.components?.map((c) => (
+                        <div
+                          key={c.name}
+                          className="flex items-center justify-between text-sm p-2 rounded bg-muted"
+                        >
+                          <span>{c.name}</span>
+                          <span className={HEALTH_TEXT[c.status] ?? "text-status-error-fg"}>
+                            {c.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </StateView>
             </CardContent>
           </Card>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Health Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <StateView state={healthState} errorTitle="Failed to load health status" loadingLabel="Loading health" onRetry={reloadHealth}>
-                  {(health) => (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-3 h-3 rounded-full ${
-                            HEALTH_DOT[health.status] ?? "bg-status-error"
-                          }`}
-                        />
-                        <span className="font-medium capitalize">{health.status}</span>
-                      </div>
-                      <div className="space-y-1">
-                        {health.components?.map((c) => (
-                          <div
-                            key={c.name}
-                            className="flex items-center justify-between text-sm p-2 rounded bg-muted"
-                          >
-                            <span>{c.name}</span>
-                            <span className={HEALTH_TEXT[c.status] ?? "text-status-error-fg"}>
-                              {c.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </StateView>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Stats</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Total Cost (7 days)</span>
-                    <span className="font-bold text-lg">${totalCost.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Total Tokens (7 days)</span>
-                    <span className="font-bold text-lg" suppressHydrationWarning>
-                      {totalTokens.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Active Models</span>
-                    <span className="font-bold text-lg">{modelUsage.length}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Completed Sessions</span>
-                    <span className="font-bold text-lg">{metrics?.completed_sessions || 0}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Active Sessions Tab */}
-        <TabsContent value="active">
           <Card>
             <CardHeader>
-              <CardTitle>Active Sessions</CardTitle>
+              <CardTitle>Quick Stats</CardTitle>
             </CardHeader>
             <CardContent>
-              {activeSessions.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  No sessions currently running.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {activeSessions.map((s) => (
-                    <div
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Total Cost (7 days)</span>
+                  <span className="font-bold text-lg tabular-nums">{formatCurrency(totalCost, ctx)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Total Tokens (7 days)</span>
+                  <span className="font-bold text-lg tabular-nums">{formatNumber(totalTokens, ctx)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Active Models</span>
+                  <span className="font-bold text-lg tabular-nums">{formatNumber(modelUsage.length, ctx)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Completed Sessions</span>
+                  <span className="font-bold text-lg tabular-nums">
+                    {formatNumber(metrics?.completed_sessions || 0, ctx)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+
+      {/* Active Sessions Tab */}
+      <TabsContent value="active">
+        <Card>
+          <CardHeader>
+            <CardTitle>Active Sessions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StateView
+              state={activeState}
+              errorTitle="Couldn't load active sessions"
+              loadingLabel="Loading active sessions"
+              onRetry={reloadActive}
+              isEmpty={(sessions) => sessions.length === 0}
+              empty={<p className="text-muted-foreground text-center py-8">No sessions currently running.</p>}
+            >
+              {(sessions) => (
+                <ul className="space-y-3">
+                  {sessions.map((s) => (
+                    <li
                       key={s.session_id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-card"
                     >
-                      <div>
-                        <p className="font-mono text-sm font-medium">{s.session_id}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {s.steps_completed}/{s.step_count} steps · {s.tool_calls} tool calls ·{" "}
-                          {s.elapsed_events} events
+                      <div className="min-w-0">
+                        <Link
+                          href={`/sessions/${encodeURIComponent(s.session_id)}`}
+                          translate="no"
+                          title={s.session_id}
+                          className="block truncate font-mono text-sm font-medium hover:text-primary-text focus-ring rounded-sm"
+                        >
+                          {s.session_id}
+                        </Link>
+                        <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                          {formatNumber(s.steps_completed, ctx)}/{formatNumber(s.step_count, ctx)}{" "}
+                          {plural(s.step_count, ctx, { one: "step", other: "steps" })} ·{" "}
+                          {plural(s.tool_calls, ctx, { one: "{n} tool call", other: "{n} tool calls" })} ·{" "}
+                          {plural(s.elapsed_events, ctx, { one: "{n} event", other: "{n} events" })}
                         </p>
                       </div>
                       <Badge
+                        className="shrink-0"
                         variant={s.status === "running" ? "default" : "secondary"}
                       >
                         {s.status}
                       </Badge>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </StateView>
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-        {/* Cost Tracking Tab */}
-        <TabsContent value="costs">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cost Analysis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dailyCosts.length > 0 ? (
-                <CostChart
-                  dailyCosts={dailyCosts}
-                  modelUsage={modelUsage}
-                  totalCost={totalCost}
-                  totalTokens={totalTokens}
-                />
-              ) : (
-                <p className="text-muted-foreground text-center py-8">
-                  No cost data available yet. Run some sessions to see metrics.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* Cost Tracking Tab */}
+      <TabsContent value="costs">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cost Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dailyCosts.length > 0 ? (
+              <CostChart
+                dailyCosts={dailyCosts}
+                modelUsage={modelUsage}
+                totalCost={totalCost}
+                totalTokens={totalTokens}
+              />
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No cost data available yet. Run some sessions to see metrics.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-        {/* Plan Visualization Tab */}
-        <TabsContent value="plan">
-          <PlanVizTab />
-        </TabsContent>
+      {/* Plan Visualization Tab */}
+      <TabsContent value="plan">
+        <PlanVizTab />
+      </TabsContent>
 
-        {/* Live Events Tab */}
-        <TabsContent value="logs">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Live Event Stream</CardTitle>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${wsLive ? "bg-status-live animate-pulse" : "bg-status-idle"}`} />
-                  <span className="text-xs text-muted-foreground">
-                    {wsLive ? "WebSocket connected" : "Connecting…"}
-                  </span>
-                  {logs.length > 0 && (
-                    <button
-                      onClick={() => setLogs([])}
-                      className="text-xs text-muted-foreground hover:text-foreground underline"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
+      {/* Live Events Tab */}
+      <TabsContent value="logs">
+        <LiveEventsCard logs={logs} wsLive={wsLive} onClear={clearLog} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** Its own component so the stick-to-bottom hook mounts with the log it observes. */
+function LiveEventsCard({ logs, wsLive, onClear }: { logs: LogEntry[]; wsLive: boolean; onClear: () => void }) {
+  const ctx = useIntlContext();
+  const { viewportRef, sentinelRef } = useStickToBottom(logs.length);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Live Event Stream</CardTitle>
+          <div className="flex items-center gap-2">
+            <div
+              aria-hidden="true"
+              className={`w-2 h-2 rounded-full ${wsLive ? "bg-status-live motion-safe:animate-pulse" : "bg-status-idle"}`}
+            />
+            <span className="text-xs text-muted-foreground">
+              {wsLive ? "WebSocket connected" : "Connecting…"}
+            </span>
+            {logs.length > 0 && (
+              <Button variant="link" size="sm" onClick={onClear} className="h-auto px-1 py-0 text-xs text-muted-foreground">
+                Clear Log
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[500px]" viewportRef={viewportRef}>
+          <div
+            role="log"
+            aria-label="Live event log"
+            className="font-mono text-xs space-y-0.5 bg-[hsl(var(--p-ink-1000))] text-[hsl(var(--p-cactus-300))] p-4 rounded-lg min-h-[460px]"
+          >
+            {logs.length === 0 ? (
+              <div className="text-[hsl(var(--p-ink-500))]">
+                Waiting for events… Start a session to see live output.
               </div>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[500px]">
-                <div className="font-mono text-xs space-y-0.5 bg-[hsl(var(--p-ink-1000))] text-[hsl(var(--p-cactus-300))] p-4 rounded-lg min-h-[460px]">
-                  {logs.length === 0 ? (
-                    <div className="text-[hsl(var(--p-ink-500))]">
-                      Waiting for events… Start a session to see live output.
-                    </div>
-                  ) : (
-                    logs.map((entry, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-[hsl(var(--p-ink-500))] shrink-0">
-                          {entry.timestamp.slice(11, 19)}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className="text-xs h-4 px-1 shrink-0 border-[hsl(var(--p-olive-700))] text-[hsl(var(--p-cactus-300))]"
-                        >
-                          {entry.type}
-                        </Badge>
-                        <span className="truncate">{entry.raw}</span>
-                      </div>
-                    ))
-                  )}
-                  <div ref={logsEndRef} />
+            ) : (
+              logs.map((entry) => (
+                <div key={entry.id} className="flex gap-2">
+                  <span className="text-[hsl(var(--p-ink-500))] shrink-0 tabular-nums">
+                    {formatTime(entry.timestamp, ctx) ?? "--:--:--"}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="text-xs h-4 px-1 shrink-0 border-[hsl(var(--p-olive-700))] text-[hsl(var(--p-cactus-300))]"
+                  >
+                    {entry.type}
+                  </Badge>
+                  <span className="truncate" title={entry.raw}>
+                    {entry.raw}
+                  </span>
                 </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+              ))
+            )}
+            <div ref={sentinelRef} aria-hidden="true" className="h-px" />
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -376,34 +452,26 @@ function PlanVizTab() {
     id: string;
     nodes: { id: string; description: string; status: StepStatus }[];
   } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchPlan = async () => {
-    if (!sessionId.trim()) return;
-    setLoading(true);
-    setError(null);
-    setPlanData(null); // a failed load must not leave the previous session's plan on screen
+  // Throws on failure, so the action's error state is the message; the guard drops a second
+  // submit (Enter, or a double click) while one request is in flight.
+  const { state, run, pending } = useAsyncAction(async () => {
     const id = sessionId.trim();
-    try {
-      const result = await api.ops.planViz(id);
-      if (result.ok) {
-        const plan = result.data.plan;
-        setPlanData({
-          id,
-          nodes: (plan?.nodes ?? []).map((n) => ({
-            id: n.id,
-            description: n.label,
-            status: (n.status as StepStatus) || "pending",
-          })),
-        });
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load plan");
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (!id) return;
+    setPlanData(null); // a failed load must not leave the previous session's plan on screen
+    const result = await api.ops.planViz(id);
+    if (!result.ok) throw new Error("The server could not load that plan");
+    const plan = result.data.plan;
+    setPlanData({
+      id,
+      nodes: (plan?.nodes ?? []).map((n) => ({
+        id: n.id,
+        description: n.label,
+        status: (n.status as StepStatus) || "pending",
+      })),
+    });
+  });
+  const error = state.status === "error" ? state.error : null;
 
   return (
     <Card>
@@ -411,24 +479,40 @@ function PlanVizTab() {
         <CardTitle>Execution Plan</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <input
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-            placeholder="Enter session ID to visualize its plan…"
-            value={sessionId}
-            onChange={(e) => setSessionId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && fetchPlan()}
-          />
-          <button
-            onClick={fetchPlan}
-            disabled={!sessionId.trim() || loading}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loading ? "Loading…" : "Load"}
-          </button>
-        </div>
+        <form
+          noValidate
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run();
+          }}
+        >
+          <Label htmlFor="plan-session-id">Session ID</Label>
+          <div className="flex gap-2">
+            <Input
+              id="plan-session-id"
+              name="session-id"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-9 font-mono"
+              placeholder="Enter a session ID to visualize its plan…"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "plan-session-error" : undefined}
+            />
+            <Button type="submit" loading={pending} disabled={!sessionId.trim()}>
+              Load
+            </Button>
+          </div>
+        </form>
 
-        {error && <p className="text-sm text-status-error-fg">{error}</p>}
+        {error && (
+          <p id="plan-session-error" role="alert" className="text-sm text-status-error-fg">
+            {error}
+          </p>
+        )}
 
         {planData ? (
           <LazyPlanVisualizer steps={planData.nodes} title={`Plan for ${planData.id}`} />

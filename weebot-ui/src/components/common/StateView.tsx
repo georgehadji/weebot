@@ -9,7 +9,7 @@ interface StateViewProps<T> {
   /** True when *data* is ready but has nothing to show; renders `empty` instead. */
   isEmpty?: (data: T) => boolean;
   empty?: React.ReactNode;
-  /** What failed, for the error message ("Couldn't load sessions"). */
+  /** What failed, for the error message ("Couldn’t load sessions"). */
   errorTitle?: string;
   /** Name of what is loading, for assistive technology. */
   loadingLabel?: string;
@@ -26,7 +26,7 @@ export function StateView<T>({
   children,
   isEmpty,
   empty,
-  errorTitle = "Couldn't load this",
+  errorTitle = "Couldn’t load this",
   loadingLabel = "Loading",
   skeleton,
   onRetry,
@@ -35,14 +35,17 @@ export function StateView<T>({
 
   if (state.status === "loading") {
     return (
-      <div role="status" aria-label={loadingLabel} className="space-y-2 p-2">
-        {skeleton ?? (
-          <>
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-5/6" />
-            <Skeleton className="h-8 w-2/3" />
-          </>
-        )}
+      <div role="status" aria-label={loadingLabel} className="p-2">
+        <span className="sr-only">{loadingLabel}…</span>
+        <div aria-hidden="true" className="space-y-2">
+          {skeleton ?? (
+            <>
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-5/6" />
+              <Skeleton className="h-8 w-2/3" />
+            </>
+          )}
+        </div>
       </div>
     );
   }

@@ -12,19 +12,23 @@
  * failed send keeps its row with a Retry.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { StateView } from "@/components/common/StateView";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Composer, SessionLifecycleStatus } from "./Composer";
 import { EventRenderer, isRendered } from "./EventRenderer";
 import { GapMarkerRow } from "./GapMarkerRow";
 import { RunControls } from "./RunControls";
+import { useAsyncAction } from "@/hooks/useAsyncAction";
+import { useIntlContext } from "@/hooks/useIntlContext";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { useStickToBottom } from "@/hooks/useStickToBottom";
 import { announcementFor } from "@/lib/announce";
 import { api } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
 import {
   getDisplayItems,
   initialSessionViewState,
@@ -34,6 +38,7 @@ import {
   SessionViewState,
 } from "@/lib/session-reducer";
 import { useAnnounce } from "@/providers/AnnouncerProvider";
+import { Remote } from "@/types/remote";
 import { AgentEvent, DeliveryState, MessageEvent } from "@/types/events";
 
 const EXAMPLE_PROMPTS = [
@@ -66,6 +71,11 @@ export function ConversationPane({
   // Ids already shown, so a reconnect replaying history is not announced a second time.
   const [seen] = useState(() => new Set((initialEvents ?? []).map((e) => e.id)));
   const announce = useAnnounce();
+  const ctx = useIntlContext();
+  // Whether the history refresh below failed; a failure is shown with a Retry, not swallowed.
+  const [refresh, setRefresh] = useState<{ error: string | null; attempt: number }>({ error: null, attempt: 0 });
+  const refreshState: Remote<null> =
+    refresh.error === null ? { status: "idle" } : { status: "error", message: refresh.error };
 
   useSessionEvents(sessionId ?? undefined, (event) => {
     setState((prev) => sessionReducer(prev, event));
@@ -85,16 +95,22 @@ export function ConversationPane({
       .events(sessionId)
       .then((events) => {
         if (cancelled) return;
+        setRefresh((prev) => (prev.error === null ? prev : { ...prev, error: null }));
         const missed = events.filter((e) => !seen.has(e.id));
         if (missed.length === 0) return;
         missed.forEach((e) => seen.add(e.id));
         setState((prev) => mergeHistory(prev, events));
       })
-      .catch((e) => console.warn("[Conversation] could not refresh events", e));
+      .catch((e) => {
+        console.warn("[Conversation] could not refresh events", e);
+        if (!cancelled) {
+          setRefresh((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Something went wrong" }));
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [sessionId, status, seen]);
+  }, [sessionId, status, seen, refresh.attempt]);
 
   const addOptimisticMessage = useCallback(
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),
@@ -124,6 +140,12 @@ export function ConversationPane({
     quickReplyRef.current = fn;
   }, []);
   const onReply = useCallback((text: string) => quickReplyRef.current?.(text), []);
+  const focusRef = useRef<() => void>(undefined);
+  const registerFocus = useCallback((fn: () => void) => {
+    focusRef.current = fn;
+  }, []);
+  const onRequestChanges = useCallback(() => focusRef.current?.(), []);
+  const { run: runContinue, pending: continuing } = useAsyncAction(() => onReply("continue"));
 
   // Events with no row (title, plan, …) are not timeline rows: they must not hide the empty state
   // or inflate the "new" count.
@@ -141,11 +163,31 @@ export function ConversationPane({
   const { viewportRef, sentinelRef, atBottom, unseen, scrollToBottom } = useStickToBottom(items.length);
   const isRunning = status === "running";
 
+  // The log is not a live region, so the two waiting states are announced here, once each time
+  // they begin. The running one skips the first render: a session opened mid-run is not news.
+  const showWaiting = items.length === 0 && !!sessionId;
+  const say = useEffectEvent((text: string) => announce(text));
+  useEffect(() => {
+    if (showWaiting) say("Waiting for events…");
+  }, [showWaiting]);
+  const wasRunning = useRef(isRunning);
+  useEffect(() => {
+    if (isRunning && !wasRunning.current) say("Agent is working…");
+    wasRunning.current = isRunning;
+  }, [isRunning]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col">
+        <StateView
+          state={refreshState}
+          errorTitle="Couldn’t refresh the conversation"
+          onRetry={() => setRefresh((prev) => ({ error: null, attempt: prev.attempt + 1 }))}
+        >
+          {() => null}
+        </StateView>
         <ScrollArea className="min-h-0 flex-1" viewportRef={viewportRef}>
-          <div role="log" aria-label="Conversation" aria-live="off" className="space-y-3 p-4">
+          <div role="log" aria-label="Conversation" aria-live="off" className="flex flex-col gap-3 p-4">
             {items.length === 0 ? (
               sessionId ? (
                 <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
@@ -170,22 +212,26 @@ export function ConversationPane({
                 </div>
               )
             ) : (
-              items.map((item) =>
-                item.kind === "gap" ? (
-                  <GapMarkerRow key={item.key} droppedCount={item.droppedCount} />
-                ) : (
-                  <EventRenderer
-                    key={item.event.id}
-                    event={item.event}
-                    onRetry={onRetry}
-                    onReply={onReply}
-                  />
-                )
-              )
+              // content-visibility skips off-screen rows; the 4px of padding (cancelled by the negative
+              // margin) keeps a row's focus ring inside the box that paint containment clips to.
+              items.map((item) => (
+                <div key={item.kind === "gap" ? item.key : item.event.id} className="cv-auto -m-1 p-1">
+                  {item.kind === "gap" ? (
+                    <GapMarkerRow droppedCount={item.droppedCount} />
+                  ) : (
+                    <EventRenderer
+                      event={item.event}
+                      onRetry={onRetry}
+                      onReply={onReply}
+                      onRequestChanges={onRequestChanges}
+                    />
+                  )}
+                </div>
+              ))
             )}
             {isRunning && (
               <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
                 <span>Agent is working…</span>
               </div>
             )}
@@ -197,11 +243,11 @@ export function ConversationPane({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium shadow-lg transition-colors hover:bg-surface-3 focus-ring pointer-coarse:min-h-11"
+            className="absolute bottom-safe left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-surface-2 px-3 py-1.5 text-xs font-medium tabular-nums shadow-lg transition-colors hover:bg-surface-3 focus-ring pointer-coarse:min-h-11"
           >
             <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             Jump to latest
-            {unseen > 0 && <span className="text-muted-foreground">· {unseen} new</span>}
+            {unseen > 0 && <span className="text-muted-foreground">· {formatNumber(unseen, ctx)} new</span>}
           </button>
         )}
       </div>
@@ -214,15 +260,10 @@ export function ConversationPane({
           className="flex flex-wrap items-center gap-2 border-t bg-status-error/10 px-3 py-2 text-xs"
         >
           <StatusBadge status="failed" variant="icon" />
-          <p className="min-w-0 flex-1 text-muted-foreground">
+          <p className="min-w-0 flex-1 break-words text-muted-foreground">
             {failureReason || "This run stopped before finishing."}
           </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => onReply("continue")}
-          >
+          <Button size="sm" variant="outline" loading={continuing} onClick={() => void runContinue()}>
             Continue
           </Button>
         </div>
@@ -238,6 +279,7 @@ export function ConversationPane({
         registerRetry={registerRetry}
         registerSetDraft={registerSetDraft}
         registerQuickReply={registerQuickReply}
+        registerFocus={registerFocus}
       />
     </div>
   );

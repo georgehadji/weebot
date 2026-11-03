@@ -5,7 +5,7 @@ export function StepRow({ event }: { event: StepEvent }) {
   return (
     <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
       <StatusBadge status={event.status} variant="icon" />
-      <span>{event.description}</span>
+      <span className="min-w-0 break-words">{event.description}</span>
     </div>
   );
 }

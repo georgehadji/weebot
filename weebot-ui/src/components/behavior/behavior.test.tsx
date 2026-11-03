@@ -13,8 +13,11 @@ vi.mock("@/hooks/useBehavior", async (orig) => ({
   useBehaviorREST: () => hooks.rest,
 }));
 
+import { AnnouncerProvider } from "@/providers/AnnouncerProvider";
 import { BehaviorPanel } from "./BehaviorPanel";
+import { LiveFeed } from "./LiveFeed";
 import { RecentActions } from "./RecentActions";
+import { TrustBar } from "./TrustBar";
 
 const real = await vi.importActual<typeof import("@/hooks/useBehavior")>("@/hooks/useBehavior");
 
@@ -152,5 +155,151 @@ describe("RecentActions override failures are shown (W5 B3, decision D-BEH)", ()
     const { onRefresh } = await submitOverride(new Response("{}", { status: 200 }));
     expect(screen.queryByText("Mark as Override")).toBeNull();
     expect(onRefresh).toHaveBeenCalled();
+  });
+});
+
+describe("BehaviorPanel announces the link on transition only (Phase 4)", () => {
+  const live = () => document.querySelector('[role="status"][aria-live="polite"]')?.textContent ?? "";
+
+  it("says nothing on mount, then says so when the socket drops", () => {
+    setHooks({ isConnected: true }, { trustScore: fullTrust });
+    const { rerender } = render(
+      <AnnouncerProvider>
+        <BehaviorPanel />
+      </AnnouncerProvider>
+    );
+    expect(live().replace("​", "")).toBe("");
+    setHooks({ isConnected: false }, { trustScore: fullTrust });
+    rerender(
+      <AnnouncerProvider>
+        <BehaviorPanel />
+      </AnnouncerProvider>
+    );
+    expect(live()).toContain("Behavior monitor is polling");
+  });
+
+  it("does not announce the first load finishing (boundary)", () => {
+    setHooks({}, { isLoading: true });
+    const { rerender } = render(
+      <AnnouncerProvider>
+        <BehaviorPanel />
+      </AnnouncerProvider>
+    );
+    setHooks({}, { isLoading: false, trustScore: fullTrust });
+    rerender(
+      <AnnouncerProvider>
+        <BehaviorPanel />
+      </AnnouncerProvider>
+    );
+    expect(live().replace("​", "")).toBe("");
+  });
+
+  it("names each panel by its scope so two on a page are told apart", () => {
+    setHooks({}, {});
+    render(<BehaviorPanel sessionId="abcdef123456" />);
+    expect(screen.getByRole("region", { name: "Behavior monitor, session abcdef12" })).toBeTruthy();
+  });
+});
+
+describe("TrustBar", () => {
+  it("exposes the score as a progressbar and counts with the right plural", () => {
+    render(<TrustBar trust={{ ...fullTrust, total_actions: 1, overrides: 1 }} />);
+    const bar = screen.getByRole("progressbar", { name: "Trust score" });
+    expect(bar.getAttribute("aria-valuenow")).toBe("95");
+    expect(screen.getByText(/1 action ·/)).toBeTruthy();
+    expect(screen.getByText(/1 override$/)).toBeTruthy();
+  });
+
+  it("formats a large count by locale and clamps a score above 100 (boundary)", () => {
+    render(<TrustBar trust={{ ...fullTrust, score_percentage: 140, total_actions: 12345 }} />);
+    expect(screen.getByText(/12,345 actions/)).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
+  });
+
+  it("a frame with no score_percentage reads 0%, not NaN (boundary)", () => {
+    render(<TrustBar trust={wsConnectTrust} />);
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("0");
+  });
+
+  it("loading is a status with an ellipsis", () => {
+    render(<TrustBar trust={null} />);
+    expect(screen.getByRole("status").textContent).toBe("Loading trust score…");
+  });
+});
+
+describe("LiveFeed", () => {
+  const ev = (n: number) => ({
+    type: "file.created" as const,
+    timestamp: `2026-10-31T10:00:0${n}Z`,
+    path: `a/b/c/file${n}.txt`,
+    session_id: "s",
+    agent_version: "1",
+  });
+
+  it("is a log, always mounted, and says what each event was", () => {
+    const { rerender } = render(<LiveFeed events={[]} />);
+    const log = screen.getByRole("log", { name: "Live file events" });
+    expect(log.textContent).toContain("No events yet…");
+    rerender(<LiveFeed events={[ev(1)]} />);
+    expect(screen.getByRole("log")).toBe(log);
+    expect(log.textContent).toContain("Created");
+    expect(log.textContent).toContain("…/c/file1.txt");
+  });
+
+  it("keeps a row's DOM node when newer events slide in (stable keys)", () => {
+    const first = ev(1);
+    const { rerender } = render(<LiveFeed events={[first]} />);
+    const row = screen.getByText("…/c/file1.txt").closest("div");
+    rerender(<LiveFeed events={[ev(2), first]} />);
+    expect(screen.getByText("…/c/file1.txt").closest("div")).toBe(row);
+  });
+
+  it("an unparseable timestamp falls back instead of printing Invalid Date (boundary)", () => {
+    render(<LiveFeed events={[{ ...ev(1), timestamp: "garbage" }]} />);
+    expect(screen.getByText("--:--")).toBeTruthy();
+  });
+});
+
+describe("RecentActions override dialog", () => {
+  it("is a real dialog with the textarea labelled by its Label", () => {
+    render(<RecentActions actions={[act1]} />);
+    fireEvent.click(screen.getByText("b/old.txt"));
+    expect(screen.getByRole("dialog", { name: "Mark as Override" })).toBeTruthy();
+    const reason = screen.getByLabelText("Reason for override") as HTMLTextAreaElement;
+    expect(reason.name).toBe("reason");
+  });
+
+  it("an error says what to do next", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "Action not found: t1" }), { status: 404 })));
+    render(<RecentActions actions={[act1]} />);
+    fireEvent.click(screen.getByText("b/old.txt"));
+    fireEvent.change(screen.getByLabelText("Reason for override"), { target: { value: "x" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Mark Override" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/Try again, or refresh the list/);
+    vi.unstubAllGlobals();
+  });
+
+  it("a double submit sends one request", async () => {
+    const fetchStub = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchStub);
+    render(<RecentActions actions={[act1]} />);
+    fireEvent.click(screen.getByText("b/old.txt"));
+    fireEvent.change(screen.getByLabelText("Reason for override"), { target: { value: "x" } });
+    const form = screen.getByRole("dialog").querySelector("form") as HTMLFormElement;
+    await act(async () => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a row mounted across a poll that replaces the list objects (stable keys)", () => {
+    const { rerender } = render(<RecentActions actions={[act1]} />);
+    const row = screen.getByText("b/old.txt").closest("button");
+    rerender(<RecentActions actions={[act2, { ...act1 }]} />);
+    expect(screen.getByText("b/old.txt").closest("button")).toBe(row);
   });
 });

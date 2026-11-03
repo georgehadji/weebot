@@ -59,6 +59,7 @@ describe("W6 R5: ThemeProvider hydrates without a mismatch", () => {
     expect(host.textContent).toBe("light");
     expect(host.querySelector("button")!.getAttribute("aria-label")).toBe("Switch to dark theme");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.style.colorScheme).toBe("light");
     expect(store.get("weebot_theme")).toBe("light");
   });
 

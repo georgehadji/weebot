@@ -71,3 +71,45 @@ describe("/sessions delete and the rail (W5 D10)", () => {
     expect(screen.getByText("rail:s2")).toBeTruthy();
   });
 });
+
+describe("/sessions list", () => {
+  const page = (rows: ReturnType<typeof row>[], total = rows.length) =>
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") return new Response(JSON.stringify({ detail: "locked" }), { status: 409 });
+      return new Response(JSON.stringify({ sessions: rows, total }), { status: 200 });
+    });
+
+  it("Load More widens the window when the backend has more sessions than shown", async () => {
+    const fetchStub = page([row("s1")], 150);
+    vi.stubGlobal("fetch", fetchStub);
+    render(<ToastProvider><SessionsPage /></ToastProvider>);
+    await act(async () => {});
+    expect(screen.getByText("Showing 1 of 150")).toBeTruthy();
+    expect(String(fetchStub.mock.calls[0][0])).toContain("limit=100");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Load More" }));
+    });
+    expect(String(fetchStub.mock.calls.at(-1)?.[0])).toContain("limit=200");
+  });
+
+  it("no Load More when everything is shown, and a single event is not pluralised", async () => {
+    vi.stubGlobal("fetch", page([row("s1")]));
+    render(<ToastProvider><SessionsPage /></ToastProvider>);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Load More" })).toBeNull();
+    expect(screen.getByText(/1 event(?!s)/)).toBeTruthy();
+  });
+
+  it("a failed removal keeps the dialog open and says why", async () => {
+    vi.stubGlobal("fetch", page([row("s1")]));
+    render(<ToastProvider><SessionsPage /></ToastProvider>);
+    await act(async () => {});
+    fireEvent.click(screen.getByLabelText("Delete session Title s1"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete session" }));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("locked");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+});
