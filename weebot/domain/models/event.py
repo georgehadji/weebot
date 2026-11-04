@@ -129,6 +129,8 @@ class ToolApprovalEvent(BaseEvent):
     # may allowlist for good ("always"). Empty/None for older payloads.
     fingerprint: str = Field(default="")
     allow_always: str | None = Field(default=None)
+    # H18b: the command pattern "session" or "always" would cover; None when none can.
+    pattern: str | None = Field(default=None)
     # An approval floor (H18): AUTO mode pauses for it instead of granting it.
     human_only: bool = Field(default=False)
 
