@@ -17,7 +17,8 @@ from weebot.application.ports.sandbox_port import (
     network_allowed,
 )
 from weebot.application.services.kernel_manager import KernelManager
-from weebot.config.tool_config import ToolConfig
+from weebot.application.services.tool_rpc import ToolRpcServer, current_dispatch, parse_allowed
+from weebot.config.tool_config import DEFAULT_TOOL_CONFIG, ToolConfig
 from weebot.core.log_context import session_id_var
 from weebot.core.approval import is_human_approved
 from weebot.core.approval_policy import ExecApprovalPolicy
@@ -65,7 +66,10 @@ class PythonExecuteTool(BaseTool):
         "Supports pandas, numpy, matplotlib if installed. "
         "Use print() to produce output visible to the agent. "
         "Variables persist between calls in the same session; pass reset=true to start clean "
-        "or persistent=false for a one-shot run (needed for network access)."
+        "or persistent=false for a one-shot run (needed for network access). "
+        "In a persistent run, `import weebot_tools` gives bash(command), web_search(query), "
+        "file_view(path), file_write(path, text) and call_tool(name, **args); a failure raises "
+        "weebot_tools.ToolError. Use it to loop over many tool calls in one run."
     )
     parameters: dict = {
         "type": "object",
@@ -156,12 +160,22 @@ class PythonExecuteTool(BaseTool):
             return None  # this call was cleared for the network; a running kernel cannot be
         return session_id_var.get() or None
 
+    def _tool_rpc(self):
+        """Answers tool calls the kernel's code makes, or None when they are off (H17)."""
+        dispatch = current_dispatch()
+        allowed = parse_allowed((self._tool_config or DEFAULT_TOOL_CONFIG).kernel_rpc_tools)
+        if dispatch is None or not allowed:
+            return None
+        return ToolRpcServer(dispatch, allowed).handle
+
     async def _execute_in_kernel(
         self, session_id: str, code: str, timeout: float, reset: bool
     ) -> ToolResult | None:
         """The result of running *code* in the session's kernel, or None to run it one-shot."""
         try:
-            run = await self._kernels.run(session_id, code, timeout, reset=reset)
+            run = await self._kernels.run(
+                session_id, code, timeout, reset=reset, on_rpc=self._tool_rpc()
+            )
         except RuntimeError as exc:
             logger.warning("python_execute: no kernel (%s); running one-shot", exc)
             return None

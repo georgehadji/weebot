@@ -282,7 +282,7 @@
  },
  {
   "function": {
-   "description": "Execute Python code in an isolated subprocess. stdout and stderr are captured and returned. Supports pandas, numpy, matplotlib if installed. Use print() to produce output visible to the agent. Variables persist between calls in the same session; pass reset=true to start clean or persistent=false for a one-shot run (needed for network access).",
+   "description": "Execute Python code in an isolated subprocess. stdout and stderr are captured and returned. Supports pandas, numpy, matplotlib if installed. Use print() to produce output visible to the agent. Variables persist between calls in the same session; pass reset=true to start clean or persistent=false for a one-shot run (needed for network access). In a persistent run, `import weebot_tools` gives bash(command), web_search(query), file_view(path), file_write(path, text) and call_tool(name, **args); a failure raises weebot_tools.ToolError. Use it to loop over many tool calls in one run.",
    "name": "python_execute",
    "parameters": {
     "properties": {

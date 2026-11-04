@@ -25,6 +25,7 @@ class ToolConfig:
     python_timeout: int = 30
     sandbox_max_output_bytes: int = 65_536
     max_tool_timeout: int = 300  # env: MAX_TOOL_TIMEOUT — ceiling for tool timeout params
+    kernel_rpc_tools: str = "bash,file_editor,web_search"  # env: WEEBOT_KERNEL_RPC_TOOLS
 
     # External research-tool endpoints (Berb / Reasoner / Spacescraper).
     # Defaults mirror WeebotSettings; a value of None means "unset — fall back

@@ -17,7 +17,12 @@ import logging
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from weebot.application.ports.kernel_port import KernelHandle, KernelPort, KernelResult
+from weebot.application.ports.kernel_port import (
+    KernelHandle,
+    KernelPort,
+    KernelResult,
+    RpcHandler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +59,13 @@ class KernelManager:
         return list(self._slots)
 
     async def run(
-        self, session_id: str, code: str, timeout: float, *, reset: bool = False
+        self,
+        session_id: str,
+        code: str,
+        timeout: float,
+        *,
+        reset: bool = False,
+        on_rpc: RpcHandler | None = None,
     ) -> KernelRun:
         self._bind_loop()
         victims: list[_Slot] = []
@@ -66,7 +77,7 @@ class KernelManager:
             await self._stop_slots([*victims, *evicted])
             victims = []
             try:
-                done = await self._run_in(slot, session_id, code, timeout)
+                done = await self._run_in(slot, session_id, code, timeout, on_rpc)
             finally:
                 slot.users -= 1
             if done is not None:
@@ -110,7 +121,12 @@ class KernelManager:
         return slot, evicted
 
     async def _run_in(
-        self, slot: _Slot, session_id: str, code: str, timeout: float
+        self,
+        slot: _Slot,
+        session_id: str,
+        code: str,
+        timeout: float,
+        on_rpc: RpcHandler | None,
     ) -> KernelRun | None:
         """The run, or None when the call must be claimed again (its kernel was gone)."""
         async with slot.lock:
@@ -125,7 +141,7 @@ class KernelManager:
                     raise
                 notice = self._lost.pop(session_id, "")
             try:
-                result = await self._backend.exec(slot.handle, code, timeout)
+                result = await self._backend.exec(slot.handle, code, timeout, on_rpc)
             except asyncio.CancelledError:
                 # The backend ended the process; the slot must not outlive it.
                 self._forget(session_id, "the call was cancelled", only=slot)

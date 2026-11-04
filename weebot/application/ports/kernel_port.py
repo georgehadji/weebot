@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+
+# Answers one JSON-RPC request frame the kernel's code sent while it ran (a tool call).
+RpcHandler = Callable[[dict], Awaitable[dict]]
 
 
 @dataclass(frozen=True)
@@ -34,8 +38,19 @@ class KernelPort(ABC):
         """Start a fresh interpreter for a session."""
 
     @abstractmethod
-    async def exec(self, handle: KernelHandle, code: str, timeout: float) -> KernelResult:
-        """Run *code* in the kernel's persistent globals. One call at a time per kernel."""
+    async def exec(
+        self,
+        handle: KernelHandle,
+        code: str,
+        timeout: float,
+        on_rpc: RpcHandler | None = None,
+    ) -> KernelResult:
+        """Run *code* in the kernel's persistent globals. One call at a time per kernel.
+
+        While the code runs it may send request frames (tool calls); each is answered by
+        *on_rpc*, and the time that takes does not count against *timeout*. Without a
+        handler every request is answered with an error.
+        """
 
     @abstractmethod
     async def stop(self, handle: KernelHandle) -> None:

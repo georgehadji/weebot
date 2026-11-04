@@ -21,7 +21,12 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from weebot.application.ports.kernel_port import KernelHandle, KernelPort, KernelResult
+from weebot.application.ports.kernel_port import (
+    KernelHandle,
+    KernelPort,
+    KernelResult,
+    RpcHandler,
+)
 from weebot.application.ports.sandbox_port import SandboxConfig
 from weebot.infrastructure.sandbox.native_windows import (
     sandbox_child_env,
@@ -34,6 +39,30 @@ logger = logging.getLogger(__name__)
 SERVER = Path(__file__).with_name("kernel_server.py")
 DEFAULT_MEMORY_MB = 1024
 START_TIMEOUT_S = 15.0
+
+
+def _rpc_request(line: str) -> dict | None:
+    """The tool-call request in a line from the kernel, or None for its final reply."""
+    try:
+        frame = json.loads(line)
+    except ValueError:
+        return None
+    request = frame.get("rpc") if isinstance(frame, dict) else None
+    return request if isinstance(request, dict) else None
+
+
+async def _answer(on_rpc: RpcHandler | None, request: dict) -> dict:
+    """The reply frame for one request; a failed handler is an error reply, never a crash."""
+    if on_rpc is None:
+        message = "Tool calls are not available in this kernel."
+    else:
+        try:
+            return await on_rpc(request)
+        except Exception as exc:
+            logger.warning("kernel tool call failed: %s", exc, exc_info=True)
+            message = f"The tool call failed: {type(exc).__name__}"
+    error = {"code": -32603, "message": message}
+    return {"jsonrpc": "2.0", "id": request.get("id"), "error": error}
 
 
 @dataclass
@@ -100,7 +129,13 @@ class NativeKernel(KernelPort):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
-    async def exec(self, handle: KernelHandle, code: str, timeout: float) -> KernelResult:
+    async def exec(
+        self,
+        handle: KernelHandle,
+        code: str,
+        timeout: float,
+        on_rpc: RpcHandler | None = None,
+    ) -> KernelResult:
         running = self._running.get(handle.kernel_id)
         if running is None:
             return KernelResult(error="The kernel is not running.", died=True, ran=False)
@@ -110,9 +145,7 @@ class NativeKernel(KernelPort):
         request = json.dumps({"code": code, "max_chars": self._max_chars}) + "\n"
         try:
             await asyncio.to_thread(self._send, running.proc, request)
-            line = await asyncio.wait_for(
-                asyncio.to_thread(running.proc.stdout.readline), timeout=timeout
-            )
+            line = await self._read_reply(running.proc, timeout, on_rpc)
         except TimeoutError:
             self._running.pop(handle.kernel_id, None)
             self._discard(running)
@@ -141,6 +174,28 @@ class NativeKernel(KernelPort):
             error=reply.get("error", ""),
             duration_s=float(reply.get("duration", 0.0)),
         )
+
+    async def _read_reply(
+        self, proc: subprocess.Popen, timeout: float, on_rpc: RpcHandler | None
+    ) -> str:
+        """The kernel's final reply line, answering the tool calls its code makes on the way.
+
+        Time spent answering a tool call is the tool's, not the code's, so it is added to the
+        deadline.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            line = await asyncio.wait_for(
+                asyncio.to_thread(proc.stdout.readline),
+                timeout=max(0.001, deadline - time.monotonic()),
+            )
+            request = _rpc_request(line)
+            if request is None:
+                return line
+            asked = time.monotonic()
+            reply = await _answer(on_rpc, request)
+            deadline += time.monotonic() - asked
+            await asyncio.to_thread(self._send, proc, json.dumps({"rpc_result": reply}) + "\n")
 
     @staticmethod
     def _parse(handle: KernelHandle, line: str) -> dict | None:
