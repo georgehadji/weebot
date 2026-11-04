@@ -79,6 +79,8 @@ jobs:
         run: make lint-ruff
       - name: Long-function ratchet
         run: make lint-long-functions
+      - name: Complexity ratchet
+        run: make lint-complexity
       - name: UI debt ratchet
         # BLOCKING. Exact equality both ways, ceilings in tasks/quality/ceilings.toml.
         run: make lint-ui

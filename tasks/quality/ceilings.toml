@@ -371,6 +371,16 @@ dynamic_weebot_imports = 15
 # 24 -> 23 with wave 6 G4: the unwired observability modules were deleted.
 functions_over_150_lines = 23
 
+# Functions with cyclomatic complexity over 20 in weebot/ (AST, per function; a nested
+# function counts on its own). Plan Q1, Hermes's per-unit rule with this exact-equality
+# mechanism. Measured by: scripts/lint_complexity.py. Set at today's value; lower it as
+# the Phase 0-2 refactors land.
+functions_over_cc_20 = 47
+
+# Functions nested more than 6 blocks deep (if/for/while/try/with/match; an elif is not a
+# level). Measured by: scripts/lint_complexity.py.
+functions_over_nesting_6 = 2
+
 # Every ruff violation at pyproject.toml's configured rules in weebot/ and cli/.
 # CI's blocking selector is F821,E9 only; this catches growth in the rest.
 # Fragile to ruff upgrades (0.17.2 when added); the script prints the version.
