@@ -12,6 +12,8 @@ test.use({ viewport: { width: 1280, height: 800 } });
 //   Phase 7.2 lazy:  /  748 KB, /sessions 749, /ops  715, /models 662, /behavior 695
 //   live event on a 2,041-row timeline: 2.8 ms of scripting before React.memo rows, 1.4 ms after.
 // Budgets are the "after" figures plus ~7% headroom. Virtualization (7.3) is not needed.
+// scriptMsPerLiveEvent is looser: shared CI runners measured 6.0 to 9.8 ms on unchanged code, so
+// it catches a large regression (baseline is 1.4 ms), not a few percent.
 const BUDGETS = {
   firstLoadJsKb: {
     "/": 800,
@@ -20,7 +22,7 @@ const BUDGETS = {
     "/models": 710,
     "/behavior": 750,
   } as Record<string, number>,
-  scriptMsPerLiveEvent: 6,
+  scriptMsPerLiveEvent: 12,
 };
 
 for (const route of Object.keys(BUDGETS.firstLoadJsKb)) {
