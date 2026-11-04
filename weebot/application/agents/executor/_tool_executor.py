@@ -21,6 +21,12 @@ from weebot.application.agents.executor._system_prompt import load_executor_syst
 from weebot.application.agents.executor._turn_checkpoint import checkpoint_before_change
 from weebot.application.middleware.base import Deny
 from weebot.application.services.tool_arg_coercion import Coercion, coerce_args
+from weebot.application.services.verification_evidence import (
+    CODE_WRITTEN,
+    VERIFICATION_RAN,
+    classify_verification_command,
+    is_source_file,
+)
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -663,6 +669,17 @@ class ToolExecutor:
             if args.get("command") != "view" and not getattr(result, "is_error", False):
                 if self._scope.note_written_file(self._current_session_id, path):
                     self._persist_flag("file_written", path=path)
+                if is_source_file(path):
+                    self._persist_flag(CODE_WRITTEN, path=path)
+        elif name in ("bash", "powershell"):
+            verification = classify_verification_command(str(args.get("command", "")))
+            if verification:
+                self._persist_flag(
+                    VERIFICATION_RAN,
+                    verification=verification,
+                    command=str(args.get("command", ""))[:200],
+                    ok=not getattr(result, "is_error", False),
+                )
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):

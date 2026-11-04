@@ -388,6 +388,7 @@ class CompletedState(FlowState):
                 verification=verif_scores,
                 gate_failures=gate_failures,
                 verification_status=verification_status,
+                verification_commands=list(extra.get("verification_commands", [])),
                 tool_calls=tool_count,
                 errors=error_count,
                 duration_ms=0,
