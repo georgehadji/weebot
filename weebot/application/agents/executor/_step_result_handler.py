@@ -34,6 +34,7 @@ def pause_events(result: Any, tool_name: str) -> list[AgentEvent] | None:
                 prompt=pending.get("prompt", "Allow this command? (yes/no)"),
                 fingerprint=pending.get("fingerprint", ""),
                 allow_always=pending.get("allow_always"),
+                pattern=pending.get("pattern"),
                 human_only=bool(pending.get("human_only")),
             ),
             # The UI, CLI and SSE render wait_for_user, not tool_approval: this is
