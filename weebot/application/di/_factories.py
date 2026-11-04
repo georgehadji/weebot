@@ -235,18 +235,44 @@ class FactoriesMixin:
         return SQLiteGatewaySessionStore()
 
     def _spillover_kwargs(self) -> dict:
-        """`spillover_store` and a middleware chain that spills oversized tool output (H7)."""
+        """`spillover_store` and the tool middleware chain: spillover (H7), then LSP (H20)."""
+        from weebot.application.di.keys import LSP
         from weebot.application.middleware.chain import MiddlewareChain
         from weebot.application.ports.spillover_store_port import SpilloverStorePort
+        from weebot.application.services.lsp_diagnostics import LspDiagnosticsMiddleware
         from weebot.application.services.spillover import SpilloverMiddleware
+        from weebot.config.settings import WORKSPACE_ROOT
 
+        kwargs: dict = {}
+        chain = []
         store = self._maybe_get(SpilloverStorePort)
-        if store is None:
-            return {}
-        return {
-            "spillover_store": store,
-            "middleware_chain": MiddlewareChain([SpilloverMiddleware(store)]),
-        }
+        if store is not None:
+            kwargs["spillover_store"] = store
+            chain.append(SpilloverMiddleware(store))
+        lsp = self.get(LSP)
+        if lsp is not None:
+            chain.append(LspDiagnosticsMiddleware(lsp, WORKSPACE_ROOT))
+        if chain:
+            kwargs["middleware_chain"] = MiddlewareChain(chain)
+        return kwargs
+
+    @staticmethod
+    def _create_lsp():
+        """The language-server manager (H20), or None while WEEBOT_LSP_DIAGNOSTICS is off."""
+        import os
+        from pathlib import Path
+
+        from weebot.config import feature_flags
+
+        if not feature_flags.LSP_DIAGNOSTICS_ENABLED:
+            return None
+        from weebot.config.secret_accessor import SecretAccessor
+        from weebot.config.settings import WORKSPACE_ROOT
+        from weebot.infrastructure.lsp.manager import LspManager
+
+        raw = SecretAccessor.get("WEEBOT_LSP_TRUSTED_ROOTS") or ""
+        trusted = [Path(p) for p in raw.split(os.pathsep) if p.strip()]
+        return LspManager(WORKSPACE_ROOT, trusted)
 
     def _workspace_checkpoints(self):
         """The shadow-git checkpoint port, or None while WEEBOT_FILE_CHECKPOINTS is off."""
