@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-11-04
-commit: d12497d4
+commit: 43396cc6
 ---
 
 # BashGuard
