@@ -526,6 +526,15 @@ class WeebotSettings(BaseSettings):
         alias="WEEBOT_OUTBOUND_ASK_IN_OBSERVE",
         description="Outbound tools ask through the approval channel even in observe mode.",
     )
+    approval_deny_globs: str = Field(
+        default="",
+        alias="WEEBOT_APPROVAL_DENY_GLOBS",
+        description=(
+            "Comma-separated globs (case-insensitive) for shell commands that are always "
+            "refused, in every approval mode, e.g. 'npm publish*,git push*'. Each glob is "
+            "tried against the command and against every part of it (H18 floors)."
+        ),
+    )
     secret_redaction_enabled: bool = Field(
         default=True, description="Redact secrets (PANs, API keys) in tool output and logs."
     )

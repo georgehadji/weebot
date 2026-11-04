@@ -186,6 +186,9 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce user_id matching on session access"},
     {"var": "WEEBOT_SHELL_DEFAULT_ASK", "type": "str", "default": "observe",
      "desc": "Shell commands no approval rule covers: off, observe (log what would ask) or enforce"},
+    {"var": "WEEBOT_APPROVAL_DENY_GLOBS", "type": "str", "default": "",
+     "desc": "Comma-separated globs for shell commands that are always refused, in every "
+             "approval mode (H18 floors)"},
     {"var": "WEEBOT_AUTO_INSTALL_TOOLS", "type": "bool", "default": "true",
      "desc": "Let install_tool add a missing dependency from PyPI (wheels only), npm (no "
              "lifecycle scripts) or winget. Every install still asks first; URLs, VCS specs, "
