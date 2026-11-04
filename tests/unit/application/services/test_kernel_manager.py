@@ -21,8 +21,14 @@ class FakeKernels(KernelPort):
         self.max_running = 0
         self.delay = 0.0
         self.die_on = ""
+        self.vanish_next = ""  # the next exec finds its kernel already gone; the code never ran
+        self.fail_start = False
+        self.start_delay: dict[str, float] = {}
 
     async def start(self, session_id):
+        if self.fail_start:
+            raise RuntimeError("kernel did not start")
+        await asyncio.sleep(self.start_delay.get(session_id, 0.0))
         kernel_id = f"k{len(self.started)}"
         self.started.append(session_id)
         self.state[kernel_id] = {}
@@ -32,7 +38,10 @@ class FakeKernels(KernelPort):
         self.running += 1
         self.max_running = max(self.max_running, self.running)
         try:
-            await asyncio.sleep(self.delay)
+            if self.vanish_next:
+                error, self.vanish_next = self.vanish_next, ""
+                return KernelResult(error=error, died=True, ran=False)
+            await asyncio.sleep(30 if code == "hang" else self.delay)
             if code == self.die_on:
                 return KernelResult(error="The kernel stopped (exit code 9).", died=True)
             if "=" in code:
@@ -185,3 +194,86 @@ async def test_stop_all_stops_every_kernel(manager, backend):
     await manager.stop_all()
 
     assert sorted(backend.stopped) == ["a", "b"] and manager.live_sessions == []
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_call_drops_its_kernel_and_the_next_call_says_so(manager, backend):
+    await manager.run("a", "x = 1", 5)
+    hung = asyncio.create_task(manager.run("a", "hang", 5))
+    await asyncio.sleep(0.03)
+
+    hung.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await hung
+
+    assert manager.live_sessions == [] and backend.stopped == ["a"]
+    again = await manager.run("a", "x", 5)
+    assert again.result.stdout == "<unset>" and "cancelled" in again.notice
+
+
+@pytest.mark.asyncio
+async def test_a_call_whose_kernel_was_gone_before_it_ran_is_run_on_a_fresh_one(manager, backend):
+    await manager.run("a", "x = 1", 5)
+    backend.vanish_next = "The kernel stopped (memory limit of 1024 MB exceeded)."
+
+    run = await manager.run("a", "x = 2", 5)
+
+    assert run.result.success and backend.started == ["a", "a"]
+    assert "memory limit" in run.notice
+    assert (await manager.run("a", "x", 5)).result.stdout == "2"
+
+
+@pytest.mark.asyncio
+async def test_a_kernel_that_will_not_start_leaves_no_slot_and_keeps_the_notice(manager, backend):
+    await manager.run("a", "x = 1", 5)
+    backend.die_on = "boom"
+    await manager.run("a", "boom", 5)
+    backend.fail_start = True
+
+    with pytest.raises(RuntimeError, match="did not start"):
+        await manager.run("a", "x", 5)
+    assert manager.live_sessions == []
+
+    backend.fail_start = False
+    assert "exit code 9" in (await manager.run("a", "x", 5)).notice
+
+
+@pytest.mark.asyncio
+async def test_a_slow_start_for_one_session_does_not_hold_up_another(manager, backend):
+    await manager.run("b", "x = 1", 5)
+    backend.start_delay["slow"] = 0.3
+    slow = asyncio.create_task(manager.run("slow", "x = 1", 5))
+    await asyncio.sleep(0.03)
+
+    await asyncio.wait_for(manager.run("b", "x", 5), timeout=0.15)
+
+    assert not slow.done()
+    await slow
+
+
+@pytest.mark.asyncio
+async def test_a_slot_with_a_waiting_call_is_not_evicted(backend):
+    manager = KernelManager(backend, max_kernels=2)
+    backend.delay = 0.2
+    await manager.run("b", "x = 1", 5)
+    first = asyncio.create_task(manager.run("a", "x = 1", 5))
+    queued = asyncio.create_task(manager.run("a", "y = 1", 5))
+    await asyncio.sleep(0.05)
+
+    await manager.run("c", "x = 1", 5)  # b is the idle one
+
+    await asyncio.gather(first, queued)
+    assert backend.stopped == ["b"]
+
+
+def test_the_manager_can_be_used_from_one_event_loop_after_another(backend):
+    manager = KernelManager(backend)
+
+    async def contended():
+        await asyncio.gather(*(manager.run("a", f"v{i} = {i}", 5) for i in range(3)))
+
+    backend.delay = 0.02
+    asyncio.run(contended())  # the slot's lock is waited on, so it binds to this loop
+    asyncio.run(contended())  # a different loop must not meet the old lock
+
+    assert manager.live_sessions == ["a"]

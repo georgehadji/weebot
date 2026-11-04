@@ -16,7 +16,7 @@ Each call used to start a fresh interpreter, so a multi-step data task repeated 
 
 ## Shape
 - `KernelPort`: `start(session_id)`, `exec(handle, code, timeout)`, `stop(handle)`; `KernelResult` carries `stdout`, `error`, `timed_out`, `died` (`weebot/application/ports/kernel_port.py`).
-- `KernelManager.run(session_id, code, timeout, reset=)`: one kernel per session, four at most, least recently used out, one call at a time per kernel; `stop_session`, `stop_all` (`weebot/application/services/kernel_manager.py`).
+- `KernelManager.run(session_id, code, timeout, reset=)`: one kernel per session, four at most, least recently used out, one call at a time per kernel, a dead, timed-out or cancelled kernel dropped (no manager-wide lock); `stop_session`, `stop_all` (`weebot/application/services/kernel_manager.py`).
 - `NativeKernel`: a child process with the native sandbox's environment allowlist, proxy blockade and a memory kill (`weebot/infrastructure/sandbox/native_kernel.py`), running `kernel_server.py`, a standard-library REPL speaking JSON lines (`weebot/infrastructure/sandbox/kernel_server.py`).
 
 ## Connected to

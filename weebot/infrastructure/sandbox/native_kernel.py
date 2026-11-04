@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import subprocess
 import sys
 import threading
@@ -23,10 +24,12 @@ from pathlib import Path
 from weebot.application.ports.kernel_port import KernelHandle, KernelPort, KernelResult
 from weebot.application.ports.sandbox_port import SandboxConfig
 from weebot.infrastructure.sandbox.native_windows import (
-    _build_child_env,
-    _psutil_memory_monitor,
-    _spawn_error,
+    sandbox_child_env,
+    psutil_memory_monitor,
+    spawn_error,
 )
+
+logger = logging.getLogger(__name__)
 
 SERVER = Path(__file__).with_name("kernel_server.py")
 DEFAULT_MEMORY_MB = 1024
@@ -59,7 +62,7 @@ class NativeKernel(KernelPort):
         try:
             proc = await asyncio.to_thread(self._spawn)
         except Exception as exc:
-            raise RuntimeError(_spawn_error(exc)) from exc
+            raise RuntimeError(spawn_error(exc)) from exc
         running = _Running(proc)
         try:
             first = await asyncio.wait_for(
@@ -68,13 +71,13 @@ class NativeKernel(KernelPort):
             if not json.loads(first or "{}").get("ready"):
                 raise RuntimeError(f"kernel did not start (exit code {proc.poll()})")
         except BaseException as exc:
-            self._kill(running)
+            self._discard(running)
             if isinstance(exc, (TimeoutError, ValueError)):
                 raise RuntimeError(f"kernel did not start: {type(exc).__name__}") from exc
             raise
         limit_bytes = self._memory_mb * 1024 * 1024
         threading.Thread(
-            target=_psutil_memory_monitor,
+            target=psutil_memory_monitor,
             args=(proc.pid, limit_bytes, running.stop_monitor, running.memory_killed),
             daemon=True,
         ).start()
@@ -90,7 +93,7 @@ class NativeKernel(KernelPort):
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             cwd=str(cwd) if cwd is not None else None,
-            env=_build_child_env(self._config),
+            env=sandbox_child_env(self._config),
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -99,8 +102,10 @@ class NativeKernel(KernelPort):
 
     async def exec(self, handle: KernelHandle, code: str, timeout: float) -> KernelResult:
         running = self._running.get(handle.kernel_id)
-        if running is None or running.proc.poll() is not None:
-            return KernelResult(error="The kernel is not running.", died=True)
+        if running is None:
+            return KernelResult(error="The kernel is not running.", died=True, ran=False)
+        if running.proc.poll() is not None:  # it went between calls, perhaps for memory
+            return await self._died(handle, running, 0.0, ran=False)
         started = time.monotonic()
         request = json.dumps({"code": code, "max_chars": self._max_chars}) + "\n"
         try:
@@ -109,7 +114,8 @@ class NativeKernel(KernelPort):
                 asyncio.to_thread(running.proc.stdout.readline), timeout=timeout
             )
         except TimeoutError:
-            self._kill(running)
+            self._running.pop(handle.kernel_id, None)
+            self._discard(running)
             return KernelResult(
                 error=f"Timed out after {timeout:.0f}s; the kernel was stopped.",
                 duration_s=time.monotonic() - started,
@@ -117,13 +123,16 @@ class NativeKernel(KernelPort):
                 died=True,
             )
         except asyncio.CancelledError:
-            self._kill(running)  # what the code was doing is unknown; do not keep its state
+            # What the code was doing is unknown, so its state is not kept.
+            self._running.pop(handle.kernel_id, None)
+            self._discard(running)
             raise
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            logger.warning("kernel %s: talking to it failed: %s", handle.kernel_id, exc)
             line = ""
-        if not line:
-            return self._died(running, time.monotonic() - started)
-        reply = json.loads(line)
+        reply = self._parse(handle, line)
+        if reply is None:
+            return await self._died(handle, running, time.monotonic() - started)
         stdout = reply.get("stdout", "")
         if reply.get("truncated"):
             stdout += "\n...[output truncated]"
@@ -134,12 +143,26 @@ class NativeKernel(KernelPort):
         )
 
     @staticmethod
+    def _parse(handle: KernelHandle, line: str) -> dict | None:
+        """The reply, or None when the kernel closed its output or died mid-reply."""
+        if not line:
+            return None
+        try:
+            return json.loads(line)
+        except ValueError:
+            logger.warning("kernel %s: its reply was cut short", handle.kernel_id)
+            return None
+
+    @staticmethod
     def _send(proc: subprocess.Popen, request: str) -> None:
         proc.stdin.write(request)
         proc.stdin.flush()
 
-    def _died(self, running: _Running, elapsed: float) -> KernelResult:
-        self._kill(running)
+    async def _died(
+        self, handle: KernelHandle, running: _Running, elapsed: float, *, ran: bool = True
+    ) -> KernelResult:
+        self._running.pop(handle.kernel_id, None)
+        await self._kill(running)
         why = (
             f"memory limit of {self._memory_mb} MB exceeded"
             if running.memory_killed[0]
@@ -149,20 +172,35 @@ class NativeKernel(KernelPort):
             error=f"The kernel stopped ({why}); its variables are gone.",
             duration_s=elapsed,
             died=True,
+            ran=ran,
         )
 
     async def stop(self, handle: KernelHandle) -> None:
         running = self._running.pop(handle.kernel_id, None)
         if running is not None:
-            await asyncio.to_thread(self._kill, running)
+            await self._kill(running)
 
     @staticmethod
-    def _kill(running: _Running) -> None:
+    def _terminate(running: _Running) -> None:
+        """Ask the OS to end the process now; never waits."""
         running.stop_monitor.set()
         with contextlib.suppress(OSError):
             running.proc.kill()
+
+    @staticmethod
+    def _reap(running: _Running) -> None:
+        """Wait for the process and release its pipes; blocks, so not on the event loop."""
         with contextlib.suppress(OSError, subprocess.TimeoutExpired):
             running.proc.wait(timeout=5)
         for stream in (running.proc.stdin, running.proc.stdout):
             with contextlib.suppress(Exception):  # a reader thread may still hold the stream
                 stream.close()
+
+    async def _kill(self, running: _Running) -> None:
+        self._terminate(running)
+        await asyncio.to_thread(self._reap, running)
+
+    def _discard(self, running: _Running) -> None:
+        """End the process without waiting; for paths that must not block or may be cancelled."""
+        self._terminate(running)
+        asyncio.get_running_loop().run_in_executor(None, self._reap, running)

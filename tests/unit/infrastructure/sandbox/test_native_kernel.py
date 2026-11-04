@@ -176,3 +176,63 @@ async def test_stopping_twice_is_harmless():
     await backend.stop(handle)
 
     assert (await backend.exec(handle, "1", 5)).died
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_call_ends_the_kernel_and_the_next_call_runs_nothing(kernel):
+    handle = await kernel.start()
+    hung = asyncio.create_task(kernel.exec(handle, "import time; time.sleep(60)", 60))
+    await asyncio.sleep(0.5)
+
+    hung.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await hung
+
+    after = await kernel.exec(handle, "print(1)", 10)
+    assert after.died and not after.ran
+
+
+@pytest.mark.asyncio
+async def test_a_reply_cut_short_is_a_dead_kernel_not_an_exception(tmp_path, monkeypatch):
+    from weebot.infrastructure.sandbox import native_kernel
+
+    fake = tmp_path / "cut_short.py"
+    fake.write_text(
+        "import sys\n"
+        "sys.stdout.write('{\"ready\": true}\\n'); sys.stdout.flush()\n"
+        "sys.stdin.readline()\n"
+        "sys.stdout.write('{\"stdout\": \"par'); sys.stdout.flush()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(native_kernel, "SERVER", fake)
+    backend = NativeKernel()
+    handle = await backend.start("s")
+
+    result = await backend.exec(handle, "x = 1", 10)
+
+    assert result.died and result.ran and "variables are gone" in result.error
+    await backend.stop(handle)
+
+
+@pytest.mark.asyncio
+async def test_a_kernel_over_its_memory_limit_says_so_whether_it_dies_in_a_call_or_between():
+    pytest.importorskip("psutil")
+    backend = NativeKernel(memory_limit_mb=120)
+    handle = await backend.start("s")
+    try:
+        grow_and_wait = "x = b'x' * 400_000_000\nimport time; time.sleep(5)"
+        during = await backend.exec(handle, grow_and_wait, 20)
+        assert during.died and "memory limit of 120 MB" in during.error
+    finally:
+        await backend.stop(handle)
+
+    handle = await backend.start("s")
+    try:
+        await backend.exec(handle, "x = b'x' * 400_000_000", 20)
+        await asyncio.sleep(2)  # the monitor looks every half second
+
+        between = await backend.exec(handle, "print(1)", 10)
+        assert between.died and not between.ran
+        assert "memory limit of 120 MB" in between.error
+    finally:
+        await backend.stop(handle)

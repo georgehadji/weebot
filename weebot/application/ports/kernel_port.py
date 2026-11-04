@@ -21,6 +21,7 @@ class KernelResult:
     duration_s: float = 0.0
     timed_out: bool = False
     died: bool = False  # the process is gone; its variables with it
+    ran: bool = True  # False: the code never reached the kernel, so running it again is safe
 
     @property
     def success(self) -> bool:
