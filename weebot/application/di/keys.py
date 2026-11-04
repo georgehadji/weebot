@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     )
     from weebot.application.ports.skill_store_port import SkillStorePort
     from weebot.application.ports.guardian_port import GuardianPort
+    from weebot.application.ports.lsp_port import LspPort
     from weebot.application.ports.step_evaluator_port import StepEvaluatorPort
     from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
     from weebot.application.services.strategy_transfer import StrategyTransferService
@@ -58,6 +59,8 @@ ACR_ROUTER: Key[AdaptiveCapabilityRouter] = Key("acr_router")
 STEP_EVALUATOR: Key[StepEvaluatorPort | None] = Key("step_evaluator")
 # Approval guardian (H18c); resolves to None while WEEBOT_APPROVAL_GUARDIAN is off.
 APPROVAL_GUARDIAN: Key[GuardianPort | None] = Key("approval_guardian")
+# Language-server diagnostics after file edits (H20); None while WEEBOT_LSP_DIAGNOSTICS is off.
+LSP: Key[LspPort | None] = Key("lsp")
 # Chain-of-verification veto on candidate -> trusted; None while its flag is off.
 SKILL_PROMOTION_GATE: Key[SkillPromotionGate | None] = Key("skill_promotion_gate")
 # Episodic summaries; always bound so the delete cascade can purge them.

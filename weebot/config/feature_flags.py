@@ -180,6 +180,14 @@ STEP_EVALUATOR_ENABLED: bool = _env_bool("WEEBOT_STEP_EVALUATOR", default=False)
 APPROVAL_GUARDIAN_ENABLED: bool = _env_bool("WEEBOT_APPROVAL_GUARDIAN", default=False)
 
 
+# ── LSP delta diagnostics (H20) ─────────────────────────────────────────────
+# When True, a file_editor write also reports the language-server diagnostics the edit
+# introduced (not the ones already there). Spawns pyright / ruff / typescript-language-server
+# child processes, and only for the workspace root and WEEBOT_LSP_TRUSTED_ROOTS (a path list),
+# because a language server runs the project's own config. Default OFF: it starts processes.
+LSP_DIAGNOSTICS_ENABLED: bool = _env_bool("WEEBOT_LSP_DIAGNOSTICS", default=False)
+
+
 # ── Desktop toasts (D4) ─────────────────────────────────────────────────────
 # When True, the web backend shows a Windows toast for errors, questions and
 # finished runs. The text is credential-redacted first. Default OFF: a toast

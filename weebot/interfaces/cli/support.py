@@ -289,6 +289,19 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
                 DoctorCheck(name="projects_db", status="error", details=f"DB open failed: {exc}")
             )
 
+    # Language servers for H20 diagnostics. Optional and off by default, so never an error.
+    from weebot.config.lsp_servers import installed_servers
+
+    servers = installed_servers()
+    checks.append(
+        DoctorCheck(
+            name="lsp_servers",
+            status="ok" if any(servers.values()) else "warn",
+            details=", ".join(f"{lang}: {exe or 'not installed'}" for lang, exe in servers.items()),
+            data={"servers": servers},
+        )
+    )
+
     # Templates validation
     parser = TemplateParser()
     builtin_dir = root / "weebot" / "templates" / "builtin"
