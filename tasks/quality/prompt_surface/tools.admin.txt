@@ -839,13 +839,21 @@
  },
  {
   "function": {
-   "description": "Execute Python code in an isolated subprocess. stdout and stderr are captured and returned. Supports pandas, numpy, matplotlib if installed. Use print() to produce output visible to the agent.",
+   "description": "Execute Python code in an isolated subprocess. stdout and stderr are captured and returned. Supports pandas, numpy, matplotlib if installed. Use print() to produce output visible to the agent. Variables persist between calls in the same session; pass reset=true to start clean or persistent=false for a one-shot run (needed for network access).",
    "name": "python_execute",
    "parameters": {
     "properties": {
      "code": {
       "description": "Python source code to execute",
       "type": "string"
+     },
+     "persistent": {
+      "description": "Keep variables between calls (default true). False = one-shot.",
+      "type": "boolean"
+     },
+     "reset": {
+      "description": "Discard the session's variables before running this code.",
+      "type": "boolean"
      },
      "timeout": {
       "description": "Timeout in seconds (default 30)",

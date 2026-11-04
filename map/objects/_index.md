@@ -23,6 +23,7 @@ Format: name — source — status — card
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
+- PythonKernel (KernelPort, KernelManager, NativeKernel, kernel_server) — `docs/adr/026-persistent-python-kernel.md` — stub — [card](application/PythonKernel.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
 - SpilloverStore (SpilloverStorePort, FileSpilloverStore, SpilloverMiddleware, spill_over_budget) — `docs/adr/020-tool-output-spillover.md` — stub — [card](application/SpilloverStore.md)
 - ToolArgCoercion (coerce_args, Coercion, Deny, ToolCall, MiddlewareChain) — `tasks/specs/hermes_v022_parity_implementation_plan.md` — stub — [card](application/ToolArgCoercion.md)
@@ -45,7 +46,7 @@ Format: name — source — status — card
 
 ## core
 - ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-03 — [card](core/ApprovalManager.md)
-- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-03 — [card](core/BashGuard.md)
+- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-04 — [card](core/BashGuard.md)
 - ChildEnv (build_child_env, BASE_POSIX, BASE_WINDOWS) — `weebot/core/child_env.py` — stub — [card](core/ChildEnv.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-11-01 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-11-01 — [card](core/EgressGuard.md)
