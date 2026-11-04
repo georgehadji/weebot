@@ -571,6 +571,7 @@ class FactoriesMixin:
         from weebot.application.ports.tool_repository_port import ToolRepositoryPort
         from weebot.application.services.audit_service import AuditService
         from weebot.application.services.file_state import FileStateRegistry
+        from weebot.application.services.kernel_manager import KernelManager
         from weebot.config.tool_config import ToolConfig
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 
@@ -605,6 +606,7 @@ class FactoriesMixin:
             # The workflow orchestrator tool's progress events, onto the shared bus.
             "workflow_events": EventBrokerAdapter(bus) if bus is not None else None,
             "browser_factory": self._playwright_adapter,
+            "kernel_manager": self._maybe_get(KernelManager),
             "rerank": self._maybe_get(RerankPort),
             "tool_config": self._maybe_get(ToolConfig),
             "collaborators": {

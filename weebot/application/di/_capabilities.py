@@ -74,6 +74,10 @@ class CapabilitiesMixin:
 
         self.register(FileStateRegistry, FileStateRegistry)
         self.register(SyntaxCheckPort, InProcessSyntaxCheck)
+        # One Python interpreter per session that keeps its variables between calls (H17).
+        from weebot.application.services.kernel_manager import KernelManager
+
+        self.register(KernelManager, self._create_kernel_manager)
         # The persistent-memory text each session read at its first step (H24a).
         from weebot.application.di.keys import MEMORY_SNAPSHOT_CACHE
 
@@ -85,6 +89,15 @@ class CapabilitiesMixin:
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"
         self.register(STRATEGY_TRANSFER, lambda: self._create_strategy_transfer(strategies_db))
+
+    @staticmethod
+    def _create_kernel_manager():
+        from weebot.application.services.kernel_manager import KernelManager
+        from weebot.config.settings import get_settings
+        from weebot.infrastructure.sandbox.factory import build_sandbox_config
+        from weebot.infrastructure.sandbox.native_kernel import NativeKernel
+
+        return KernelManager(NativeKernel(build_sandbox_config(get_settings())))
 
     @staticmethod
     def _create_memory_snapshot_cache():

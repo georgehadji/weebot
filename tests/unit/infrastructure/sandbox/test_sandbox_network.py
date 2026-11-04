@@ -20,7 +20,7 @@ from weebot.application.services.tool_approval import DenyApproval, approval_sco
 from weebot.core.egress_guard import EgressGuard, RecipientAllowlist
 from weebot.domain.models.tool_result import ToolResult
 from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
-from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox, _build_child_env
+from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox, sandbox_child_env
 
 
 def test_network_is_allowed_only_inside_a_cleared_call():
@@ -33,9 +33,9 @@ def test_network_is_allowed_only_inside_a_cleared_call():
 
 
 def test_native_proxy_block_lifts_for_a_cleared_call():
-    assert _build_child_env(SandboxConfig())["HTTP_PROXY"] == "http://127.0.0.1:9"
+    assert sandbox_child_env(SandboxConfig())["HTTP_PROXY"] == "http://127.0.0.1:9"
     with network_cleared_for_call():
-        assert "HTTP_PROXY" not in _build_child_env(SandboxConfig())
+        assert "HTTP_PROXY" not in sandbox_child_env(SandboxConfig())
 
 
 async def test_docker_command_is_hardened_and_network_none_unless_cleared(monkeypatch):
