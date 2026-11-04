@@ -44,8 +44,9 @@ Format: name — source — status — card
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-31 — [card](interfaces/WebUI.md)
 
 ## core
+- ApprovalFloors (Floor, BUILTIN_FLOORS, FloorGuard, command_variants) — `docs/adr/022-approval-floors.md` — stub — [card](core/ApprovalFloors.md)
 - ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-03 — [card](core/ApprovalManager.md)
-- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-03 — [card](core/BashGuard.md)
+- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-04 — [card](core/BashGuard.md)
 - ChildEnv (build_child_env, BASE_POSIX, BASE_WINDOWS) — `weebot/core/child_env.py` — stub — [card](core/ChildEnv.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-11-01 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-11-01 — [card](core/EgressGuard.md)
