@@ -40,6 +40,7 @@ from weebot.domain.models.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 APPROVAL_DATA_KEY = "approval_required"
+DENIAL_DATA_KEY = "approval_denied"  # on a result a person, a rule or a guard refused (H18d)
 ALWAYS_TOKENS = frozenset({"always", "always allow", "allow always", "always allow host"})
 SESSION_TOKENS = frozenset({"session", "yes for this session", "allow for this session"})
 
@@ -149,6 +150,50 @@ def _scope_covers(request: ToolCallApproval) -> bool:
     logger.info("approval scope used (%s): %s", scope, request.pattern)
     _journal_outcome("approval_granted", request, f"scope_{scope}")
     return True
+
+
+class DenialBreaker:
+    """Counts refused tool calls: too many in a step, or in a session, and a person decides (H18d).
+
+    ``record`` returns ``"step"`` or ``"session"`` on the call that trips it, else None. A trip
+    clears both counts: the person has been asked, and the next refusals start a new tally.
+    """
+
+    def __init__(self, per_step: int = 3, per_session: int = 6) -> None:
+        self._per_step = per_step
+        self._per_session = per_session
+        self._steps: dict[tuple[str, str], int] = {}
+        self._sessions: dict[str, int] = {}
+
+    def record(self, session_id: str, step_id: str) -> str | None:
+        key = (session_id, step_id)
+        self._steps[key] = self._steps.get(key, 0) + 1
+        self._sessions[session_id] = self._sessions.get(session_id, 0) + 1
+        if self._sessions[session_id] >= self._per_session:
+            tripped = "session"
+        elif self._steps[key] >= self._per_step:
+            tripped = "step"
+        else:
+            return None
+        self._sessions.pop(session_id, None)
+        for step_key in [k for k in self._steps if k[0] == session_id]:
+            del self._steps[step_key]
+        logger.warning(
+            "denial breaker tripped (%s): session=%s step=%s", tripped, session_id, step_id
+        )
+        return tripped
+
+    def forget_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+        for step_key in [k for k in self._steps if k[0] == session_id]:
+            del self._steps[step_key]
+
+
+_BREAKER = DenialBreaker()
+
+
+def denial_breaker() -> DenialBreaker:
+    return _BREAKER
 
 
 # ── Strategies ──────────────────────────────────────────────────────────────
@@ -410,7 +455,7 @@ def denied_result(request: ToolCallApproval) -> ToolResult:
             " To run Python, use the python_execute tool, or write the script to a file"
             " under Output/ and run that file; both run without approval."
         )
-    return ToolResult(output="", error=error)
+    return ToolResult(output="", error=error, data={DENIAL_DATA_KEY: True})
 
 
 def mark_tool_approval_pending(session: Any, event: Any) -> Any:

@@ -244,6 +244,8 @@ class ToolBatchRunner:
             return
         if self._policy_error_loop(step, result, outcome):
             return
+        if self._denial_loop(step, result, outcome):
+            return
 
         result = await self._middleware(executor, tool_name, event_args, result)
         if result is None:
@@ -355,6 +357,35 @@ class ToolBatchRunner:
             f"{diagnosis.detail}{security_context}. Auto-aborting step."
         )
         outcome.events.append(ErrorEvent(error=outcome.loop_error))
+        outcome.abort_step = True
+        return True
+
+    def _denial_loop(self, step: Step, result: ToolResult, outcome: BatchOutcome) -> bool:
+        """H18d: too many refused calls in a step, or in a session, and a person decides."""
+        from weebot.application.services.tool_approval import DENIAL_DATA_KEY, denial_breaker
+
+        if not (result.data or {}).get(DENIAL_DATA_KEY):
+            return False
+        tripped = denial_breaker().record(session_id_var.get() or "", step.id)
+        if tripped is None:
+            return False
+        scope = "this step" if tripped == "step" else "this session"
+        outcome.loop_error = (
+            f"Step '{step.id}' stopped: too many tool calls were refused in {scope}."
+        )
+        outcome.events.append(ErrorEvent(error=outcome.loop_error))
+        outcome.events.append(
+            WaitForUserEvent(
+                question=(
+                    f"Too many tool calls were refused in {scope} (last: "
+                    f"{(result.error or '')[:300]}).\n"
+                    f"Step: {step.description!r}.\n\n"
+                    "Please either:\n"
+                    "  1. Rephrase the task to avoid the refused operation, or\n"
+                    "  2. Change the approval settings if appropriate, then resume."
+                )
+            )
+        )
         outcome.abort_step = True
         return True
 

@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-11-04
-commit: 63079861
+commit: c5b6fed4
 ---
 
 # MCP server

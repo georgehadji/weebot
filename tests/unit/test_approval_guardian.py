@@ -144,6 +144,7 @@ async def test_deny_refuses_without_asking_a_person(setup):
     )
     result = await _run(tool)
     assert result.is_error and "guardian" in result.error
+    assert result.data[tool_approval.DENIAL_DATA_KEY]  # it counts toward the denial breaker
     assert inner.calls == [] and channel.seen == []
 
 
