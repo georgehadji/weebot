@@ -46,7 +46,12 @@ def render() -> dict[str, str]:
     for scope in SCOPES:
         static, _ = asyncio.run(build_system_blocks(base_prompt=base, context_scope=scope))
         surfaces[f"system_static.{scope}"] = static
-    registry = RoleBasedToolRegistry()
+    from weebot.infrastructure.persistence.session_search_sqlite import SqliteSessionSearch
+
+    # A tool with collaborators is left out of an unwired registry; wire the ones the lock
+    # must see. The search port opens no database until it is used.
+    wiring = {"collaborators": {"search_history": {"search": SqliteSessionSearch.at(":memory:")}}}
+    registry = RoleBasedToolRegistry(wiring=lambda: wiring)
     for role in ROLES:
         tools = canonical_tools(registry.create_tool_collection(role).to_params())
         surfaces[f"tools.{role}"] = json.dumps(tools, indent=1, sort_keys=True) + "\n"
