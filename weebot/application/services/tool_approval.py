@@ -32,6 +32,7 @@ from weebot.application.ports.approval_port import (
     ApprovalPort,
     ToolCallApproval,
 )
+from weebot.application.ports.guardian_port import GuardianPort, GuardianVerdict
 from weebot.core.approval import ApprovalManager
 from weebot.core.approval_scopes import ScopedGrants
 from weebot.domain.models.tool_result import ToolResult
@@ -102,6 +103,39 @@ def grant_store() -> ApprovalManager:
 
 
 _SCOPES = ScopedGrants()
+_guardian: GuardianPort | None = None  # set by the entry point when WEEBOT_APPROVAL_GUARDIAN is on
+
+
+def set_guardian(guardian: GuardianPort | None) -> None:
+    """Let *guardian* review the commands no rule covers before a person is asked (H18c)."""
+    global _guardian
+    _guardian = guardian
+
+
+async def guardian_outcome(request: ToolCallApproval) -> ApprovalOutcome | None:
+    """APPROVED or DENIED by the guardian, or None: ask the approval channel as usual.
+
+    Only a call that can carry a scope pattern goes to it (no rule covers the command; not
+    dangerous, not a floor, not egress, not the untrusted-content gate), only in a session the
+    executor said is untainted, and never when a scope already covers the call.
+    """
+    command = request.arguments.get("command")
+    if (
+        _guardian is None
+        or not request.pattern
+        or not isinstance(command, str)
+        or _scope_tainted.get() is not False
+        or _SCOPES.allows(request.session_id, request.pattern)
+    ):
+        return None
+    verdict = await _guardian.review(command, _scope_step.get())
+    if verdict is GuardianVerdict.APPROVE:
+        _journal_outcome("approval_granted", request, "guardian")
+        return ApprovalOutcome.APPROVED
+    if verdict is GuardianVerdict.DENY:
+        _journal_outcome("approval_denied", request, "guardian")
+        return ApprovalOutcome.DENIED
+    return None
 
 
 def scope_store() -> ScopedGrants:
@@ -270,6 +304,9 @@ _process_approval: ApprovalPort = DenyApproval()
 _scope_approval: ContextVar[ApprovalPort | None] = ContextVar("weebot_approval", default=None)
 _scope_session: ContextVar[str] = ContextVar("weebot_approval_session", default="")
 _approved_call: ContextVar[str] = ContextVar("weebot_approved_call", default="")
+# What the guardian needs of the running step; None until the executor says (H18c).
+_scope_tainted: ContextVar[bool | None] = ContextVar("weebot_approval_tainted", default=None)
+_scope_step: ContextVar[str] = ContextVar("weebot_approval_step", default="")
 
 
 def set_process_approval(port: ApprovalPort) -> None:
@@ -297,8 +334,14 @@ def approval_scope(
     approval: ApprovalPort | None = None,
     session_id: str | None = None,
     approved_call: str | None = None,
+    tainted: bool | None = None,
+    step_description: str | None = None,
 ) -> Iterator[None]:
     tokens = []
+    if tainted is not None:
+        tokens.append((_scope_tainted, _scope_tainted.set(tainted)))
+    if step_description is not None:
+        tokens.append((_scope_step, _scope_step.set(step_description)))
     if approval is not None:
         tokens.append((_scope_approval, _scope_approval.set(approval)))
     if session_id is not None:

@@ -203,6 +203,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     set_process_approval(FlowPauseApproval())
     set_approval_journal(container.get(EventStorePort))
+    from weebot.application.di.keys import APPROVAL_GUARDIAN
+    from weebot.application.services.tool_approval import set_guardian
+
+    set_guardian(container.get(APPROVAL_GUARDIAN))
 
     # The one API-key store for this process; web/auth.py reads it from app.state.
     from weebot.application.ports.api_key_port import ApiKeyPort

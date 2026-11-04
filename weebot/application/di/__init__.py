@@ -33,6 +33,7 @@ from weebot.application.di.keys import (  # noqa: E402
     ACR_ROUTER,
     DELEGATION_GUARD,
     LEARNING_SKILL_STORE,
+    APPROVAL_GUARDIAN,
     LLM_POOL,
     MEMORY_SNAPSHOT_CACHE,
     PROMPT_PREFIX_STORE,
@@ -203,6 +204,7 @@ class Container(
         # back to that default automatically if role config is absent.
         self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
         self.register(STEP_EVALUATOR, self._create_step_evaluator)
+        self.register(APPROVAL_GUARDIAN, self._create_approval_guardian)
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)

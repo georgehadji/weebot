@@ -55,6 +55,10 @@ def _run_async(coro_factory) -> None:
             set_process_approval(ConsoleApproval())
             _get_state_repo()  # builds the shared container
             set_approval_journal(_container.get(EventStorePort))
+            from weebot.application.di.keys import APPROVAL_GUARDIAN
+            from weebot.application.services.tool_approval import set_guardian
+
+            set_guardian(_container.get(APPROVAL_GUARDIAN))
         try:
             await coro_factory()
         finally:

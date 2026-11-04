@@ -194,6 +194,7 @@ class ToolExecutor:
         self._workspace_checkpoints = workspace_checkpoints
         self._effect_ledger = effect_ledger
         self._current_step_scope: str = ""
+        self._step_description: str = ""
         self._tools = tools
         self._hooks = hooks
         self._conversation_buffer = conversation_buffer or deque(maxlen=15)
@@ -230,6 +231,7 @@ class ToolExecutor:
         """Update the current step/session context (called at step start)."""
         self._current_step_id = step_id
         self._current_session_id = session_id
+        self._step_description = step_description
         self._current_step_scope = step_scope(step_description)
         # Every log record from this step's tools, cascade and adapters carries the ids.
         bind_step(step_id, session_id)
@@ -580,7 +582,12 @@ class ToolExecutor:
             # GuardedTool resolves its own ASK against the same session and does
             # not ask again for a call a human approved here (ADR-013).
             with (
-                approval_scope(session_id=self._current_session_id, approved_call=approved_call),
+                approval_scope(
+                    session_id=self._current_session_id,
+                    approved_call=approved_call,
+                    tainted=self._untrusted_context_active,
+                    step_description=self._step_description,
+                ),
                 network_cleared_for_call() if network_ok else contextlib.nullcontext(),
                 # H17: code in a persistent kernel reaches tools back through this executor.
                 tool_rpc_scope(self.execute_tool)

@@ -1039,6 +1039,7 @@ def test_orphan_ports_flagged():
         "ApprovalPort",
         "ApprovalOutcome",
         "ToolCallApproval",
+        "GuardianVerdict",  # a value type returned by GuardianPort, not a port
     }
 
     # Get all port class names
