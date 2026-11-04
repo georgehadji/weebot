@@ -70,6 +70,10 @@ _EXPECTED = {
     "dynamic_weebot_imports",
     # God methods: functions over 150 lines. See scripts/lint_long_functions.py.
     "functions_over_150_lines",
+    # Per-unit complexity: functions over cyclomatic complexity 20 and over nesting depth 6.
+    # See scripts/lint_complexity.py.
+    "functions_over_cc_20",
+    "functions_over_nesting_6",
     # Total ruff violations at the configured rules. See scripts/lint_ruff_violations.py.
     "ruff_violations",
     # String-keyed container bindings; Key[T] replaces them. See scripts/lint_di_wiring.py.

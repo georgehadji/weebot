@@ -192,7 +192,7 @@ class TestFts5WatermarkTracksWhatWasIndexed:
 
         calls = {"n": 0}
 
-        async def failing_index_event(conn, session_id, event_type, summary, content):
+        async def failing_index_event(conn, session_id, event_type, summary, content, **_):
             calls["n"] += 1
             if calls["n"] == 3:  # the third event cannot be indexed
                 raise sqlite3.OperationalError("fts5 index unavailable")
@@ -219,7 +219,7 @@ class TestFts5WatermarkTracksWhatWasIndexed:
         state = {"fail": True}
         indexed: list[str] = []
 
-        async def flaky_index_event(conn, session_id, event_type, summary, content):
+        async def flaky_index_event(conn, session_id, event_type, summary, content, **_):
             if state["fail"]:
                 raise sqlite3.OperationalError("fts5 index unavailable")
             indexed.append(summary)
@@ -250,7 +250,7 @@ class TestFts5WatermarkTracksWhatWasIndexed:
 
         indexed: list[str] = []
 
-        async def ok_index_event(conn, session_id, event_type, summary, content):
+        async def ok_index_event(conn, session_id, event_type, summary, content, **_):
             indexed.append(summary)
 
         monkeypatch.setattr(mod, "index_event", ok_index_event)
