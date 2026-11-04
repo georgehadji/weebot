@@ -34,7 +34,7 @@ class FakeKernels(KernelPort):
         self.state[kernel_id] = {}
         return KernelHandle(session_id, kernel_id)
 
-    async def exec(self, handle, code, timeout):
+    async def exec(self, handle, code, timeout, on_rpc=None):
         self.running += 1
         self.max_running = max(self.max_running, self.running)
         try:

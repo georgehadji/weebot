@@ -451,6 +451,10 @@ class ToolExecutor:
         if "timeout" in args:
             with contextlib.suppress(ValueError, TypeError):
                 timeout = min(float(args["timeout"]) + 5.0, 305.0)
+        if name == "python_execute":
+            # H17: tool calls the code makes are the tools' time, not the code's. The kernel
+            # holds the code to its own timeout; this is only the ceiling on the whole run.
+            timeout = 305.0
 
         # Pre-tool hook
         if self._hooks is not None:
@@ -570,6 +574,7 @@ class ToolExecutor:
 
         from weebot.application.ports.sandbox_port import network_cleared_for_call
         from weebot.application.services.tool_approval import approval_scope
+        from weebot.application.services.tool_rpc import tool_rpc_scope
 
         _t0 = _timer.monotonic()
         try:
@@ -584,6 +589,10 @@ class ToolExecutor:
                     step_description=self._step_description,
                 ),
                 network_cleared_for_call() if network_ok else contextlib.nullcontext(),
+                # H17: code in a persistent kernel reaches tools back through this executor.
+                tool_rpc_scope(self.execute_tool)
+                if name == "python_execute"
+                else contextlib.nullcontext(),
             ):
                 result = await asyncio.wait_for(
                     self._tools.execute(_name=name, **args), timeout=timeout

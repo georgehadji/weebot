@@ -189,6 +189,10 @@ CONFIG_SCHEMA: list[dict] = [
     {"var": "WEEBOT_APPROVAL_DENY_GLOBS", "type": "str", "default": "",
      "desc": "Comma-separated globs for shell commands that are always refused, in every "
              "approval mode (H18 floors)"},
+    {"var": "WEEBOT_KERNEL_RPC_TOOLS", "type": "str", "default": "bash,file_editor,web_search",
+     "desc": "Tools that code in a persistent python_execute kernel may call through the "
+             "weebot_tools module (H17); each call passes the usual guards and approval "
+             "floors. Empty turns it off"},
     {"var": "WEEBOT_AUTO_INSTALL_TOOLS", "type": "bool", "default": "true",
      "desc": "Let install_tool add a missing dependency from PyPI (wheels only), npm (no "
              "lifecycle scripts) or winget. Every install still asks first; URLs, VCS specs, "

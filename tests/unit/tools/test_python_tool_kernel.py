@@ -31,8 +31,9 @@ class FakeKernels:
         self._run = run or KernelRun(KernelResult(stdout="from kernel\n"))
         self._error = error
 
-    async def run(self, session_id, code, timeout, *, reset=False):
+    async def run(self, session_id, code, timeout, *, reset=False, on_rpc=None):
         self.calls.append((session_id, code, reset))
+        self.on_rpc = on_rpc
         if self._error:
             raise self._error
         return self._run
@@ -152,3 +153,39 @@ async def test_no_kernel_available_falls_back_to_one_shot(session):
     result = await tool.execute("print(1)")
 
     assert sandbox.one_shot == ["print(1)"] and not result.is_error
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_from_code_are_wired_only_inside_a_dispatch_scope(session):
+    from weebot.application.services.tool_rpc import tool_rpc_scope
+
+    async def dispatch(name, arguments):  # pragma: no cover - never called here
+        raise AssertionError
+
+    kernels = FakeKernels()
+    tool, _ = _tool(kernels)
+
+    await tool.execute(code="x = 1")
+    assert kernels.on_rpc is None  # not run by a ToolExecutor: no way back to the tools
+
+    with tool_rpc_scope(dispatch):
+        await tool.execute(code="x = 1")
+    assert kernels.on_rpc is not None
+
+
+@pytest.mark.asyncio
+async def test_an_empty_allowlist_turns_tool_calls_off(session):
+    from weebot.application.services.tool_rpc import tool_rpc_scope
+    from weebot.config.tool_config import ToolConfig
+
+    async def dispatch(name, arguments):  # pragma: no cover - never called here
+        raise AssertionError
+
+    kernels = FakeKernels()
+    tool, _ = _tool(kernels)
+    tool.set_config(ToolConfig(kernel_rpc_tools=""))
+
+    with tool_rpc_scope(dispatch):
+        await tool.execute(code="x = 1")
+
+    assert kernels.on_rpc is None
