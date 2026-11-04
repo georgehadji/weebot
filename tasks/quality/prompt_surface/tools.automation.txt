@@ -204,24 +204,48 @@
  },
  {
   "function": {
-   "description": "View, create, or edit files on the local filesystem. Commands: view (read file or list directory), create (write new file), str_replace (find-and-replace in file), insert (add lines at position). All paths must be within the workspace.",
+   "description": "View, create, or edit files on the local filesystem. Commands: view (read file or list directory), create (write new file), str_replace (find-and-replace in file; small copying slips in old_str are tolerated and the result names the match), patch (several old_str/new_str hunks, all or none), insert (add lines at position). View a file before you edit it. All paths must be within the workspace.",
    "name": "file_editor",
    "parameters": {
     "properties": {
      "command": {
-      "description": "Operation: 'view'=read, 'create'=write small file, 'str_replace'=find+replace, 'insert'=add lines, 'write_large'=write large file via Python (preferred for >50 lines)",
+      "description": "Operation: 'view'=read, 'create'=write small file, 'str_replace'=find+replace, 'patch'=several find+replace hunks, 'insert'=add lines, 'write_large'=write large file via Python (preferred for >50 lines)",
       "enum": [
        "view",
        "create",
        "str_replace",
+       "patch",
        "insert",
        "write_large"
       ],
       "type": "string"
      },
+     "exact": {
+      "description": "For 'str_replace' and 'patch': match old_str exactly.",
+      "type": "boolean"
+     },
      "file_text": {
       "description": "Content to write (for 'create' command)",
       "type": "string"
+     },
+     "hunks": {
+      "description": "Edits for 'patch'; applied in order, all or none.",
+      "items": {
+       "properties": {
+        "new_str": {
+         "type": "string"
+        },
+        "old_str": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "old_str",
+        "new_str"
+       ],
+       "type": "object"
+      },
+      "type": "array"
      },
      "insert_line": {
       "description": "Line number after which to insert new content (0 = before line 1) for 'insert' command",

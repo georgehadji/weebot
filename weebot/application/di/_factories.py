@@ -567,8 +567,10 @@ class FactoriesMixin:
         """
         from weebot.application.ports.rerank_port import RerankPort
         from weebot.application.ports.speech_port import SpeechPort
+        from weebot.application.ports.syntax_check_port import SyntaxCheckPort
         from weebot.application.ports.tool_repository_port import ToolRepositoryPort
         from weebot.application.services.audit_service import AuditService
+        from weebot.application.services.file_state import FileStateRegistry
         from weebot.config.tool_config import ToolConfig
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 
@@ -577,7 +579,9 @@ class FactoriesMixin:
         speech = self._maybe_get(SpeechPort)
         audit = self._maybe_get(AuditService)
         memory = self._maybe_get(FileSystemMemoryAdapter)
+        file_state = self._maybe_get(FileStateRegistry)
         wanted = {
+            "file_editor": {"file_state": file_state, "syntax": self._maybe_get(SyntaxCheckPort)},
             "ocr": {"vision_llm": self._vision_llm()},
             "audit_session": {"service": audit},
             "knowledge": {"repo": tool_repo},
@@ -587,7 +591,8 @@ class FactoriesMixin:
             "voice_output": {"speech": speech},
             "persistent_memory": {"memory": memory, "state_repo": state_repo},
         }
-        required = {"ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
+        required = {"file_editor": "file_state",
+                    "ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
                     "product": "repo",
                     "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
                     "persistent_memory": "memory"}
