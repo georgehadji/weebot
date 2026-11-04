@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-11-04
-commit: 7c4035f4
+commit: 58649bb5
 ---
 
 # BashGuard
@@ -30,11 +30,11 @@ Pure core-layer code with no infrastructure imports; metrics and hooks are injec
 | `bash` | `CommandSecurityAnalyzer` (DANGEROUS refuses; the HMAC override token was retired by ADR-013; analyzer crash refuses) → **BashGuard: only BLOCKED returns an error** → `ExecApprovalPolicy` (DENY errors; needs-confirmation errors unless `GuardedTool` runs the call as human-approved, fixed 2026-10-23) → sandbox | `tools/bash_tool.py:251-308, 356-404` |
 | `python_execute` | BashGuard on the code string (only BLOCKED refuses) → `ExecApprovalPolicy` → sandbox | `tools/python_tool.py:216-236` |
 | `powershell` | in the tool's own code: `_validate_no_encoded_commands`, then `ExecApprovalPolicy` (dangerous cmdlets and system paths are DENY rules in the policy itself) → sandbox. **No BashGuard, no `CommandSecurityAnalyzer`** | `tools/powershell_tool.py:154-168` |
-| `GuardedTool` around the three tools above | `BashGuardAdapter` (BLOCKED to DENY, DANGEROUS to ASK, SUSPICIOUS note only), `AnalyzerAdapter`, `ApprovalPolicyAdapter`, financial and outbound policy, `EgressAdapter` (not in flows); most restrictive verdict wins; DENY refused, ASK goes to the approval channel, then the tool runs as human-approved | `application/services/tool_guards.py:89-115, 431-444, 492-523` |
+| `GuardedTool` around the three tools above | `BashGuardAdapter` (BLOCKED to DENY, DANGEROUS to ASK, SUSPICIOUS note only), `AnalyzerAdapter`, `ApprovalPolicyAdapter`, financial and outbound policy, `EgressAdapter` (not in flows); most restrictive verdict wins; DENY refused, ASK goes to the approval channel, then the tool runs as human-approved | `application/services/tool_guards.py:91-117, 431-444, 492-523` |
 | other callers | `latex_compiler.py` (refuses BLOCKED), CLI `guard` command | `infrastructure/document/latex_compiler.py:26,136-137`, `cli/commands/guard.py` |
 
 Consequences (read from source, not run):
-- Inside the tools, DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`; `get_risk_description` says DANGEROUS needs "explicit approval", and only the `GuardedTool` chain asks (`tool_guards.py:89-115`). A bare `BashTool()` has no such gate.
+- Inside the tools, DANGEROUS and SUSPICIOUS ratings are logged and counted but do not stop `bash` or `python_execute`; `get_risk_description` says DANGEROUS needs "explicit approval", and only the `GuardedTool` chain asks (`tool_guards.py:91-117`). A bare `BashTool()` has no such gate.
 - `bash`, `powershell` and `python_execute` from the registry (`application/services/tool_registry.py:549-551`, flows pass `include_egress=False` because `ToolExecutor` gates egress) are wrapped in `GuardedTool`; the MCP server wraps `bash` and `python_execute` (`weebot/mcp/server.py:392`). Default mode is `enforce` since W3.7 (`weebot/config/settings.py:256-260`); `observe` only logs the verdict and the tools' own gates decide (`tool_guards.py:11-18`).
 - The `post_bash_guard` hook payload marks `requires_approval` for SUSPICIOUS and DANGEROUS (`bash_tool.py:376-377`). It is a report only, spawned through `core/background_tasks.py` (`bash_tool.py:365-381`); nothing reads it to stop the command. The hook registry is a module global set by `set_bash_guard_hooks` (`bash_guard.py:28-30`).
 - The `powershell` tool itself skips BashGuard, although the root `CLAUDE.md` rule says every shell command goes through `bash_guard.py`: its `Invoke-Expression`, `iex`, `-EncodedCommand` and `Remove-Item -Recurse -Force` rules reach it only through `GuardedTool` (`tests/unit/fixes/test_f01_powershell_skips_bash_guard.py`); built bare, only `ExecApprovalPolicy` and the encoded-command validator apply.

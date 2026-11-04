@@ -33,12 +33,14 @@ from weebot.application.ports.approval_port import (
     ToolCallApproval,
 )
 from weebot.core.approval import ApprovalManager
+from weebot.core.approval_scopes import ScopedGrants
 from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 APPROVAL_DATA_KEY = "approval_required"
 ALWAYS_TOKENS = frozenset({"always", "always allow", "allow always", "always allow host"})
+SESSION_TOKENS = frozenset({"session", "yes for this session", "allow for this session"})
 
 # ── Journal (ADR-013: outcomes, not only requests, reach the event store) ──
 
@@ -98,6 +100,23 @@ def grant_store() -> ApprovalManager:
     return _GRANTS
 
 
+_SCOPES = ScopedGrants()
+
+
+def scope_store() -> ScopedGrants:
+    return _SCOPES
+
+
+def _scope_covers(request: ToolCallApproval) -> bool:
+    """True when a session or always scope a human gave already covers this call (H18b)."""
+    scope = _SCOPES.allows(request.session_id, request.pattern)
+    if scope is None:
+        return False
+    logger.info("approval scope used (%s): %s", scope, request.pattern)
+    _journal_outcome("approval_granted", request, f"scope_{scope}")
+    return True
+
+
 # ── Strategies ──────────────────────────────────────────────────────────────
 
 
@@ -146,6 +165,8 @@ class FlowPauseApproval(ApprovalPort):
         if self._grants.consume(request.session_id, request.fingerprint):
             logger.info("approval grant used: %s %s", request.tool_name, request.fingerprint[:12])
             return ApprovalOutcome.APPROVED
+        if _scope_covers(request):
+            return ApprovalOutcome.APPROVED
         return ApprovalOutcome.PENDING
 
 
@@ -161,9 +182,13 @@ class ConsoleApproval(ApprovalPort):
         self._ask = ask
 
     async def resolve(self, request: ToolCallApproval) -> ApprovalOutcome:
+        if _scope_covers(request):
+            return ApprovalOutcome.APPROVED
         options = (
             "[y] once  [a] always allow this host  [n] no" if request.allow_always else "[y/N]"
         )
+        if request.pattern:
+            options = f"[y] once  [s] this session  [a] always allow '{request.pattern}'  [n] no"
         question = f"\n{approval_prompt(request, short=True)}\nApprove? {options}: "
         try:
             answer = (await self._ask(question)).strip().lower()
@@ -176,6 +201,11 @@ class ConsoleApproval(ApprovalPort):
         if answer in ("a", "always") and request.allow_always:
             allow_host(request.allow_always)
             _journal_outcome("approval_granted", request, "console_always")
+            return ApprovalOutcome.APPROVED
+        if request.pattern and answer in ("s", "session", "a", "always"):
+            scope = "session" if answer in ("s", "session") else "always"
+            _SCOPES.grant(scope, request.session_id, request.pattern)
+            _journal_outcome("approval_granted", request, f"console_{scope}")
             return ApprovalOutcome.APPROVED
         _journal_outcome("approval_denied", request, "console")
         return ApprovalOutcome.DENIED
@@ -293,6 +323,12 @@ def approval_prompt(request: ToolCallApproval, *, short: bool = False) -> str:
                 if request.allow_always
                 else ""
             )
+            + (
+                f", 'session' to allow '{request.pattern}' for this session"
+                f", 'always' to allow it from now on"
+                if request.pattern
+                else ""
+            )
             + ", or say what to do instead."
         )
     return "\n".join(line for line in lines if line)
@@ -312,6 +348,7 @@ def pending_result(request: ToolCallApproval) -> ToolResult:
                 "guard": request.guard,
                 "reason": request.reason,
                 "allow_always": request.allow_always,
+                "pattern": request.pattern,
                 "human_only": request.human_only,
                 "prompt": approval_prompt(request),
             }
@@ -350,6 +387,7 @@ def mark_tool_approval_pending(session: Any, event: Any) -> Any:
             "tool_name": event.tool_name,
             "fingerprint": event.fingerprint,
             "allow_always": event.allow_always,
+            "pattern": event.pattern,
         },
     }
     return session.model_copy(
@@ -370,7 +408,13 @@ def record_flow_reply(
     response = reply.strip().lower()
     fingerprint = pending.get("fingerprint", "")
     always_host = pending.get("allow_always")
-    approved = response in approve_tokens or (bool(always_host) and response in ALWAYS_TOKENS)
+    pattern = pending.get("pattern")
+    scope_tokens = (SESSION_TOKENS | ALWAYS_TOKENS) if pattern else frozenset()
+    approved = (
+        response in approve_tokens
+        or (bool(always_host) and response in ALWAYS_TOKENS)
+        or response in scope_tokens
+    )
     data = {"tool_name": pending.get("tool_name"), "fingerprint": fingerprint, "channel": "flow"}
     if not approved or not fingerprint:
         logger.info("approval declined for %s", pending.get("tool_name"))
@@ -378,6 +422,8 @@ def record_flow_reply(
         return False
     if always_host and response in ALWAYS_TOKENS:
         allow_host(always_host)
+    if pattern and response in scope_tokens:
+        _SCOPES.grant("session" if response in SESSION_TOKENS else "always", session_id, pattern)
     _GRANTS.grant(session_id, fingerprint)
     _journal("approval_granted", session_id, data)
     return True
