@@ -820,7 +820,7 @@
  },
  {
   "function": {
-   "description": "Execute a PowerShell command on Windows 11. Working directory / workspace root: C:\\Users\\tesse\\Documents\\Vibe Coding\\Weebot. Accepts optional 'timeout' in seconds (default: 30, max: 300). Diagnostic shortcuts: system_info, processes, network_test, list_workspace. Run Python with the python_execute tool, not `python -c` here (inline scripts need approval), and write file contents with file_editor.",
+   "description": "Execute a PowerShell command on Windows 11. Working directory / workspace root: C:\\Users\\tesse\\Documents\\Vibe Coding\\Weebot-wt-h17. Accepts optional 'timeout' in seconds (default: 30, max: 300). Diagnostic shortcuts: system_info, processes, network_test, list_workspace. Run Python with the python_execute tool, not `python -c` here (inline scripts need approval), and write file contents with file_editor.",
    "name": "powershell",
    "parameters": {
     "properties": {
