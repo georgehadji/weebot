@@ -820,7 +820,7 @@
  },
  {
   "function": {
-   "description": "Execute a PowerShell command on Windows 11. Working directory / workspace root: C:\\Users\\tesse\\Documents\\Vibe Coding\\Weebot. Accepts optional 'timeout' in seconds (default: 30, max: 300). Diagnostic shortcuts: system_info, processes, network_test, list_workspace. Run Python with the python_execute tool, not `python -c` here (inline scripts need approval), and write file contents with file_editor.",
+   "description": "Execute a PowerShell command on Windows 11. Working directory / workspace root: C:\\Users\\tesse\\Documents\\Vibe Coding\\Weebot-wt-h17. Accepts optional 'timeout' in seconds (default: 30, max: 300). Diagnostic shortcuts: system_info, processes, network_test, list_workspace. Run Python with the python_execute tool, not `python -c` here (inline scripts need approval), and write file contents with file_editor.",
    "name": "powershell",
    "parameters": {
     "properties": {
@@ -1140,23 +1140,51 @@
  },
  {
   "function": {
-   "description": "Search across all past session events using full-text search. Use this to recall past decisions, findings, or similar tasks from previous sessions. Results include session ID, event type, and a relevance score.",
+   "description": "Search past sessions to recall decisions, findings, or similar tasks. mode=discover (default) returns the sessions that match, best first, each with its best event. mode=scroll returns the events around one hit (needs session_id and event_id from a discover result). mode=read returns one event by event_id. Plain words also match parts of words ('onfig' finds 'config') and non-Latin text. With syntax=fts the query is FTS5: AND, OR, NOT, \"a phrase\", prefix*, event_type:message.",
    "name": "search_history",
    "parameters": {
     "properties": {
+     "event_id": {
+      "description": "Event to scroll around or read (mode=scroll, read).",
+      "type": "string"
+     },
      "limit": {
       "default": 10,
-      "description": "Maximum results to return (default: 10).",
+      "description": "Maximum sessions to return (default: 10).",
       "type": "integer"
      },
-     "query": {
-      "description": "Search query (plain text or FTS5 syntax).",
+     "mode": {
+      "description": "discover (default), scroll or read.",
+      "enum": [
+       "discover",
+       "scroll",
+       "read"
+      ],
       "type": "string"
+     },
+     "query": {
+      "description": "Search query (mode=discover).",
+      "type": "string"
+     },
+     "session_id": {
+      "description": "Session of the hit (mode=scroll).",
+      "type": "string"
+     },
+     "syntax": {
+      "description": "text (default) quotes operators; fts passes FTS5 syntax.",
+      "enum": [
+       "text",
+       "fts"
+      ],
+      "type": "string"
+     },
+     "window": {
+      "default": 5,
+      "description": "Events before and after the hit (mode=scroll, default 5).",
+      "type": "integer"
      }
     },
-    "required": [
-     "query"
-    ],
+    "required": [],
     "type": "object"
    }
   },

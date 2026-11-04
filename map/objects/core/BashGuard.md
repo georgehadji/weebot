@@ -6,7 +6,7 @@ cluster: core
 universe: live
 status: verified
 verified: 2026-11-04
-commit: 43396cc6
+commit: 1115e62c
 ---
 
 # BashGuard
@@ -42,7 +42,7 @@ Consequences (read from source, not run):
 
 ## Connected to
 - **Wired in** `BashTool.__init__` (`bash_tool.py:147`) and `PythonExecuteTool.__init__` (`python_tool.py:146`) with a Prometheus counter `bash_guard_events_total` (`infrastructure/observability/metrics.py:69`).
-- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:96`) (own cards, all in this folder).
+- **Related:** `CommandSecurityAnalyzer`, `ExecApprovalPolicy`, `EgressGuard` and `ApprovalManager` (single-use approval grants, held in `application/services/tool_approval.py:97`) (own cards, all in this folder).
 - **Looks like but is not:** `ExecApprovalPolicy` (a different rule table, PowerShell-oriented, modes not levels); `CommandRiskLevel` (3 levels, analyzer).
 
 ## If you change this

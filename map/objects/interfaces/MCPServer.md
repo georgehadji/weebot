@@ -6,7 +6,7 @@ cluster: interfaces
 universe: live
 status: verified
 verified: 2026-11-04
-commit: 43396cc6
+commit: 1115e62c
 ---
 
 # MCP server
@@ -14,7 +14,7 @@ commit: 43396cc6
 Weebot exposed as a Model Context Protocol server: a FastMCP instance with shell, Python, search and file tools plus `weebot://` resources. Class `WeebotMCPServer` (`weebot/mcp/server.py:109`), entry point `python run_mcp.py` (`run_mcp.py:81-135`).
 
 ## Why this shape
-An external client (Claude Desktop over stdio, an IDE over SSE) calls Weebot's tools directly, outside any flow, so the server applies the guard chain itself: `guard_tools([BashTool(), PythonExecuteTool()])` (`server.py:388-392`) and `guard_tools(self._dynamic_tools)` (`server.py:269-276`). No approval channel is set in this process, so the default `DenyApproval` applies (`weebot/application/services/tool_approval.py:224`). Every collaborator is optional so the server starts with whatever the container can build (`run_mcp.py:33-39, 42-70`).
+An external client (Claude Desktop over stdio, an IDE over SSE) calls Weebot's tools directly, outside any flow, so the server applies the guard chain itself: `guard_tools([BashTool(), PythonExecuteTool()])` (`server.py:388-392`) and `guard_tools(self._dynamic_tools)` (`server.py:269-276`). No approval channel is set in this process, so the default `DenyApproval` applies (`weebot/application/services/tool_approval.py:269`). Every collaborator is optional so the server starts with whatever the container can build (`run_mcp.py:33-39, 42-70`).
 
 ## Shape
 - Entry point: `--transport stdio|sse`, `--host` (default `127.0.0.1`), `--port` (8765), `--allow-remote` (`run_mcp.py:82-96`). It requires one provider key (`run_mcp.py:98-105`), refuses a non-loopback SSE host without `--allow-remote` (`run_mcp.py:107-115`), and `--allow-remote` requires `WEEBOT_MCP_API_KEY` (`run_mcp.py:117-128`).
