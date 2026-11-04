@@ -23,7 +23,7 @@ Format: name — source — status — card
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
-- PythonKernel (KernelPort, KernelManager, NativeKernel, kernel_server) — `docs/adr/026-persistent-python-kernel.md` — stub — [card](application/PythonKernel.md)
+- PythonKernel (KernelPort, KernelManager, NativeKernel, kernel_server, ToolRpcServer) — `docs/adr/026-persistent-python-kernel.md` — stub — [card](application/PythonKernel.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
 - SpilloverStore (SpilloverStorePort, FileSpilloverStore, SpilloverMiddleware, spill_over_budget) — `docs/adr/020-tool-output-spillover.md` — stub — [card](application/SpilloverStore.md)
 - ToolArgCoercion (coerce_args, Coercion, Deny, ToolCall, MiddlewareChain) — `tasks/specs/hermes_v022_parity_implementation_plan.md` — stub — [card](application/ToolArgCoercion.md)
