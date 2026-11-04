@@ -1,7 +1,7 @@
 # ADR-022: Approval floors that no mode can lower
 
 **Date:** 2026-11-04
-**Status:** Implemented 2026-11-04 as part (a) of plan H18 (`tasks/specs/hermes_v022_parity_implementation_plan.md`), under the user's instruction "continue". Parts (b) scopes, (c) guardian, (d) denial breaker and (e) unattended are not built.
+**Status:** Implemented 2026-11-04 as parts (a) floors, (b) scopes and (d) denial breaker of plan H18 (`tasks/specs/hermes_v022_parity_implementation_plan.md`), under the user's instructions "continue" and "proceed". Parts (c) guardian and (e) unattended are not built.
 **Owner:** weebot maintainers
 **Supersedes:** N/A (the plan calls this ADR-021; that number is the loop-guardrails ADR)
 
@@ -17,6 +17,7 @@
 2. **`FloorGuard`** in `tool_guards.py`, first in `default_guard_chain`, for the shell tools. It reads every variant from `command_variants`: the text as written, without PowerShell backticks, without quotes and backslash-before-letter, and with any base64 run decoded (`bash_security.decode_base64_text`, as the analyzer does).
 3. **`GuardAction.HUMAN`** sits between ASK and DENY. `GuardedTool` hands it to the approval channel like an ASK, with `ToolCallApproval.human_only=True`. `AutoApproval` does not grant a `human_only` request: it answers PENDING unless a human grant exists, so the flow pauses (`_step_run.py` pauses on a `human_only` `ToolApprovalEvent` even in AUTO). `DenyApproval` refuses it, so cron, webhooks and MCP still refuse.
 4. The prompt, the event and the pending payload carry `human_only`; a "yes" records the usual single-use grant, which AUTO then spends on the rerun.
+5. **Scopes (part b).** `core/approval_scopes.py` (`ScopedGrants`, `command_pattern`). A reply of `session` or `always` to an ASK covers every later call with the same *command pattern* (argv[0], its subcommand, its flags without values: `npm test --silent` -> `npm test --silent`). `session` lives in memory per session; `always` is kept in `~/.weebot/approvals.json`, written atomically. Only the verdict "no approval rule covers this command" (`ExecApprovalPolicy._default_ask`, `GuardVerdict.scopable`) can be scoped, and only when it is the deciding verdict, the tool is a shell tool and the line is one plain command (no `;`, `&`, `|`, redirect or substitution). So DANGEROUS commands, floors, egress and the untrusted-content gate (D5) never carry a pattern: D5 asks as its own request, so a scope cannot skip it. The console prompt offers `[s]` and `[a]`; the flow prompt takes `session` and `always`. A covered call is journaled as `approval_granted` with channel `scope_session` or `scope_always`.
 
 ## Consequences
 
@@ -24,7 +25,9 @@
 - `python_execute` code and the file tools are not read. A floor on `shutil.rmtree(os.path.expanduser("~"))` or a `file_editor` write to `~/.ssh` is not built.
 - `.env` matches any file with that exact name, not only the one at the Weebot root, so editing a project's `.env` in AUTO mode now pauses.
 - `GuardAction.DENY` changed from 2 to 3. Nothing stores the number.
-- **Not built:** scopes (`once | session | always`), the guardian, the denial breaker, `ApprovalChannel.UNATTENDED`. The plan's unattended case assumes a gateway "with no human approver bound"; the code has no such binding (cron and webhooks already refuse through `DenyApproval`), so it needs a decision first.
+- A pattern ignores the words after the subcommand, so `npm run build` and `npm run deploy` share `npm run`; a flag before any subcommand with a positional after it (`python -m pytest`) gets no pattern. Flags are part of the pattern, so `npm test --silent` is a different pattern from `npm test`.
+- `always` is one file for the machine, not one per profile as the plan says; there is no profile-aware home directory in the code. Session scopes are not dropped at session end (sessions are few and ids are not reused). The plan's `ApprovalScopedGrant` event is not added: the journal row above carries it.
+- **Not built:** the guardian, `ApprovalChannel.UNATTENDED`. The plan's unattended case assumes a gateway "with no human approver bound"; the code has no such binding (cron and webhooks already refuse through `DenyApproval`), so it needs a decision first.
 
 ## Part (d): denial breaker
 

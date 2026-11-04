@@ -63,6 +63,8 @@ class GuardVerdict:
     # Resolve this ASK through the approval channel even in observe mode: the
     # call cannot be undone (outbound_policy).
     enforce_always: bool = False
+    # "No rule covers this command": a human's yes may cover its pattern (H18b scopes).
+    scopable: bool = False
 
 
 @dataclass(frozen=True)
@@ -252,7 +254,7 @@ class ApprovalPolicyAdapter:
             return None
         reason = f"no approval rule covers: {unreviewed[0][:120]}"
         if mode == "enforce":
-            return GuardVerdict(GuardAction.ASK, self.name, reason)
+            return GuardVerdict(GuardAction.ASK, self.name, reason, scopable=True)
         logger.warning("shell_default_ask would ask (%s): %s", tool_name, reason)
         return None
 
@@ -590,11 +592,22 @@ class GuardedTool(BaseTool):
         from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
         from weebot.application.services import tool_approval
         from weebot.core.approval import call_fingerprint
+        from weebot.core.approval_scopes import command_pattern
 
         fingerprint = call_fingerprint(self.name, kwargs)
         if tool_approval.already_approved(fingerprint):
             return None  # a human approved this exact call at an earlier gate
         hosts = {v.allow_always for v in result.verdicts if v.action is GuardAction.ASK}
+        asking = [v for v in result.verdicts if v.action in (GuardAction.ASK, GuardAction.HUMAN)]
+        command = _shell_command(self.name, kwargs)
+        pattern = (
+            command_pattern(command)
+            if command
+            and self.name in SHELL_TOOLS
+            and result.verdict.action is GuardAction.ASK
+            and all(v.scopable for v in asking)
+            else None
+        )
         request = ToolCallApproval(
             session_id=tool_approval.current_session_id(),
             tool_name=self.name,
@@ -605,6 +618,7 @@ class GuardedTool(BaseTool):
             # Offer "always allow this host" only when every ASK is that one host.
             allow_always=next(iter(hosts)) if len(hosts) == 1 and None not in hosts else None,
             human_only=result.verdict.action is GuardAction.HUMAN,
+            pattern=pattern,
         )
         approval = self._approval or tool_approval.current_approval()
         outcome = await approval.resolve(request)
