@@ -40,6 +40,7 @@ _SESSION_STORES = {
     "prompt_prefix",
     "trajectories",
     "steering",
+    "kernels",
 }
 
 

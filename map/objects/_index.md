@@ -23,6 +23,7 @@ Format: name — source — status — card
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
 - PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
+- PythonKernel (KernelPort, KernelManager, NativeKernel, kernel_server) — `docs/adr/026-persistent-python-kernel.md` — stub — [card](application/PythonKernel.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
 - SpilloverStore (SpilloverStorePort, FileSpilloverStore, SpilloverMiddleware, spill_over_budget) — `docs/adr/020-tool-output-spillover.md` — stub — [card](application/SpilloverStore.md)
 - ToolArgCoercion (coerce_args, Coercion, Deny, ToolCall, MiddlewareChain) — `tasks/specs/hermes_v022_parity_implementation_plan.md` — stub — [card](application/ToolArgCoercion.md)
@@ -45,7 +46,7 @@ Format: name — source — status — card
 
 ## core
 - ApprovalFloors (Floor, BUILTIN_FLOORS, FloorGuard, command_variants) — `docs/adr/022-approval-floors.md` — stub — [card](core/ApprovalFloors.md)
-- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-03 — [card](core/ApprovalManager.md)
+- ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — verified 2026-11-04 — [card](core/ApprovalManager.md)
 - BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-04 — [card](core/BashGuard.md)
 - ChildEnv (build_child_env, BASE_POSIX, BASE_WINDOWS) — `weebot/core/child_env.py` — stub — [card](core/ChildEnv.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — verified 2026-11-01 — [card](core/CommandSecurityAnalyzer.md)
@@ -59,7 +60,7 @@ Format: name — source — status — card
 - BaseTool (BaseTool, ToolResult, ToolCollection) — `weebot/domain/models/base_tool.py` — stale 2026-11-01 — [card](tools/BaseTool.md)
 - Browser and desktop tools (AdvancedBrowserTool, WebScraperTool, BrowserInspectorTool, BrowserTool, CamofoxBrowserTool, ComputerUseTool, ScreenCaptureBaseTool, DesktopA11yTool) — `weebot/tools/advanced_browser.py` — stale 2026-11-01 — [card](tools/BrowserTools.md)
 - Built-in skills (weebot/skills/builtin/, .weebot/skills/ (loaded by SkillRegistry)) — `weebot/application/skills/skill_registry.py` — stale 2026-10-29 — [card](tools/BuiltinSkills.md)
-- ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — verified 2026-11-02 — [card](tools/ExecTools.md)
+- ExecTools (BashTool, PowerShellTool, PythonExecuteTool, StrReplaceEditorTool, SecureOutputFile, ValidationPipeline) — `weebot/tools/bash_tool.py` — stale 2026-11-02 — [card](tools/ExecTools.md)
 - Integration tools (AtomicMailTool, ApifyActorTool, ApifyService, ProductTool, DesignSystemTool, MCPToolAdapter) — `weebot/interfaces/factories.py` — stale 2026-11-01 — [card](tools/IntegrationTools.md)
 - Media tools (ImageGenTool, VideoGenTool, VideoIngestTool, RemotionVideoTool, VoiceInputTool, VoiceOutputTool, YouTubeDownloadTool) — `weebot/tools/image_gen_tool.py` — stale 2026-11-01 — [card](tools/MediaTools.md)
 - Orchestration tools (DebateTool, SwarmTool, DispatchAgentsTool, WorkflowOrchestratorTool, MixtureOfAgentsTool, ReasonerTool, BerbTool, TerminateTool, AskHumanTool, TodoWriteTool, ScheduleTool, PersistentMemoryTool, AuditTool, HeuristicRouter) — `weebot/tools/dispatch_agents.py` — stale 2026-11-01 — [card](tools/OrchestrationTools.md)

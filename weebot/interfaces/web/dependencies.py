@@ -31,6 +31,7 @@ def _session_stores() -> list[tuple[str, Any, str]]:
     from weebot.application.ports.spillover_store_port import SpilloverStorePort
     from weebot.application.ports.steering_port import SteeringPort
     from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
+    from weebot.application.services.kernel_manager import KernelManager
 
     return [
         # DurableEventBus journals every agent event of the session here.
@@ -55,6 +56,8 @@ def _session_stores() -> list[tuple[str, Any, str]]:
         ("trajectories", "trajectory_repo", "delete_by_session_id"),
         # Steering messages sent to the run and not yet read (user text).
         ("steering", SteeringPort, "discard"),
+        # The session's Python interpreter and the variables in it (H17).
+        ("kernels", KernelManager, "stop_session"),
     ]
 
 

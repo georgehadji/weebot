@@ -20,7 +20,7 @@ The environment a child process (MCP stdio server, sandbox command) is started w
 - An MCP server opts a secret in with `env_passthrough` in its config, or declares it in `env` (`weebot/infrastructure/mcp/mcp_client_manager.py:164`).
 
 ## Connected to
-Used by the MCP stdio client, `NativeWindowsSandbox._build_child_env` (`weebot/infrastructure/sandbox/native_windows.py:51`) and the WSL2 sandbox (`weebot/infrastructure/sandbox/wsl2.py:141`). Looks like but is not `SecretAccessor`, which reads single named values.
+Used by the MCP stdio client, `sandbox_child_env` (`weebot/infrastructure/sandbox/native_windows.py:51`) and the WSL2 sandbox (`weebot/infrastructure/sandbox/wsl2.py:141`). Looks like but is not `SecretAccessor`, which reads single named values.
 
 ## If you change this
 **Hits:** every MCP stdio server and sandbox child. A server that relied on an inherited variable stops seeing it until it is declared or passed through.

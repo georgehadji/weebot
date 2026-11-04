@@ -48,7 +48,9 @@ _ALLOWLISTED_ENV_VARS: set[str] = {
 }
 
 
-def _build_child_env(config: SandboxConfig, extra: dict[str, str] | None = None) -> dict[str, str]:
+def sandbox_child_env(
+    config: SandboxConfig, extra: dict[str, str] | None = None
+) -> dict[str, str]:
     """Build a child process environment from a minimal allowlist.
 
     Starts from a deny-by-default allowlist (``_ALLOWLISTED_ENV_VARS``),
@@ -95,7 +97,7 @@ def _build_child_env(config: SandboxConfig, extra: dict[str, str] | None = None)
 # ---------------------------------------------------------------------------
 
 
-def _psutil_memory_monitor(
+def psutil_memory_monitor(
     pid: int, limit_bytes: int, stop_event: threading.Event, killed_flag: list[bool]
 ) -> None:
     """Background thread: kill process if RSS exceeds limit_bytes."""
@@ -115,7 +117,7 @@ def _psutil_memory_monitor(
         pass
 
 
-def _spawn_error(exc: Exception) -> str:
+def spawn_error(exc: Exception) -> str:
     """Why a process did not start, never blank (some exceptions have no message)."""
     return f"Failed to start process: {type(exc).__name__}: {exc}".rstrip(": ")
 
@@ -212,7 +214,7 @@ class NativeWindowsSandbox(SandboxPort):
             )
 
         # Build child environment from minimal allowlist (never inherit secrets)
-        merged_env = _build_child_env(self._config, env)
+        merged_env = sandbox_child_env(self._config, env)
 
         # Determine working directory
         working_dir = cwd or self._config.working_dir
@@ -243,7 +245,7 @@ class NativeWindowsSandbox(SandboxPort):
         except Exception as e:
             return SandboxResult(
                 stdout="",
-                stderr=_spawn_error(e),
+                stderr=spawn_error(e),
                 returncode=-1,
                 elapsed_ms=0.0,
                 sandbox_type=self.sandbox_type,
@@ -257,7 +259,7 @@ class NativeWindowsSandbox(SandboxPort):
         if limit_bytes is not None:
             monitor_task = asyncio.create_task(
                 asyncio.to_thread(
-                    _psutil_memory_monitor, proc.pid, limit_bytes, stop_event, memory_killed
+                    psutil_memory_monitor, proc.pid, limit_bytes, stop_event, memory_killed
                 )
             )
 
@@ -325,7 +327,7 @@ class NativeWindowsSandbox(SandboxPort):
         except Exception as e:
             return SandboxResult(
                 stdout="",
-                stderr=_spawn_error(e),
+                stderr=spawn_error(e),
                 returncode=-1,
                 elapsed_ms=0.0,
                 sandbox_type=self.sandbox_type,
@@ -336,7 +338,7 @@ class NativeWindowsSandbox(SandboxPort):
         monitor: threading.Thread | None = None
         if limit_bytes is not None:
             monitor = threading.Thread(
-                target=_psutil_memory_monitor,
+                target=psutil_memory_monitor,
                 args=(proc.pid, limit_bytes, stop_event, memory_killed),
                 daemon=True,
             )
