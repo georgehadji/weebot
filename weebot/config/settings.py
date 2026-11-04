@@ -535,6 +535,15 @@ class WeebotSettings(BaseSettings):
             "tried against the command and against every part of it (H18 floors)."
         ),
     )
+    kernel_rpc_tools: str = Field(
+        default="bash,file_editor,web_search",
+        alias="WEEBOT_KERNEL_RPC_TOOLS",
+        description=(
+            "Comma-separated tools that code in a persistent python_execute kernel may call "
+            "through the weebot_tools module (H17). Each call passes the same guards and "
+            "approval floors as a call the model makes. Empty turns tool calls from code off."
+        ),
+    )
     secret_redaction_enabled: bool = Field(
         default=True, description="Redact secrets (PANs, API keys) in tool output and logs."
     )
