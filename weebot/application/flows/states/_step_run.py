@@ -105,9 +105,10 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
         if isinstance(event, WaitForUserEvent):
             run.hitl_paused = True
         elif isinstance(event, ToolApprovalEvent):
-            if auto:
+            if auto and not event.human_only:
                 # AutoApproval should have granted it before the tool ran; if one still
-                # surfaces, asking is exactly what AUTO promises not to do.
+                # surfaces, asking is exactly what AUTO promises not to do. An approval
+                # floor (human_only) is the exception: it pauses even in AUTO.
                 logger.warning(
                     "AUTO mode: tool approval surfaced for %s — not pausing",
                     getattr(event, "tool_name", "?"),

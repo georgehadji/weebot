@@ -231,7 +231,7 @@ ENTROPY_THRESHOLD = 4.0  # bits/char; hex cannot exceed log2(16) = 4.0
 DECODE_MIN_LENGTH = 16  # shortest base64 run worth decoding
 OPAQUE_MIN_LENGTH = 40  # shortest undecodable run treated as a payload
 PATH_SEGMENT_MAX = 16  # a run split by "/" into parts all shorter is a path
-_B64_RUN = re.compile(rf"[A-Za-z0-9+/]{{{DECODE_MIN_LENGTH},}}={{0,2}}")
+B64_RUN = re.compile(rf"[A-Za-z0-9+/]{{{DECODE_MIN_LENGTH},}}={{0,2}}")
 _HEX_ONLY = re.compile(r"[0-9a-fA-F]+")
 _DECODED_SHELL = re.compile(
     r"\b(bash|sh|zsh|exec|eval|cmd|powershell|pwsh|iex|curl|wget|nc)\b|rm\s+-rf|\bformat\s+[a-z]:",
@@ -271,7 +271,7 @@ def _shannon_entropy(data: str) -> float:
     return -sum(c / n * math.log2(c / n) for c in Counter(data).values())
 
 
-def _decode_base64_text(run: str) -> str | None:
+def decode_base64_text(run: str) -> str | None:
     """Strictly decode *run*; return the text if it is mostly printable."""
     stripped = run.rstrip("=")
     padded = stripped + "=" * (-len(stripped) % 4)
@@ -382,8 +382,8 @@ class CommandSecurityAnalyzer:
 
     def _layer3_entropy_analysis(self, command: str) -> SecurityAssessment:
         """Detect base64 that decodes to a shell command, and opaque encoded blobs."""
-        for run in _B64_RUN.findall(command):
-            decoded = _decode_base64_text(run)
+        for run in B64_RUN.findall(command):
+            decoded = decode_base64_text(run)
             if decoded is not None and _DECODED_SHELL.search(decoded):
                 return SecurityAssessment(
                     risk_level=CommandRiskLevel.DANGEROUS,

@@ -229,7 +229,7 @@ The flow's `EventPublisher` owns session persistence: it saves after every event
 
 ### Network off in the native sandboxes
 
-With `allow_network` off, `NativeWindowsSandbox` only points the proxy variables at a dead port (`infrastructure/sandbox/native_windows.py`, `_build_child_env`), and the WSL2 sandbox does nothing. A tool that ignores proxies, or opens a raw socket, still reaches the network. It stays advisory by the owner's decision D9 (2026-10-30): enforcing it would take an admin-only firewall rule per program. The sandbox factory logs this once per sandbox type (`_warn_if_network_off_is_best_effort`). For real isolation use `SANDBOX_MODE=docker` (audit A22).
+With `allow_network` off, `NativeWindowsSandbox` only points the proxy variables at a dead port (`infrastructure/sandbox/native_windows.py`, `sandbox_child_env`), and the WSL2 sandbox does nothing. A tool that ignores proxies, or opens a raw socket, still reaches the network. It stays advisory by the owner's decision D9 (2026-10-30): enforcing it would take an admin-only firewall rule per program. The sandbox factory logs this once per sandbox type (`_warn_if_network_off_is_best_effort`). For real isolation use `SANDBOX_MODE=docker` (audit A22).
 
 ### How weebot learns
 

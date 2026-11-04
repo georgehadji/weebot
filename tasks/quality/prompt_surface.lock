@@ -3,6 +3,6 @@
  "system_static.full": "883786dc5c642b8804cd72599b86c8a07d4ca9b79ca86cc54a690d806aacd3fc",
  "system_static.minimal": "883786dc5c642b8804cd72599b86c8a07d4ca9b79ca86cc54a690d806aacd3fc",
  "system_static.skill": "883786dc5c642b8804cd72599b86c8a07d4ca9b79ca86cc54a690d806aacd3fc",
- "tools.admin": "dbbc21d26cd3b78c4df4e31b708eedc6235752d54e55ed14ab663a6bb6ddc6a2",
- "tools.automation": "1b187237bc52f89fbfeeef4dcf2d12ebfa3454299bdaaddff225cc51f77de6da"
+ "tools.admin": "83c6ab1430ac28b858ffbc6946417790e111d96b72a9a9ef080e80faa7954f3b",
+ "tools.automation": "523afa26d328732feba0424b87635520a9bf68ffe7f97fb5839fac1d18e253e4"
 }

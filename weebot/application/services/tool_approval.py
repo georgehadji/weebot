@@ -121,6 +121,9 @@ class AutoApproval(ApprovalPort):
     """
 
     async def resolve(self, request: ToolCallApproval) -> ApprovalOutcome:
+        if request.human_only:
+            # An approval floor: a person answers even in AUTO, and their grant is spent here.
+            return await FlowPauseApproval().resolve(request)
         logger.warning(
             "approval auto-granted (AUTO execution mode): %s by %s",
             request.tool_name,
@@ -309,6 +312,7 @@ def pending_result(request: ToolCallApproval) -> ToolResult:
                 "guard": request.guard,
                 "reason": request.reason,
                 "allow_always": request.allow_always,
+                "human_only": request.human_only,
                 "prompt": approval_prompt(request),
             }
         },
