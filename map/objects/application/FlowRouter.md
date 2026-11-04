@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-11-04
-commit: 58649bb5
+commit: 4376c22b
 ---
 
 # FlowRouter
@@ -41,7 +41,7 @@ Known sharp edge, in the source's own words: priorities 0 and 1 build `extra_out
 
 ## Connected to
 - **Called by** `begin_run`, the prologue of `PlanActFlow._run_states` (`weebot/application/flows/_run_prologue.py:99-103`) and, for `record_misalignment`, `_run_prologue.py:120`.
-- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:336-348` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:106` (`plan_pending_approval`), `states/product_gate.py:161` (`_product_gate_pending`).
+- **Reads flags written by** `states/_execution_gates.py:54` (`_user_gate_pending`), `weebot/application/services/tool_approval.py:373-385` (`_user_gate_pending = "tool_approval"`), `states/plan_review.py:106` (`plan_pending_approval`), `states/product_gate.py:161` (`_product_gate_pending`).
 - **Approve words:** `_APPROVE_TOKENS`, `states/plan_review.py:36` (imported lazily at `flow_router.py:84, 127`).
 - **Not** the state machine itself: transitions *between* states are `context.set_state(...)` calls inside each state (see FlowState).
 

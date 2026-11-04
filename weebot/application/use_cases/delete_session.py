@@ -37,4 +37,7 @@ class DeleteSession:
         from weebot.application.agents.executor._session_scope import get_session_scope
 
         get_session_scope().close(session_id)
+        from weebot.application.services.tool_approval import denial_breaker
+
+        denial_breaker().forget_session(session_id)
         return results

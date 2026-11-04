@@ -324,6 +324,9 @@ class CompletedState(FlowState):
         # rows in the event store and _hydrate_session_state replays them if the
         # session runs again; a TTL would not be safe, which is why there is none.
         get_session_scope().close(context._session.id)
+        from weebot.application.services.tool_approval import denial_breaker
+
+        denial_breaker().forget_session(context._session.id)
         yield DoneEvent(status=done_status)
 
         # --- CQRS: score the trajectory if mediator is available ---
