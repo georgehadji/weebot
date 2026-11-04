@@ -31,14 +31,14 @@ Format: name — source — status — card
 
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-31 — [card](infrastructure/Browser.md)
-- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-11-02 — [card](infrastructure/EventBus.md)
+- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-11-04 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — stale 2026-10-31 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-11-03 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox, ModalSandboxBackend) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-11-02 — [card](infrastructure/Sandbox.md)
 - SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-11-03 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
-- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-11-02 — [card](interfaces/ChatGateways.md)
+- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-11-04 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-11-01 — [card](interfaces/CLI.md)
 - MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-11-04 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — stale 2026-10-31 — [card](interfaces/WebAPI.md)

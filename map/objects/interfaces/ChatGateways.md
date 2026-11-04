@@ -5,8 +5,8 @@ code: GatewayAdapter and six subclasses
 cluster: interfaces
 universe: live
 status: verified
-verified: 2026-11-02
-commit: a824d62a
+verified: 2026-11-04
+commit: 63079861
 ---
 
 # Chat gateways
@@ -20,7 +20,7 @@ One base class holds what every platform needs: the allowlist check `is_authoriz
 
 | Adapter | File | Inbound | Started by | Session |
 |---|---|---|---|---|
-| `TelegramAdapter` | `gateways/telegram.py:52` | long-poll `getUpdates` (`telegram.py:95-135`) | web lifespan when `telegram_bot_token` is set (`weebot/interfaces/web/main.py:291-317`) | `GatewayFlowResolver` keyed by chat (`telegram.py:167-194, 243-248`); `/new`, `/reset` and "new session" stop the run and close the gateway session, `/stop` cancels the chat's run task (F1, `telegram.py:201-258, 275-282, 301-318`) |
+| `TelegramAdapter` | `gateways/telegram.py:52` | long-poll `getUpdates` (`telegram.py:95-135`) | web lifespan when `telegram_bot_token` is set (`weebot/interfaces/web/main.py:295-321`) | `GatewayFlowResolver` keyed by chat (`telegram.py:167-194, 243-248`); `/new`, `/reset` and "new session" stop the run and close the gateway session, `/stop` cancels the chat's run task (F1, `telegram.py:201-258, 275-282, 301-318`) |
 | `SignalAdapter` | `gateways/signal.py:31` | poll signal-cli REST (`signal.py:64-84`) | lifespan when `signal_account_number` is set (`main.py:309-325`) | new per message (`signal.py:108-111`) |
 | `EmailAdapter` | `gateways/email.py:100` | IMAP poll (`email.py:145-162, 243-298`) | lifespan when IMAP user and password are set (`main.py:327-352`) | new per message (`email.py:199-200`) |
 | `SlackAdapter` | `gateways/slack.py:30` | `POST /api/gateway/slack/events` (`weebot/interfaces/web/routers/slack_webhook.py:34-69`; acks, then spawns the event on the background-task owner, `slack_webhook.py:68`), HMAC plus a 5-minute timestamp window (`slack.py:54-72`) | lazily on first callback (`slack_webhook.py:90-121`) | new per message (`slack.py:130-133`) |
