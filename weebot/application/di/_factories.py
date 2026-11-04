@@ -380,6 +380,16 @@ class FactoriesMixin:
 
         return LLMStepEvaluator(llm=self._create_llm_for_role("verifier"))
 
+    def _create_approval_guardian(self):
+        """The command guardian (H18c), or None while WEEBOT_APPROVAL_GUARDIAN is off."""
+        from weebot.config import feature_flags
+
+        if not feature_flags.APPROVAL_GUARDIAN_ENABLED:
+            return None
+        from weebot.application.services.llm_guardian import LLMGuardianAdapter
+
+        return LLMGuardianAdapter(llm=self._create_llm_for_role("verifier"))
+
     @staticmethod
     def _create_workspace_snapshots():
         """LongHorizon-Harness E7b — workspace drift detection for the integrity axis.

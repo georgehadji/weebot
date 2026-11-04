@@ -173,6 +173,13 @@ WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").str
 STEP_EVALUATOR_ENABLED: bool = _env_bool("WEEBOT_STEP_EVALUATOR", default=False)
 
 
+# ── Approval guardian (H18c) ────────────────────────────────────────────────
+# When True, a cheap model reviews each shell command that no approval rule covers (and that
+# is not dangerous, a floor, egress or after untrusted content) before a person is asked: it
+# may approve, refuse or escalate. Any failure escalates. Default OFF: a model decides.
+APPROVAL_GUARDIAN_ENABLED: bool = _env_bool("WEEBOT_APPROVAL_GUARDIAN", default=False)
+
+
 # ── Desktop toasts (D4) ─────────────────────────────────────────────────────
 # When True, the web backend shows a Windows toast for errors, questions and
 # finished runs. The text is credential-redacted first. Default OFF: a toast

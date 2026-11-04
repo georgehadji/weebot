@@ -275,6 +275,8 @@ CONFIG_SCHEMA: list[dict] = [
     # ── Optional features, off by default (D4) ────────────────────
     {"var": "WEEBOT_STEP_EVALUATOR", "type": "bool", "default": "false",
      "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
+    {"var": "WEEBOT_APPROVAL_GUARDIAN", "type": "bool", "default": "false",
+     "desc": "A cheap model reviews shell commands no approval rule covers before a person is asked"},
     {"var": "WEEBOT_SKILL_PROMOTION_GATE", "type": "bool", "default": "false",
      "desc": "Chain-of-verification veto before a learned skill is promoted to trusted"},
     {"var": "WEEBOT_STAGED_VALIDATION", "type": "bool", "default": "false",

@@ -617,7 +617,13 @@ class GuardedTool(BaseTool):
             pattern=pattern,
         )
         approval = self._approval or tool_approval.current_approval()
-        outcome = await approval.resolve(request)
+        by_guardian = await tool_approval.guardian_outcome(request)
+        if by_guardian is ApprovalOutcome.DENIED:
+            return ToolResult(
+                output="",
+                error=f"Refused by the approval guardian ({request.reason}); not run.",
+            )
+        outcome = by_guardian or await approval.resolve(request)
         if outcome is ApprovalOutcome.APPROVED:
             return None
         if outcome is ApprovalOutcome.PENDING:

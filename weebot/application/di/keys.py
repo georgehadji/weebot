@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         AdaptiveCapabilityRouter,
     )
     from weebot.application.ports.skill_store_port import SkillStorePort
+    from weebot.application.ports.guardian_port import GuardianPort
     from weebot.application.ports.step_evaluator_port import StepEvaluatorPort
     from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
     from weebot.application.services.strategy_transfer import StrategyTransferService
@@ -55,6 +56,8 @@ LEARNING_SKILL_STORE: Key[SkillStorePort] = Key("learning_skill_store")
 ACR_ROUTER: Key[AdaptiveCapabilityRouter] = Key("acr_router")
 # Per-step progress evaluator; resolves to None while WEEBOT_STEP_EVALUATOR is off.
 STEP_EVALUATOR: Key[StepEvaluatorPort | None] = Key("step_evaluator")
+# Approval guardian (H18c); resolves to None while WEEBOT_APPROVAL_GUARDIAN is off.
+APPROVAL_GUARDIAN: Key[GuardianPort | None] = Key("approval_guardian")
 # Chain-of-verification veto on candidate -> trusted; None while its flag is off.
 SKILL_PROMOTION_GATE: Key[SkillPromotionGate | None] = Key("skill_promotion_gate")
 # Episodic summaries; always bound so the delete cascade can purge them.
