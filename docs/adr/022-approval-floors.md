@@ -1,7 +1,7 @@
 # ADR-022: Approval floors that no mode can lower
 
 **Date:** 2026-11-04
-**Status:** Implemented 2026-11-04 as parts (a) floors and (b) scopes of plan H18 (`tasks/specs/hermes_v022_parity_implementation_plan.md`), under the user's instructions "continue" and "proceed". Parts (c) guardian, (d) denial breaker and (e) unattended are not built.
+**Status:** Implemented 2026-11-04 as parts (a) floors, (b) scopes and (d) denial breaker of plan H18 (`tasks/specs/hermes_v022_parity_implementation_plan.md`), under the user's instructions "continue" and "proceed". Parts (c) guardian and (e) unattended are not built.
 **Owner:** weebot maintainers
 **Supersedes:** N/A (the plan calls this ADR-021; that number is the loop-guardrails ADR)
 
@@ -27,4 +27,13 @@
 - `GuardAction.DENY` changed from 2 to 3. Nothing stores the number.
 - A pattern ignores the words after the subcommand, so `npm run build` and `npm run deploy` share `npm run`; a flag before any subcommand with a positional after it (`python -m pytest`) gets no pattern. Flags are part of the pattern, so `npm test --silent` is a different pattern from `npm test`.
 - `always` is one file for the machine, not one per profile as the plan says; there is no profile-aware home directory in the code. Session scopes are not dropped at session end (sessions are few and ids are not reused). The plan's `ApprovalScopedGrant` event is not added: the journal row above carries it.
-- **Not built:** the guardian, the denial breaker, `ApprovalChannel.UNATTENDED`. The plan's unattended case assumes a gateway "with no human approver bound"; the code has no such binding (cron and webhooks already refuse through `DenyApproval`), so it needs a decision first.
+- **Not built:** the guardian, `ApprovalChannel.UNATTENDED`. The plan's unattended case assumes a gateway "with no human approver bound"; the code has no such binding (cron and webhooks already refuse through `DenyApproval`), so it needs a decision first.
+
+## Part (d): denial breaker
+
+Added 2026-11-04, under the user's instruction "proceed". A refused tool call now carries `data["approval_denied"]` (`tool_approval.DENIAL_DATA_KEY`): the refusal of an ASK (`denied_result`) and a DENY verdict from the guard chain. `ToolBatchRunner._denial_loop`, beside `_policy_error_loop`, counts them in `DenialBreaker` (`tool_approval.denial_breaker()`, a process singleton like the grant store): 3 in one step, or 6 in one session, ends the step with an `ErrorEvent` and a `WaitForUserEvent` that quotes the last refusal and says how to go on. A trip clears the session's counts, so the next refusals start a new tally; the counts are dropped when a session completes or is deleted.
+
+- The plan says the step stops with `StepStatus.BLOCKED`; no such status exists, so the step ends the way `_policy_error_loop` ends one (loop error plus a question for the person).
+- The plan says "a DI singleton"; the grant store and the journal are module singletons in `tool_approval.py`, so the breaker is too.
+- `_policy_error_loop` already stops three same-class policy errors in a row, but approval refusals match none of its classes, and a success resets it; the breaker counts refusals across a whole step.
+- The guardian's refusal (part c) is a separate branch; it needs the same marker once both land.

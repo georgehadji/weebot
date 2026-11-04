@@ -566,8 +566,12 @@ class GuardedTool(BaseTool):
             )
         if self._mode == "enforce" and verdict.action is GuardAction.DENY:
             # DENY is never approvable (ADR-013 section 2).
+            from weebot.application.services import tool_approval
+
             return ToolResult(
-                output="", error=f"Tool call denied by {verdict.guard}: {verdict.reason}"
+                output="",
+                error=f"Tool call denied by {verdict.guard}: {verdict.reason}",
+                data={tool_approval.DENIAL_DATA_KEY: True},
             )
         enforced_ask = any(
             v.enforce_always for v in result.verdicts if v.action is GuardAction.ASK

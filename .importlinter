@@ -48,10 +48,6 @@ ignore_imports =
     # attribute, so the repo would stay None and every salience write would
     # fail. Static import retained, so the exemption is retained with it.
     weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
-    # search_history queries the FTS5 index for session search — the FTS5
-    # adapter is a capability query, not a DB bypass for writes.
-    weebot.tools.search_history -> weebot.infrastructure.persistence.fts5_search
-    weebot.tools.search_history -> weebot.infrastructure.persistence.connection_pool
     # atomic_mail_tool delegates to the Atomic Mail MCP server adapter.
     weebot.tools.atomic_mail_tool -> weebot.infrastructure.adapters.atomicmail.mcp_server
     # apify_presets uses the Apify service adapter for actor execution.

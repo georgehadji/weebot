@@ -572,8 +572,10 @@ class FactoriesMixin:
         from weebot.application.services.audit_service import AuditService
         from weebot.application.services.file_state import FileStateRegistry
         from weebot.application.services.kernel_manager import KernelManager
+        from weebot.config.constants import DB_SESSIONS_PATH
         from weebot.config.tool_config import ToolConfig
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
+        from weebot.infrastructure.persistence.session_search_sqlite import SqliteSessionSearch
 
         state_repo = self._maybe_get(StateRepositoryPort)
         tool_repo = self._maybe_get(ToolRepositoryPort)
@@ -591,12 +593,14 @@ class FactoriesMixin:
             "voice_input": {"speech": speech},
             "voice_output": {"speech": speech},
             "persistent_memory": {"memory": memory, "state_repo": state_repo},
+            # The tool searches through the port; the SQLite file is the one sessions live in.
+            "search_history": {"search": SqliteSessionSearch.at(DB_SESSIONS_PATH)},
         }
         required = {"file_editor": "file_state",
                     "ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
                     "product": "repo",
                     "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
-                    "persistent_memory": "memory"}
+                    "persistent_memory": "memory", "search_history": "search"}
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
 
