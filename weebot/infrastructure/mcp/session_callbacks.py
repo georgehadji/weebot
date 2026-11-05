@@ -2,8 +2,8 @@
 
 The SDK runs these callbacks in the session's own task, not the caller's, so the session and
 taint of the tool call that triggered them do not travel by ``ContextVar``. The manager
-records each in-flight call (:class:`CallContext`, from the port); a callback uses the newest one for its
-server. With none, the server is asking outside a tool call and the request is denied.
+records each in-flight call (:class:`CallContext`, from the port); a callback uses the newest
+one for its server. With none, the server is asking outside a tool call and the request is denied.
 """
 
 from __future__ import annotations

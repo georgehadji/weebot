@@ -191,7 +191,9 @@ class MCPSamplingHandler(McpSamplingPort):
                 messages=messages,
                 model=None if model == "default" else model,
                 temperature=(
-                    TEMPERATURE_DETERMINISTIC if request.temperature is None else request.temperature
+                    TEMPERATURE_DETERMINISTIC
+                    if request.temperature is None
+                    else request.temperature
                 ),
                 max_tokens=max_tokens,
             )

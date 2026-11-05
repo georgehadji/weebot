@@ -195,7 +195,11 @@ class MCPClientManager:
 
     def _newest_call(self, server_name: str) -> Callable[[], CallContext | None]:
         """The call a callback from *server_name* answers: the newest one in flight."""
-        return lambda: self._in_flight[server_name][-1] if self._in_flight.get(server_name) else None
+        def newest() -> CallContext | None:
+            flight = self._in_flight.get(server_name)
+            return flight[-1] if flight else None
+
+        return newest
 
     @staticmethod
     def _request_headers(config: MCPServerConfig) -> dict[str, str]:

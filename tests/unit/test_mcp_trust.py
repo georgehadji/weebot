@@ -101,7 +101,8 @@ async def test_sse_sends_the_headers_and_the_bearer_token(monkeypatch):
 async def test_an_entry_the_typed_config_rejects_fails_that_server():
     async with AsyncExitStack() as stack:
         with pytest.raises(ValueError):
-            await mod.MCPClientManager({})._connect_server("s", {"transport": "carrier-pigeon"}, stack)
+            manager = mod.MCPClientManager({})
+            await manager._connect_server("s", {"transport": "carrier-pigeon"}, stack)
 
 
 # ── H12: sampling through the manager ──────────────────────────────────────────────────────
@@ -174,7 +175,8 @@ async def test_the_manager_records_the_call_in_flight_and_clears_it(monkeypatch)
             raise RuntimeError("stop")
 
     manager._clients["srv"] = Session()
-    manager._tools_cache["srv"] = [type("T", (), {"name": "get", "description": "", "inputSchema": {}})()]
+    tool = type("T", (), {"name": "get", "description": "", "inputSchema": {}})()
+    manager._tools_cache["srv"] = [tool]
     with pytest.raises(RuntimeError):
         await manager.call_tool("mcp__srv__get", {})
 
