@@ -495,6 +495,7 @@ class ToolExecutor:
         approved_call = ""
         effect_to_record = ""  # set when this call is an egress the ledger should remember
         network_ok = False  # W3.9: does this call get sandbox network?
+        cleared_hosts: frozenset[str] | None = None  # H23: the hosts it may reach; None = any
         if guard is not None:
             from weebot.config.settings import get_settings
             from weebot.core.approval_policy import is_output_only_python
@@ -555,6 +556,10 @@ class ToolExecutor:
                 )
                 if refused is not None:
                     return refused
+            if network_ok:
+                cleared_hosts = guard.network_hosts(name, args)
+                if cleared_hosts is None and decision.recipient:
+                    cleared_hosts = frozenset({decision.recipient.lower()})
 
         # Decision D5: after untrusted content, a call that does more than read asks, even
         # when nothing leaves the machine. An egress approval above already covers the call.
@@ -594,7 +599,7 @@ class ToolExecutor:
                     tainted=self._untrusted_context_active,
                     step_description=self._step_description,
                 ),
-                network_cleared_for_call() if network_ok else contextlib.nullcontext(),
+                network_cleared_for_call(cleared_hosts) if network_ok else contextlib.nullcontext(),
                 # H17: code in a persistent kernel reaches tools back through this executor.
                 tool_rpc_scope(self.execute_tool)
                 if name == "python_execute"

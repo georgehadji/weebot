@@ -21,15 +21,26 @@ from pathlib import Path
 # ``network_allowed(config)`` when they build the process. Lives in the port so
 # infrastructure can read it without importing application services.
 _network_cleared: ContextVar[bool] = ContextVar("weebot_sandbox_network", default=False)
+# The hosts the cleared call may reach (H23). None: any host (the host was not known, or a human
+# approved it without one). A backend that can restrict hosts reads ``network_hosts()``.
+_network_hosts: ContextVar[frozenset[str] | None] = ContextVar(
+    "weebot_sandbox_network_hosts", default=None
+)
 
 
 @contextmanager
-def network_cleared_for_call() -> Iterator[None]:
+def network_cleared_for_call(hosts: frozenset[str] | None = None) -> Iterator[None]:
     token = _network_cleared.set(True)
+    hosts_token = _network_hosts.set(hosts)
     try:
         yield
     finally:
+        _network_hosts.reset(hosts_token)
         _network_cleared.reset(token)
+
+
+def network_hosts() -> frozenset[str] | None:
+    return _network_hosts.get()
 
 
 def network_allowed(config: SandboxConfig) -> bool:
