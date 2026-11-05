@@ -82,6 +82,7 @@ def _lazy_cost_tracker():
 from weebot.application.di._skills import SkillsMixin  # noqa: E402
 from weebot.application.di._skillopt import SkillOptMixin  # noqa: E402
 from weebot.application.di._learning import LearningMixin  # noqa: E402
+from weebot.application.di._secrets import install_secret_sources  # noqa: E402,F401
 
 
 @dataclass

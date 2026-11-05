@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from types import MappingProxyType
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,14 @@ class SecretAccessor:
         Not an accessor for secrets: the child-env allowlist decides what leaves.
         """
         return MappingProxyType(dict(cls._get_source()))
+
+    @classmethod
+    def process_environ(cls) -> MutableMapping[str, str]:
+        """The live process environment, for the startup resolver (H19) to rewrite in place.
+
+        Nothing else should write to it; read through ``get`` or ``environ_view``.
+        """
+        return os.environ
 
     # ------------------------------------------------------------------
     # Public accessors

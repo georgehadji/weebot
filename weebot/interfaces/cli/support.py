@@ -220,6 +220,29 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
     checks: list[DoctorCheck] = []
     root = root.resolve()
 
+    # Secret references in .env (op://, bws://) resolved at startup (H19)
+    from weebot.core.secret_provenance import provenance
+
+    refs = provenance()
+    if refs.failed:
+        checks.append(
+            DoctorCheck(
+                name="secret_sources",
+                status="error",
+                details="; ".join(f"{key}: {why}" for key, why in sorted(refs.failed.items())),
+                data={"failed": dict(refs.failed), "resolved": dict(refs.resolved)},
+            )
+        )
+    elif refs.resolved:
+        checks.append(
+            DoctorCheck(
+                name="secret_sources",
+                status="ok",
+                details=", ".join(f"{key} via {src}" for key, src in sorted(refs.resolved.items())),
+                data={"resolved": dict(refs.resolved)},
+            )
+        )
+
     # API keys / settings
     try:
         settings = get_settings()
