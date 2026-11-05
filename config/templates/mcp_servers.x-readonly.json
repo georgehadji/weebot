@@ -1,12 +1,14 @@
 {
   "_comment": "X (Twitter) MCP — read-only Path A. Autonomous-ready. No writes.",
   "x-docs": {
+    "trust": "trusted",
     "transport": "streamable-http",
     "url": "https://docs.x.com/mcp",
     "enabled": false,
     "tool_cap": 100
   },
   "xapi": {
+    "trust": "trusted",
     "transport": "streamable-http",
     "url": "https://api.x.com/mcp",
     "enabled": false,

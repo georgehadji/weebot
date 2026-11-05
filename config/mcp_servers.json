@@ -1,6 +1,7 @@
 {
   "_comment": "External MCP servers for Weebot. Loaded when WEEBOT_ENABLE_X_MCP=1 and MCP_SERVERS_CONFIG_PATH points here. Dollar-brace variable references come from .env; an unset one skips only the server that uses it (a warning is logged), and that includes any written inside these comments. Tools arrive as mcp__<server>__<tool>: their output is untrusted, and publish/send/delete/generate tools always ask (WEEBOT_OUTBOUND_TOOL_PATTERNS).",
   "postiz": {
+    "trust": "trusted",
     "_comment": "Self-hosted Postiz (~/postiz/compose, docker compose). API key: Postiz UI > Settings > Public API.",
     "transport": "streamable-http",
     "url": "http://localhost:4007/api/mcp",
@@ -8,6 +9,7 @@
     "timeout_seconds": 30
   },
   "jira": {
+    "trust": "trusted",
     "_comment": "Jira Cloud via the community mcp-atlassian server (uvx). Token: id.atlassian.com > Security > API tokens.",
     "transport": "stdio",
     "command": "uvx",
@@ -20,6 +22,7 @@
     "timeout_seconds": 60
   },
   "hubspot": {
+    "trust": "trusted",
     "_comment": "HubSpot CRM via HubSpot's own MCP server (npx). Token: HubSpot Settings > Integrations > Private Apps.",
     "transport": "stdio",
     "command": "npx",
@@ -28,6 +31,7 @@
     "timeout_seconds": 60
   },
   "apify": {
+    "trust": "trusted",
     "_comment": "Apify's hosted MCP server: search the Apify Store and run any Actor (billed to the Apify account). Token: console.apify.com > Settings > API & Integrations. The same key turns on the built-in apify_* preset tools.",
     "transport": "streamable-http",
     "url": "https://mcp.apify.com",
