@@ -33,6 +33,7 @@ from typing import Any, Protocol
 
 from pydantic import PrivateAttr
 
+from weebot.core.mcp_trust import is_untrusted_tool
 from weebot.domain.models.base_tool import BaseTool
 from weebot.domain.models.tool_result import ToolResult
 
@@ -345,8 +346,11 @@ def is_outbound_tool(tool_name: str) -> bool:
     patterns = (p.strip().lower() for p in get_settings().outbound_tool_patterns.split(","))
     if any(fnmatchcase(name, p) for p in patterns if p):
         return True
-    # MCP tools fail closed: one that does not read by its name asks (F38).
-    return name.startswith("mcp__") and not _mcp_tool_reads(tool_name)
+    # MCP tools fail closed: one that does not read by its name asks (F38), and so does
+    # every tool of a server the config marks untrusted (H12).
+    return name.startswith("mcp__") and (
+        is_untrusted_tool(tool_name) or not _mcp_tool_reads(tool_name)
+    )
 
 
 _READ_VERBS = frozenset(

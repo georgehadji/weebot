@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -94,6 +94,14 @@ class MCPServerConfig(BaseModel):
         default_factory=dict,
         description="Extra env vars for the subprocess. Overlaid on safe baseline.",
     )
+    env_passthrough: list[str] = Field(
+        default_factory=list,
+        description="Names of parent environment variables the subprocess may inherit.",
+    )
+
+    # Whether the server's tools may be treated as reads by their name (H12). An untrusted
+    # server's tools all ask; its output is external either way.
+    trust: Literal["trusted", "untrusted"] = Field(default="untrusted")
 
     # HTTP/SSE transport
     url: str | None = Field(default=None, description="Server URL (http/sse/streamable-http)")
