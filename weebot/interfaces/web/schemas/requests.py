@@ -42,6 +42,19 @@ class ResumeSessionRequest(BaseModel):
     answer: str = Field(..., description="User answer to HITL question")
 
 
+class RewindSessionRequest(BaseModel):
+    """Drop the last turns of a conversation, and optionally put the files back."""
+
+    turns: int = Field(default=1, ge=1, le=100)
+    files: bool = Field(default=True, description="Restore the workspace checkpoint too")
+
+
+class BranchSessionRequest(BaseModel):
+    """Copy a conversation up to an event into a new session."""
+
+    at_event_id: str = Field(..., min_length=1)
+
+
 class UpdateSessionRequest(BaseModel):
     """Request to update session settings."""
 

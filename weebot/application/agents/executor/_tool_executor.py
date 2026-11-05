@@ -21,6 +21,12 @@ from weebot.application.agents.executor._system_prompt import load_executor_syst
 from weebot.application.agents.executor._turn_checkpoint import checkpoint_before_change
 from weebot.application.middleware.base import Deny
 from weebot.application.services.tool_arg_coercion import Coercion, coerce_args
+from weebot.application.services.verification_evidence import (
+    CODE_WRITTEN,
+    VERIFICATION_RAN,
+    classify_verification_command,
+    is_source_file,
+)
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import HostClass, classify_host, is_enforcing
@@ -194,6 +200,7 @@ class ToolExecutor:
         self._workspace_checkpoints = workspace_checkpoints
         self._effect_ledger = effect_ledger
         self._current_step_scope: str = ""
+        self._step_description: str = ""
         self._tools = tools
         self._hooks = hooks
         self._conversation_buffer = conversation_buffer or deque(maxlen=15)
@@ -230,6 +237,7 @@ class ToolExecutor:
         """Update the current step/session context (called at step start)."""
         self._current_step_id = step_id
         self._current_session_id = session_id
+        self._step_description = step_description
         self._current_step_scope = step_scope(step_description)
         # Every log record from this step's tools, cascade and adapters carries the ids.
         bind_step(step_id, session_id)
@@ -449,6 +457,10 @@ class ToolExecutor:
         if "timeout" in args:
             with contextlib.suppress(ValueError, TypeError):
                 timeout = min(float(args["timeout"]) + 5.0, 305.0)
+        if name == "python_execute":
+            # H17: tool calls the code makes are the tools' time, not the code's. The kernel
+            # holds the code to its own timeout; this is only the ceiling on the whole run.
+            timeout = 305.0
 
         # Pre-tool hook
         if self._hooks is not None:
@@ -483,6 +495,7 @@ class ToolExecutor:
         approved_call = ""
         effect_to_record = ""  # set when this call is an egress the ledger should remember
         network_ok = False  # W3.9: does this call get sandbox network?
+        cleared_hosts: frozenset[str] | None = None  # H23: the hosts it may reach; None = any
         if guard is not None:
             from weebot.config.settings import get_settings
             from weebot.core.approval_policy import is_output_only_python
@@ -543,6 +556,10 @@ class ToolExecutor:
                 )
                 if refused is not None:
                     return refused
+            if network_ok:
+                cleared_hosts = guard.network_hosts(name, args)
+                if cleared_hosts is None and decision.recipient:
+                    cleared_hosts = frozenset({decision.recipient.lower()})
 
         # Decision D5: after untrusted content, a call that does more than read asks, even
         # when nothing leaves the machine. An egress approval above already covers the call.
@@ -568,6 +585,7 @@ class ToolExecutor:
 
         from weebot.application.ports.sandbox_port import network_cleared_for_call
         from weebot.application.services.tool_approval import approval_scope
+        from weebot.application.services.tool_rpc import tool_rpc_scope
 
         _t0 = _timer.monotonic()
         try:
@@ -575,8 +593,17 @@ class ToolExecutor:
             # GuardedTool resolves its own ASK against the same session and does
             # not ask again for a call a human approved here (ADR-013).
             with (
-                approval_scope(session_id=self._current_session_id, approved_call=approved_call),
-                network_cleared_for_call() if network_ok else contextlib.nullcontext(),
+                approval_scope(
+                    session_id=self._current_session_id,
+                    approved_call=approved_call,
+                    tainted=self._untrusted_context_active,
+                    step_description=self._step_description,
+                ),
+                network_cleared_for_call(cleared_hosts) if network_ok else contextlib.nullcontext(),
+                # H17: code in a persistent kernel reaches tools back through this executor.
+                tool_rpc_scope(self.execute_tool)
+                if name == "python_execute"
+                else contextlib.nullcontext(),
             ):
                 result = await asyncio.wait_for(
                     self._tools.execute(_name=name, **args), timeout=timeout
@@ -647,6 +674,17 @@ class ToolExecutor:
             if args.get("command") != "view" and not getattr(result, "is_error", False):
                 if self._scope.note_written_file(self._current_session_id, path):
                     self._persist_flag("file_written", path=path)
+                if is_source_file(path):
+                    self._persist_flag(CODE_WRITTEN, path=path)
+        elif name in ("bash", "powershell"):
+            verification = classify_verification_command(str(args.get("command", "")))
+            if verification:
+                self._persist_flag(
+                    VERIFICATION_RAN,
+                    verification=verification,
+                    command=str(args.get("command", ""))[:200],
+                    ok=not getattr(result, "is_error", False),
+                )
         if must_taint(trust_of(tool_obj), getattr(result, "is_error", False)) and not (
             local_page or own_file
         ):

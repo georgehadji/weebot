@@ -4,9 +4,9 @@ name: SQLiteStateRepository
 code: SQLiteStateRepository
 cluster: infrastructure
 universe: live
-status: verified
+status: stale
 verified: 2026-11-03
-commit: e7c91b6a
+commit: 74ebf637
 ---
 
 # SQLiteStateRepository
@@ -21,7 +21,7 @@ The port declares 11 methods (`save_session`, `save_session_if_unchanged`, `crea
 - A session is **one row**: `events_json` holds every event as JSON and `context_json` the context (`sqlite_state_repo.py:159-169`). `SessionQueries.save` drops the oldest events until `events_json` fits `MAX_EVENTS_JSON_BYTES` (10 MB, `weebot/config/constants.py:39`), never the last `plan` event, and logs one warning (`_session_queries.py:97-138`); the ceiling lives only there.
 - `save_session` (`sqlite_state_repo.py:304`) does three separate write transactions in this order: the session row (`sqlite_state_repo.py:331`), then, in `_index_saved_session` (`sqlite_state_repo.py:345`), commitments extracted from assistant messages (failure is logged, session still saved, `sqlite_state_repo.py:364-391`; a per-instance `_commitments_scanned` watermark skips events already scanned, `sqlite_state_repo.py:368-383`), then FTS5 indexing of events (`sqlite_state_repo.py:393-459`).
 - `save_session_if_unchanged` (`sqlite_state_repo.py:334-343`) is one guarded UPDATE on `updated_at` (`_session_queries.py:59-80`), runs the same `_index_saved_session` after a win, and returns False when the row moved; the compaction job uses it (`weebot/scheduling/default_jobs.py:95`). `create_session` (`sqlite_state_repo.py:298-302`) is load-then-save under a per-process lock, so a second replica could race it.
-- FTS5 index: `_fts5_indexed` is a **per-instance, in-memory** watermark of how many events of each session were indexed (`sqlite_state_repo.py:97-98`). A fresh repository starts from zero and, for a session it has not seen, clears that session's index rows and re-indexes everything (replace, not append, `sqlite_state_repo.py:414-434`). The watermark advances only as far as indexing succeeded (`sqlite_state_repo.py:456-459`).
+- FTS5 index (H15): `_fts5_indexed` caches how many events of each session were indexed (`sqlite_state_repo.py:100`); the count is stored in the `fts_watermark` table, so a restart resumes instead of re-indexing (`sqlite_state_repo.py:418-421`). A session that was never indexed, or whose row holds fewer events than the watermark, is cleared and indexed again from the start (replace, not append). The watermark advances only as far as indexing succeeded and is written in the same transaction (`sqlite_state_repo.py:473`). Each event goes into `event_fts` and, except tool results, `event_fts_trigram`, with its event id and timestamp. Queries are in `SessionSearch`.
 - `list_sessions(load_events=False)` by default: list views skip event deserialization (`sqlite_state_repo.py:468-491`). Callers that read `.events` must pass `load_events=True`.
 - `delete_session` first deletes the session's `session_constraints` and `correction_records` rows (plan L1), then the session row, then best-effort clears FTS5 rows (`sqlite_state_repo.py:497-511`); `search_sessions` truncates the query to 500 chars (`sqlite_state_repo.py:523-524`).
 - Event rows are rebuilt through a Pydantic `TypeAdapter(AgentEvent)`, falling back to `MessageEvent` (`sqlite_state_repo.py:532-539, 554-561`).
@@ -58,11 +58,11 @@ Found by grepping for `.method(` calls in `weebot/` and `cli/` and dropping rece
 | `find_plan_templates_by_hash`, `list_all_plan_templates` | `domain/services/plan_template_cache.py` (domain layer) |
 | `list_commitments`, `update_commitment_status` | `domain/services/commitment_engine.py` (domain layer); `save_commitment` is called only inside this class (`sqlite_state_repo.py:382`) |
 
-Consequence: `InMemoryStateRepository` implements the port but none of the roles, while the PostgreSQL repo takes them from `PostgresRoleStores` (`persistence/postgresql/_role_stores.py:77`; grep 2026-10-30). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-99`), get `None` on a repository without it, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:128-131`.
+Consequence: `InMemoryStateRepository` implements the port but none of the roles, while the PostgreSQL repo takes them from `PostgresRoleStores` (`persistence/postgresql/_role_stores.py:77`; grep 2026-10-30). Callers resolve a role with `as_role` (`weebot/domain/ports.py:87-99`), get `None` on a repository without it, and skip the feature instead of raising `AttributeError` (W5.1, F26), for example `weebot/application/agents/executor/_step_setup.py:[stale 128-131]`.
 
 ## Connected to
 - **Implements** `StateRepositoryPort` (`application/ports/state_repo_port.py`); 67 files under `weebot/` mention the port (grep 2026-10-30). Other implementers: `persistence/in_memory_state_repo.py`, `persistence/postgresql/state_repo.py`.
-- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:164`. `cli/main.py:72-73` tells callers not to construct it directly.
+- **Constructed by** `FactoriesMixin._create_state_repo` (`application/di/_factories.py:41-50`; PostgreSQL instead when `WEEBOT_DB_BACKEND=postgresql`, `application/di/_factories.py:42-47`) and directly at `infrastructure/observability/health_checks.py:294` and `tools/persistent_memory.py:172`. `cli/main.py:72-73` tells callers not to construct it directly.
 - **Pool:** `persistence/connection_pool.py` (`SQLiteConnectionPool`, shared with the event store through `get_or_create_pool`).
 - **Looks like but is not:** the other port implementers above; the **event store** (a separate DB file and table, see its card); PostgreSQL adapters under `persistence/postgresql/` (scaffolded, not covered).
 

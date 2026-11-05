@@ -4,6 +4,11 @@ Sources are scoped per-step via ``context_scope`` (ICM-derived: stage-scoped
 context loading). Each source is tagged with the scopes that include it in
 ``_SCOPE_SOURCES``; unknown scope values fall back to "full" so callers that
 predate scoping (or pass a bad value) keep prior behavior unchanged.
+
+The prompt is built in two parts (H10). `build_system_blocks` is what stays the same for
+a session (boot, base, harness, personality, user profile) and goes in the system prompt.
+`build_step_context` is what changes with the step (retrieved skills, behavioural rules)
+and goes in the step's first user message, so it never breaks the cached prefix.
 """
 
 from __future__ import annotations
@@ -72,62 +77,86 @@ _BOOT_BLOCK = (
 )
 
 
-async def build_executor_prompt(
-    step_description: str,
+_HEADER = (
+    "## CONSTRAINTS\n"
+    "Internalize the following as rules and patterns to follow "
+    "while executing the current step.\n\n"
+)
+
+
+async def build_system_blocks(
     *,
     base_prompt: str,
     context_scope: str = "full",
     harness_block: str | None = None,
-    skill_prompt: str | None = None,
-    skill_retriever: Any | None = None,
-    behavioral_learner: Any | None = None,
     state_repo: Any | None = None,
     personality: Any | None = None,
     profile_name: str = "",
+) -> tuple[str, str]:
+    """The system prompt's two stable parts: ``(static, session)``.
+
+    *static* is the boot block, base prompt, harness block and personality under the
+    "## CONSTRAINTS" header (ICM reference/working separation: these are rules to
+    internalize, not input to transform). *session* is the user profile. Neither reads
+    the step, so both can be built once per session and scope.
+    """
+    sources = _SCOPE_SOURCES.get(context_scope, _SCOPE_SOURCES["full"])
+    static: list[str] = []
+
+    if "boot" in sources:
+        static.append(_BOOT_BLOCK)
+    if "base" in sources and base_prompt:
+        static.append(base_prompt)
+    if "harness" in sources and harness_block:
+        static.append(harness_block)
+    if "personality" in sources and personality is not None and personality.loaded:
+        static.append(personality.get_system_prompt(profile_name=profile_name))
+
+    session = ""
+    from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
+
+    memory = as_role(state_repo, MemoryMetadataStore)
+    if "profile" in sources and memory is not None:
+        try:
+            import hashlib
+
+            key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
+            row = await memory.get_memory_entry(key)
+            txt = row.get("entry_text", "") if row else ""
+            if txt and txt != "No user data collected yet.":
+                session = f"\n\n## User Profile\n{txt[:500]}"
+        except Exception:
+            pass
+
+    return (_HEADER + "\n".join(static) if static else ""), session
+
+
+async def build_step_context(
+    step_description: str,
+    *,
+    context_scope: str = "full",
+    skill_prompt: str | None = None,
+    skill_retriever: Any | None = None,
+    behavioral_learner: Any | None = None,
     skills_used: list[str] | None = None,
     retrieval_scores: list[float] | None = None,
 ) -> str:
-    """Assemble the system prompt from all configured sources.
+    """What this step adds to the prompt: injected and retrieved skills, behavioural rules.
 
     Args:
         step_description: Current step description (for skill retrieval).
-        base_prompt: The base system prompt loaded from config.
-        context_scope: ContextScope value ("full"/"minimal"/"skill"/
-            "creative") controlling which sources below are included.
-            Unrecognized values fall back to "full".
-        harness_block: Self-Harness behavioural instruction block.
+        context_scope: ContextScope value ("full"/"minimal"/"skill"/"creative").
         skill_prompt: Injected skill content.
         skill_retriever: BM25 skill retriever for Tier 1.2.
         behavioral_learner: Behavioral rule learner.
-        state_repo: State repository for user profile lookup.
-        personality: Personality module for core personality injection.
-        profile_name: Profile name for personality selection.
         skills_used: Filled with the candidate skills injected, so their uses count.
         retrieval_scores: Filled with the best retrieval score, so a miss records a gap.
-
-    Returns:
-        Assembled system prompt string, with included sources framed under
-        a "## CONSTRAINTS" header (ICM reference/working separation — these
-        sources are rules to internalize, not input to transform).
     """
     sources = _SCOPE_SOURCES.get(context_scope, _SCOPE_SOURCES["full"])
-    constraints: list[str] = []
+    parts: list[str] = []
 
-    # ── BOOT: PowerShell environment reminder ─────────────────────────
-    if "boot" in sources:
-        constraints.append(_BOOT_BLOCK)
-
-    # ── Base system prompt ────────────────────────────────────────────
-    if "base" in sources and base_prompt:
-        constraints.append(base_prompt)
-
-    # ── Self-Harness: behavioural instruction block ───────────────────
-    if "harness" in sources and harness_block:
-        constraints.append(harness_block)
-
-    # ── Injected skill content ────────────────────────────────────────
     if "skill" in sources and skill_prompt:
-        constraints.append(f"\n{skill_prompt}")
+        parts.append(f"\n{skill_prompt}")
 
     # ── Tier 1.2: BM25 Skill Retrieval ────────────────────────────────
     if "skill_retriever" in sources and skill_retriever is not None:
@@ -147,46 +176,52 @@ async def build_executor_prompt(
                     candidates += 1
                     if skills_used is not None:
                         skills_used.append(m.skill_name)
-                constraints.append(
-                    f"\n\n## Relevant Skill: {m.skill_name}\n{m.content_preview}"
-                )
+                parts.append(f"\n\n## Relevant Skill: {m.skill_name}\n{m.content_preview}")
         except Exception as exc:
             logger.warning("Skill retrieval failed: %s", exc)
 
-    # ── Behavioral rules ──────────────────────────────────────────────
     if "behavioral" in sources and behavioral_learner is not None:
         try:
             rules_prompt = behavioral_learner.get_rules_for_prompt()
             if rules_prompt:
-                constraints.append(f"\n\n{rules_prompt}")
+                parts.append(f"\n\n{rules_prompt}")
         except Exception as exc:
             logger.warning("Behavioral rules injection failed: %s", exc)
 
-    # ── User profile ──────────────────────────────────────────────────
-    from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
+    return "\n".join(parts)
 
-    memory = as_role(state_repo, MemoryMetadataStore)
-    if "profile" in sources and memory is not None:
-        try:
-            import hashlib
 
-            key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-            row = await memory.get_memory_entry(key)
-            txt = row.get("entry_text", "") if row else ""
-            if txt and txt != "No user data collected yet.":
-                constraints.append(f"\n\n## User Profile\n{txt[:500]}")
-        except Exception:
-            pass
-
-    # ── Personality ───────────────────────────────────────────────────
-    if "personality" in sources and personality is not None and personality.loaded:
-        constraints.append(personality.get_system_prompt(profile_name=profile_name))
-
-    if not constraints:
-        return ""
-
-    return (
-        "## CONSTRAINTS\n"
-        "Internalize the following as rules and patterns to follow "
-        "while executing the current step.\n\n" + "\n".join(constraints)
+async def build_executor_prompt(
+    step_description: str,
+    *,
+    base_prompt: str,
+    context_scope: str = "full",
+    harness_block: str | None = None,
+    skill_prompt: str | None = None,
+    skill_retriever: Any | None = None,
+    behavioral_learner: Any | None = None,
+    state_repo: Any | None = None,
+    personality: Any | None = None,
+    profile_name: str = "",
+    skills_used: list[str] | None = None,
+    retrieval_scores: list[float] | None = None,
+) -> str:
+    """Both parts as one string, for callers that want the text and not the layout."""
+    static, session = await build_system_blocks(
+        base_prompt=base_prompt,
+        context_scope=context_scope,
+        harness_block=harness_block,
+        state_repo=state_repo,
+        personality=personality,
+        profile_name=profile_name,
     )
+    step = await build_step_context(
+        step_description,
+        context_scope=context_scope,
+        skill_prompt=skill_prompt,
+        skill_retriever=skill_retriever,
+        behavioral_learner=behavioral_learner,
+        skills_used=skills_used,
+        retrieval_scores=retrieval_scores,
+    )
+    return static + session + ("\n" + step if step else "")

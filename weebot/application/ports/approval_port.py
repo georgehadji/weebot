@@ -30,6 +30,8 @@ class ToolCallApproval:
     guard: str  # the guard whose ASK verdict this is
     reason: str
     allow_always: str | None = None  # an egress host the human may allowlist for good
+    human_only: bool = False  # an approval floor: AUTO mode cannot answer it (H18)
+    pattern: str | None = None  # the command pattern a session/always scope would cover (H18b)
     extra: dict[str, Any] = field(default_factory=dict)
 
 

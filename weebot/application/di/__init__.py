@@ -33,7 +33,11 @@ from weebot.application.di.keys import (  # noqa: E402
     ACR_ROUTER,
     DELEGATION_GUARD,
     LEARNING_SKILL_STORE,
+    APPROVAL_GUARDIAN,
     LLM_POOL,
+    LSP,
+    MEMORY_SNAPSHOT_CACHE,
+    PROMPT_PREFIX_STORE,
     SESSION_COST_METER,
     SKILL_PROMOTION_GATE,
     STEP_EVALUATOR,
@@ -78,6 +82,7 @@ def _lazy_cost_tracker():
 from weebot.application.di._skills import SkillsMixin  # noqa: E402
 from weebot.application.di._skillopt import SkillOptMixin  # noqa: E402
 from weebot.application.di._learning import LearningMixin  # noqa: E402
+from weebot.application.di._secrets import install_secret_sources  # noqa: E402,F401
 
 
 @dataclass
@@ -201,6 +206,8 @@ class Container(
         # back to that default automatically if role config is absent.
         self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
         self.register(STEP_EVALUATOR, self._create_step_evaluator)
+        self.register(APPROVAL_GUARDIAN, self._create_approval_guardian)
+        self.register(LSP, self._create_lsp)
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)
@@ -493,7 +500,6 @@ class Container(
         from weebot.application.models.tool_collection import ToolCollection
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
         from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
-        from weebot.tools.persistent_memory import PersistentMemoryTool
 
         kwargs = dict(
             llm=llm if llm is not None else self._maybe_get(LLMPort),
@@ -518,7 +524,9 @@ class Container(
             workspace_checkpoints=self._workspace_checkpoints(),
             # Plan 2.4: past the soft cost limit the cascade skips PREMIUM models.
             cost_meter=self._maybe_get(SESSION_COST_METER),
-            memory_snapshot=PersistentMemoryTool.load_snapshot,
+            # H24a: read once per session, so a memory write cannot move a running prefix.
+            memory_snapshot=self.get(MEMORY_SNAPSHOT_CACHE).get,
+            prompt_prefix=self.get(PROMPT_PREFIX_STORE),
             acr_router=self._maybe_get(ACR_ROUTER),
             # H7: output past the cap goes to a file; the model gets a head, a tail and the path.
             **self._spillover_kwargs(),

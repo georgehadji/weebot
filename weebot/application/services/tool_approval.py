@@ -32,13 +32,17 @@ from weebot.application.ports.approval_port import (
     ApprovalPort,
     ToolCallApproval,
 )
+from weebot.application.ports.guardian_port import GuardianPort, GuardianVerdict
 from weebot.core.approval import ApprovalManager
+from weebot.core.approval_scopes import ScopedGrants
 from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
 APPROVAL_DATA_KEY = "approval_required"
+DENIAL_DATA_KEY = "approval_denied"  # on a result a person, a rule or a guard refused (H18d)
 ALWAYS_TOKENS = frozenset({"always", "always allow", "allow always", "always allow host"})
+SESSION_TOKENS = frozenset({"session", "yes for this session", "allow for this session"})
 
 # ── Journal (ADR-013: outcomes, not only requests, reach the event store) ──
 
@@ -98,6 +102,100 @@ def grant_store() -> ApprovalManager:
     return _GRANTS
 
 
+_SCOPES = ScopedGrants()
+_guardian: GuardianPort | None = None  # set by the entry point when WEEBOT_APPROVAL_GUARDIAN is on
+
+
+def set_guardian(guardian: GuardianPort | None) -> None:
+    """Let *guardian* review the commands no rule covers before a person is asked (H18c)."""
+    global _guardian
+    _guardian = guardian
+
+
+async def guardian_outcome(request: ToolCallApproval) -> ApprovalOutcome | None:
+    """APPROVED or DENIED by the guardian, or None: ask the approval channel as usual.
+
+    Only a call that can carry a scope pattern goes to it (no rule covers the command; not
+    dangerous, not a floor, not egress, not the untrusted-content gate), only in a session the
+    executor said is untainted, and never when a scope already covers the call.
+    """
+    command = request.arguments.get("command")
+    if (
+        _guardian is None
+        or not request.pattern
+        or not isinstance(command, str)
+        or _scope_tainted.get() is not False
+        or _SCOPES.allows(request.session_id, request.pattern)
+    ):
+        return None
+    verdict = await _guardian.review(command, _scope_step.get())
+    if verdict is GuardianVerdict.APPROVE:
+        _journal_outcome("approval_granted", request, "guardian")
+        return ApprovalOutcome.APPROVED
+    if verdict is GuardianVerdict.DENY:
+        _journal_outcome("approval_denied", request, "guardian")
+        return ApprovalOutcome.DENIED
+    return None
+
+
+def scope_store() -> ScopedGrants:
+    return _SCOPES
+
+
+def _scope_covers(request: ToolCallApproval) -> bool:
+    """True when a session or always scope a human gave already covers this call (H18b)."""
+    scope = _SCOPES.allows(request.session_id, request.pattern)
+    if scope is None:
+        return False
+    logger.info("approval scope used (%s): %s", scope, request.pattern)
+    _journal_outcome("approval_granted", request, f"scope_{scope}")
+    return True
+
+
+class DenialBreaker:
+    """Counts refused tool calls: too many in a step, or in a session, and a person decides (H18d).
+
+    ``record`` returns ``"step"`` or ``"session"`` on the call that trips it, else None. A trip
+    clears both counts: the person has been asked, and the next refusals start a new tally.
+    """
+
+    def __init__(self, per_step: int = 3, per_session: int = 6) -> None:
+        self._per_step = per_step
+        self._per_session = per_session
+        self._steps: dict[tuple[str, str], int] = {}
+        self._sessions: dict[str, int] = {}
+
+    def record(self, session_id: str, step_id: str) -> str | None:
+        key = (session_id, step_id)
+        self._steps[key] = self._steps.get(key, 0) + 1
+        self._sessions[session_id] = self._sessions.get(session_id, 0) + 1
+        if self._sessions[session_id] >= self._per_session:
+            tripped = "session"
+        elif self._steps[key] >= self._per_step:
+            tripped = "step"
+        else:
+            return None
+        self._sessions.pop(session_id, None)
+        for step_key in [k for k in self._steps if k[0] == session_id]:
+            del self._steps[step_key]
+        logger.warning(
+            "denial breaker tripped (%s): session=%s step=%s", tripped, session_id, step_id
+        )
+        return tripped
+
+    def forget_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+        for step_key in [k for k in self._steps if k[0] == session_id]:
+            del self._steps[step_key]
+
+
+_BREAKER = DenialBreaker()
+
+
+def denial_breaker() -> DenialBreaker:
+    return _BREAKER
+
+
 # ── Strategies ──────────────────────────────────────────────────────────────
 
 
@@ -121,6 +219,9 @@ class AutoApproval(ApprovalPort):
     """
 
     async def resolve(self, request: ToolCallApproval) -> ApprovalOutcome:
+        if request.human_only:
+            # An approval floor: a person answers even in AUTO, and their grant is spent here.
+            return await FlowPauseApproval().resolve(request)
         logger.warning(
             "approval auto-granted (AUTO execution mode): %s by %s",
             request.tool_name,
@@ -143,6 +244,8 @@ class FlowPauseApproval(ApprovalPort):
         if self._grants.consume(request.session_id, request.fingerprint):
             logger.info("approval grant used: %s %s", request.tool_name, request.fingerprint[:12])
             return ApprovalOutcome.APPROVED
+        if _scope_covers(request):
+            return ApprovalOutcome.APPROVED
         return ApprovalOutcome.PENDING
 
 
@@ -158,9 +261,13 @@ class ConsoleApproval(ApprovalPort):
         self._ask = ask
 
     async def resolve(self, request: ToolCallApproval) -> ApprovalOutcome:
+        if _scope_covers(request):
+            return ApprovalOutcome.APPROVED
         options = (
             "[y] once  [a] always allow this host  [n] no" if request.allow_always else "[y/N]"
         )
+        if request.pattern:
+            options = f"[y] once  [s] this session  [a] always allow '{request.pattern}'  [n] no"
         question = f"\n{approval_prompt(request, short=True)}\nApprove? {options}: "
         try:
             answer = (await self._ask(question)).strip().lower()
@@ -173,6 +280,11 @@ class ConsoleApproval(ApprovalPort):
         if answer in ("a", "always") and request.allow_always:
             allow_host(request.allow_always)
             _journal_outcome("approval_granted", request, "console_always")
+            return ApprovalOutcome.APPROVED
+        if request.pattern and answer in ("s", "session", "a", "always"):
+            scope = "session" if answer in ("s", "session") else "always"
+            _SCOPES.grant(scope, request.session_id, request.pattern)
+            _journal_outcome("approval_granted", request, f"console_{scope}")
             return ApprovalOutcome.APPROVED
         _journal_outcome("approval_denied", request, "console")
         return ApprovalOutcome.DENIED
@@ -192,6 +304,9 @@ _process_approval: ApprovalPort = DenyApproval()
 _scope_approval: ContextVar[ApprovalPort | None] = ContextVar("weebot_approval", default=None)
 _scope_session: ContextVar[str] = ContextVar("weebot_approval_session", default="")
 _approved_call: ContextVar[str] = ContextVar("weebot_approved_call", default="")
+# What the guardian needs of the running step; None until the executor says (H18c).
+_scope_tainted: ContextVar[bool | None] = ContextVar("weebot_approval_tainted", default=None)
+_scope_step: ContextVar[str] = ContextVar("weebot_approval_step", default="")
 
 
 def set_process_approval(port: ApprovalPort) -> None:
@@ -208,6 +323,11 @@ def current_session_id() -> str:
     return _scope_session.get()
 
 
+def current_tainted() -> bool:
+    """True inside a step whose session holds untrusted content (False when not said)."""
+    return bool(_scope_tainted.get())
+
+
 def already_approved(fingerprint: str) -> bool:
     """True inside a call a human already approved at an earlier gate."""
     return bool(fingerprint) and _approved_call.get() == fingerprint
@@ -219,8 +339,14 @@ def approval_scope(
     approval: ApprovalPort | None = None,
     session_id: str | None = None,
     approved_call: str | None = None,
+    tainted: bool | None = None,
+    step_description: str | None = None,
 ) -> Iterator[None]:
     tokens = []
+    if tainted is not None:
+        tokens.append((_scope_tainted, _scope_tainted.set(tainted)))
+    if step_description is not None:
+        tokens.append((_scope_step, _scope_step.set(step_description)))
     if approval is not None:
         tokens.append((_scope_approval, _scope_approval.set(approval)))
     if session_id is not None:
@@ -290,6 +416,12 @@ def approval_prompt(request: ToolCallApproval, *, short: bool = False) -> str:
                 if request.allow_always
                 else ""
             )
+            + (
+                f", 'session' to allow '{request.pattern}' for this session"
+                f", 'always' to allow it from now on"
+                if request.pattern
+                else ""
+            )
             + ", or say what to do instead."
         )
     return "\n".join(line for line in lines if line)
@@ -309,6 +441,8 @@ def pending_result(request: ToolCallApproval) -> ToolResult:
                 "guard": request.guard,
                 "reason": request.reason,
                 "allow_always": request.allow_always,
+                "pattern": request.pattern,
+                "human_only": request.human_only,
                 "prompt": approval_prompt(request),
             }
         },
@@ -326,7 +460,7 @@ def denied_result(request: ToolCallApproval) -> ToolResult:
             " To run Python, use the python_execute tool, or write the script to a file"
             " under Output/ and run that file; both run without approval."
         )
-    return ToolResult(output="", error=error)
+    return ToolResult(output="", error=error, data={DENIAL_DATA_KEY: True})
 
 
 def mark_tool_approval_pending(session: Any, event: Any) -> Any:
@@ -346,6 +480,7 @@ def mark_tool_approval_pending(session: Any, event: Any) -> Any:
             "tool_name": event.tool_name,
             "fingerprint": event.fingerprint,
             "allow_always": event.allow_always,
+            "pattern": event.pattern,
         },
     }
     return session.model_copy(
@@ -366,7 +501,13 @@ def record_flow_reply(
     response = reply.strip().lower()
     fingerprint = pending.get("fingerprint", "")
     always_host = pending.get("allow_always")
-    approved = response in approve_tokens or (bool(always_host) and response in ALWAYS_TOKENS)
+    pattern = pending.get("pattern")
+    scope_tokens = (SESSION_TOKENS | ALWAYS_TOKENS) if pattern else frozenset()
+    approved = (
+        response in approve_tokens
+        or (bool(always_host) and response in ALWAYS_TOKENS)
+        or response in scope_tokens
+    )
     data = {"tool_name": pending.get("tool_name"), "fingerprint": fingerprint, "channel": "flow"}
     if not approved or not fingerprint:
         logger.info("approval declined for %s", pending.get("tool_name"))
@@ -374,6 +515,8 @@ def record_flow_reply(
         return False
     if always_host and response in ALWAYS_TOKENS:
         allow_host(always_host)
+    if pattern and response in scope_tokens:
+        _SCOPES.grant("session" if response in SESSION_TOKENS else "always", session_id, pattern)
     _GRANTS.grant(session_id, fingerprint)
     _journal("approval_granted", session_id, data)
     return True

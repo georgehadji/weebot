@@ -20,6 +20,10 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+from weebot.application.di import install_secret_sources
+
+install_secret_sources()  # op:// and bws:// references in .env (H19)
+
 # Configure structured logging
 from weebot.infrastructure.observability.logging_config import (
     configure_logging as _configure_weebot_logging,

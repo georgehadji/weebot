@@ -25,6 +25,7 @@ without a new import-linter exemption.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import IntEnum
@@ -32,6 +33,7 @@ from typing import Any, Protocol
 
 from pydantic import PrivateAttr
 
+from weebot.core.mcp_trust import is_untrusted_tool
 from weebot.domain.models.base_tool import BaseTool
 from weebot.domain.models.tool_result import ToolResult
 
@@ -48,7 +50,8 @@ class GuardAction(IntEnum):
 
     ALLOW = 0
     ASK = 1
-    DENY = 2
+    HUMAN = 2  # asks a person, and AUTO mode cannot answer for them (approval floors)
+    DENY = 3
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,8 @@ class GuardVerdict:
     # Resolve this ASK through the approval channel even in observe mode: the
     # call cannot be undone (outbound_policy).
     enforce_always: bool = False
+    # "No rule covers this command": a human's yes may cover its pattern (H18b scopes).
+    scopable: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,54 @@ class BashGuardAdapter:
         if action is GuardAction.ALLOW and risk is not RiskLevel.SUSPICIOUS:
             return None
         return GuardVerdict(action, self.name, f"{risk.value}: {reason}".rstrip(": "))
+
+
+def command_variants(command: str) -> tuple[str, ...]:
+    """The command as written and the plainer texts it could hide behind (H18).
+
+    PowerShell drops a backtick inside a word, a shell drops quotes and a backslash before
+    a letter, and a base64 run may carry the real command, so a floor reads all of them.
+    """
+    from weebot.core.shell_segments import strip_escapes
+    from weebot.tools.bash_security import B64_RUN, decode_base64_text
+
+    plain = strip_escapes(command)
+    unquoted = re.sub(r"\\(?=[A-Za-z])", "", plain.replace('"', "").replace("'", ""))
+    texts = [command, plain, unquoted]
+    for text in (command, unquoted):
+        texts.extend(
+            decoded
+            for run in B64_RUN.findall(text)
+            if (decoded := decode_base64_text(run)) is not None
+        )
+    return tuple(dict.fromkeys(texts))
+
+
+class FloorGuard:
+    """A floor no approval mode can lower: DENY, or HUMAN (a person must say yes)."""
+
+    name = "approval_floor"
+
+    def __init__(self, floors: Iterable[Any] | None = None) -> None:
+        self._floors = None if floors is None else tuple(floors)
+
+    def check(self, tool_name: str, args: Mapping[str, Any]) -> GuardVerdict | None:
+        command = _shell_command(tool_name, args)
+        if command is None:
+            return None
+        from weebot.core.approval_floors import BUILTIN_FLOORS, first_floor, glob_floors
+
+        floors = self._floors
+        if floors is None:
+            from weebot.config.settings import get_settings
+
+            globs = get_settings().approval_deny_globs.split(",")
+            floors = (*BUILTIN_FLOORS, *glob_floors(globs))
+        floor = first_floor(command_variants(command), floors)
+        if floor is None:
+            return None
+        action = GuardAction.DENY if floor.action == "deny" else GuardAction.HUMAN
+        return GuardVerdict(action, self.name, f"{floor.id}: {floor.reason}")
 
 
 class AnalyzerAdapter:
@@ -202,7 +255,7 @@ class ApprovalPolicyAdapter:
             return None
         reason = f"no approval rule covers: {unreviewed[0][:120]}"
         if mode == "enforce":
-            return GuardVerdict(GuardAction.ASK, self.name, reason)
+            return GuardVerdict(GuardAction.ASK, self.name, reason, scopable=True)
         logger.warning("shell_default_ask would ask (%s): %s", tool_name, reason)
         return None
 
@@ -293,8 +346,11 @@ def is_outbound_tool(tool_name: str) -> bool:
     patterns = (p.strip().lower() for p in get_settings().outbound_tool_patterns.split(","))
     if any(fnmatchcase(name, p) for p in patterns if p):
         return True
-    # MCP tools fail closed: one that does not read by its name asks (F38).
-    return name.startswith("mcp__") and not _mcp_tool_reads(tool_name)
+    # MCP tools fail closed: one that does not read by its name asks (F38), and so does
+    # every tool of a server the config marks untrusted (H12).
+    return name.startswith("mcp__") and (
+        is_untrusted_tool(tool_name) or not _mcp_tool_reads(tool_name)
+    )
 
 
 _READ_VERBS = frozenset(
@@ -440,6 +496,7 @@ def default_guard_chain(*, include_egress: bool = True) -> GuardChain:
     gates egress (and routes its ASK to the same approval channel), so a second
     egress check here would ask twice for one call."""
     guards: list[ToolGuard] = [
+        FloorGuard(),
         BashGuardAdapter(),
         AnalyzerAdapter(),
         ApprovalPolicyAdapter(),
@@ -513,13 +570,18 @@ class GuardedTool(BaseTool):
             )
         if self._mode == "enforce" and verdict.action is GuardAction.DENY:
             # DENY is never approvable (ADR-013 section 2).
+            from weebot.application.services import tool_approval
+
             return ToolResult(
-                output="", error=f"Tool call denied by {verdict.guard}: {verdict.reason}"
+                output="",
+                error=f"Tool call denied by {verdict.guard}: {verdict.reason}",
+                data={tool_approval.DENIAL_DATA_KEY: True},
             )
         enforced_ask = any(
             v.enforce_always for v in result.verdicts if v.action is GuardAction.ASK
         )
-        if verdict.action is GuardAction.ASK and (self._mode == "enforce" or enforced_ask):
+        asks = verdict.action in (GuardAction.ASK, GuardAction.HUMAN)
+        if asks and (self._mode == "enforce" or enforced_ask):
             refused = await self._resolve_ask(kwargs, result)
             if refused is not None:
                 return refused
@@ -534,11 +596,22 @@ class GuardedTool(BaseTool):
         from weebot.application.ports.approval_port import ApprovalOutcome, ToolCallApproval
         from weebot.application.services import tool_approval
         from weebot.core.approval import call_fingerprint
+        from weebot.core.approval_scopes import command_pattern
 
         fingerprint = call_fingerprint(self.name, kwargs)
         if tool_approval.already_approved(fingerprint):
             return None  # a human approved this exact call at an earlier gate
         hosts = {v.allow_always for v in result.verdicts if v.action is GuardAction.ASK}
+        asking = [v for v in result.verdicts if v.action in (GuardAction.ASK, GuardAction.HUMAN)]
+        command = _shell_command(self.name, kwargs)
+        pattern = (
+            command_pattern(command)
+            if command
+            and self.name in SHELL_TOOLS
+            and result.verdict.action is GuardAction.ASK
+            and all(v.scopable for v in asking)
+            else None
+        )
         request = ToolCallApproval(
             session_id=tool_approval.current_session_id(),
             tool_name=self.name,
@@ -548,9 +621,18 @@ class GuardedTool(BaseTool):
             reason=result.verdict.reason,
             # Offer "always allow this host" only when every ASK is that one host.
             allow_always=next(iter(hosts)) if len(hosts) == 1 and None not in hosts else None,
+            human_only=result.verdict.action is GuardAction.HUMAN,
+            pattern=pattern,
         )
         approval = self._approval or tool_approval.current_approval()
-        outcome = await approval.resolve(request)
+        by_guardian = await tool_approval.guardian_outcome(request)
+        if by_guardian is ApprovalOutcome.DENIED:
+            return ToolResult(
+                output="",
+                error=f"Refused by the approval guardian ({request.reason}); not run.",
+                data={tool_approval.DENIAL_DATA_KEY: True},
+            )
+        outcome = by_guardian or await approval.resolve(request)
         if outcome is ApprovalOutcome.APPROVED:
             return None
         if outcome is ApprovalOutcome.PENDING:

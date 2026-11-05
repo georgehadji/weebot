@@ -16,7 +16,18 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from weebot.application.agents.executor._prompt_builder import build_executor_prompt
+from weebot.application.agents.executor._prompt_builder import (
+    build_step_context,
+    build_system_blocks,
+)
+from weebot.application.models.prompt_layout import (
+    PromptLayoutBuilder,
+    system_sha,
+    tools_sha,
+)
+
+MAX_FROZEN_SYSTEMS = 32
+"""Session/scope entries of the system prompt kept before the oldest is dropped."""
 
 if TYPE_CHECKING:
     from weebot.application.agents.executor._base import ExecutorAgent
@@ -33,7 +44,9 @@ class StepPrime:
     span: Any | None
 
 
-def prime_step(executor: ExecutorAgent, step: Step, session_id: str) -> StepPrime:
+def prime_step(
+    executor: ExecutorAgent, step: Step, session_id: str, plan: Plan | None = None
+) -> StepPrime:
     """Bind the step's identity and open its tracing span.
 
     Everything here must happen before the first event is emitted, because the approval
@@ -55,97 +68,114 @@ def prime_step(executor: ExecutorAgent, step: Step, session_id: str) -> StepPrim
     # The approval scope and audit records read the session from here; it was never set,
     # so Flow pause denied every web approval (B2c).
     executor._tool_executor.set_step_context(step.id, session_id, step.description or "")
-    tool_note = executor._scope_tools_for(step)
+    tool_note = executor._scope_tools_for(step, plan)
     return StepPrime(tool_note=tool_note, span=span)
 
 
 async def build_step_prompts(
-    executor: ExecutorAgent, plan: Plan, step: Step, user_input: str | None
+    executor: ExecutorAgent, plan: Plan, step: Step, user_input: str | None, tool_note: str = ""
 ) -> None:
-    """Assemble the system prompt and seed the conversation buffer for this step."""
-    executor._tool_note = executor._scope_tools_for(step)
-    await _load_user_profile(executor)
+    """Assemble the system prompt and seed the conversation buffer for this step.
 
+    The system prompt is the session's stable part only (H10): it is built at the first
+    step of a session and scope and reused. What changes with the step (retrieved skills,
+    behavioural rules, the output root, the tool note) leads the step's first user message.
+    """
     step_scope = getattr(step, "context_scope", None)
     scope_value = step_scope.value if step_scope is not None else "full"
+    static, session = await _frozen_system(executor, scope_value)
+
     retrieval_scores: list[float] = []
-    system_prompt = await build_executor_prompt(
-        step_description=step.description,
-        base_prompt=executor._load_prompt(),
+    step_text = await build_step_context(
+        step.description,
         context_scope=scope_value,
-        harness_block=executor._harness_instruction_block,
         skill_prompt=executor._skill_prompt,
         skill_retriever=executor._skill_retriever,
         behavioral_learner=executor._behavioral_learner,
-        state_repo=executor._state_repo,
-        personality=executor._personality,
-        profile_name=executor._profile_name,
         skills_used=executor._skills_used,
         retrieval_scores=retrieval_scores,
     )
     if retrieval_scores:
         record_skill_gap(executor, step.description, retrieval_scores[0])
 
-    # Gated by scope: minimal/skill steps don't need the cached user profile blob
-    # (ICM per-step context scoping — see _prompt_builder).
-    if scope_value in ("full", "creative") and getattr(executor, "_user_profile_cache", ""):
-        system_prompt += f"\n\n## User Profile\n{executor._user_profile_cache}"
-
-    executor._system_prompt = system_prompt
     # Inject OUTPUT_ROOT so tools resolve paths consistently
     from weebot.core.output_path import output_path as _op
 
-    executor._system_prompt = executor._system_prompt + (
-        f"\n\nOUTPUT_ROOT = {_op('Output')}"
+    step_context = (
+        "## STEP CONTEXT"
+        + step_text
+        + f"\n\nOUTPUT_ROOT = {_op('Output')}"
         "\nALL file writes MUST use this absolute path prefix. "
         'Example: Set-Content -Path "{OUTPUT_ROOT}/refactor/file.md" -Value ...'
+        + tool_note
     )
+    tools = executor._tools.to_params() if executor._tools else []
+    layout = PromptLayoutBuilder().static(static).session(session).step(step_context).build(tools)
+    executor._system_prompt = layout.system
+    _record_prefix(executor, layout.system, tools, layout.prefix_sha)
 
+    _seed_conversation(executor, plan, step, user_input, preamble=layout.step_context)
+
+
+async def _frozen_system(executor: ExecutorAgent, scope_value: str) -> tuple[str, str]:
+    """The system prompt's ``(static, session)`` parts, built once per session and scope."""
+    key = (executor._current_session_id, scope_value)
+    frozen = executor._frozen_system.get(key)
+    if frozen is not None:
+        executor._frozen_system.move_to_end(key)
+        return frozen
+
+    static, session = await build_system_blocks(
+        base_prompt=executor._load_prompt(),
+        context_scope=scope_value,
+        harness_block=executor._harness_instruction_block,
+        state_repo=executor._state_repo,
+        personality=executor._personality,
+        profile_name=executor._profile_name,
+    )
     try:
-        snapshot = await executor._memory_snapshot() if executor._memory_snapshot else ""
+        snapshot = (
+            await executor._memory_snapshot(executor._current_session_id)
+            if executor._memory_snapshot
+            else ""
+        )
         if snapshot:
-            executor._system_prompt = executor._system_prompt + "\n\n" + snapshot
+            session = session + "\n\n" + snapshot
     except Exception as exc:
         logger.warning("Persistent memory snapshot unavailable: %s", exc)
 
-    _seed_conversation(executor, plan, step, user_input)
+    executor._frozen_system[key] = (static, session)
+    while len(executor._frozen_system) > MAX_FROZEN_SYSTEMS:
+        executor._frozen_system.popitem(last=False)
+    return static, session
 
 
-async def _load_user_profile(executor: ExecutorAgent) -> None:
-    """Lazily fetch the dialectic-consolidation profile once per executor.
-
-    A failure here is not the step's problem: an empty profile costs a paragraph of
-    prompt, and refusing to run costs the task.
-    """
-    if hasattr(executor, "_user_profile_cache"):
+def _record_prefix(executor: ExecutorAgent, system: str, tools: list, prefix_sha: str) -> None:
+    """Tell the prefix store what this step will send, so a change is counted (H10)."""
+    store = executor._prompt_prefix
+    if store is None:
         return
-
-    try:
-        import hashlib
-
-        from weebot.application.ports.state_roles_port import MemoryMetadataStore, as_role
-
-        repo = as_role(executor._state_repo, MemoryMetadataStore)
-        if repo is None:
-            executor._user_profile_cache = ""
-            return
-        key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-        row = await repo.get_memory_entry(key)
-        text = row.get("entry_text", "") if row else ""
-        executor._user_profile_cache = (
-            text[:500] if text and text != "No user data collected yet." else ""
-        )
-    except Exception:
-        executor._user_profile_cache = ""
+    reason = store.record(executor._current_session_id, system_sha(system), tools_sha(tools))
+    if reason is not None:
+        logger.info("Prompt prefix changed (%s); now %s", reason, prefix_sha[:12])
 
 
 def _seed_conversation(
-    executor: ExecutorAgent, plan: Plan, step: Step, user_input: str | None
+    executor: ExecutorAgent,
+    plan: Plan,
+    step: Step,
+    user_input: str | None,
+    preamble: str = "",
 ) -> None:
-    """First turn gets the plan's context; later turns get one line."""
+    """First turn gets the plan's context; later turns get one line.
+
+    *preamble* (the step context) leads the first message appended, so it is the step's
+    first user message and the system prompt stays the same.
+    """
+    lead = f"{preamble}\n\n---\n\n" if preamble else ""
     if executor._conversation_buffer:
         executor._conversation_buffer.append(
-            {"role": "user", "content": f"Next step: {step.description}"}
+            {"role": "user", "content": f"{lead}Next step: {step.description}"}
         )
         return
 
@@ -170,7 +200,9 @@ def _seed_conversation(
         "",
         "Use available tools to execute this specific step.",
     ]
-    executor._conversation_buffer.append({"role": "user", "content": "\n".join(context_lines)})
+    executor._conversation_buffer.append(
+        {"role": "user", "content": lead + "\n".join(context_lines)}
+    )
     # If this is a resume (user provided input), inject it so the LLM sees the answer
     # instead of calling ask_human again.
     if user_input:

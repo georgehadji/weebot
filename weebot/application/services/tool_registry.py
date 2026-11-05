@@ -481,7 +481,11 @@ class RoleBasedToolRegistry:
                 elif name in _llm_port_tools and llm_port is not None:
                     tool = tool_cls(llm_port=llm_port)
                 elif name in _sandbox_port_tools and sandbox_port is not None:
-                    tool = tool_cls(sandbox=sandbox_port)
+                    # python_execute also gets the kernel manager, when the container has one (H17).
+                    extra = {}
+                    if name == "python_execute":
+                        extra["kernels"] = wired.get("kernel_manager")
+                    tool = tool_cls(sandbox=sandbox_port, **extra)
                 elif name == "swarm":
                     # The swarm tool receives its agents instead of importing them (plan 3.3).
                     from weebot.application.agents.goal_agent import GoalAgent
@@ -511,7 +515,13 @@ class RoleBasedToolRegistry:
                     if _shared_browser_adapter is None:
                         logger.debug("Skipping tool %s: no browser_factory wired", name)
                         continue
-                    tool = tool_cls(browser=_shared_browser_adapter)
+                    if name == "advanced_browser":
+                        tool = tool_cls(
+                            browser=_shared_browser_adapter,
+                            credential_vault=wired.get("credential_vault"),
+                        )
+                    else:
+                        tool = tool_cls(browser=_shared_browser_adapter)
                 elif name == "web_scraper" and browser_factory is not None:
                     # Not the shared adapter above: a scrape gets a fresh browser per call,
                     # so it never navigates the page the agent is driving.

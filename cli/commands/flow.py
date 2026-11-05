@@ -55,6 +55,10 @@ def _run_async(coro_factory) -> None:
             set_process_approval(ConsoleApproval())
             _get_state_repo()  # builds the shared container
             set_approval_journal(_container.get(EventStorePort))
+            from weebot.application.di.keys import APPROVAL_GUARDIAN
+            from weebot.application.services.tool_approval import set_guardian
+
+            set_guardian(_container.get(APPROVAL_GUARDIAN))
         try:
             await coro_factory()
         finally:
@@ -392,6 +396,63 @@ def flow_retry(session_id: str) -> None:
             return
         console.print(f"[green]Retrying failed session {session_id}[/green]")
         await runner.wait_for(session_id)
+
+    _run_async(_run)
+
+
+def _rewinder():
+    from weebot.application.ports.event_store_port import EventStorePort
+    from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
+    from weebot.application.use_cases.rewind_session import RewindSession
+
+    container = _get_container()
+
+    def _optional(key):
+        try:
+            return container.get(key)
+        except Exception:
+            logger.debug("%s is not wired; rewind runs without it", key, exc_info=True)
+            return None
+
+    return RewindSession(
+        _get_state_repo(), _optional(EventStorePort), _optional(WorkspaceCheckpointPort)
+    )
+
+
+@flow.command("rewind")
+@click.argument("session_id")
+@click.option("--turns", default=1, show_default=True, help="How many user turns to drop")
+@click.option("--files/--no-files", default=True, help="Restore the workspace files too")
+def flow_rewind(session_id: str, turns: int, files: bool) -> None:
+    """Drop the last turns of a conversation and put the files back (H21)."""
+    from weebot.application.use_cases.rewind_session import SessionBusy
+
+    async def _run() -> None:
+        try:
+            result = await _rewinder().rewind(session_id, turns, files)
+        except (LookupError, SessionBusy, ValueError) as exc:
+            raise click.ClickException(str(exc)) from None
+        console.print(
+            f"[green]Dropped {result.dropped} event(s); {result.files_changed} file(s) "
+            f"restored.[/green]\nThe dropped message was: {result.dropped_text}"
+        )
+
+    _run_async(_run)
+
+
+@flow.command("branch")
+@click.argument("session_id")
+@click.argument("event_id")
+def flow_branch(session_id: str, event_id: str) -> None:
+    """Copy a conversation up to EVENT_ID into a new session. The files are not copied."""
+    from weebot.application.use_cases.rewind_session import SessionBusy
+
+    async def _run() -> None:
+        try:
+            child = await _rewinder().branch(session_id, event_id)
+        except (LookupError, SessionBusy, ValueError) as exc:
+            raise click.ClickException(str(exc)) from None
+        console.print(f"[green]Branched into session {child.id}[/green]")
 
     _run_async(_run)
 

@@ -136,9 +136,9 @@ def retry_empty_turn(
 
 
 def _assemble_messages(executor: ExecutorAgent) -> list[dict]:
-    """System prompt + tool note + the conversation, repaired for tool-call pairing."""
+    """System prompt + the conversation, repaired for tool-call pairing."""
     messages = sanitize_tool_call_pairing(
-        [{"role": "system", "content": executor._system_prompt + executor._tool_note}]
+        [{"role": "system", "content": executor._system_prompt}]
         + list(executor._conversation_buffer)
     )
     # Lost-in-Compaction: session constraints ride as messages[-1] (the paper's K_ub

@@ -235,18 +235,44 @@ class FactoriesMixin:
         return SQLiteGatewaySessionStore()
 
     def _spillover_kwargs(self) -> dict:
-        """`spillover_store` and a middleware chain that spills oversized tool output (H7)."""
+        """`spillover_store` and the tool middleware chain: spillover (H7), then LSP (H20)."""
+        from weebot.application.di.keys import LSP
         from weebot.application.middleware.chain import MiddlewareChain
         from weebot.application.ports.spillover_store_port import SpilloverStorePort
+        from weebot.application.services.lsp_diagnostics import LspDiagnosticsMiddleware
         from weebot.application.services.spillover import SpilloverMiddleware
+        from weebot.config.settings import WORKSPACE_ROOT
 
+        kwargs: dict = {}
+        chain = []
         store = self._maybe_get(SpilloverStorePort)
-        if store is None:
-            return {}
-        return {
-            "spillover_store": store,
-            "middleware_chain": MiddlewareChain([SpilloverMiddleware(store)]),
-        }
+        if store is not None:
+            kwargs["spillover_store"] = store
+            chain.append(SpilloverMiddleware(store))
+        lsp = self.get(LSP)
+        if lsp is not None:
+            chain.append(LspDiagnosticsMiddleware(lsp, WORKSPACE_ROOT))
+        if chain:
+            kwargs["middleware_chain"] = MiddlewareChain(chain)
+        return kwargs
+
+    @staticmethod
+    def _create_lsp():
+        """The language-server manager (H20), or None while WEEBOT_LSP_DIAGNOSTICS is off."""
+        import os
+        from pathlib import Path
+
+        from weebot.config import feature_flags
+
+        if not feature_flags.LSP_DIAGNOSTICS_ENABLED:
+            return None
+        from weebot.config.secret_accessor import SecretAccessor
+        from weebot.config.settings import WORKSPACE_ROOT
+        from weebot.infrastructure.lsp.manager import LspManager
+
+        raw = SecretAccessor.get("WEEBOT_LSP_TRUSTED_ROOTS") or ""
+        trusted = [Path(p) for p in raw.split(os.pathsep) if p.strip()]
+        return LspManager(WORKSPACE_ROOT, trusted)
 
     def _workspace_checkpoints(self):
         """The shadow-git checkpoint port, or None while WEEBOT_FILE_CHECKPOINTS is off."""
@@ -380,6 +406,16 @@ class FactoriesMixin:
 
         return LLMStepEvaluator(llm=self._create_llm_for_role("verifier"))
 
+    def _create_approval_guardian(self):
+        """The command guardian (H18c), or None while WEEBOT_APPROVAL_GUARDIAN is off."""
+        from weebot.config import feature_flags
+
+        if not feature_flags.APPROVAL_GUARDIAN_ENABLED:
+            return None
+        from weebot.application.services.llm_guardian import LLMGuardianAdapter
+
+        return LLMGuardianAdapter(llm=self._create_llm_for_role("verifier"))
+
     @staticmethod
     def _create_workspace_snapshots():
         """LongHorizon-Harness E7b — workspace drift detection for the integrity axis.
@@ -469,12 +505,54 @@ class FactoriesMixin:
                             _logging.getLogger(__name__).warning(
                                 "MCP server %s not loaded: %s", name, exc
                             )
-                    return MCPClientManager(config={"mcpServers": loaded})
+                    from weebot.application.ports.mcp_sampling_port import CallContext
+                    from weebot.application.services.tool_approval import (
+                        current_session_id,
+                        current_tainted,
+                    )
+
+                    return MCPClientManager(
+                        config={"mcpServers": loaded},
+                        sampling_handler=self._create_mcp_sampling_handler(loaded),
+                        call_context=lambda: CallContext(current_session_id(), current_tainted()),
+                        elicitation_broker=self._create_mcp_elicitation_broker(loaded),
+                    )
                 _logging.getLogger(__name__).warning("MCP config %s does not exist", config_path)
         except Exception as exc:
             _logging.getLogger(__name__).warning("Failed to load MCP config from settings: %s", exc)
 
         return MCPClientManager(config={})
+
+    def _create_mcp_sampling_handler(self, servers: dict):
+        """The sampling handler (H12), or None while no configured server enables sampling.
+
+        Built only then so a config that never samples does not need a provider key. It
+        answers with the ``subagent`` role's model and charges the calling session's meter.
+        """
+        if not any(
+            isinstance(cfg, dict) and (cfg.get("sampling") or {}).get("enabled")
+            for cfg in servers.values()
+        ):
+            return None
+        from weebot.application.di.keys import SESSION_COST_METER
+        from weebot.application.services.mcp_sampling_handler import MCPSamplingHandler
+
+        return MCPSamplingHandler(
+            llm_provider=self._create_llm_for_role("subagent"),
+            cost_meter=self._maybe_get(SESSION_COST_METER),
+        )
+
+    @staticmethod
+    def _create_mcp_elicitation_broker(servers: dict):
+        """The elicitation broker (H12), or None while no configured server enables it."""
+        if not any(
+            isinstance(cfg, dict) and cfg.get("elicitation_enabled") for cfg in servers.values()
+        ):
+            return None
+        from weebot.application.services.elicitation_broker import ElicitationBroker
+        from weebot.application.services.tool_approval import _input
+
+        return ElicitationBroker(ask=_input)
 
     @staticmethod
     def _create_mcp_tool_retrieval_service(registry):
@@ -569,8 +647,11 @@ class FactoriesMixin:
         from weebot.application.ports.speech_port import SpeechPort
         from weebot.application.ports.tool_repository_port import ToolRepositoryPort
         from weebot.application.services.audit_service import AuditService
+        from weebot.application.services.kernel_manager import KernelManager
+        from weebot.config.constants import DB_SESSIONS_PATH
         from weebot.config.tool_config import ToolConfig
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
+        from weebot.infrastructure.persistence.session_search_sqlite import SqliteSessionSearch
 
         state_repo = self._maybe_get(StateRepositoryPort)
         tool_repo = self._maybe_get(ToolRepositoryPort)
@@ -586,11 +667,13 @@ class FactoriesMixin:
             "voice_input": {"speech": speech},
             "voice_output": {"speech": speech},
             "persistent_memory": {"memory": memory, "state_repo": state_repo},
+            # The tool searches through the port; the SQLite file is the one sessions live in.
+            "search_history": {"search": SqliteSessionSearch.at(DB_SESSIONS_PATH)},
         }
         required = {"ocr": "vision_llm", "audit_session": "service", "knowledge": "repo",
                     "product": "repo",
                     "video_ingest": "repo", "voice_input": "speech", "voice_output": "speech",
-                    "persistent_memory": "memory"}
+                    "persistent_memory": "memory", "search_history": "search"}
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
 
@@ -600,6 +683,8 @@ class FactoriesMixin:
             # The workflow orchestrator tool's progress events, onto the shared bus.
             "workflow_events": EventBrokerAdapter(bus) if bus is not None else None,
             "browser_factory": self._playwright_adapter,
+            "credential_vault": self._create_credential_vault(),
+            "kernel_manager": self._maybe_get(KernelManager),
             "rerank": self._maybe_get(RerankPort),
             "tool_config": self._maybe_get(ToolConfig),
             "collaborators": {
@@ -607,6 +692,25 @@ class FactoriesMixin:
                 if kwargs[required[name]] is not None
             },
         }
+
+    @staticmethod
+    def _create_credential_vault():
+        """The credential vault (H19), or None when no vault file is set or it is invalid."""
+        from weebot.config.settings import get_settings
+
+        path = get_settings().credential_vault_path
+        if not path:
+            return None
+        from weebot.config.secret_accessor import SecretAccessor
+        from weebot.infrastructure.secrets.resolver import default_sources
+        from weebot.infrastructure.secrets.vault import ConfiguredVault
+
+        try:
+            sources = default_sources(SecretAccessor.process_environ())
+            return ConfiguredVault.from_file(path, sources)
+        except (OSError, ValueError) as exc:
+            _logging.getLogger(__name__).error("credential vault %s not loaded: %s", path, exc)
+            return None
 
     @staticmethod
     def _playwright_adapter():

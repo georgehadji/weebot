@@ -635,12 +635,25 @@ class EgressGuard:
         as egress. Returns ``(uses_network, host)``; host is the first URL
         host, else the registry the command implies, else None (unknown).
         """
-        if tool_name.lower() not in ("bash_execute", "powershell", "bash", "shell", "cmd"):
+        uses, hosts = self._network_hosts(tool_name, args)
+        if not uses:
             return False, None
+        # One host stands for the call: the first one not known, else the first.
+        unknown = [h for h in hosts if not self.is_known_recipient(h)]
+        return True, (unknown or hosts or [None])[0]
+
+    def network_hosts(self, tool_name: str, args: dict[str, Any]) -> frozenset[str] | None:
+        """Every host a network-using shell call names, or None when it names none (H23)."""
+        uses, hosts = self._network_hosts(tool_name, args)
+        return frozenset(hosts) if uses and hosts else None
+
+    def _network_hosts(self, tool_name: str, args: dict[str, Any]) -> tuple[bool, list[str]]:
+        if tool_name.lower() not in ("bash_execute", "powershell", "bash", "shell", "cmd"):
+            return False, []
         cmd = str(args.get("command", ""))
         match = _SHELL_NETWORK_RE.search(cmd)
         if not match:
-            return False, None
+            return False, []
         hosts = _ordered_hosts(cmd)
         if not hosts:
             scp_like = re.search(r"\bgit@([\w.-]+):", cmd)
@@ -650,9 +663,7 @@ class EgressGuard:
             kind = next((k for k in _DEFAULT_HOSTS if found.group(k)), None)
             if kind and _DEFAULT_HOSTS[kind] not in hosts:
                 hosts.append(_DEFAULT_HOSTS[kind])
-        # One host stands for the call: the first one not known, else the first.
-        unknown = [h for h in hosts if not self.is_known_recipient(h)]
-        return True, (unknown or hosts or [None])[0]
+        return True, hosts
 
     def uses_network(self, tool_name: str, args: dict[str, Any]) -> bool:
         """Did this shell or python call fetch from the network? (F20)

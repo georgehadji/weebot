@@ -48,6 +48,10 @@ class SessionStamp(BaseModel):
             "could not run also produces."
         ),
     )
+    verification_commands: list[str] = Field(
+        default_factory=list,
+        description="Test, build and lint commands that ran, each marked passed or failed (H20b).",
+    )
     tool_calls: int = Field(default=0)
     errors: int = Field(default=0)
     duration_ms: int = Field(default=0)

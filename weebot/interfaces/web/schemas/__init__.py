@@ -5,7 +5,9 @@ from __future__ import annotations
 from .requests import (
     CreateSessionRequest,
     SendMessageRequest,
+    BranchSessionRequest,
     ResumeSessionRequest,
+    RewindSessionRequest,
     SessionInputRequest,
     UpdateSessionRequest,
 )
@@ -23,7 +25,9 @@ from .responses import (
 __all__ = [
     "CreateSessionRequest",
     "SendMessageRequest",
+    "BranchSessionRequest",
     "ResumeSessionRequest",
+    "RewindSessionRequest",
     "SessionInputRequest",
     "UpdateSessionRequest",
     "SessionResponse",

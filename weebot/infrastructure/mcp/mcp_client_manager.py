@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -11,9 +12,17 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
+from weebot.application.ports.mcp_elicitation_port import McpElicitationPort
+from weebot.application.ports.mcp_sampling_port import CallContext, McpSamplingPort
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.core.child_env import build_child_env
 from weebot.core.mcp_naming import build_namespaced_name
+from weebot.core.mcp_trust import register_server, unregister_server
+from weebot.domain.models.mcp import MCPServerConfig, MCPTransport
+from weebot.infrastructure.mcp.session_callbacks import (
+    make_elicitation_callback,
+    make_sampling_callback,
+)
 
 try:
     from mcp.client.streamable_http import streamablehttp_client
@@ -34,6 +43,9 @@ class MCPClientManager:
         max_retries: int = 3,
         base_delay: float = 1.0,
         max_delay: float = 10.0,
+        sampling_handler: McpSamplingPort | None = None,
+        call_context: Callable[[], CallContext] | None = None,
+        elicitation_broker: McpElicitationPort | None = None,
     ):
         self._config = config or {}
         self._clients: dict[str, ClientSession] = {}
@@ -49,6 +61,12 @@ class MCPClientManager:
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._connection_attempts: dict[str, int] = {}
+        self._registered: set[str] = set()
+        self._sampling_handler = sampling_handler
+        self._elicitation_broker = elicitation_broker
+        # Who is calling: the session and taint of the running step, supplied by the wiring.
+        self._call_context = call_context or (lambda: CallContext("", False))
+        self._in_flight: dict[str, list[CallContext]] = {}
 
     @property
     def has_servers(self) -> bool:
@@ -138,89 +156,90 @@ class MCPClientManager:
     async def _connect_server(
         self, server_name: str, server_config: dict[str, Any], stack: AsyncExitStack
     ) -> None:
-        transport = server_config.get("transport", "stdio")
-        valid_transports = {"stdio", "http", "sse", "streamable-http"}
-        if transport not in valid_transports:
-            raise ValueError(
-                f"Server {server_name} has invalid transport {transport!r}. "
-                f"Valid transports: {valid_transports}"
-            )
-        if transport == "stdio":
-            await self._connect_stdio(server_name, server_config, stack)
-        elif transport in ("http", "sse"):
-            await self._connect_sse(server_name, server_config, stack)
-        elif transport == "streamable-http":
-            await self._connect_streamable_http(server_name, server_config, stack)
+        # The one place the raw entry becomes the typed config; nothing below reads a dict.
+        config = MCPServerConfig.model_validate({**server_config, "name": server_name})
+        register_server(server_name, config.trust)
+        self._registered.add(server_name)
+        if config.transport == MCPTransport.STDIO:
+            await self._connect_stdio(config, stack)
+        elif config.transport in (MCPTransport.HTTP, MCPTransport.SSE):
+            await self._connect_sse(config, stack)
+        else:
+            await self._connect_streamable_http(config, stack)
 
-    async def _connect_stdio(
-        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
+    async def _open_session(
+        self, config: MCPServerConfig, streams: tuple[Any, ...], stack: AsyncExitStack
     ) -> None:
-        command = config.get("command")
-        args = config.get("args", [])
-        env = config.get("env", {})
-        timeout = config.get("timeout_seconds", 30)
-        if not command:
-            raise ValueError(f"Server {server_name} missing command")
+        read_stream, write_stream = streams[0], streams[1]
+        sampling = None
+        if self._sampling_handler is not None and config.sampling.enabled:
+            sampling = make_sampling_callback(
+                config.name, config.sampling, self._sampling_handler, self._newest_call(config.name)
+            )
+        elicitation = None
+        if self._elicitation_broker is not None and config.elicitation_enabled:
+            elicitation = make_elicitation_callback(
+                config.name, self._elicitation_broker, self._newest_call(config.name)
+            )
+        session = await stack.enter_async_context(
+            ClientSession(
+                read_stream,
+                write_stream,
+                sampling_callback=sampling,
+                elicitation_callback=elicitation,
+            )
+        )
+        await asyncio.wait_for(session.initialize(), timeout=config.timeout_seconds)
+        self._clients[config.name] = session
+        await self._cache_tools(config.name, session)
+
+    def _newest_call(self, server_name: str) -> Callable[[], CallContext | None]:
+        """The call a callback from *server_name* answers: the newest one in flight."""
+        def newest() -> CallContext | None:
+            flight = self._in_flight.get(server_name)
+            return flight[-1] if flight else None
+
+        return newest
+
+    @staticmethod
+    def _request_headers(config: MCPServerConfig) -> dict[str, str]:
+        """The config's headers, plus ``Authorization`` for bearer auth unless one is set."""
+        headers = dict(config.headers)
+        auth = config.auth
+        if auth.type == "bearer" and auth.token and "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {auth.token}"
+            logger.debug("Added Bearer auth header for MCP server %s", config.name)
+        return headers
+
+    async def _connect_stdio(self, config: MCPServerConfig, stack: AsyncExitStack) -> None:
         child_env = build_child_env(
             SecretAccessor.environ_view(),
-            declared=env,
-            passthrough=config.get("env_passthrough", ()),
+            declared=config.env,
+            passthrough=config.env_passthrough,
         )
-        params = StdioServerParameters(command=command, args=args, env=child_env)
-        transport = await stack.enter_async_context(stdio_client(params))
-        read_stream, write_stream = transport
-        session = await stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
-        await asyncio.wait_for(session.initialize(), timeout=timeout)
-        self._clients[server_name] = session
-        await self._cache_tools(server_name, session)
+        params = StdioServerParameters(command=config.command, args=config.args, env=child_env)
+        streams = await stack.enter_async_context(stdio_client(params))
+        await self._open_session(config, streams, stack)
 
-    async def _connect_sse(
-        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
-    ) -> None:
-        url = config.get("url")
-        timeout = config.get("timeout_seconds", 30)
-        if not url:
-            raise ValueError(f"Server {server_name} missing url")
-        transport = await stack.enter_async_context(sse_client(url))
-        read_stream, write_stream = transport
-        session = await stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
+    async def _connect_sse(self, config: MCPServerConfig, stack: AsyncExitStack) -> None:
+        # Until H12 the headers and the auth block were dropped here.
+        headers = self._request_headers(config)
+        streams = await stack.enter_async_context(
+            sse_client(config.url, headers=headers or None)
         )
-        await asyncio.wait_for(session.initialize(), timeout=timeout)
-        self._clients[server_name] = session
-        await self._cache_tools(server_name, session)
+        await self._open_session(config, streams, stack)
 
     async def _connect_streamable_http(
-        self, server_name: str, config: dict[str, Any], stack: AsyncExitStack
+        self, config: MCPServerConfig, stack: AsyncExitStack
     ) -> None:
         if not HAS_STREAMABLE_HTTP:
             raise RuntimeError("streamable-http client not available in this MCP version")
-        url = config.get("url")
-        timeout = config.get("timeout_seconds", 30)
-        if not url:
-            raise ValueError(f"Server {server_name} missing url")
-        headers = dict(config.get("headers", {}))
-        # Map auth config to Authorization header (Gap A — bearer auth glue)
-        auth = config.get("auth") or {}
-        if auth.get("type") == "bearer" and auth.get("token") and "Authorization" not in headers:
-            headers["Authorization"] = f"Bearer {auth['token']}"
-            logger.debug("Added Bearer auth header for streamable-http server %s", server_name)
-        params: dict[str, Any] = {"url": url}
+        params: dict[str, Any] = {"url": config.url}
+        headers = self._request_headers(config)
         if headers:
             params["headers"] = headers
-        transport = await stack.enter_async_context(streamablehttp_client(**params))
-        if len(transport) == 3:
-            read_stream, write_stream, _ = transport
-        else:
-            read_stream, write_stream = transport
-        session = await stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
-        await asyncio.wait_for(session.initialize(), timeout=timeout)
-        self._clients[server_name] = session
-        await self._cache_tools(server_name, session)
+        streams = await stack.enter_async_context(streamablehttp_client(**params))
+        await self._open_session(config, streams, stack)
 
     async def _cache_tools(self, server_name: str, session: ClientSession) -> None:
         try:
@@ -302,11 +321,16 @@ class MCPClientManager:
             if not session:
                 raise RuntimeError(f"MCP server {server_name} still not connected after reconnect")
 
+        # The session and taint of this call, for a sampling request the server makes during it.
+        call = self._call_context()
+        self._in_flight.setdefault(server_name, []).append(call)
         try:
             result = await session.call_tool(original_name, arguments)
         except Exception as exc:
             logger.warning("MCP tool call failed for %s:%s: %s", server_name, original_name, exc)
             raise RuntimeError(f"MCP tool call failed: {exc}") from exc
+        finally:
+            self._in_flight[server_name].remove(call)
 
         content: list[str] = []
         if hasattr(result, "content") and result.content:
@@ -330,3 +354,6 @@ class MCPClientManager:
         self._tools_cache.clear()
         self._initialized = False
         self._connection_attempts.clear()
+        for name in self._registered:
+            unregister_server(name)
+        self._registered.clear()

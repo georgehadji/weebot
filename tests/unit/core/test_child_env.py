@@ -48,6 +48,7 @@ async def test_mcp_stdio_child_does_not_receive_provider_keys(monkeypatch):
     from unittest.mock import AsyncMock, MagicMock, patch
 
     from weebot.config.secret_accessor import SecretAccessor
+    from weebot.domain.models.mcp import MCPServerConfig
     from weebot.infrastructure.mcp import mcp_client_manager as mod
 
     SecretAccessor.set_source({"PATH": "/bin", "OPENROUTER_API_KEY": "sk-secret", "G": "tok"})
@@ -64,8 +65,10 @@ async def test_mcp_stdio_child_does_not_receive_provider_keys(monkeypatch):
             with pytest.raises(Exception):
                 async with AsyncExitStack() as stack:
                     await mgr._connect_stdio(
-                        "s",
-                        {"command": "x", "env": {"GITHUB_TOKEN": "decl"}, "env_passthrough": ["G"]},
+                        MCPServerConfig(
+                            name="s", command="x", env={"GITHUB_TOKEN": "decl"},
+                            env_passthrough=["G"],
+                        ),
                         stack,
                     )
     finally:

@@ -186,6 +186,13 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Enforce user_id matching on session access"},
     {"var": "WEEBOT_SHELL_DEFAULT_ASK", "type": "str", "default": "observe",
      "desc": "Shell commands no approval rule covers: off, observe (log what would ask) or enforce"},
+    {"var": "WEEBOT_APPROVAL_DENY_GLOBS", "type": "str", "default": "",
+     "desc": "Comma-separated globs for shell commands that are always refused, in every "
+             "approval mode (H18 floors)"},
+    {"var": "WEEBOT_KERNEL_RPC_TOOLS", "type": "str", "default": "bash,file_editor,web_search",
+     "desc": "Tools that code in a persistent python_execute kernel may call through the "
+             "weebot_tools module (H17); each call passes the usual guards and approval "
+             "floors. Empty turns it off"},
     {"var": "WEEBOT_AUTO_INSTALL_TOOLS", "type": "bool", "default": "true",
      "desc": "Let install_tool add a missing dependency from PyPI (wheels only), npm (no "
              "lifecycle scripts) or winget. Every install still asks first; URLs, VCS specs, "
@@ -272,6 +279,12 @@ CONFIG_SCHEMA: list[dict] = [
     # ── Optional features, off by default (D4) ────────────────────
     {"var": "WEEBOT_STEP_EVALUATOR", "type": "bool", "default": "false",
      "desc": "Score each step's progress on the verifier model; a stalled step is replanned"},
+    {"var": "WEEBOT_APPROVAL_GUARDIAN", "type": "bool", "default": "false",
+     "desc": "A cheap model reviews shell commands no approval rule covers before a person is asked"},
+    {"var": "WEEBOT_LSP_DIAGNOSTICS", "type": "bool", "default": "false",
+     "desc": "A file_editor write also reports the new language-server diagnostics it caused"},
+    {"var": "WEEBOT_LSP_TRUSTED_ROOTS", "type": "str", "default": "",
+     "desc": "Extra directories (path-separator list) where language servers may start"},
     {"var": "WEEBOT_SKILL_PROMOTION_GATE", "type": "bool", "default": "false",
      "desc": "Chain-of-verification veto before a learned skill is promoted to trusted"},
     {"var": "WEEBOT_STAGED_VALIDATION", "type": "bool", "default": "false",

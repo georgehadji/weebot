@@ -7,6 +7,7 @@ from weebot.domain.models.output_trust import OutputTrust
 
 import base64
 import logging
+import re
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.infrastructure.browser.session_manager import BrowserSessionManager
@@ -43,6 +44,9 @@ def _atexit_cleanup_playwright() -> None:
 atexit.register(_atexit_cleanup_playwright)
 
 # ── wait_type → Playwright wait_until mapping ──
+# `vault:<handle>` or `vault:<handle>:username|password` as a fill value names a stored credential.
+_VAULT_REF = re.compile(r"^vault:([A-Za-z0-9_-]+)(?::(username|password))?$")
+
 _WAIT_TYPE_MAP: dict[str, str] = {
     "navigation": "domcontentloaded",
     "function": "load",
@@ -129,6 +133,12 @@ class AdvancedBrowserTool(BaseTool):
 
     # Injected by tool_registry via DI
     browser: object | None = None  # PlaywrightAdapter
+    credential_vault: object | None = None  # CredentialVaultPort (H19)
+
+    def _scrub(self, text: str) -> str:
+        """Page text with any value the vault filled hidden, so a script cannot read it back."""
+        vault = self.credential_vault
+        return vault.redact(text) if vault is not None else text
 
     async def close(self) -> None:
         """Close the shared PlaywrightAdapter (idempotent; the sibling tool may close it too)."""
@@ -241,8 +251,27 @@ class AdvancedBrowserTool(BaseTool):
                 page = self._page()
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await page.fill(selector, value, timeout=timeout)
-                return ToolResult(output=f"Filled field: {selector}")
+                ref = _VAULT_REF.match(value)
+                if ref is None:
+                    if value.startswith("vault:"):
+                        return ToolResult(output="", error="malformed vault reference")
+                    await page.fill(selector, value, timeout=timeout)
+                    return ToolResult(output=f"Filled field: {selector}")
+                if self.credential_vault is None:
+                    return ToolResult(output="", error="no credential vault is configured")
+                from weebot.application.ports.credential_vault_port import CredentialError
+
+                try:
+                    await self.credential_vault.fill(
+                        ref.group(1),
+                        page,
+                        selector=selector,
+                        field=ref.group(2) or "password",
+                        timeout_ms=timeout,
+                    )
+                except CredentialError as exc:
+                    return ToolResult(output="", error=str(exc))
+                return ToolResult(output=f"Filled field: {selector} from vault {ref.group(1)}")
 
             elif action == "select":
                 if not selector or value is None:
@@ -259,6 +288,8 @@ class AdvancedBrowserTool(BaseTool):
                 page = self._page()
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
+                if text.startswith("vault:"):
+                    return ToolResult(output="", error="use the fill action for a vault reference")
                 await page.keyboard.type(text)
                 return ToolResult(output=f"Typed text: {text[:50]}...")
 
@@ -269,7 +300,7 @@ class AdvancedBrowserTool(BaseTool):
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
                 result = await page.evaluate(script)
-                return ToolResult(output=f"JavaScript result: {result}")
+                return ToolResult(output=self._scrub(f"JavaScript result: {result}"))
 
             elif action == "screenshot":
                 page = self._page()
@@ -284,14 +315,14 @@ class AdvancedBrowserTool(BaseTool):
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
                 content = await page.content()
-                return ToolResult(output=f"HTML content: {content[:500]}...")
+                return ToolResult(output=self._scrub(f"HTML content: {content[:500]}..."))
 
             elif action == "get_title":
                 page = self._page()
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
                 title = await page.title()
-                return ToolResult(output=f"Page title: {title}")
+                return ToolResult(output=self._scrub(f"Page title: {title}"))
 
             elif action == "wait_for_selector":
                 if not selector:
@@ -307,7 +338,7 @@ class AdvancedBrowserTool(BaseTool):
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
                 cookies = await page.context.cookies()
-                return ToolResult(output=f"Cookies: {cookies}")
+                return ToolResult(output=self._scrub(f"Cookies: {cookies}"))
 
             elif action == "set_cookies":
                 if not value:

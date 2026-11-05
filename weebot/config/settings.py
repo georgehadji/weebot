@@ -122,6 +122,28 @@ class WeebotSettings(BaseSettings):
         default=True,
         description="When True and no weebot_api_key is set, refuse non-loopback requests.",
     )
+    openai_api_enabled: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_OPENAI_API_ENABLED", "openai_api_enabled"),
+        default=False,
+        description="Mount the OpenAI-compatible API (/v1/models, /v1/chat/completions, /v1/runs).",
+    )
+    openai_api_show_steps: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_OPENAI_API_SHOW_STEPS", "openai_api_show_steps"),
+        default=False,
+        description="Add a line per tool call to a streamed chat completion's content.",
+    )
+    sandbox_egress_proxy: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_SANDBOX_EGRESS_PROXY", "sandbox_egress_proxy"),
+        default=False,
+        description=(
+            "Docker sandbox: run a network-cleared call on an internal network whose only "
+            "neighbour is a CONNECT allowlist proxy, limited to the hosts the call was cleared for."
+        ),
+    )
+    sandbox_egress_proxy_image: str | None = Field(
+        default=None,
+        description="Image for the egress proxy container (needs python). Default: the tool image.",
+    )
     web_host: str = Field(
         default="127.0.0.1", description="Web API bind address (default loopback for security)."
     )
@@ -351,6 +373,13 @@ class WeebotSettings(BaseSettings):
         default=None,
         description="Path to MCP servers config file (YAML/JSON). If None, no servers.",
     )
+    credential_vault_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to the credential vault file (JSON): handles bound to a site origin, with "
+            "secret references, never values. If None, the browser has no vault."
+        ),
+    )
     mcp_token_dir: str = Field(
         default=".weebot/mcp-tokens",
         description="Directory for OAuth token cache (relative to workspace root or absolute).",
@@ -525,6 +554,24 @@ class WeebotSettings(BaseSettings):
         default=True,
         alias="WEEBOT_OUTBOUND_ASK_IN_OBSERVE",
         description="Outbound tools ask through the approval channel even in observe mode.",
+    )
+    approval_deny_globs: str = Field(
+        default="",
+        alias="WEEBOT_APPROVAL_DENY_GLOBS",
+        description=(
+            "Comma-separated globs (case-insensitive) for shell commands that are always "
+            "refused, in every approval mode, e.g. 'npm publish*,git push*'. Each glob is "
+            "tried against the command and against every part of it (H18 floors)."
+        ),
+    )
+    kernel_rpc_tools: str = Field(
+        default="bash,file_editor,web_search",
+        alias="WEEBOT_KERNEL_RPC_TOOLS",
+        description=(
+            "Comma-separated tools that code in a persistent python_execute kernel may call "
+            "through the weebot_tools module (H17). Each call passes the same guards and "
+            "approval floors as a call the model makes. Empty turns tool calls from code off."
+        ),
     )
     secret_redaction_enabled: bool = Field(
         default=True, description="Redact secrets (PANs, API keys) in tool output and logs."

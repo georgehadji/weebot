@@ -90,7 +90,7 @@ class TestMCPServerConfig:
 
     def test_sampling_policy_defaults(self):
         config = MCPServerConfig(name="sample-server", command="npx")
-        assert config.sampling.enabled is True
+        assert config.sampling.enabled is False
         assert config.sampling.max_tokens_per_request == 4096
         assert config.sampling.rate_limit_per_minute == 10
 
@@ -189,7 +189,7 @@ class TestMCPSamplingPolicy:
 
     def test_defaults(self):
         policy = MCPSamplingPolicy()
-        assert policy.enabled is True
+        assert policy.enabled is False
         assert policy.max_tokens_per_request == 4096
         assert policy.rate_limit_per_minute == 10
 

@@ -36,8 +36,11 @@ _SESSION_STORES = {
     "flow_checkpoints",
     "workspace_checkpoints",
     "spillover",
+    "memory_snapshot",
+    "prompt_prefix",
     "trajectories",
     "steering",
+    "kernels",
 }
 
 

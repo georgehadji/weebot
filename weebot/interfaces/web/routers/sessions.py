@@ -18,8 +18,10 @@ from weebot.interfaces.web.auth import (
 )
 from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 from weebot.interfaces.web.schemas import (
+    BranchSessionRequest,
     CreateSessionRequest,
     ResumeSessionRequest,
+    RewindSessionRequest,
     SessionInputRequest,
     SessionResponse,
     SessionListResponse,
@@ -398,6 +400,100 @@ async def run_session(
 
     logger.info("Started background task for session %s", session_id)
     return await _respond(http_request, session)
+
+
+def _rewinder(http_request: Request, state_repo: StateRepositoryPort):
+    """The rewind use case over whichever event store and checkpoint port are wired."""
+    from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
+    from weebot.application.use_cases.rewind_session import RewindSession
+
+    container = http_request.app.state.container
+
+    def _optional(key):
+        try:
+            return container.get(key)
+        except Exception:
+            logger.debug("%s is not wired; rewind runs without it", key, exc_info=True)
+            return None
+
+    return RewindSession(state_repo, _optional(EventStorePort), _optional(WorkspaceCheckpointPort))
+
+
+async def _owned_session(
+    http_request: Request, state_repo: StateRepositoryPort, session_id: str
+) -> Session:
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    await verify_session_ownership(http_request, session.user_id)
+    return session
+
+
+@router.post("/{session_id}/rewind", response_model=SessionResponse)
+async def rewind_session(
+    session_id: str,
+    http_request: Request,
+    body: RewindSessionRequest,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> SessionResponse:
+    """Drop the last turns of the conversation and restore the files they changed."""
+    from weebot.application.use_cases.rewind_session import SessionBusy
+
+    await _owned_session(http_request, state_repo, session_id)
+    try:
+        result = await _rewinder(http_request, state_repo).rewind(
+            session_id, body.turns, body.files
+        )
+    except SessionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return await _respond(http_request, result.session)
+
+
+@router.post("/{session_id}/retry", response_model=SessionResponse)
+async def retry_session(
+    session_id: str,
+    http_request: Request,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> SessionResponse:
+    """Rewind the last turn, then send the same user message again."""
+    from weebot.application.use_cases.rewind_session import SessionBusy
+
+    await _owned_session(http_request, state_repo, session_id)
+    try:
+        result = await _rewinder(http_request, state_repo).rewind(session_id, 1, True)
+    except SessionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    dispatched = await _dispatch_input(
+        http_request, result.session, result.dropped_text, state_repo
+    )
+    return await _respond(http_request, dispatched.session)
+
+
+@router.post("/{session_id}/branch", response_model=SessionResponse)
+async def branch_session(
+    session_id: str,
+    http_request: Request,
+    body: BranchSessionRequest,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> SessionResponse:
+    """Copy the conversation up to an event into a new session. The files are not copied."""
+    from weebot.application.use_cases.rewind_session import SessionBusy
+
+    await _owned_session(http_request, state_repo, session_id)
+    try:
+        child = await _rewinder(http_request, state_repo).branch(session_id, body.at_event_id)
+    except SessionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return await _respond(http_request, child)
 
 
 @router.post("/{session_id}/steer")

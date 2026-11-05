@@ -60,6 +60,10 @@ if "PYTEST_VERSION" not in os.environ:
 
     load_dotenv(override=True)
 
+    from weebot.application.di import install_secret_sources
+
+    install_secret_sources()  # op:// and bws:// references in .env (H19)
+
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from cli.commands.rollback import cmd_rollback

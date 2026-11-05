@@ -51,6 +51,12 @@ class CapabilitiesMixin:
 
         checkpoints_db = str(Path(db_path).parent / "flow_checkpoints.db")
         self.register(CheckpointPort, lambda: SQLiteCheckpointStore(db_path=checkpoints_db))
+        # One run per Idempotency-Key for the OpenAI-compatible API (H12b).
+        from weebot.application.ports.idempotency_port import IdempotencyPort
+        from weebot.infrastructure.persistence.idempotency_store import SQLiteIdempotencyStore
+
+        idempotency_db = str(Path(db_path).parent / "api_idempotency.db")
+        self.register(IdempotencyPort, lambda: SQLiteIdempotencyStore(db_path=idempotency_db))
         # Undoable workspace file checkpoints, bound always so a session delete purges them
         # whether or not WEEBOT_FILE_CHECKPOINTS is on now (H5).
         from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort
@@ -67,10 +73,50 @@ class CapabilitiesMixin:
         from weebot.infrastructure.spillover.file_store import FileSpilloverStore
 
         self.register(SpilloverStorePort, lambda: FileSpilloverStore())
+        # One Python interpreter per session that keeps its variables between calls (H17).
+        from weebot.application.services.kernel_manager import KernelManager
+
+        self.register(KernelManager, self._create_kernel_manager)
+        # The persistent-memory text each session read at its first step (H24a).
+        from weebot.application.di.keys import MEMORY_SNAPSHOT_CACHE
+
+        self.register(MEMORY_SNAPSHOT_CACHE, self._create_memory_snapshot_cache)
+        from weebot.application.di.keys import PROMPT_PREFIX_STORE
+
+        self.register(PROMPT_PREFIX_STORE, self._create_prompt_prefix_store)
         from weebot.application.di.keys import STRATEGY_TRANSFER
 
         strategies_db = Path(db_path).parent / "improvement_strategies.db"
         self.register(STRATEGY_TRANSFER, lambda: self._create_strategy_transfer(strategies_db))
+
+    @staticmethod
+    def _create_kernel_manager():
+        from weebot.application.services.kernel_manager import KernelManager
+        from weebot.config.settings import get_settings
+        from weebot.infrastructure.sandbox.factory import build_sandbox_config
+        from weebot.infrastructure.sandbox.native_kernel import NativeKernel
+
+        return KernelManager(NativeKernel(build_sandbox_config(get_settings())))
+
+    @staticmethod
+    def _create_memory_snapshot_cache():
+        from weebot.application.services.memory_snapshot_cache import MemorySnapshotCache
+        from weebot.config.feature_flags import is_enabled
+        from weebot.tools.persistent_memory import PersistentMemoryTool
+
+        return MemorySnapshotCache(
+            PersistentMemoryTool.load_snapshot,
+            frozen=lambda: is_enabled("MEMORY_SNAPSHOT_FREEZE_ENABLED"),
+        )
+
+    @staticmethod
+    def _create_prompt_prefix_store():
+        from weebot.infrastructure.adapters.prompt_prefix_store import InMemoryPromptPrefixStore
+        from weebot.infrastructure.observability.metrics import prompt_prefix_changes_total
+
+        return InMemoryPromptPrefixStore(
+            on_change=lambda reason: prompt_prefix_changes_total.labels(reason=reason).inc()
+        )
 
     @staticmethod
     def _create_strategy_transfer(db_path):

@@ -30,6 +30,10 @@ if "PYTEST_VERSION" not in os.environ:
 
     load_dotenv(override=True)
 
+    from weebot.application.di import install_secret_sources
+
+    install_secret_sources()  # op:// and bws:// references in .env (H19)
+
 # Structured logging is configured inside create_app(), not at import time.
 # Calling it at module scope reconfigures the root logger for *any* process
 # that merely imports this module — including the test runner, where
@@ -68,6 +72,7 @@ from weebot.interfaces.web.routers.discord_webhook import router as discord_rout
 from weebot.interfaces.web.routers.slack_webhook import router as slack_router
 from weebot.interfaces.web.routers.whatsapp_webhook import router as whatsapp_router
 from weebot.interfaces.web.routers.ponytail import router as ponytail_router
+from weebot.interfaces.web.routers.openai_compat import router as openai_compat_router
 from weebot.interfaces.web.event_broadcaster import WebSocketEventBroadcaster
 from weebot.interfaces.web.websocket import manager
 
@@ -203,6 +208,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     set_process_approval(FlowPauseApproval())
     set_approval_journal(container.get(EventStorePort))
+    from weebot.application.di.keys import APPROVAL_GUARDIAN
+    from weebot.application.services.tool_approval import set_guardian
+
+    set_guardian(container.get(APPROVAL_GUARDIAN))
 
     # The one API-key store for this process; web/auth.py reads it from app.state.
     from weebot.application.ports.api_key_port import ApiKeyPort
@@ -618,6 +627,8 @@ def create_app() -> FastAPI:
     app.include_router(slack_router)
     app.include_router(whatsapp_router)
     app.include_router(ponytail_router, prefix="/api")
+    if getattr(_ws, "openai_api_enabled", False):
+        app.include_router(openai_compat_router)
 
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")

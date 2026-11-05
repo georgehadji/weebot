@@ -220,6 +220,29 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
     checks: list[DoctorCheck] = []
     root = root.resolve()
 
+    # Secret references in .env (op://, bws://) resolved at startup (H19)
+    from weebot.core.secret_provenance import provenance
+
+    refs = provenance()
+    if refs.failed:
+        checks.append(
+            DoctorCheck(
+                name="secret_sources",
+                status="error",
+                details="; ".join(f"{key}: {why}" for key, why in sorted(refs.failed.items())),
+                data={"failed": dict(refs.failed), "resolved": dict(refs.resolved)},
+            )
+        )
+    elif refs.resolved:
+        checks.append(
+            DoctorCheck(
+                name="secret_sources",
+                status="ok",
+                details=", ".join(f"{key} via {src}" for key, src in sorted(refs.resolved.items())),
+                data={"resolved": dict(refs.resolved)},
+            )
+        )
+
     # API keys / settings
     try:
         settings = get_settings()
@@ -288,6 +311,19 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
             checks.append(
                 DoctorCheck(name="projects_db", status="error", details=f"DB open failed: {exc}")
             )
+
+    # Language servers for H20 diagnostics. Optional and off by default, so never an error.
+    from weebot.config.lsp_servers import installed_servers
+
+    servers = installed_servers()
+    checks.append(
+        DoctorCheck(
+            name="lsp_servers",
+            status="ok" if any(servers.values()) else "warn",
+            details=", ".join(f"{lang}: {exe or 'not installed'}" for lang, exe in servers.items()),
+            data={"servers": servers},
+        )
+    )
 
     # Templates validation
     parser = TemplateParser()

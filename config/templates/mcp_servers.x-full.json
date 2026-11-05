@@ -1,11 +1,13 @@
 {
   "_comment": "X (Twitter) MCP — full read/write Path B. Requires: xurl auth oauth2 --headless.",
   "x-docs": {
+    "trust": "trusted",
     "transport": "streamable-http",
     "url": "https://docs.x.com/mcp",
     "enabled": false
   },
   "xapi": {
+    "trust": "trusted",
     "transport": "stdio",
     "command": "npx",
     "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],

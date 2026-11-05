@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,7 +67,15 @@ class MCPToolFilterConfig(BaseModel):
 class MCPSamplingPolicy(BaseModel):
     """Policy for handling sampling/createMessage requests from an MCP server."""
 
-    enabled: bool = Field(default=True, description="Allow sampling requests")
+    enabled: bool = Field(
+        default=False,
+        description="Allow sampling requests. Off by default: it spends the user's model "
+        "budget on prompts the server wrote.",
+    )
+    allow_when_tainted: bool = Field(
+        default=False,
+        description="Answer sampling requests made while untrusted content is in the session",
+    )
     max_tokens_per_request: int = Field(default=4096, ge=1, le=65536)
     model_allowlist: list[str] | None = Field(
         default=None,
@@ -94,6 +102,14 @@ class MCPServerConfig(BaseModel):
         default_factory=dict,
         description="Extra env vars for the subprocess. Overlaid on safe baseline.",
     )
+    env_passthrough: list[str] = Field(
+        default_factory=list,
+        description="Names of parent environment variables the subprocess may inherit.",
+    )
+
+    # Whether the server's tools may be treated as reads by their name (H12). An untrusted
+    # server's tools all ask; its output is external either way.
+    trust: Literal["trusted", "untrusted"] = Field(default="untrusted")
 
     # HTTP/SSE transport
     url: str | None = Field(default=None, description="Server URL (http/sse/streamable-http)")
@@ -107,6 +123,10 @@ class MCPServerConfig(BaseModel):
 
     # Sampling policy
     sampling: MCPSamplingPolicy = Field(default_factory=MCPSamplingPolicy)
+
+    # Let the server ask the person a question mid-call. Off by default: the text is the
+    # server's, so it is the server's words in front of the user.
+    elicitation_enabled: bool = Field(default=False)
 
     # Timeouts
     timeout_seconds: int = Field(default=30, ge=5, le=300)

@@ -151,6 +151,11 @@ WEEBOT_ACR_SHADOW: bool = _env_bool("WEEBOT_ACR_SHADOW", default=False)
 # real memory content, not test litter, has grown past the cap.
 MEMORY_SNAPSHOT_CAP_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_CAP", default=False)
 
+# H24a: read the persistent-memory snapshot once per session instead of at every step, so a
+# memory write by any session cannot change the prompt prefix of a running one. A write
+# reaches disk at once and shows up in the next session. Default ON; false re-reads per step.
+MEMORY_SNAPSHOT_FREEZE_ENABLED: bool = _env_bool("WEEBOT_MEMORY_SNAPSHOT_FREEZE", default=True)
+
 
 # ── C2. Durable task queue backend (ARCH-AUDIT-V2) ──────────────────────────
 # Controls which queue backend the TaskRunner uses.
@@ -166,6 +171,21 @@ WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").str
 # marked `evaluator_failed`. Default OFF until a live run has measured its
 # false-stop rate.
 STEP_EVALUATOR_ENABLED: bool = _env_bool("WEEBOT_STEP_EVALUATOR", default=False)
+
+
+# ── Approval guardian (H18c) ────────────────────────────────────────────────
+# When True, a cheap model reviews each shell command that no approval rule covers (and that
+# is not dangerous, a floor, egress or after untrusted content) before a person is asked: it
+# may approve, refuse or escalate. Any failure escalates. Default OFF: a model decides.
+APPROVAL_GUARDIAN_ENABLED: bool = _env_bool("WEEBOT_APPROVAL_GUARDIAN", default=False)
+
+
+# ── LSP delta diagnostics (H20) ─────────────────────────────────────────────
+# When True, a file_editor write also reports the language-server diagnostics the edit
+# introduced (not the ones already there). Spawns pyright / ruff / typescript-language-server
+# child processes, and only for the workspace root and WEEBOT_LSP_TRUSTED_ROOTS (a path list),
+# because a language server runs the project's own config. Default OFF: it starts processes.
+LSP_DIAGNOSTICS_ENABLED: bool = _env_bool("WEEBOT_LSP_DIAGNOSTICS", default=False)
 
 
 # ── Desktop toasts (D4) ─────────────────────────────────────────────────────
@@ -283,6 +303,13 @@ def require(flag_name: str) -> None:
 # needs (core + category + named services); the rest stay callable by name.
 # Every call used to carry all ~171 (~49k tokens). WEEBOT_TOOL_SCOPE=false sends all.
 TOOL_SCOPE_ENABLED: bool = _env_bool("WEEBOT_TOOL_SCOPE", default=True)
+# "step" re-scopes the tool list at every step (ADR-008); "plan" scopes it once, to the union
+# of the plan's steps, so the tools block stays the same and the prompt cache holds (H10, D3).
+TOOL_SCOPE_GRANULARITY: str = (
+    "plan"
+    if os.environ.get("WEEBOT_TOOL_SCOPE_GRANULARITY", "").strip().lower() == "plan"
+    else "step"
+)
 
 
 # A live session edits the repository the web API runs from, and uvicorn's reloader

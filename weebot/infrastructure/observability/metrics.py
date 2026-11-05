@@ -59,6 +59,12 @@ llm_cache_read_tokens_total = Counter(
     "weebot_llm_cache_read_tokens_total", "Input tokens served from the prompt cache", ["model"]
 )
 
+prompt_prefix_changes_total = Counter(
+    "weebot_prompt_prefix_changes_total",
+    "Times a session's request prefix (system text, tools) changed between steps",
+    ["reason"],
+)
+
 # ── Security ──
 bash_guard_events_total = Counter(
     "weebot_bash_guard_events_total",
