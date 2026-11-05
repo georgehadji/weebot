@@ -13,49 +13,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
 from typing import Any
 
+from weebot.application.ports.mcp_sampling_port import (
+    McpSamplingPort,
+    SamplingRequest,
+    SamplingResult,
+)
 from weebot.domain.models.mcp import MCPSamplingPolicy
 
 logger = logging.getLogger(__name__)
-
-
-class SamplingRequest:
-    """Represents an MCP sampling/createMessage request.
-
-    Mirrors the JSON-RPC params from the MCP specification.
-    """
-
-    def __init__(
-        self,
-        messages: list[dict[str, Any]],
-        max_tokens: int = 4096,
-        stop_sequences: list[str] | None = None,
-        model: str | None = None,
-        system_prompt: str | None = None,
-        include_context: dict[str, Any] | None = None,
-        temperature: float | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        self.messages = messages
-        self.max_tokens = max_tokens
-        self.stop_sequences = stop_sequences or []
-        self.model = model
-        self.system_prompt = system_prompt
-        self.include_context = include_context or {}
-        self.temperature = temperature
-        self.metadata = metadata or {}
-
-
-@dataclass
-class SamplingResult:
-    """Result of a sampling/createMessage operation."""
-
-    content: list[dict[str, Any]]
-    model: str
-    stop_reason: str | None = None
-    usage: dict[str, int] | None = None
 
 
 class RateLimiter:
@@ -82,7 +49,7 @@ class RateLimiter:
             return False
 
 
-class MCPSamplingHandler:
+class MCPSamplingHandler(McpSamplingPort):
     """Handles MCP sampling/createMessage requests.
 
     Dispatches LLM calls through Weebot's LLM provider, applying
@@ -91,9 +58,13 @@ class MCPSamplingHandler:
     """
 
     def __init__(
-        self, llm_provider: Any | None = None, audit_log: logging.Logger | None = None
+        self,
+        llm_provider: Any | None = None,
+        audit_log: logging.Logger | None = None,
+        cost_meter: Any | None = None,
     ) -> None:
         self._llm_provider = llm_provider
+        self._cost_meter = cost_meter
         self._audit_log = audit_log or logger
         self._rate_limiters: dict[str, RateLimiter] = {}
 
@@ -128,15 +99,42 @@ class MCPSamplingHandler:
         return None
 
     async def handle_sampling(
-        self, server_name: str, request: SamplingRequest, policy: MCPSamplingPolicy
+        self,
+        server_name: str,
+        request: SamplingRequest,
+        policy: MCPSamplingPolicy,
+        *,
+        session_id: str | None = None,
+        tainted: bool = False,
     ) -> SamplingResult | None:
         """Process a sampling/createMessage request from *server_name*.
 
-        Returns None if the request is denied (rate-limited, model not allowed,
-        or sampling disabled).
+        Returns None if the request is denied: sampling disabled, no session to charge (pass
+        ``session_id=None`` to skip that check), untrusted content in the session, the
+        session's budget spent, the rate limit, or a model outside the allowlist.
         """
         if not policy.enabled:
             logger.info("Sampling disabled for server %s — denying request", server_name)
+            return None
+        if session_id is not None and not session_id:
+            self._audit_log.warning(
+                "MCP server %s asked for sampling outside a tool call; denied", server_name
+            )
+            return None
+        if tainted and not policy.allow_when_tainted:
+            self._audit_log.warning(
+                "MCP server %s asked for sampling in a session with untrusted content; denied",
+                server_name,
+            )
+            return None
+        if (
+            session_id
+            and self._cost_meter is not None
+            and self._cost_meter.hard_exceeded(session_id)
+        ):
+            self._audit_log.warning(
+                "MCP server %s asked for sampling past the session budget; denied", server_name
+            )
             return None
 
         # Rate limit
@@ -155,37 +153,28 @@ class MCPSamplingHandler:
         effective_max_tokens = min(request.max_tokens, policy.max_tokens_per_request)
 
         # Dispatch
-        if self._llm_provider is not None:
-            return await self._dispatch_to_provider(
-                server_name, request, resolved_model, effective_max_tokens
+        if self._llm_provider is None:
+            self._audit_log.info(
+                "Sampling request from %s denied: no LLM provider configured", server_name
             )
-
-        # If no provider is configured, return a stub result (useful during
-        # development or when MCP servers don't require real sampling).
-        self._audit_log.info(
-            "Sampling request from %s (stub — no LLM provider configured): "
-            "%d message(s), model=%s, max_tokens=%d",
-            server_name,
-            len(request.messages),
-            resolved_model,
-            effective_max_tokens,
-        )
-        return SamplingResult(
-            content=[
-                {"type": "text", "text": "[Sampling not available — no LLM provider configured]"}
-            ],
-            model=resolved_model or "unknown",
-            stop_reason="endTurn",
+            return None
+        return await self._dispatch_to_provider(
+            server_name, request, resolved_model, effective_max_tokens, session_id
         )
 
     async def _dispatch_to_provider(
-        self, server_name: str, request: SamplingRequest, model: str, max_tokens: int
-    ) -> SamplingResult:
-        """Dispatch a sampling request to the configured LLM provider.
+        self,
+        server_name: str,
+        request: SamplingRequest,
+        model: str,
+        max_tokens: int,
+        session_id: str | None,
+    ) -> SamplingResult | None:
+        """Ask the provider. The call is charged to *session_id* through ``session_id_var``,
+        which the provider's cost event reads, so it lands on the parent session's meter."""
+        from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+        from weebot.core.log_context import session_id_var
 
-        This method should be extended to use the actual LLM port
-        interface when a provider is configured.
-        """
         self._audit_log.info(
             "Dispatching sampling request from %s to %s (%d messages, %d max tokens)",
             server_name,
@@ -193,9 +182,27 @@ class MCPSamplingHandler:
             len(request.messages),
             max_tokens,
         )
-        # Stub: return a placeholder until integrated with real LLM port
+        messages = list(request.messages)
+        if request.system_prompt:
+            messages.insert(0, {"role": "system", "content": request.system_prompt})
+        token = session_id_var.set(session_id) if session_id else None
+        try:
+            response = await self._llm_provider.chat(
+                messages=messages,
+                model=None if model == "default" else model,
+                temperature=(
+                    TEMPERATURE_DETERMINISTIC if request.temperature is None else request.temperature
+                ),
+                max_tokens=max_tokens,
+            )
+        except Exception as exc:
+            self._audit_log.warning("Sampling call for %s failed: %s", server_name, exc)
+            return None
+        finally:
+            if token is not None:
+                session_id_var.reset(token)
         return SamplingResult(
-            content=[{"type": "text", "text": f"[Sampling request processed for {server_name}]"}],
-            model=model,
+            content=[{"type": "text", "text": response.content or ""}],
+            model=getattr(response, "model", None) or model,
             stop_reason="endTurn",
         )

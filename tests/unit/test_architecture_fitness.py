@@ -1007,6 +1007,7 @@ def test_orphan_ports_flagged():
         "StepEvaluation",
         "JudgeVerdict",
         "CriterionScore",
+        "SamplingResult",  # the MCP sampling reply (mcp_sampling_port)
         # Ports whose implementations live in application/ (not infrastructure/)
         "JudgePort",  # → ModelJudge / ScoreJudge in application/eval/
         "CodeReviewerPort",  # → CodeReviewerService in application/services/

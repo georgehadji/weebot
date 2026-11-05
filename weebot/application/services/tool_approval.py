@@ -323,6 +323,11 @@ def current_session_id() -> str:
     return _scope_session.get()
 
 
+def current_tainted() -> bool:
+    """True inside a step whose session holds untrusted content (False when not said)."""
+    return bool(_scope_tainted.get())
+
+
 def already_approved(fingerprint: str) -> bool:
     """True inside a call a human already approved at an earlier gate."""
     return bool(fingerprint) and _approved_call.get() == fingerprint

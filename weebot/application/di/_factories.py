@@ -505,12 +505,41 @@ class FactoriesMixin:
                             _logging.getLogger(__name__).warning(
                                 "MCP server %s not loaded: %s", name, exc
                             )
-                    return MCPClientManager(config={"mcpServers": loaded})
+                    from weebot.application.ports.mcp_sampling_port import CallContext
+                    from weebot.application.services.tool_approval import (
+                        current_session_id,
+                        current_tainted,
+                    )
+
+                    return MCPClientManager(
+                        config={"mcpServers": loaded},
+                        sampling_handler=self._create_mcp_sampling_handler(loaded),
+                        call_context=lambda: CallContext(current_session_id(), current_tainted()),
+                    )
                 _logging.getLogger(__name__).warning("MCP config %s does not exist", config_path)
         except Exception as exc:
             _logging.getLogger(__name__).warning("Failed to load MCP config from settings: %s", exc)
 
         return MCPClientManager(config={})
+
+    def _create_mcp_sampling_handler(self, servers: dict):
+        """The sampling handler (H12), or None while no configured server enables sampling.
+
+        Built only then so a config that never samples does not need a provider key. It
+        answers with the ``subagent`` role's model and charges the calling session's meter.
+        """
+        if not any(
+            isinstance(cfg, dict) and (cfg.get("sampling") or {}).get("enabled")
+            for cfg in servers.values()
+        ):
+            return None
+        from weebot.application.di.keys import SESSION_COST_METER
+        from weebot.application.services.mcp_sampling_handler import MCPSamplingHandler
+
+        return MCPSamplingHandler(
+            llm_provider=self._create_llm_for_role("subagent"),
+            cost_meter=self._maybe_get(SESSION_COST_METER),
+        )
 
     @staticmethod
     def _create_mcp_tool_retrieval_service(registry):

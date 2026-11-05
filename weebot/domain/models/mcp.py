@@ -67,7 +67,15 @@ class MCPToolFilterConfig(BaseModel):
 class MCPSamplingPolicy(BaseModel):
     """Policy for handling sampling/createMessage requests from an MCP server."""
 
-    enabled: bool = Field(default=True, description="Allow sampling requests")
+    enabled: bool = Field(
+        default=False,
+        description="Allow sampling requests. Off by default: it spends the user's model "
+        "budget on prompts the server wrote.",
+    )
+    allow_when_tainted: bool = Field(
+        default=False,
+        description="Answer sampling requests made while untrusted content is in the session",
+    )
     max_tokens_per_request: int = Field(default=4096, ge=1, le=65536)
     model_allowlist: list[str] | None = Field(
         default=None,
