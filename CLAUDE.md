@@ -67,3 +67,4 @@ Before editing unfamiliar code, open `map/CLAUDE.md` (noun index, name collision
 - **Subagent Strategy**: Use subagents for research and parallel analysis to keep the main context clean.
 - **Validation**: Prove changes work with tests or health checks before marking complete.
 - **Lessons Learned**: Update `tasks/lessons.md` after any correction from the user.
+- **Docs vs code**: When the documentation and existing code conflict, follow the code's conventions, and in your final reply, list all the inconsistencies you found.
