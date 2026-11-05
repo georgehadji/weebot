@@ -293,94 +293,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.debug("Circuit breaker state restore skipped: %s", exc)
 
-    # ── Telegram gateway (long-polling) ─────────────────────────
+    # ── Polling gateways (Telegram, Signal, Email, and any `weebot.gateways` plugin) ──
     from weebot.config.settings import get_settings
+    from weebot.interfaces.gateways.registry import GatewayRegistry
 
     _settings = get_settings()
-    telegram_adapter = None
-    if _settings.telegram_bot_token:
-        try:
-            from weebot.application.ports.gateway_session_store_port import (
-                IGatewaySessionStorePort,
-            )
-            from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
-            from weebot.interfaces.gateways.telegram import TelegramAdapter
-
-            flow_resolver = GatewayFlowResolver(
-                # From the container, so session deletion purges this store.
-                store=container.get(IGatewaySessionStorePort),
-                session_ttl_seconds=_settings.gateway_session_ttl_seconds,
-                max_sessions_per_platform=_settings.gateway_max_sessions_per_platform,
-            )
-            telegram_adapter = TelegramAdapter(
-                token=_settings.telegram_bot_token,
-                state_repo=container.get(StateRepositoryPort),
-                llm=container.get(LLMPort),
-                flow_resolver=flow_resolver,
-            )
-            await telegram_adapter.start()
-            app.state.telegram_adapter = telegram_adapter
-        except Exception as exc:
-            logger.warning("Telegram gateway failed to start: %s", exc)
-    else:
-        logger.info("Telegram gateway disabled (set TELEGRAM_BOT_TOKEN to enable)")
-
-    # ── Signal gateway (long-polling via signal-cli REST API) ───
-    signal_adapter = None
-    if _settings.signal_account_number:
-        try:
-            from weebot.interfaces.gateways.signal import SignalAdapter
-
-            signal_adapter = SignalAdapter(
-                state_repo=container.get(StateRepositoryPort),
-                llm=container.get(LLMPort),
-                rest_url=_settings.signal_cli_rest_url,
-                account_number=_settings.signal_account_number,
-            )
-            await signal_adapter.start()
-            app.state.signal_adapter = signal_adapter
-        except Exception as exc:
-            logger.warning("Signal gateway failed to start: %s", exc)
-    else:
-        logger.info("Signal gateway disabled (set SIGNAL_ACCOUNT_NUMBER to enable)")
-
-    # ── Email gateway (IMAP polling) ─────────────────────────────
-    email_adapter = None
-    if _settings.email_imap_user and _settings.email_imap_password:
-        try:
-            from weebot.interfaces.gateways.email import EmailAdapter
-
-            email_adapter = EmailAdapter(
-                state_repo=container.get(StateRepositoryPort),
-                llm=container.get(LLMPort),
-                imap_server=_settings.email_imap_server,
-                imap_user=_settings.email_imap_user,
-                imap_password=_settings.email_imap_password,
-                smtp_server=_settings.email_smtp_server,
-                smtp_port=_settings.email_smtp_port,
-                from_address=_settings.email_from_address,
-                poll_interval_seconds=_settings.email_poll_interval_seconds,
-                trusted_authserv_ids=_settings.email_trusted_authserv_ids,
-            )
-            await email_adapter.start()
-            app.state.email_adapter = email_adapter
-        except Exception as exc:
-            logger.warning("Email gateway failed to start: %s", exc)
-    else:
-        logger.info(
-            "Email gateway disabled (set EMAIL_IMAP_USER and EMAIL_IMAP_PASSWORD to enable)"
-        )
+    _gateway_registry = GatewayRegistry()
+    _gateway_registry.discover()
+    gateways = await _gateway_registry.start_configured(_settings, container)
+    app.state.gateways = gateways
 
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────
     event_bus.unsubscribe(broadcaster.publish)
-    if telegram_adapter is not None:
-        await telegram_adapter.stop()
-    if signal_adapter is not None:
-        await signal_adapter.stop()
-    if email_adapter is not None:
-        await email_adapter.stop()
+    from weebot.interfaces.gateways.registry import stop_all
+
+    await stop_all(gateways)
     # Persist circuit breaker state before shutdown
     try:
         import importlib as _il

@@ -27,10 +27,16 @@ from weebot.application.services.gateway_command_dispatcher import (
     build_default_dispatcher,
 )
 from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
+from weebot.domain.models.gateway_command import (
+    NewSession,
+    SetModel,
+    StopRun,
+)
 from weebot.domain.models.gateway_session import GatewaySessionKey
 from weebot.domain.models.session import Session
 from weebot.interfaces.factories import run_scope
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -51,6 +57,37 @@ class TelegramApiError(Exception):
 
 class TelegramAdapter(GatewayAdapter):
     """Bot API adapter for Telegram messaging with session continuity."""
+
+    name = "telegram"
+    # Bot API: 4096 characters a message; sendPhoto/sendDocument/sendVoice/sendVideo.
+    capabilities = ChannelCapabilities(
+        edit=True,
+        typing=True,
+        threads=True,
+        max_len=4096,
+        media=frozenset({"image", "document", "voice", "video"}),
+    )
+
+    @classmethod
+    def configured(cls, settings) -> bool:
+        return bool(getattr(settings, "telegram_bot_token", None))
+
+    @classmethod
+    def build(cls, settings, container) -> TelegramAdapter | None:
+        from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
+
+        flow_resolver = GatewayFlowResolver(
+            # From the container, so session deletion purges this store.
+            store=container.get(IGatewaySessionStorePort),
+            session_ttl_seconds=settings.gateway_session_ttl_seconds,
+            max_sessions_per_platform=settings.gateway_max_sessions_per_platform,
+        )
+        return cls(
+            token=settings.telegram_bot_token,
+            state_repo=container.get(StateRepositoryPort),
+            llm=container.get(LLMPort),
+            flow_resolver=flow_resolver,
+        )
 
     def __init__(
         self,
@@ -227,12 +264,12 @@ class TelegramAdapter(GatewayAdapter):
 
         # Check for slash commands first
         if text.startswith("/"):
-            cmd_response = self._command_dispatcher.dispatch(text)
-            if cmd_response is not None:
-                return await self._handle_command_response(cmd_response, key)
+            command_result = self._command_dispatcher.dispatch(text)
+            if command_result is not None:
+                return await self.apply_command(command_result, key)
 
         if text.strip().lower() in ("new session", "start over"):
-            return await self._handle_command_response("OK_NEW_SESSION", key)
+            return await self.apply_command(NewSession(), key)
 
         chat = key.composite_key()
         if chat in self._runs:
@@ -298,24 +335,26 @@ class TelegramAdapter(GatewayAdapter):
         session = Session(id=flow_session_id, user_id=user_id, agent_id="telegram-agent")
         return session
 
-    async def _handle_command_response(self, cmd_response: str, key: GatewaySessionKey) -> str:
-        """Handle special command responses that require action beyond text.
+    def _command_handlers(self):
+        return {
+            **super()._command_handlers(),
+            NewSession: self._cmd_new_session,
+            StopRun: self._cmd_stop,
+            SetModel: self._cmd_set_model,
+        }
 
-        Commands like /new and /reset return special prefixes that instruct
-        the adapter to perform actions.
-        """
-        if cmd_response == "OK_NEW_SESSION" or cmd_response == "OK_RESET_SESSION":
-            await self._stop_run(key.composite_key())
-            await self._flow_resolver.close(key)
-            return "🔄 Session reset. Starting fresh."
-        if cmd_response == "OK_STOP":
-            if await self._stop_run(key.composite_key()):
-                return "⏹ Task stopped."
-            return "Nothing is running."
-        if cmd_response.startswith("OK_SET_MODEL:"):
-            model = cmd_response.split(":", 1)[1]
-            return f"✅ Model set to: {model}"
-        return cmd_response
+    async def _cmd_new_session(self, result: NewSession, key: GatewaySessionKey) -> str:
+        await self._stop_run(key.composite_key())
+        await self._flow_resolver.close(key)
+        return "🔄 Session reset. Starting fresh."
+
+    async def _cmd_stop(self, result: StopRun, key: GatewaySessionKey) -> str:
+        if await self._stop_run(key.composite_key()):
+            return "⏹ Task stopped."
+        return "Nothing is running."
+
+    async def _cmd_set_model(self, result: SetModel, key: GatewaySessionKey) -> str:
+        return f"✅ Model set to: {result.model}"
 
     async def send_response(self, response: GatewayResponse) -> bool:
         if not response.success:
@@ -338,11 +377,14 @@ class TelegramAdapter(GatewayAdapter):
 
         # Text-only fallback
         url = f"{self._api}/sendMessage"
-        payload = {"chat_id": chat_id, "text": response.text[:4096]}
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as resp:
-                    return resp.status == 200
+                for piece in self.split_text(response.text):
+                    payload = {"chat_id": chat_id, "text": piece}
+                    async with session.post(url, json=payload) as resp:
+                        if resp.status != 200:
+                            return False
+            return True
         except Exception as exc:
             logger.warning("Telegram send failed: %s", exc)
             return False

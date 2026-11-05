@@ -20,12 +20,26 @@ import random
 import re
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, ClassVar
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.gateway_auth import GatewayAuth
+from weebot.domain.models.gateway_command import (
+    CommandResult,
+    Compress,
+    ListTools,
+    McpStatus,
+    NewSession,
+    Reply,
+    ResumeSession,
+    SetModel,
+    StopRun,
+)
+from weebot.domain.models.gateway_session import GatewaySessionKey
 from weebot.utils.backoff import BackoffConfig
 
 
@@ -94,8 +108,54 @@ _AUDIO_VOICE_DIRECTIVE = "[[audio_as_voice]]"
 _DOCUMENT_DIRECTIVE = "[[as_document]]"
 
 
+@dataclass(frozen=True)
+class ChannelCapabilities:
+    """What a channel can do, so the base can adapt a reply to it (H28).
+
+    ``max_len`` is the longest text one message carries (0: no limit). ``media`` names the kinds
+    the adapter can send natively (``image``, ``document``, ``voice``, ``video``).
+    """
+
+    edit: bool = False
+    typing: bool = False
+    threads: bool = False
+    max_len: int = 0
+    media: frozenset[str] = frozenset()
+    voice_in: bool = False
+
+
+# The slash command each CommandResult comes from, for the "not available" reply.
+_COMMAND_NAMES: dict[type, str] = {
+    NewSession: "/new",
+    StopRun: "/stop",
+    SetModel: "/model set",
+    ResumeSession: "/resume",
+    ListTools: "/tools",
+    McpStatus: "/mcp",
+    Compress: "/compress",
+}
+
+
 class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
+
+    # The registry name (``telegram``) and what the channel can do. Subclasses set both.
+    name: ClassVar[str] = ""
+    capabilities: ClassVar[ChannelCapabilities] = ChannelCapabilities()
+
+    @classmethod
+    def configured(cls, settings: Any) -> bool:
+        """Whether *settings* ask for this adapter to run (a token, an account, a mailbox)."""
+        return False
+
+    @classmethod
+    def build(cls, settings: Any, container: Any) -> GatewayAdapter | None:
+        """The adapter for a process that runs it from configuration, or None.
+
+        Only long-running adapters (long polling) are built here; webhook adapters are built
+        per request by their routers.
+        """
+        return None
 
     def __init__(self, llm_port: LLMPort) -> None:
         # Every adapter still receives `llm` from the entry point's container; nothing here
@@ -150,6 +210,41 @@ class GatewayAdapter(ABC):
     async def send_response(self, response: GatewayResponse) -> bool:
         """Send a response back to the external platform."""
         ...
+
+    # ── slash commands (typed results) ─────────────────────────────────────────
+
+    def _command_handlers(
+        self,
+    ) -> dict[type, Callable[[Any, GatewaySessionKey], Awaitable[str]]]:
+        """CommandResult type -> handler. A subclass extends this with what it can do."""
+        return {Reply: self._cmd_reply}
+
+    async def _cmd_reply(self, result: Reply, key: GatewaySessionKey) -> str:
+        return result.text
+
+    async def apply_command(self, result: CommandResult, key: GatewaySessionKey) -> str:
+        """Do what a command asks and return the text to send back."""
+        handler = self._command_handlers().get(type(result))
+        if handler is None:
+            command = _COMMAND_NAMES.get(type(result), "That command")
+            return f"{command} is not available on {self.name or 'this channel'} yet."
+        return await handler(result, key)
+
+    def split_text(self, text: str) -> list[str]:
+        """*text* in pieces of at most ``capabilities.max_len``, cut at a break or a space."""
+        limit = self.capabilities.max_len
+        if limit <= 0 or len(text) <= limit:
+            return [text]
+        pieces: list[str] = []
+        rest = text
+        while len(rest) > limit:
+            cut = max(rest.rfind(sep, 0, limit) for sep in ("\n\n", "\n", " "))
+            cut = cut if cut > 0 else limit
+            pieces.append(rest[:cut].rstrip())
+            rest = rest[cut:].lstrip()
+        if rest:
+            pieces.append(rest)
+        return pieces
 
     async def handle(self, message: GatewayMessage) -> str | None:
         """The text to act on for an incoming message.

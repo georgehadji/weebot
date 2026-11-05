@@ -24,6 +24,7 @@ from email.mime.text import MIMEText
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -99,6 +100,32 @@ def _sender_authenticated(parsed, sender: str, trusted_ids: frozenset[str]) -> b
 
 class EmailAdapter(GatewayAdapter):
     """Adapter for email messaging via IMAP/SMTP."""
+
+    name = "email"
+    # A mail has no practical length limit (only the 2000 characters read from an inbound body).
+    capabilities = ChannelCapabilities(threads=True)
+
+    @classmethod
+    def configured(cls, settings) -> bool:
+        return bool(
+            getattr(settings, "email_imap_user", None)
+            and getattr(settings, "email_imap_password", None)
+        )
+
+    @classmethod
+    def build(cls, settings, container) -> EmailAdapter | None:
+        return cls(
+            state_repo=container.get(StateRepositoryPort),
+            llm=container.get(LLMPort),
+            imap_server=settings.email_imap_server,
+            imap_user=settings.email_imap_user,
+            imap_password=settings.email_imap_password,
+            smtp_server=settings.email_smtp_server,
+            smtp_port=settings.email_smtp_port,
+            from_address=settings.email_from_address,
+            poll_interval_seconds=settings.email_poll_interval_seconds,
+            trusted_authserv_ids=settings.email_trusted_authserv_ids,
+        )
 
     def __init__(
         self,

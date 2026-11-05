@@ -24,6 +24,7 @@ from nacl.signing import VerifyKey
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -46,6 +47,10 @@ class DiscordAdapter(GatewayAdapter):
         state_repo: Session state repository for PlanActFlow.
         llm: LLM port for agent execution.
     """
+
+    name = "discord"
+    # Interaction followups: 2000 characters; this adapter sends text only.
+    capabilities = ChannelCapabilities(edit=True, threads=True, max_len=2000)
 
     def __init__(
         self,
