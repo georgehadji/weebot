@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -11,11 +12,17 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
+from weebot.application.ports.mcp_elicitation_port import McpElicitationPort
+from weebot.application.ports.mcp_sampling_port import CallContext, McpSamplingPort
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.core.child_env import build_child_env
 from weebot.core.mcp_naming import build_namespaced_name
 from weebot.core.mcp_trust import register_server, unregister_server
 from weebot.domain.models.mcp import MCPServerConfig, MCPTransport
+from weebot.infrastructure.mcp.session_callbacks import (
+    make_elicitation_callback,
+    make_sampling_callback,
+)
 
 try:
     from mcp.client.streamable_http import streamablehttp_client
@@ -36,6 +43,9 @@ class MCPClientManager:
         max_retries: int = 3,
         base_delay: float = 1.0,
         max_delay: float = 10.0,
+        sampling_handler: McpSamplingPort | None = None,
+        call_context: Callable[[], CallContext] | None = None,
+        elicitation_broker: McpElicitationPort | None = None,
     ):
         self._config = config or {}
         self._clients: dict[str, ClientSession] = {}
@@ -52,6 +62,11 @@ class MCPClientManager:
         self._max_delay = max_delay
         self._connection_attempts: dict[str, int] = {}
         self._registered: set[str] = set()
+        self._sampling_handler = sampling_handler
+        self._elicitation_broker = elicitation_broker
+        # Who is calling: the session and taint of the running step, supplied by the wiring.
+        self._call_context = call_context or (lambda: CallContext("", False))
+        self._in_flight: dict[str, list[CallContext]] = {}
 
     @property
     def has_servers(self) -> bool:
@@ -156,10 +171,35 @@ class MCPClientManager:
         self, config: MCPServerConfig, streams: tuple[Any, ...], stack: AsyncExitStack
     ) -> None:
         read_stream, write_stream = streams[0], streams[1]
-        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+        sampling = None
+        if self._sampling_handler is not None and config.sampling.enabled:
+            sampling = make_sampling_callback(
+                config.name, config.sampling, self._sampling_handler, self._newest_call(config.name)
+            )
+        elicitation = None
+        if self._elicitation_broker is not None and config.elicitation_enabled:
+            elicitation = make_elicitation_callback(
+                config.name, self._elicitation_broker, self._newest_call(config.name)
+            )
+        session = await stack.enter_async_context(
+            ClientSession(
+                read_stream,
+                write_stream,
+                sampling_callback=sampling,
+                elicitation_callback=elicitation,
+            )
+        )
         await asyncio.wait_for(session.initialize(), timeout=config.timeout_seconds)
         self._clients[config.name] = session
         await self._cache_tools(config.name, session)
+
+    def _newest_call(self, server_name: str) -> Callable[[], CallContext | None]:
+        """The call a callback from *server_name* answers: the newest one in flight."""
+        def newest() -> CallContext | None:
+            flight = self._in_flight.get(server_name)
+            return flight[-1] if flight else None
+
+        return newest
 
     @staticmethod
     def _request_headers(config: MCPServerConfig) -> dict[str, str]:
@@ -281,11 +321,16 @@ class MCPClientManager:
             if not session:
                 raise RuntimeError(f"MCP server {server_name} still not connected after reconnect")
 
+        # The session and taint of this call, for a sampling request the server makes during it.
+        call = self._call_context()
+        self._in_flight.setdefault(server_name, []).append(call)
         try:
             result = await session.call_tool(original_name, arguments)
         except Exception as exc:
             logger.warning("MCP tool call failed for %s:%s: %s", server_name, original_name, exc)
             raise RuntimeError(f"MCP tool call failed: {exc}") from exc
+        finally:
+            self._in_flight[server_name].remove(call)
 
         content: list[str] = []
         if hasattr(result, "content") and result.content:
