@@ -12,8 +12,16 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from mcp.shared.context import RequestContext
-from mcp.types import CreateMessageRequestParams, CreateMessageResult, ErrorData, TextContent
+from mcp.types import (
+    CreateMessageRequestParams,
+    CreateMessageResult,
+    ElicitRequestParams,
+    ElicitResult,
+    ErrorData,
+    TextContent,
+)
 
+from weebot.application.ports.mcp_elicitation_port import McpElicitationPort
 from weebot.application.ports.mcp_sampling_port import CallContext, McpSamplingPort, SamplingRequest
 from weebot.domain.models.mcp import MCPSamplingPolicy
 
@@ -68,5 +76,34 @@ def make_sampling_callback(
             model=result.model,
             stopReason=result.stop_reason,
         )
+
+    return callback
+
+
+ElicitationCallback = Callable[
+    [RequestContext, ElicitRequestParams], Awaitable[ElicitResult | ErrorData]
+]
+
+
+def make_elicitation_callback(
+    server_name: str,
+    broker: McpElicitationPort,
+    current_call: Callable[[], CallContext | None],
+) -> ElicitationCallback:
+    async def callback(
+        context: RequestContext, params: ElicitRequestParams
+    ) -> ElicitResult | ErrorData:
+        # Only the in-band form is supported; a URL request would send the person to a page.
+        if getattr(params, "mode", "form") != "form":
+            logger.info("elicitation from %s declined: %s mode", server_name, params.mode)
+            return ElicitResult(action="decline")
+        call = current_call()
+        reply = await broker.elicit(
+            server_name,
+            params.message,
+            dict(params.requestedSchema),
+            session_id=call.session_id if call else "",
+        )
+        return ElicitResult(action=reply.action, content=reply.content)
 
     return callback

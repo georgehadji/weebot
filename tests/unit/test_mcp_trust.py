@@ -187,7 +187,7 @@ async def test_a_server_gets_the_callback_only_when_its_policy_enables_sampling(
     captured = []
 
     class FakeSession:
-        def __init__(self, r, w, sampling_callback=None):
+        def __init__(self, r, w, sampling_callback=None, elicitation_callback=None):
             captured.append(sampling_callback)
 
         async def __aenter__(self):

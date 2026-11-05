@@ -12,13 +12,17 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
+from weebot.application.ports.mcp_elicitation_port import McpElicitationPort
 from weebot.application.ports.mcp_sampling_port import CallContext, McpSamplingPort
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.core.child_env import build_child_env
 from weebot.core.mcp_naming import build_namespaced_name
 from weebot.core.mcp_trust import register_server, unregister_server
 from weebot.domain.models.mcp import MCPServerConfig, MCPTransport
-from weebot.infrastructure.mcp.session_callbacks import make_sampling_callback
+from weebot.infrastructure.mcp.session_callbacks import (
+    make_elicitation_callback,
+    make_sampling_callback,
+)
 
 try:
     from mcp.client.streamable_http import streamablehttp_client
@@ -41,6 +45,7 @@ class MCPClientManager:
         max_delay: float = 10.0,
         sampling_handler: McpSamplingPort | None = None,
         call_context: Callable[[], CallContext] | None = None,
+        elicitation_broker: McpElicitationPort | None = None,
     ):
         self._config = config or {}
         self._clients: dict[str, ClientSession] = {}
@@ -58,6 +63,7 @@ class MCPClientManager:
         self._connection_attempts: dict[str, int] = {}
         self._registered: set[str] = set()
         self._sampling_handler = sampling_handler
+        self._elicitation_broker = elicitation_broker
         # Who is calling: the session and taint of the running step, supplied by the wiring.
         self._call_context = call_context or (lambda: CallContext("", False))
         self._in_flight: dict[str, list[CallContext]] = {}
@@ -167,19 +173,29 @@ class MCPClientManager:
         read_stream, write_stream = streams[0], streams[1]
         sampling = None
         if self._sampling_handler is not None and config.sampling.enabled:
-            name = config.name
             sampling = make_sampling_callback(
-                name,
-                config.sampling,
-                self._sampling_handler,
-                lambda: self._in_flight[name][-1] if self._in_flight.get(name) else None,
+                config.name, config.sampling, self._sampling_handler, self._newest_call(config.name)
+            )
+        elicitation = None
+        if self._elicitation_broker is not None and config.elicitation_enabled:
+            elicitation = make_elicitation_callback(
+                config.name, self._elicitation_broker, self._newest_call(config.name)
             )
         session = await stack.enter_async_context(
-            ClientSession(read_stream, write_stream, sampling_callback=sampling)
+            ClientSession(
+                read_stream,
+                write_stream,
+                sampling_callback=sampling,
+                elicitation_callback=elicitation,
+            )
         )
         await asyncio.wait_for(session.initialize(), timeout=config.timeout_seconds)
         self._clients[config.name] = session
         await self._cache_tools(config.name, session)
+
+    def _newest_call(self, server_name: str) -> Callable[[], CallContext | None]:
+        """The call a callback from *server_name* answers: the newest one in flight."""
+        return lambda: self._in_flight[server_name][-1] if self._in_flight.get(server_name) else None
 
     @staticmethod
     def _request_headers(config: MCPServerConfig) -> dict[str, str]:

@@ -124,6 +124,10 @@ class MCPServerConfig(BaseModel):
     # Sampling policy
     sampling: MCPSamplingPolicy = Field(default_factory=MCPSamplingPolicy)
 
+    # Let the server ask the person a question mid-call. Off by default: the text is the
+    # server's, so it is the server's words in front of the user.
+    elicitation_enabled: bool = Field(default=False)
+
     # Timeouts
     timeout_seconds: int = Field(default=30, ge=5, le=300)
     parallel_calls: bool = Field(default=True, description="Allow concurrent tool calls")

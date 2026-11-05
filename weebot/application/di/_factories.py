@@ -515,6 +515,7 @@ class FactoriesMixin:
                         config={"mcpServers": loaded},
                         sampling_handler=self._create_mcp_sampling_handler(loaded),
                         call_context=lambda: CallContext(current_session_id(), current_tainted()),
+                        elicitation_broker=self._create_mcp_elicitation_broker(loaded),
                     )
                 _logging.getLogger(__name__).warning("MCP config %s does not exist", config_path)
         except Exception as exc:
@@ -540,6 +541,18 @@ class FactoriesMixin:
             llm_provider=self._create_llm_for_role("subagent"),
             cost_meter=self._maybe_get(SESSION_COST_METER),
         )
+
+    @staticmethod
+    def _create_mcp_elicitation_broker(servers: dict):
+        """The elicitation broker (H12), or None while no configured server enables it."""
+        if not any(
+            isinstance(cfg, dict) and cfg.get("elicitation_enabled") for cfg in servers.values()
+        ):
+            return None
+        from weebot.application.services.elicitation_broker import ElicitationBroker
+        from weebot.application.services.tool_approval import _input
+
+        return ElicitationBroker(ask=_input)
 
     @staticmethod
     def _create_mcp_tool_retrieval_service(registry):
