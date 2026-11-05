@@ -683,6 +683,7 @@ class FactoriesMixin:
             # The workflow orchestrator tool's progress events, onto the shared bus.
             "workflow_events": EventBrokerAdapter(bus) if bus is not None else None,
             "browser_factory": self._playwright_adapter,
+            "credential_vault": self._create_credential_vault(),
             "kernel_manager": self._maybe_get(KernelManager),
             "rerank": self._maybe_get(RerankPort),
             "tool_config": self._maybe_get(ToolConfig),
@@ -691,6 +692,25 @@ class FactoriesMixin:
                 if kwargs[required[name]] is not None
             },
         }
+
+    @staticmethod
+    def _create_credential_vault():
+        """The credential vault (H19), or None when no vault file is set or it is invalid."""
+        from weebot.config.settings import get_settings
+
+        path = get_settings().credential_vault_path
+        if not path:
+            return None
+        from weebot.config.secret_accessor import SecretAccessor
+        from weebot.infrastructure.secrets.resolver import default_sources
+        from weebot.infrastructure.secrets.vault import ConfiguredVault
+
+        try:
+            sources = default_sources(SecretAccessor.process_environ())
+            return ConfiguredVault.from_file(path, sources)
+        except (OSError, ValueError) as exc:
+            _logging.getLogger(__name__).error("credential vault %s not loaded: %s", path, exc)
+            return None
 
     @staticmethod
     def _playwright_adapter():

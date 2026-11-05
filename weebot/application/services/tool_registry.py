@@ -515,7 +515,13 @@ class RoleBasedToolRegistry:
                     if _shared_browser_adapter is None:
                         logger.debug("Skipping tool %s: no browser_factory wired", name)
                         continue
-                    tool = tool_cls(browser=_shared_browser_adapter)
+                    if name == "advanced_browser":
+                        tool = tool_cls(
+                            browser=_shared_browser_adapter,
+                            credential_vault=wired.get("credential_vault"),
+                        )
+                    else:
+                        tool = tool_cls(browser=_shared_browser_adapter)
                 elif name == "web_scraper" and browser_factory is not None:
                     # Not the shared adapter above: a scrape gets a fresh browser per call,
                     # so it never navigates the page the agent is driving.
