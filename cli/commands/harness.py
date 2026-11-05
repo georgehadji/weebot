@@ -19,6 +19,32 @@ def _answer_scorer(container):
     return container.get(ScoringPort)
 
 
+def _usage_tally(container):
+    """A UsageTally already listening on the container's event bus (tokens and USD per run)."""
+    from weebot.application.harness.metrics import UsageTally
+    from weebot.application.ports.event_bus_port import EventBusPort
+
+    tally = UsageTally()
+    container.get(EventBusPort).subscribe_domain(tally.on_domain_event)
+    return tally
+
+
+def _cost_line(records: list[dict]) -> str:
+    """Tokens, USD and edit-failure loops per solved task, for the plan's before/after tables."""
+    solved = sum(1 for r in records if r.get("passed"))
+    total = {k: sum(r.get("metrics", {}).get(k, 0) for r in records) for k in _METRIC_KEYS}
+    tokens = total["prompt_tokens"] + total["completion_tokens"]
+    per = max(solved, 1)
+    return (
+        f"Per solved task: {tokens / per:,.0f} tokens, ${total['cost_usd'] / per:.4f}, "
+        f"{total['llm_calls'] / per:.1f} LLM calls. Edit-failure loops: "
+        f"{total['edit_failure_loops']}."
+    )
+
+
+_METRIC_KEYS = ("llm_calls", "prompt_tokens", "completion_tokens", "cost_usd", "edit_failure_loops")
+
+
 @click.group()
 def benchmark() -> None:
     """Run weebot agents against SIA-compatible benchmark tasks."""
@@ -106,6 +132,7 @@ def benchmark_run(
             scorer=TaskScorer(),
             skill_name=skill_name,
             answer_scorer=_answer_scorer(container),
+            usage=_usage_tally(container),
         )
         result = await runner.run_task(task, sample_idx)
         console.print(json.dumps(result.to_dict(), indent=2))
@@ -147,6 +174,7 @@ def benchmark_batch(
             scorer=TaskScorer(),
             skill_name=skill_name,
             answer_scorer=_answer_scorer(container),
+            usage=_usage_tally(container),
         )
         results = await runner.run_batch(tasks, concurrency=concurrency)
         records = [r.to_dict() for r in results]
@@ -156,6 +184,7 @@ def benchmark_batch(
 
         passed = sum(1 for r in results if r.passed)
         console.print(f"[green]{passed}[/green]/{len(results)} passed. Results → {output}")
+        console.print(_cost_line(records))
 
     asyncio.run(_run())
 
@@ -177,6 +206,7 @@ def benchmark_report(results_file: str) -> None:
     console.print(
         f"[bold]Results:[/bold] {passed}/{len(records)} passed, avg score {avg_score:.3f}"
     )
+    console.print(_cost_line(records))
     console.print("")
 
     for r in records:

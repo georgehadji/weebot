@@ -18,6 +18,7 @@ from collections.abc import Callable
 from weebot.domain.models.benchmark_task import WeebotTask
 from weebot.domain.models.session import Session
 from weebot.domain.models.trajectory import TrajectorySummary
+from weebot.application.harness.metrics import RunMetrics, UsageTally, count_tool_events
 from weebot.application.harness.scorer import TaskScorer
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class BenchmarkResult:
     passed: bool
     answer: str | None = None
     error: str | None = None
+    metrics: RunMetrics = RunMetrics()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,6 +44,7 @@ class BenchmarkResult:
             "passed": self.passed,
             "answer": self.answer,
             "error": self.error,
+            "metrics": self.metrics.to_dict(),
         }
 
 
@@ -63,11 +66,14 @@ class BenchmarkRunner:
         skill_name: str = "general",
         skill_version: int = 0,
         answer_scorer: Any | None = None,
+        usage: UsageTally | None = None,
     ) -> None:
         self._flow_factory = flow_factory
         self._scorer = scorer or TaskScorer()
         # Optional ScoringPort for samples with an expected answer (WEEBOT_SCORING_MODE).
         self._answer_scorer = answer_scorer
+        # Optional: LLM calls, tokens and USD per run. Subscribe it to the bus before running.
+        self._usage = usage
         self._skill_name = skill_name
         self._skill_version = skill_version
 
@@ -91,14 +97,21 @@ class BenchmarkRunner:
             context={"skill_name": self._skill_name, "skill_version": self._skill_version},
         )
 
+        tool_events: list[Any] = []
         try:
             flow = self._flow_factory(session)
-            async for _ in flow.run(sample.prompt):
-                pass
+            async for event in flow.run(sample.prompt):
+                if getattr(event, "type", "") == "tool":
+                    tool_events.append(event)
         except Exception as exc:
             logger.warning("Flow failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
             return BenchmarkResult(
-                task_id=task.task_id, sample_idx=sample_idx, score=0.0, passed=False, error=str(exc)
+                task_id=task.task_id,
+                sample_idx=sample_idx,
+                score=0.0,
+                passed=False,
+                error=str(exc),
+                metrics=self._metrics(session_id, tool_events),
             )
 
         # PlanActFlow updates its own _session immutably — use that for scoring.
@@ -125,7 +138,13 @@ class BenchmarkRunner:
             score=score,
             passed=score >= task.pass_threshold,
             answer=answer,
+            metrics=self._metrics(session_id, tool_events),
         )
+
+    def _metrics(self, session_id: str, tool_events: list[Any]) -> RunMetrics:
+        calls, prompt, completion, cost = self._usage.of(session_id) if self._usage else (0,) * 4
+        tool_calls, tool_errors, loops = count_tool_events(tool_events)
+        return RunMetrics(calls, prompt, completion, cost, tool_calls, tool_errors, loops)
 
     async def run_batch(
         self, tasks: list[WeebotTask], concurrency: int = 4

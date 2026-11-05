@@ -16,6 +16,15 @@ Loaded by `weebot/application/harness/loader.py` (`TaskLoader.load_all_from_dir`
 - List them: `python -m cli.main benchmark list tasks/evals`.
 - The browser, email and LinkedIn groups also have runners: `scripts/run_browser_tasks.py`, `scripts/run_email_tasks.py`, `scripts/run_linkedin_tasks.py` (`--dry-run` prints the prompts).
 
+## Numbers an eval-gated PR attaches
+
+`benchmark batch` writes a `metrics` object per result (`weebot/application/harness/metrics.py`): `llm_calls`, `prompt_tokens`, `completion_tokens`, `cost_usd`, `tool_calls`, `tool_errors`, and `edit_failure_loops` (two or more failed `file_editor` calls in a row on one file). It prints a "Per solved task" line (tokens, USD, LLM calls); `benchmark report` prints the same from a results file. Run the batch on `main` and on the PR branch and attach both lines.
+
+- `edit_heavy/` (H6, H20): multi-file edits; the scorer reads the files the agent leaves in `Output/evals/edit_heavy/`, so delete that folder before each run.
+- `long_context/` (H9, H10): 40 or more separate tool results per run, then an answer that depends on them. Check `metrics.tool_calls` to see the run really had that many.
+
+Run only the two: copy them to a folder of their own (`benchmark batch` takes one directory), or run them with `benchmark run tasks/evals/<name> --sample N`. Live runs are billed.
+
 ## What passes
 
 A sample passes when its score is at least `pass_threshold`, 0.5 by default (`weebot/domain/models/benchmark_task.py:36`; the loader does not set it per task). `TaskScorer` (`weebot/application/harness/scorer.py:1-9`) scores in this order: the task's `evaluate.py`; with no `expected_answer`, the session status (completed 1.0, failed 0.0, anything else 0.5); an exact match with the last assistant message (1.0); otherwise word overlap (Jaccard) between the two. So without `evaluate.py` a loose paraphrase can pass at 0.5: write an `evaluate.py` for any task where that is too lenient.
