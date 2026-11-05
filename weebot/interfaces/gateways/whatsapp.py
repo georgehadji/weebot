@@ -20,6 +20,7 @@ import aiohttp
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -33,6 +34,10 @@ class WhatsAppAdapter(GatewayAdapter):
     """Adapter for WhatsApp Business Cloud API messaging."""
 
     API_BASE = "https://graph.facebook.com/v19.0"
+
+    name = "whatsapp"
+    # Cloud API text body: 4096 characters; this adapter sends text only.
+    capabilities = ChannelCapabilities(max_len=4096)
 
     def __init__(
         self,

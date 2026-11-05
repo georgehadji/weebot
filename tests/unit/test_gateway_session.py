@@ -13,6 +13,15 @@ from weebot.application.services.gateway_command_dispatcher import (
     build_default_dispatcher,
 )
 from weebot.core.gateway_auth import GatewayAuth
+from weebot.domain.models.gateway_command import (
+    Compress,
+    ListTools,
+    McpStatus,
+    NewSession,
+    Reply,
+    SetModel,
+    StopRun,
+)
 
 
 class TestGatewaySessionKey:
@@ -169,27 +178,27 @@ class TestGatewayCommandDispatcher:
 
     def test_help_command(self):
         result = self.dispatcher.dispatch("/help")
-        assert "Available commands" in result
+        assert isinstance(result, Reply) and "Available commands" in result.text
 
     def test_new_command(self):
         result = self.dispatcher.dispatch("/new")
-        assert result == "OK_NEW_SESSION"
+        assert result == NewSession()
 
     def test_reset_command(self):
         result = self.dispatcher.dispatch("/reset")
-        assert result == "OK_RESET_SESSION"
+        assert result == NewSession()
 
     def test_stop_command(self):
         result = self.dispatcher.dispatch("/stop")
-        assert result == "OK_STOP"
+        assert result == StopRun()
 
     def test_model_command(self):
         result = self.dispatcher.dispatch("/model")
-        assert "Current model" in result
+        assert isinstance(result, Reply) and "Current model" in result.text
 
     def test_model_set_command(self):
         result = self.dispatcher.dispatch("/model set gpt-4")
-        assert result == "OK_SET_MODEL:gpt-4"
+        assert result == SetModel("gpt-4")
 
     def test_unknown_command(self):
         result = self.dispatcher.dispatch("/nonexistent")
@@ -205,15 +214,15 @@ class TestGatewayCommandDispatcher:
 
     def test_tools_command(self):
         result = self.dispatcher.dispatch("/tools")
-        assert result == "OK_LIST_TOOLS"
+        assert result == ListTools()
 
     def test_compress_command(self):
         result = self.dispatcher.dispatch("/compress")
-        assert result == "OK_COMPRESS"
+        assert result == Compress()
 
     def test_mcp_command(self):
         result = self.dispatcher.dispatch("/mcp")
-        assert result == "OK_MCP_STATUS"
+        assert result == McpStatus()
 
     def test_list_commands(self):
         cmds = self.dispatcher.list_commands()
@@ -228,7 +237,7 @@ class TestGatewayCommandDispatcher:
         def _ping() -> str:
             return "pong"
 
-        assert dispatcher.dispatch("/ping") == "pong"
+        assert dispatcher.dispatch("/ping") == Reply("pong")
         assert dispatcher.is_command("/ping") is True
 
 

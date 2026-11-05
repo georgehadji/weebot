@@ -22,6 +22,18 @@ import logging
 import shlex
 from collections.abc import Callable
 
+from weebot.domain.models.gateway_command import (
+    CommandResult,
+    Compress,
+    ListTools,
+    McpStatus,
+    NewSession,
+    Reply,
+    ResumeSession,
+    SetModel,
+    StopRun,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,9 +45,11 @@ class GatewayCommandDispatcher:
     """
 
     def __init__(self) -> None:
-        self._commands: dict[str, Callable[..., str]] = {}
+        self._commands: dict[str, Callable[..., CommandResult | str]] = {}
 
-    def register(self, command: str, handler: Callable[..., str] | None = None) -> Callable | None:
+    def register(
+        self, command: str, handler: Callable[..., CommandResult | str] | None = None
+    ) -> Callable | None:
         """Register a handler for *command* (without the leading /).
 
         Can be used as a decorator: @dispatcher.register("help")
@@ -43,14 +57,15 @@ class GatewayCommandDispatcher:
 
         Args:
             command: Command name (e.g. "help", "new")
-            handler: Callable that takes optional args and returns a response string.
+            handler: Callable that takes optional args and returns a CommandResult (a plain
+                string counts as ``Reply``).
 
         Returns:
             The handler if used as a decorator, None otherwise.
         """
         normalized = command.lower().strip()
 
-        def _register(h: Callable[..., str]) -> Callable[..., str]:
+        def _register(h: Callable[..., CommandResult | str]) -> Callable[..., CommandResult | str]:
             self._commands[normalized] = h
             logger.debug("Registered gateway command: /%s", normalized)
             return h
@@ -67,14 +82,14 @@ class GatewayCommandDispatcher:
         cmd, _, _ = self._parse(text)
         return cmd in self._commands
 
-    def dispatch(self, text: str) -> str | None:
+    def dispatch(self, text: str) -> CommandResult | None:
         """Parse *text* and dispatch to the matching command handler.
 
         Args:
             text: The raw message text from the user.
 
         Returns:
-            The handler's response string, or None if the command is unknown.
+            The handler's CommandResult, or None if the command is unknown.
         """
         if not text or not text.startswith("/"):
             return None
@@ -85,10 +100,11 @@ class GatewayCommandDispatcher:
             return None
 
         try:
-            return handler(*args) if args else handler()
+            result = handler(*args) if args else handler()
         except Exception as exc:
             logger.error("Command /%s failed: %s", cmd, exc)
-            return f"Command /{cmd} failed: {exc}"
+            return Reply(f"Command /{cmd} failed: {exc}")
+        return Reply(result) if isinstance(result, str) else result
 
     @staticmethod
     def _parse(text: str) -> tuple[str, list[str], str]:
@@ -118,15 +134,14 @@ class GatewayCommandDispatcher:
 def build_default_dispatcher() -> GatewayCommandDispatcher:
     """Create a GatewayCommandDispatcher with the standard commands registered.
 
-    These handlers return simple strings; the gateway adapter is responsible
-    for wrapping them in the appropriate response type.
+    The handlers return CommandResult values; each gateway adapter maps a type to an action.
     """
     dispatcher = GatewayCommandDispatcher()
 
     @dispatcher.register("help")
-    def _help() -> str:
+    def _help() -> CommandResult:
         """Show available commands."""
-        return (
+        return Reply(
             "Available commands:\n"
             "/new     — Start a new conversation session\n"
             "/reset   — Reset the current session\n"
@@ -140,51 +155,51 @@ def build_default_dispatcher() -> GatewayCommandDispatcher:
         )
 
     @dispatcher.register("new")
-    def _new() -> str:
+    def _new() -> CommandResult:
         """Start a new conversation session."""
-        return "OK_NEW_SESSION"
+        return NewSession()
 
     @dispatcher.register("reset")
-    def _reset() -> str:
+    def _reset() -> CommandResult:
         """Reset the current session."""
-        return "OK_RESET_SESSION"
+        return NewSession()
 
     @dispatcher.register("resume")
-    def _resume() -> str:
+    def _resume() -> CommandResult:
         """Resume the last active session."""
-        return "OK_RESUME_SESSION"
+        return ResumeSession()
 
     @dispatcher.register("stop")
-    def _stop() -> str:
+    def _stop() -> CommandResult:
         """Stop the current task execution."""
-        return "OK_STOP"
+        return StopRun()
 
     @dispatcher.register("model")
-    def _model(*args: str) -> str:
+    def _model(*args: str) -> CommandResult:
         """Show or set the current model.
         Usage: /model [set <model_name>]
         """
         if args and args[0] == "set" and len(args) > 1:
-            return f"OK_SET_MODEL:{args[1]}"
+            return SetModel(args[1])
         from weebot.config.model_refs import MODEL_DI_DEFAULT
 
-        return f"Current model: {MODEL_DI_DEFAULT}"
+        return Reply(f"Current model: {MODEL_DI_DEFAULT}")
 
     @dispatcher.register("tools")
-    def _tools() -> str:
+    def _tools() -> CommandResult:
         """List available tools for the current role."""
-        return "OK_LIST_TOOLS"
+        return ListTools()
 
     @dispatcher.register("mcp")
-    def _mcp_status(*args: str) -> str:
+    def _mcp_status(*args: str) -> CommandResult:
         """Show MCP server status.
         Usage: /mcp
         """
-        return "OK_MCP_STATUS"
+        return McpStatus()
 
     @dispatcher.register("compress")
-    def _compress() -> str:
+    def _compress() -> CommandResult:
         """Force context compression."""
-        return "OK_COMPRESS"
+        return Compress()
 
     return dispatcher

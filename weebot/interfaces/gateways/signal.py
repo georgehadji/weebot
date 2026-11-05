@@ -18,6 +18,7 @@ import aiohttp
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -30,6 +31,23 @@ logger = logging.getLogger(__name__)
 
 class SignalAdapter(GatewayAdapter):
     """Adapter for Signal messaging via signal-cli REST API."""
+
+    name = "signal"
+    # Capped at 5000 characters here; this adapter sends text only.
+    capabilities = ChannelCapabilities(max_len=5000)
+
+    @classmethod
+    def configured(cls, settings) -> bool:
+        return bool(getattr(settings, "signal_account_number", None))
+
+    @classmethod
+    def build(cls, settings, container) -> SignalAdapter | None:
+        return cls(
+            state_repo=container.get(StateRepositoryPort),
+            llm=container.get(LLMPort),
+            rest_url=settings.signal_cli_rest_url,
+            account_number=settings.signal_account_number,
+        )
 
     def __init__(
         self,

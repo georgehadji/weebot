@@ -18,6 +18,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.factories import run_scope
 from weebot.interfaces.gateways.base import (
+    ChannelCapabilities,
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
@@ -29,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 class SlackAdapter(GatewayAdapter):
     """Events API + Webhook adapter for Slack messaging."""
+
+    name = "slack"
+    # Slack text field is cut at 3000 here; this adapter sends text only.
+    capabilities = ChannelCapabilities(edit=True, threads=True, max_len=3000)
 
     def __init__(
         self,
