@@ -72,6 +72,7 @@ from weebot.interfaces.web.routers.discord_webhook import router as discord_rout
 from weebot.interfaces.web.routers.slack_webhook import router as slack_router
 from weebot.interfaces.web.routers.whatsapp_webhook import router as whatsapp_router
 from weebot.interfaces.web.routers.ponytail import router as ponytail_router
+from weebot.interfaces.web.routers.openai_compat import router as openai_compat_router
 from weebot.interfaces.web.event_broadcaster import WebSocketEventBroadcaster
 from weebot.interfaces.web.websocket import manager
 
@@ -626,6 +627,8 @@ def create_app() -> FastAPI:
     app.include_router(slack_router)
     app.include_router(whatsapp_router)
     app.include_router(ponytail_router, prefix="/api")
+    if getattr(_ws, "openai_api_enabled", False):
+        app.include_router(openai_compat_router)
 
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")

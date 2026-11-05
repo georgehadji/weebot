@@ -51,6 +51,12 @@ class CapabilitiesMixin:
 
         checkpoints_db = str(Path(db_path).parent / "flow_checkpoints.db")
         self.register(CheckpointPort, lambda: SQLiteCheckpointStore(db_path=checkpoints_db))
+        # One run per Idempotency-Key for the OpenAI-compatible API (H12b).
+        from weebot.application.ports.idempotency_port import IdempotencyPort
+        from weebot.infrastructure.persistence.idempotency_store import SQLiteIdempotencyStore
+
+        idempotency_db = str(Path(db_path).parent / "api_idempotency.db")
+        self.register(IdempotencyPort, lambda: SQLiteIdempotencyStore(db_path=idempotency_db))
         # Undoable workspace file checkpoints, bound always so a session delete purges them
         # whether or not WEEBOT_FILE_CHECKPOINTS is on now (H5).
         from weebot.application.ports.workspace_checkpoint_port import WorkspaceCheckpointPort

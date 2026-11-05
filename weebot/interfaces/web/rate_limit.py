@@ -56,6 +56,7 @@ _PATH_TIERS: dict[str, str] = {
     "/api/gateway/": "webhook",
     # Expensive
     "/api/flow/": "expensive",
+    "/v1/": "expensive",  # OpenAI-compatible API (H12b)
 }
 
 UNLIMITED_TIERS = {"unlimited"}
