@@ -351,6 +351,13 @@ class WeebotSettings(BaseSettings):
         default=None,
         description="Path to MCP servers config file (YAML/JSON). If None, no servers.",
     )
+    credential_vault_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to the credential vault file (JSON): handles bound to a site origin, with "
+            "secret references, never values. If None, the browser has no vault."
+        ),
+    )
     mcp_token_dir: str = Field(
         default=".weebot/mcp-tokens",
         description="Directory for OAuth token cache (relative to workspace root or absolute).",
