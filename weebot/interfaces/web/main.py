@@ -30,6 +30,10 @@ if "PYTEST_VERSION" not in os.environ:
 
     load_dotenv(override=True)
 
+    from weebot.application.di import install_secret_sources
+
+    install_secret_sources()  # op:// and bws:// references in .env (H19)
+
 # Structured logging is configured inside create_app(), not at import time.
 # Calling it at module scope reconfigures the root logger for *any* process
 # that merely imports this module — including the test runner, where

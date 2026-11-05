@@ -16,6 +16,10 @@ from dotenv import load_dotenv
 # and path validation inconsistently rejects valid workspace paths.
 load_dotenv(override=True)
 
+from weebot.application.di import install_secret_sources
+
+install_secret_sources()  # op:// and bws:// references in .env (H19)
+
 from weebot.config.settings import get_settings
 
 # Clear stale bytecode cache to prevent import errors from old .pyc files
