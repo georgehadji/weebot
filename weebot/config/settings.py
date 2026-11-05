@@ -122,6 +122,16 @@ class WeebotSettings(BaseSettings):
         default=True,
         description="When True and no weebot_api_key is set, refuse non-loopback requests.",
     )
+    openai_api_enabled: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_OPENAI_API_ENABLED", "openai_api_enabled"),
+        default=False,
+        description="Mount the OpenAI-compatible API (/v1/models, /v1/chat/completions, /v1/runs).",
+    )
+    openai_api_show_steps: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_OPENAI_API_SHOW_STEPS", "openai_api_show_steps"),
+        default=False,
+        description="Add a line per tool call to a streamed chat completion's content.",
+    )
     web_host: str = Field(
         default="127.0.0.1", description="Web API bind address (default loopback for security)."
     )
