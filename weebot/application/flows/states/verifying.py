@@ -188,6 +188,10 @@ class VerifyingState(FlowState):
 
             # ── Step 5: Gate sweep ──────────────────────────────────────
             gate_failures = await self._gate_sweep(flow, final_summary)
+            evidence_status, commands = await self._gate_evidence(flow)
+            if evidence_status == "stale_after_edit":
+                gate_failures.append("verification_stale_after_edit")
+                verification_status = evidence_status
             for gate in gate_failures:
                 yield VerificationEvent(
                     step_id="gate_sweep",
@@ -202,7 +206,10 @@ class VerifyingState(FlowState):
                 try:
                     ctx.extra["verification_scores"] = scores
                     ctx.extra["gate_failures"] = gate_failures
-                    ctx.extra["verification_status"] = verification_status.value
+                    ctx.extra["verification_status"] = getattr(
+                        verification_status, "value", verification_status
+                    )
+                    ctx.extra["verification_commands"] = commands
                 except Exception:
                     _log.debug(
                         "Failed to store verification scores in session context", exc_info=True
@@ -462,6 +469,23 @@ class VerifyingState(FlowState):
             _log.info("Gate sweep passed — all gates clean")
 
         return failures
+
+    async def _gate_evidence(self, flow) -> tuple[str | None, list[str]]:
+        """Did a passing check run after the last source edit (H20b)? Plus the commands that ran.
+
+        Reads the effect ledger's flag rows. No event store, or an unreadable one, answers
+        "no evidence either way": the gate neither passes nor fails the session.
+        """
+        store = getattr(flow, "_event_store", None)
+        if store is None:
+            return None, []
+        from weebot.application.services.effect_ledger import EffectLedger
+        from weebot.application.services.verification_evidence import commands_run, evidence_status
+
+        rows = await EffectLedger(store).flags(flow._session.id)
+        if not rows:
+            return None, []
+        return evidence_status(rows), commands_run(rows)
 
     async def _gate_outcome_verification(self, flow, product_context: dict) -> str | None:
         """Check whether the completed work achieves the stated success metric.
