@@ -132,6 +132,18 @@ class WeebotSettings(BaseSettings):
         default=False,
         description="Add a line per tool call to a streamed chat completion's content.",
     )
+    sandbox_egress_proxy: bool = Field(
+        validation_alias=AliasChoices("WEEBOT_SANDBOX_EGRESS_PROXY", "sandbox_egress_proxy"),
+        default=False,
+        description=(
+            "Docker sandbox: run a network-cleared call on an internal network whose only "
+            "neighbour is a CONNECT allowlist proxy, limited to the hosts the call was cleared for."
+        ),
+    )
+    sandbox_egress_proxy_image: str | None = Field(
+        default=None,
+        description="Image for the egress proxy container (needs python). Default: the tool image.",
+    )
     web_host: str = Field(
         default="127.0.0.1", description="Web API bind address (default loopback for security)."
     )

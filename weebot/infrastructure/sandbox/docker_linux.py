@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import shutil
@@ -17,7 +18,9 @@ from weebot.application.ports.sandbox_port import (
     SandboxResult,
     SandboxType,
     network_allowed,
+    network_hosts,
 )
+from weebot.infrastructure.sandbox.egress_sidecar import NETWORK, EgressProxyError, EgressSidecar
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,7 @@ class DockerLinuxSandbox(SandboxPort):
         self._config = config or SandboxConfig()
         self._image = image
         self._docker_path = docker_path or shutil.which("docker") or "docker"
+        self._egress: EgressSidecar | None = None
 
     async def _resolve_image(self) -> str | None:
         """The image to run, or None when weebot-tool-env is not built.
@@ -148,12 +152,40 @@ class DockerLinuxSandbox(SandboxPort):
 
         return capabilities
 
+    def _egress_hosts(self) -> frozenset[str] | None:
+        """The hosts this call is limited to when the egress proxy is on (H23), else None.
+
+        None means the call is not proxied: the proxy is off, the sandbox network is on for
+        every call, or the call was cleared without a host (a human approved an unknown one).
+        """
+        from weebot.config.settings import get_settings
+
+        if self._config.allow_network or not network_allowed(self._config):
+            return None
+        if not get_settings().sandbox_egress_proxy:
+            return None
+        return network_hosts()
+
+    def _sidecar(self) -> EgressSidecar:
+        from weebot.config.settings import get_settings
+
+        if self._egress is None:
+            image = get_settings().sandbox_egress_proxy_image or self.CUSTOM_IMAGE
+            self._egress = EgressSidecar(self._docker_path, image)
+        return self._egress
+
+    async def close(self) -> None:
+        """Remove the egress proxy container, if this sandbox started one."""
+        if self._egress is not None:
+            await self._egress.stop()
+
     async def _build_docker_command(
         self,
         command: list[str],
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         memory_limit_mb: int | None = None,
+        proxied: bool = False,
     ) -> list[str]:
         """Build the docker run command with all options.
 
@@ -201,7 +233,9 @@ class DockerLinuxSandbox(SandboxPort):
             docker_cmd.extend(["-m", f"{limit}m"])
 
         # Network
-        if not network_allowed(self._config):
+        if proxied:
+            docker_cmd.extend(["--network", NETWORK])  # internal; the proxy is its only neighbour
+        elif not network_allowed(self._config):
             docker_cmd.extend(["--network", "none"])
 
         # Environment variables
@@ -290,19 +324,33 @@ class DockerLinuxSandbox(SandboxPort):
         if env:
             merged_env.update(env)
 
-        # Build docker command (image resolved lazily)
-        docker_command = await self._build_docker_command(command, cwd, merged_env, memory_limit_mb)
-
         import time
 
         t_start = time.monotonic()
 
+        hosts = self._egress_hosts()
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *docker_command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
+            async with contextlib.AsyncExitStack() as stack:
+                if hosts is not None:
+                    merged_env.update(await stack.enter_async_context(self._sidecar().lease(hosts)))
+                # Build docker command (image resolved lazily)
+                docker_command = await self._build_docker_command(
+                    command, cwd, merged_env, memory_limit_mb, proxied=hosts is not None
+                )
+                proc = await asyncio.create_subprocess_exec(
+                    *docker_command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
 
-            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except EgressProxyError as e:
+            # Fail closed: never run the call on an open network instead.
+            return SandboxResult(
+                stdout="",
+                stderr=f"Egress proxy unavailable, call not run: {e}",
+                returncode=-1,
+                elapsed_ms=(time.monotonic() - t_start) * 1000,
+                sandbox_type=self.sandbox_type,
+            )
 
         except TimeoutError:
             # Try to kill the container if it timed out
