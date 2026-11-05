@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from weebot.infrastructure.sandbox import egress_proxy
+import weebot.infrastructure.sandbox.egress_proxy as egress_proxy
 
 logger = logging.getLogger(__name__)
 
