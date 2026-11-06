@@ -1,15 +1,10 @@
-"""A failed summary must not cost the caller its conversation.
+"""A failed summary must not be passed off as one.
 
-W2 of the V7 defect hunt. `_summarize` returned the string
-``"(compression failed: {exc})"`` on an LLM error and ``"(summary
-unavailable)"`` on an empty completion. Both callers embedded that string in a
-summary message and dropped the middle turns it stood for, returning a
-normally-shaped result the caller could not tell from a successful
-compression -- so it committed the replacement and those turns were gone.
-
-Compression is lossy by design, which is exactly why its failure has to be a
-no-op rather than a loss. Both call sites now match the behaviour already
-documented for a buffer too short to compress: return the input unchanged.
+W2 of the V7 defect hunt. `_summarize` returned the string ``"(compression failed: {exc})"``
+on an LLM error and ``"(summary unavailable)"`` on an empty completion; callers embedded it
+in a summary message and dropped the turns it stood for. A failed call now returns ``""``,
+and the pipeline (`context_passes.py`) turns that into an honest, labelled fallback instead
+of a fake summary. H9 moved the head/tail slicing out of this class.
 """
 
 from __future__ import annotations
@@ -34,72 +29,31 @@ def _conversation(n=12):
     return [{"role": "user", "content": f"turn {i} carries detail {i}"} for i in range(n)]
 
 
-class TestFailedCompressionIsANoOp:
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "kwargs",
-        [
-            {"error": RuntimeError("provider 503")},
-            {"content": ""},
-            {"content": None},
-            {"content": "   "},
-        ],
-        ids=["llm_raises", "empty_content", "none_content", "whitespace_only"],
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"error": RuntimeError("provider 503")},
+        {"content": ""},
+        {"content": None},
+        {"content": "   "},
+    ],
+    ids=["llm_raises", "empty_content", "none_content", "whitespace_only"],
+)
+async def test_a_failed_summary_is_empty_not_an_error_string(kwargs):
+    assert await _compressor(**kwargs).summarize(_conversation()) == ""
+
+
+@pytest.mark.asyncio
+async def test_a_successful_summary_is_returned_as_written():
+    assert await _compressor(content="the middle, summarized").summarize(_conversation()) == (
+        "the middle, summarized"
     )
-    async def test_no_turn_is_lost(self, kwargs):
-        convo = _conversation()
-
-        result = await _compressor(**kwargs).compress(list(convo))
-
-        surviving = {m.get("content", "") for m in result}
-        lost = [m["content"] for m in convo if m["content"] not in surviving]
-        assert lost == [], f"{len(lost)} turn(s) discarded by a failed compression"
-
-    @pytest.mark.asyncio
-    async def test_no_error_string_is_passed_off_as_a_summary(self):
-        result = await _compressor(error=RuntimeError("provider 503")).compress(_conversation())
-
-        blob = " ".join(str(m.get("content", "")) for m in result)
-        assert "compression failed" not in blob
-        assert "summary unavailable" not in blob
-        assert "Context summary" not in blob
 
 
-class TestSuccessfulCompressionStillCompresses:
-    """No-regression: the fix must not disable compression."""
-
-    @pytest.mark.asyncio
-    async def test_middle_is_replaced_by_the_summary(self):
-        convo = _conversation()
-
-        result = await _compressor(content="the middle, summarized").compress(list(convo))
-
-        assert len(result) < len(convo)
-        blob = " ".join(str(m.get("content", "")) for m in result)
-        assert "the middle, summarized" in blob
-        assert "Context summary" in blob
-
-    @pytest.mark.asyncio
-    async def test_short_buffer_is_returned_unchanged(self):
-        convo = _conversation(2)
-
-        result = await _compressor(content="unused").compress(list(convo))
-
-        assert result == convo
-
-
-class TestTrajectoryExporterSharesTheContract:
-    """trajectory_exporter.py calls _summarize directly and dropped events the
-    same way. The empty-summary contract has to hold at both call sites."""
-
-    @pytest.mark.asyncio
-    async def test_summarize_returns_empty_string_on_failure(self):
-        assert await _compressor(error=RuntimeError("boom"))._summarize(_conversation()) == ""
-
-    @pytest.mark.asyncio
-    async def test_summarize_returns_empty_string_on_empty_completion(self):
-        assert await _compressor(content="")._summarize(_conversation()) == ""
-
-    @pytest.mark.asyncio
-    async def test_summarize_returns_the_summary_on_success(self):
-        assert await _compressor(content="a summary")._summarize(_conversation()) == "a summary"
+@pytest.mark.asyncio
+async def test_it_summarizes_exactly_the_messages_it_is_given():
+    c = _compressor(content="ok")
+    await c.summarize(_conversation(2))
+    sent = c._llm.chat.call_args.kwargs["messages"][1]["content"]
+    assert "turn 0" in sent and "turn 1" in sent
