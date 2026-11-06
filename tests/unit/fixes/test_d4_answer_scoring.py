@@ -79,4 +79,6 @@ def test_the_benchmark_commands_pass_the_scoring_port():
     from pathlib import Path
 
     src = Path("cli/commands/harness.py").read_text(encoding="utf-8")
-    assert src.count("answer_scorer=_answer_scorer(container)") == 2
+    # Both commands build their runner in _tool_runner, so the port is passed once.
+    assert src.count("answer_scorer=_answer_scorer(container)") == 1
+    assert src.count("await _tool_runner(") == 2
