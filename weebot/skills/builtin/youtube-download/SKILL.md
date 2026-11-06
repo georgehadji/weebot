@@ -1,6 +1,6 @@
 ---
 name: youtube-download
-description: Download videos (mp4/webm/mkv) and extract MP3 audio from YouTube, X/Twitter, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, and 1000+ sites using yt-dlp. Handles age-restricted content via browser cookies, JS-heavy sites via Deno, and falls back to transcripts. Triggered for any video download, save, or MP3 extraction task.
+description: Download videos and extract MP3 audio from YouTube, X/Twitter, TikTok, Instagram, Threads and 1800+ other sites with the Yoinks downloader. Falls back to transcripts when a video cannot be fetched. Triggered for any video download, save, or MP3 extraction task.
 metadata:
   emoji: 📥
   trust: trusted
@@ -12,161 +12,77 @@ metadata:
 
 # Video Download & MP3 Extraction
 
-You can download videos and extract MP3 audio from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, and 1000+ other sites via the `youtube_download` tool (which uses yt-dlp under the hood — it handles hundreds of sites, not just YouTube).
+You can download a video, or extract its audio as MP3, from YouTube, Twitter/X, TikTok, Instagram, Threads and 1800+ other sites with the `youtube_download` tool. The tool runs the Yoinks downloader (`node <Yoinks>/dist/cli.js`), which brings its own yt-dlp and ffmpeg.
 
 **CRITICAL RULES:**
 
-1. **Always use the `youtube_download` tool** — never run `yt-dlp.exe` directly via bash/powershell. The tool has built-in error handling, targeted fallback instructions, cookie support, and JS runtime support. Raw yt-dlp commands bypass all of this.
+1. **Always use the `youtube_download` tool.** Never run `yt-dlp` or `yoinks` yourself through bash/powershell: the tool guards the output path, the size and the time, and returns a file path you can use.
 
-2. **Never give up after the first failure.** When `youtube_download` returns an error, the error message will tell you exactly what to try next. Follow the fallback chain WITHIN THE SAME STEP — do NOT terminate the step as "completed" until you have exhausted ALL approaches or succeeded.
+2. **Never give up after the first failure.** When `youtube_download` returns an error, read it: it says what Yoinks reported and names the next approach. Try the fallbacks below in the same step before you mark the step done.
 
-3. **In your plan, make the download step use the `youtube_download` tool.** Example step: "Download the video using youtube_download tool with url=...". Do NOT plan raw PowerShell/yt-dlp commands.
-
-If the first download attempt returns an error, READ the error message carefully — it contains explicit instructions for the next approach to try. Follow them in order.
+3. **In your plan, make the download step use the `youtube_download` tool.** Example step: "Download the video using youtube_download with url=...".
 
 ---
 
 ## Tool Reference
 
-| Goal | Tool / Command | Key Parameters |
+| Goal | Tool | Key Parameters |
 |---|---|---|
-| Download video (mp4) | `youtube_download` | `url`, `format="mp4"` |
-| Download video (webm/mkv) | `youtube_download` | `url`, `format="webm"` or `"mkv"` |
-| Extract MP3 audio | `youtube_download` | `url`, `format="mp3"` — auto-extracts 320kbps |
-| Extract m4a audio | `youtube_download` | `url`, `format="audio"` |
-| Age-restricted video | `youtube_download` + `advanced_browser` | `cookies="path/to/cookies.txt"` |
-| JS runtime missing | Install Deno → `youtube_download` | `js_runtime="C:\\path\\to\\deno.exe"` |
+| Download a video (best quality, mp4) | `youtube_download` | `url` |
+| Extract MP3 audio | `youtube_download` | `url`, `format="mp3"` |
+| Save under a chosen name | `youtube_download` | `output_path="Output/videos/clip.mp4"` (inside the project, media file types only) |
 | Transcript / subtitles | `video_ingest` | Works without auth, even on restricted videos |
-| Find mirrors | `web_search` | Search for same video on other platforms |
+| Find the same video elsewhere | `web_search` | Search for the title on other platforms |
+
+What the tool does not offer: a resolution or container choice (always the best available), cookies, a JavaScript runtime, playlists (one video per call). A request for those cannot be met with this tool; say so rather than retrying.
+
+When `output_path` is empty the file goes to `Output/videos/youtube_<id>.mp4` (or `.mp3`). A video over 500 MiB is deleted after download and reported as an error. The call times out after 5 minutes.
 
 ---
 
-## Decision Tree (always follow this order)
+## Decision Tree (follow this order)
 
 ```
 1. youtube_download(url, format) — normal download
-   ✅ Success? Done.
-   ❌ "Sign in to confirm your age" → Go to step 2
-   ❌ "No supported JavaScript runtime" → Go to step 3
-   ❌ Other error → Go to step 4
+   ✅ Success? Return the file path. Done.
+   ❌ "Node.js ... is not on PATH" or "Yoinks is not built" → tell the user (fix below); do not retry
+   ❌ Any Yoinks error (private, age-restricted, geo-blocked, unavailable) → Go to step 2
 
-2. COOKIE WORKFLOW (age-restricted videos)
-   a. advanced_browser → navigate to https://youtube.com
-   b. Sign in if needed (use form-fill or ask user to sign in)
-   c. advanced_browser → get_cookies action → receive JSON
-   d. python_execute → convert JSON to Netscape cookie file
-   e. youtube_download(url, cookies="path/to/cookies.txt")
-   ✅ Success? Done.
-   ❌ Still fails → Go to step 4
-
-3. DENO INSTALL (JS runtime error)
-   a. Run: winget install DenoLand.Deno
-   b. Verify: Get-Command deno
-   c. Find path: (Get-Command deno).Source
-   d. youtube_download(url, js_runtime="<deno_path>")
-   ✅ Success? Done.
-   ❌ Still fails → Go to step 4
-
-4. FALLBACKS
+2. FALLBACKS
    a. video_ingest(url) — get transcript/subtitles
-   b. web_search("<video title> download") — find mirrors
-   c. Report to user what was obtained and what failed
+   b. web_search("<video title>") — find the same video on another site, then youtube_download that URL
+   c. Report to the user what was obtained and what failed
 ```
+
+---
+
+## Setup Errors
+
+| Error | Fix (for the user) |
+|---|---|
+| "Node.js (22 or newer) is not on PATH" | Install Node 22+ and restart the shell |
+| "Yoinks is not built at ..." | Run `npm install && npm run build` in the Yoinks folder, or set `YOINKS_DIR` to where it is built |
+
+Yoinks is expected in a `Yoinks` folder next to the project (`../Yoinks`); `YOINKS_DIR` overrides it.
 
 ---
 
 ## MP3 Extraction Recipe
 
-To extract MP3 audio from any YouTube video:
-
 ```
 youtube_download(url="https://youtu.be/VIDEO_ID", format="mp3")
 ```
 
-This tells yt-dlp to:
-- Download only the best audio stream (no video data)
-- Extract the audio track
-- Convert to MP3 at 320kbps (maximum quality)
-- Save as `.mp3` file in `Output/videos/`
-
-**No additional steps needed** — yt-dlp handles extraction and conversion automatically. The resulting file is typically 3-8 MB for a 3-5 minute video.
-
----
-
-## Cookie Workflow (Step-by-Step)
-
-Use this when YouTube returns "Sign in to confirm your age."
-
-**Step 1: Open YouTube in browser**
-```
-advanced_browser(action="navigate", url="https://youtube.com")
-```
-
-**Step 2: Sign in** (if not already signed in)
-```
-advanced_browser(action="fill", selector="input[type='email']", value="user@gmail.com")
-advanced_browser(action="click", selector="button[type='submit']")
-```
-Or ask the user: "Please sign into YouTube in the browser window, then I'll continue."
-
-**Step 3: Export cookies**
-```
-advanced_browser(action="get_cookies")
-```
-This returns a JSON array of cookie objects.
-
-**Step 4: Convert to Netscape format**
-```python
-import json
-cookies = json.loads('''<cookie_json_from_step_3>''')
-with open('tmp/youtube_cookies.txt', 'w') as f:
-    f.write('# Netscape HTTP Cookie File\n')
-    for c in cookies:
-        domain = c.get('domain', '.youtube.com')
-        flag = 'TRUE' if domain.startswith('.') else 'FALSE'
-        path = c.get('path', '/')
-        secure = 'TRUE' if c.get('secure', False) else 'FALSE'
-        expires = str(int(c.get('expires', 0))) if c.get('expires') else '0'
-        f.write(f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{c['name']}\t{c['value']}\n")
-```
-Use `python_execute` with this code.
-
-**Step 5: Download with cookies**
-```
-youtube_download(url="https://youtu.be/VIDEO_ID", cookies="tmp/youtube_cookies.txt")
-```
-
----
-
-## Deno Install (for JS Runtime Errors)
-
-When yt-dlp reports "No supported JavaScript runtime could be found":
-
-```powershell
-# Check if already installed
-Get-Command deno -ErrorAction SilentlyContinue
-
-# Install if missing
-winget install DenoLand.Deno
-
-# Get the full path
-(Get-Command deno).Source
-```
-
-Then pass the path to the tool:
-```
-youtube_download(url="https://youtu.be/VIDEO_ID", js_runtime="C:\Users\<user>\AppData\Local\deno\deno.exe")
-```
+Yoinks downloads the best audio and converts it to MP3. No further steps are needed. The result is typically 3-8 MB for a 3-5 minute video.
 
 ---
 
 ## Error Recovery Quick Reference
 
-| Error Message | Root Cause | Fix |
+| Error Message | Likely Cause | Fix |
 |---|---|---|
-| "Sign in to confirm your age" | Age restriction | Cookie workflow above |
-| "No supported JavaScript runtime" | Missing Deno/Node | Install Deno (above) |
-| "Failed to decrypt with DPAPI" | Chrome cookie encryption | Use Playwright get_cookies instead of --cookies-from-browser |
-| "Video unavailable" | Private/deleted/geo-blocked | video_ingest for transcript, web_search for mirrors |
-| "HTTP Error 403" | Rate limiting or geo-block | Wait 30s, try with cookies |
-| "Requested format not available" | No stream at that quality | Retry with `quality="worst"` or `format="audio"` |
+| "Sign in to confirm your age" | Age restriction | Not downloadable here; use `video_ingest` for the transcript |
+| "Video unavailable" / "Private video" | Private, deleted or geo-blocked | `video_ingest` for the transcript, `web_search` for mirrors |
+| "HTTP Error 403" / "429" | Rate limit or geo-block | Wait 30 s and retry once |
+| "Timed out after 300s" | Very long video or slow link | Pick a shorter video |
+| "over the 500 MiB limit" | Too large | Pick a shorter video |

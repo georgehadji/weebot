@@ -1,11 +1,13 @@
 """Video download tool for weebot agents.
 
-Downloads videos and extracts MP3 audio from YouTube, Twitter/X, TikTok,
-Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, and hundreds of
-other sites using yt-dlp.  Also handles age-restricted content via browser
-cookies and JS-heavy sites via Deno runtime.
+Downloads a video, or extracts its audio as MP3, from YouTube, Twitter/X,
+TikTok, Instagram, Threads and 1800+ other sites by running the Yoinks CLI
+(``node <yoinks>/dist/cli.js --best|--mp3 -o <dir> <url>``). Yoinks fetches and
+updates its own yt-dlp and finds ffmpeg, so neither has to be on PATH.
 
-Security: path traversal guard, HTTPS validation, size caps, timeout.
+Yoinks lives next to this project (``../Yoinks``); ``YOINKS_DIR`` points elsewhere.
+
+Security: path traversal guard (write_target), http(s) validation, size cap, timeout.
 """
 
 from __future__ import annotations
@@ -13,80 +15,53 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Any, ClassVar
+
+from pydantic import BaseModel, Field, PrivateAttr
+
+from weebot.config.tool_config import ToolConfig, resolve_setting
 from weebot.domain.models.output_trust import OutputTrust
-
-from pydantic import BaseModel, Field
-
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-# ── URL validation ───────────────────────────────────────────────────
-# Accept any HTTPS URL — yt-dlp validates whether it can handle the site.
-# Known supported sources: YouTube, Twitter/X, TikTok, Instagram, Vimeo,
-# Dailymotion, Facebook, Reddit, Twitch, and 1000+ more.
-_HTTPS_URL_RE = re.compile(r"^https?://")
-
-# yt-dlp is optional — the tool reports an error if it's not installed.
-# Availability is checked at runtime via `yt-dlp --version` in health_check().
-# We set this to True here since yt-dlp is a CLI tool, not a Python import.
+# Yoinks (through yt-dlp) decides whether it can handle the site.
+_HTTP_URL_RE = re.compile(r"^https?://")
 
 # ── Safety limits ──────────────────────────────────────────────────────
-_MAX_VIDEO_DURATION_SEC: int = 600  # 10 min — no long-form content
-_MAX_VIDEO_SIZE_MB: int = 500  # 500 MiB ceiling
+_MAX_VIDEO_SIZE_MB: int = 500  # 500 MiB ceiling, checked after the download
 _DOWNLOAD_TIMEOUT_SEC: int = 300  # 5 min max download time
 # What output_path may name (R14): a media file inside the project, never .env or source.
 _MEDIA_SUFFIXES: frozenset[str] = frozenset(
     {".mp4", ".m4a", ".mp3", ".webm", ".mkv", ".opus", ".wav"}
 )
+# The project root is two levels above weebot/tools/; Yoinks is cloned beside it.
+_DEFAULT_YOINKS_DIR = Path(__file__).resolve().parents[2].parent / "Yoinks"
 
 
 class YouTubeDownloadParams(BaseModel):
-    """Parameters for video download from any yt-dlp-supported site."""
+    """Parameters for a video download. Unknown keys (quality, cookies, ...) are ignored."""
 
-    url: str = Field(
-        description="Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site"
-    )
+    url: str = Field(description="Video page URL (http or https)")
     output_path: str = Field(
         default="", description="Output file path. If empty, auto-generated in Output/videos/"
     )
-    format: str = Field(
-        default="mp4",
-        description="Output format: mp4, webm, mkv, 'mp3' for MP3 audio extraction, or 'audio' for m4a audio only",
-    )
-    quality: str = Field(
-        default="best", description="Quality: best, worst, or resolution like 1080p, 720p, 480p"
-    )
+    format: str = Field(default="mp4", description="'mp4' (best video) or 'mp3' (audio only)")
 
 
 class YouTubeDownloadTool(BaseTool):
-    """Download videos and extract MP3 audio from any yt-dlp-supported site.
+    """Download a video, or its audio as MP3, by running the Yoinks CLI.
 
-    Supports YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion,
-    Facebook, Reddit, Twitch, and 1000+ other sites.
-
-    Download strategies for edge cases:
-    - **Age-restricted**: Use `cookies` param via Playwright get_cookies export.
-    - **JS runtime error ("No supported JavaScript runtime")**:
-      Install Deno: ``winget install DenoLand.Deno`` or ``scoop install deno``.
-      Then pass path via `js_runtime` param.
-    - **Cannot download at all**: Fall back to `video_ingest` tool for transcript.
-    - **Firefox users**: ``yt-dlp --cookies-from-browser firefox`` avoids DPAPI
-      errors on Chrome/Edge cookies.
-
-    Security guards:
-    - URL validated for HTTPS
-    - Video duration checked before download (max 10 min, YouTube only)
-    - Output path guarded against traversal attacks
-    - Download timed out at 300 seconds
+    Yoinks saves the best available quality; there is no resolution, container,
+    cookie or JavaScript-runtime option. A video it cannot fetch (private,
+    age-restricted, geo-blocked) fails with Yoinks's own message.
 
     Usage:
         youtube_download(url="https://youtube.com/watch?v=dQw4w9WgXcQ",
                          output_path="Output/videos/clip.mp4")
-        youtube_download(url="https://twitter.com/user/status/123",
-                         format="mp4")
+        youtube_download(url="https://youtu.be/dQw4w9WgXcQ", format="mp3")
     """
 
     output_trust: ClassVar[OutputTrust] = OutputTrust.EXTERNAL
@@ -94,54 +69,37 @@ class YouTubeDownloadTool(BaseTool):
     default_timeout_seconds: int = _DOWNLOAD_TIMEOUT_SEC
     name: str = "youtube_download"
     description: str = (
-        "Download a video or extract MP3 audio from any yt-dlp-supported site "
-        "(YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, "
-        "Reddit, Twitch, and 1000+ more). "
-        "Parameters: url (required), output_path (optional, auto-generated if empty), "
-        "format (mp4/webm/mkv/mp3/audio), quality (best/worst/resolution), "
-        "cookies (path to Netscape-format cookies file for age-restricted videos), "
-        "js_runtime (path to Deno/Node.js executable for EJS extractors). "
-        "Video duration is limited to 10 minutes (YouTube only). "
-        "For MP3: extracts audio and converts to MP3 (320kbps best quality). "
-        "After download, the file path is returned.\n\n"
-        "Download strategies:\n"
-        "- Normal: works as-is for any supported site.\n"
-        "- Age-restricted: Use the cookies param with a Playwright cookie export.\n"
-        "- JS runtime error: Install Deno (winget install DenoLand.Deno), "
-        "then pass its path as js_runtime.\n"
-        "- Fallback: Use video_ingest tool for transcript/subtitles instead."
+        "Download a video or extract MP3 audio from YouTube, Twitter/X, TikTok, "
+        "Instagram, Threads and 1800+ other sites, using the Yoinks downloader. "
+        "Parameters: url (required, http or https), output_path (optional, "
+        "auto-generated under Output/videos/ if empty), format ('mp4' = best video, "
+        "'mp3' = audio only). Quality is always the best available; there are no "
+        "resolution, container, cookie or JS-runtime options. "
+        "A single video only, never a playlist. After download, the file path is returned.\n\n"
+        "If the download fails: use video_ingest to fetch the transcript/subtitles, "
+        "or web_search to find the same video on another platform."
     )
     parameters: dict = {
         "type": "object",
         "properties": {
-            "url": {
-                "type": "string",
-                "description": "Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site",
-            },
+            "url": {"type": "string", "description": "Video page URL (http or https)"},
             "output_path": {
                 "type": "string",
                 "description": "Output file path (auto-generated if empty)",
             },
             "format": {
                 "type": "string",
-                "enum": ["mp4", "webm", "mkv", "mp3", "audio"],
-                "description": "Output format: mp4, webm, mkv, mp3 (audio extraction), or audio (m4a) (default mp4)",
-            },
-            "quality": {
-                "type": "string",
-                "description": "Quality: best, worst, or resolution like 1080p, 720p (default best)",
-            },
-            "cookies": {
-                "type": "string",
-                "description": "Path to Netscape-format cookies file for age-restricted videos",
-            },
-            "js_runtime": {
-                "type": "string",
-                "description": "Path to Deno/Node.js for yt-dlp EJS extractors",
+                "enum": ["mp4", "mp3"],
+                "description": "mp4 = best video (default), mp3 = audio only",
             },
         },
         "required": ["url"],
     }
+
+    _tool_config: ToolConfig | None = PrivateAttr(default=None)
+
+    def set_config(self, config: ToolConfig) -> None:
+        self._tool_config = config
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -149,131 +107,122 @@ class YouTubeDownloadTool(BaseTool):
         params = YouTubeDownloadParams(
             url=url, **{k: v for k, v in kwargs.items() if v is not None}
         )
-        # Reset per-call state
-        self._last_download_error = ""
 
-        # 1. Validate URL is HTTPS
-        if not _HTTPS_URL_RE.match(params.url):
+        if not _HTTP_URL_RE.match(params.url):
             return ToolResult.error_result(
-                f"Invalid URL: {params.url[:80]}. " "Expected an https:// URL to a video page."
+                f"Invalid URL: {params.url[:80]}. Expected an http(s):// URL to a video page."
             )
 
-        # 2. Check yt-dlp available (deferred — check on first call)
-        if not await self._check_ytdlp():
+        node = shutil.which("node")
+        if node is None:
             return ToolResult.error_result(
-                "yt-dlp is not installed or not on PATH. " "Install with: pip install yt-dlp"
+                "Node.js (22 or newer) is not on PATH, and Yoinks needs it to run."
+            )
+        cli = self._cli_path()
+        if not cli.is_file():
+            return ToolResult.error_result(
+                f"Yoinks is not built at {cli}. Run `npm install && npm run build` in "
+                f"{cli.parent.parent}, or set YOINKS_DIR to the Yoinks folder."
             )
 
-        # 3. Check video metadata before downloading
-        metadata = await self._get_metadata(params.url)
-        if metadata is None:
-            # Try to get at least the transcript as partial data
-            # video_ingest has no health check of its own (BaseTool's is always
-            # True), so the hint never depended on building one here.
-            transcript_hint = " Try video_ingest to fetch the transcript/subtitles instead."
-            return ToolResult.error_result(
-                "Could not fetch metadata from " + params.url[:60] + ". "
-                "The video may be private, age-restricted, or geo-blocked.\n\n"
-                "DO NOT GIVE UP — try these approaches IN ORDER within the same step:\n"
-                "1. Try downloading anyway (metadata fetch may fail but download may succeed)\n"
-                "2. Use video_ingest to fetch the subtitles/transcript" + transcript_hint + "\n"
-                "3. Use web_search to find the same video on another platform\n"
-                "4. Try a different URL for the same content"
-            )
-
-        duration = metadata.get("duration", 0)
-        if duration > _MAX_VIDEO_DURATION_SEC:
-            return ToolResult.error_result(
-                f"Video duration ({duration}s) exceeds the maximum allowed "
-                f"({_MAX_VIDEO_DURATION_SEC}s). Download a shorter video or "
-                "increase MAX_VIDEO_DURATION_SEC."
-            )
-
-        # 4. Determine output path
+        audio = params.format in ("mp3", "audio")
         output_path = params.output_path
         if not output_path:
             import uuid
 
-            if params.format == "mp3":
-                ext = "mp3"
-            elif params.format == "audio":
-                ext = "m4a"
-            else:
-                ext = "mp4"
+            ext = "mp3" if audio else "mp4"
             output_path = f"Output/videos/youtube_{uuid.uuid4().hex[:8]}.{ext}"
-
-        path = self._sanitize_output_path(output_path)
+        try:
+            path = self._sanitize_output_path(output_path)
+        except ValueError as exc:
+            return ToolResult.error_result(f"output_path refused: {exc}")
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 5. Download (pass cookies/js_runtime for age-restricted / EJS scenarios)
-        result = await self._download(
-            url=params.url,
-            output_path=path,
-            fmt=params.format,
-            quality=params.quality,
-            cookies=params.cookies,
-            js_runtime=params.js_runtime,
+        saved, error = await self._run_yoinks(node, cli, params.url, path.parent, audio)
+        if saved is None:
+            return ToolResult.error_result(
+                f"Video download failed for {params.url[:60]}. {error}\n\n"
+                "Try the next approach in the same step: video_ingest for the "
+                "transcript/subtitles, or web_search for the video on another site."
+            )
+
+        size = saved.stat().st_size
+        if size > _MAX_VIDEO_SIZE_MB * 1024 * 1024:
+            saved.unlink(missing_ok=True)
+            return ToolResult.error_result(
+                f"The video is {size // (1024 * 1024)} MiB, over the {_MAX_VIDEO_SIZE_MB} MiB "
+                "limit. It was deleted; pick a shorter video."
+            )
+
+        final = self._move_to_requested(saved, path)
+        logger.info("Video download complete: %s (%d bytes)", final, size)
+        return ToolResult(
+            output=f"Downloaded video: {final} ({size} bytes)",
+            data={
+                "path": str(final.resolve()),
+                "size_bytes": size,
+                "format": "mp3" if audio else "mp4",
+                "url": params.url[:80],
+            },
         )
-        if result is not None:
-            return result
 
-        # Build a targeted fallback message based on the actual yt-dlp error
-        last_error = getattr(self, "_last_download_error", "")
-        error_lower = last_error.lower()
+    # ── Yoinks ──────────────────────────────────────────────────────────
 
-        if "sign in to confirm your age" in error_lower or "age" in error_lower:
-            fallback = (
-                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
-                "1. Use advanced_browser to navigate to youtube.com and sign in\n"
-                "2. Call advanced_browser get_cookies action to export cookies\n"
-                "3. Use python_execute to convert cookies to Netscape format\n"
-                '4. Retry: youtube_download(url=..., cookies="tmp/youtube_cookies.txt")\n'
-                "5. If that fails, try video_ingest for transcript as last resort"
-            )
-        elif (
-            "no supported javascript runtime" in error_lower or "javascript runtime" in error_lower
-        ):
-            fallback = (
-                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
-                "1. Install Deno: winget install DenoLand.Deno\n"
-                "2. Find the path: (Get-Command deno).Source\n"
-                '3. Retry: youtube_download(url=..., js_runtime="<deno_path>")\n'
-                "4. If that fails, try video_ingest for transcript"
-            )
-        elif "video unavailable" in error_lower or "private" in error_lower:
-            fallback = (
-                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
-                "1. Use video_ingest to get the transcript/subtitles\n"
-                "2. Use web_search to find mirrors or alternative sources"
-            )
-        else:
-            fallback = (
-                f"\n\nyt-dlp error: {last_error[:200]}\n\n"
-                "DO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
-                "1. If age-restricted: use cookies (advanced_browser → get_cookies → retry)\n"
-                "2. If JS error: install Deno and retry with js_runtime param\n"
-                "3. Last resort: video_ingest for transcript"
-            )
+    def _cli_path(self) -> Path:
+        """``<yoinks>/dist/cli.js``: YOINKS_DIR, else the Yoinks folder beside this project."""
+        configured = resolve_setting(self._tool_config, "yoinks_dir", "YOINKS_DIR")
+        root = Path(configured) if configured else _DEFAULT_YOINKS_DIR
+        return root / "dist" / "cli.js"
 
-        return ToolResult.error_result(f"Video download failed for {params.url[:60]}." + fallback)
+    @staticmethod
+    async def _run_yoinks(
+        node: str, cli: Path, url: str, out_dir: Path, audio: bool
+    ) -> tuple[Path | None, str]:
+        """Run Yoinks' scriptable mode; return (saved file, "") or (None, reason).
 
-    # ── Dependency check ────────────────────────────────────────────────
-
-    async def _check_ytdlp(self) -> bool:
-        """Check whether yt-dlp is available on PATH."""
+        It prints one saved path per line on stdout; status and errors go to stderr.
+        """
+        cmd = [node, str(cli), "--mp3" if audio else "--best", "-o", str(out_dir), url]
+        logger.info("Downloading video: %s", url[:60])
         try:
             proc = await asyncio.create_subprocess_exec(
-                "yt-dlp",
-                "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-            return proc.returncode == 0
-        except Exception:
-            return False
+        except OSError as exc:
+            logger.warning("Could not start Yoinks: %s", exc)
+            return None, f"Could not start Yoinks: {exc}"
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_DOWNLOAD_TIMEOUT_SEC
+            )
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            logger.warning("Video download timed out after %ds", _DOWNLOAD_TIMEOUT_SEC)
+            return None, f"Timed out after {_DOWNLOAD_TIMEOUT_SEC}s."
 
-    # ── Metadata fetch ──────────────────────────────────────────────────
+        if proc.returncode != 0:
+            detail = stderr.decode(errors="replace").strip()[-500:]
+            logger.warning("Yoinks failed (exit %s): %s", proc.returncode, detail)
+            return None, detail or f"Yoinks exited with code {proc.returncode}."
+        for line in stdout.decode(errors="replace").splitlines():
+            saved = Path(line.strip())
+            if line.strip() and saved.is_file():
+                return saved, ""
+        logger.warning("Yoinks reported success but printed no existing file: %r", stdout[:200])
+        return None, "Yoinks finished but did not report a saved file."
+
+    @staticmethod
+    def _move_to_requested(saved: Path, requested: Path) -> Path:
+        """Give the file the requested name (keeping its real extension); never overwrite."""
+        target = requested.with_suffix(saved.suffix) if saved.suffix else requested
+        if target == saved or target.exists() or saved.suffix.lower() not in _MEDIA_SUFFIXES:
+            return saved
+        try:
+            return saved.replace(target)
+        except OSError as exc:
+            logger.warning("Could not move %s to %s: %s", saved, target, exc)
+            return saved
 
     @staticmethod
     def _sanitize_output_path(output_path: str) -> Path:
@@ -282,176 +231,6 @@ class YouTubeDownloadTool(BaseTool):
 
         return Path(write_target(output_path, suffixes=_MEDIA_SUFFIXES))
 
-    async def _get_metadata(self, url: str) -> dict[str, Any] | None:
-        """Fetch video metadata via yt-dlp --dump-json.
-
-        Returns:
-            Dict with 'duration', 'title', 'filesize_approx', etc., or None on failure.
-        """
-        import json as _json
-
-        cmd = ["yt-dlp", "--dump-json", "--no-playlist", "--skip-download", url]
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-            if proc.returncode != 0:
-                logger.debug("yt-dlp metadata fetch failed: %s", stderr.decode()[:200])
-                return None
-            return _json.loads(stdout.decode())
-        except TimeoutError:
-            logger.warning("yt-dlp metadata fetch timed out")
-            return None
-        except Exception as exc:
-            logger.debug("yt-dlp metadata fetch error: %s", exc)
-            return None
-
-    # ── Download ────────────────────────────────────────────────────────
-
-    async def _download(
-        self,
-        url: str,
-        output_path: Path,
-        fmt: str,
-        quality: str,
-        cookies: str = "",
-        js_runtime: str = "",
-    ) -> ToolResult | None:
-        """Run yt-dlp subprocess to download the video.
-
-        Args:
-            url: YouTube video URL.
-            output_path: Where to save the video.
-            fmt: Output format (mp4, webm, mkv, audio).
-            quality: Quality string (best, worst, or resolution).
-            cookies: Optional path to Netscape-format cookies file
-                     (for age-restricted videos, exported from Playwright).
-            js_runtime: Optional path to Deno/Node.js executable
-                        (for EJS extractor runtime).
-
-        Returns ToolResult on success, None on failure.
-        """
-        # Resolve format string and post-processing flags
-        if fmt == "mp3":
-            # Extract best audio and convert to MP3 at highest quality
-            format_spec = "bestaudio/best"
-        elif fmt == "audio":
-            format_spec = "bestaudio/best"
-        elif quality and quality != "best":
-            format_spec = f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]"
-        else:
-            format_spec = "bestvideo+bestaudio/best"
-
-        cmd = [
-            "yt-dlp",
-            "--no-playlist",
-            "--no-overwrites",
-            "--print",
-            "after_move:filepath",
-            "-o",
-            str(output_path),
-            "-f",
-            format_spec,
-        ]
-
-        # Audio extraction: --extract-audio --audio-format with quality
-        if fmt == "mp3":
-            cmd.extend(
-                [
-                    "--extract-audio",
-                    "--audio-format",
-                    "mp3",
-                    "--audio-quality",
-                    "0",  # best (320kbps for mp3)
-                ]
-            )
-        elif fmt == "audio":
-            cmd.extend(["--merge-output-format", "mp4"])
-        else:
-            cmd.extend(["--merge-output-format", fmt])
-
-        # Optional: cookies file for age-restricted videos
-        # (export from Playwright get_cookies action → Netscape format)
-        if cookies:
-            cp = Path(cookies)
-            if cp.exists() and cp.is_file():
-                cmd.extend(["--cookies", str(cp.resolve())])
-                logger.info("Using cookies: %s", cp)
-            else:
-                logger.warning("Cookies file not found: %s", cookies)
-
-        # Optional: JS runtime path for EJS extractors
-        # (install Deno via: winget install DenoLand.Deno)
-        if js_runtime:
-            jp = Path(js_runtime)
-            if jp.exists() and jp.is_file():
-                cmd.extend(["--js-runtimes", str(jp.resolve())])
-                logger.info("Using JS runtime: %s", jp)
-            else:
-                logger.warning("JS runtime not found: %s", js_runtime)
-
-        cmd.append(url)
-
-        logger.info("Downloading YouTube video: %s", url[:60])
-
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=_DOWNLOAD_TIMEOUT_SEC
-            )
-            if proc.returncode != 0:
-                error_text = stderr.decode()[:500]
-                logger.warning("yt-dlp download failed: %s", error_text)
-                # Attach the error text as a special attribute so execute()
-                # can use it for targeted fallback instructions.
-                self._last_download_error = error_text
-                return None
-
-            # yt-dlp --print after_move:filepath prints the final path on stdout
-            actual_path_str = stdout.decode().strip()
-            if not actual_path_str:
-                # Fallback: use the requested path
-                actual_path = output_path
-            else:
-                actual_path = Path(actual_path_str)
-
-            if not actual_path.exists():
-                logger.warning("yt-dlp download completed but file not found: %s", actual_path)
-                return None
-
-            size = actual_path.stat().st_size
-            logger.info("YouTube download complete: %s (%d bytes)", actual_path, size)
-
-            return ToolResult(
-                output=f"Downloaded YouTube video: {actual_path} ({size} bytes)",
-                data={
-                    "path": str(actual_path.resolve()),
-                    "size_bytes": size,
-                    "format": fmt,
-                    "quality": quality,
-                    "url": url[:80],
-                },
-            )
-        except TimeoutError:
-            logger.warning("YouTube download timed out after %ds", _DOWNLOAD_TIMEOUT_SEC)
-            return None
-        except Exception as exc:
-            logger.warning("YouTube download failed: %s", exc)
-            return None
-
     async def health_check(self) -> bool:
-        """yt-dlp must be installed and callable."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "yt-dlp",
-                "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-            return proc.returncode == 0
-        except Exception:
-            return False
+        """Node must be on PATH and Yoinks built."""
+        return shutil.which("node") is not None and self._cli_path().is_file()
