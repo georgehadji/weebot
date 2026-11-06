@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "Run `python -c \"print(N*N)\"` once for each N from 1 to 45, one separate tool call per N (do not batch or loop them). Then reply with only the sum of the 45 printed numbers.",
+    "expected_answer": "31395"
+  },
+  {
+    "prompt": "Run `python -c \"print(7*N+3)\"` once for each N from 1 to 50, one separate tool call per N (do not batch or loop them). Reply with the sum and the largest printed number, formatted as `sum=<n> max=<n>`.",
+    "expected_answer": "sum=9075,max=353"
+  },
+  {
+    "prompt": "Run `python -c \"print('chunk-N:', N*7919 % 10007)\"` once for each N from 1 to 40, one separate tool call per N (do not batch or loop them). Do not write the results to a file. After the last call, reply with the printed value for chunk-3 and for chunk-40, formatted as `chunk-3=<n> chunk-40=<n>`.",
+    "expected_answer": "chunk-3=3743,chunk-40=6543"
+  }
+]

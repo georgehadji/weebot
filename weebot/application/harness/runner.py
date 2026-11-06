@@ -18,9 +18,14 @@ from collections.abc import Callable
 from weebot.domain.models.benchmark_task import WeebotTask
 from weebot.domain.models.session import Session
 from weebot.domain.models.trajectory import TrajectorySummary
+from weebot.application.harness.metrics import RunMetrics, UsageTally, count_tool_events
 from weebot.application.harness.scorer import TaskScorer
 
 logger = logging.getLogger(__name__)
+
+# The executor swaps any step reply under 20 characters for this text (classify_reply), so a
+# short final answer such as "42" survives only as the preceding ThoughtEvent.
+_FILLER_REPLY = "Step completed. Continuing to the next plan step."
 
 
 @dataclass
@@ -33,6 +38,7 @@ class BenchmarkResult:
     passed: bool
     answer: str | None = None
     error: str | None = None
+    metrics: RunMetrics = RunMetrics()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,7 +48,19 @@ class BenchmarkResult:
             "passed": self.passed,
             "answer": self.answer,
             "error": self.error,
+            "metrics": self.metrics.to_dict(),
         }
+
+
+def _restore_short_answer(session: Session, thought: str) -> Session:
+    """Put the model's real reply back when the executor replaced it with filler."""
+    if not thought or TaskScorer._extract_answer(session) != _FILLER_REPLY:
+        return session
+    from weebot.domain.models.event import MessageEvent
+
+    return session.model_copy(
+        update={"events": [*session.events, MessageEvent(role="assistant", message=thought)]}
+    )
 
 
 class BenchmarkRunner:
@@ -63,11 +81,18 @@ class BenchmarkRunner:
         skill_name: str = "general",
         skill_version: int = 0,
         answer_scorer: Any | None = None,
+        usage: UsageTally | None = None,
+        prepare: Callable | None = None,
     ) -> None:
         self._flow_factory = flow_factory
         self._scorer = scorer or TaskScorer()
         # Optional ScoringPort for samples with an expected answer (WEEBOT_SCORING_MODE).
         self._answer_scorer = answer_scorer
+        # Optional: LLM calls, tokens and USD per run. Subscribe it to the bus before running.
+        self._usage = usage
+        # Optional async Session -> None, awaited before each run (e.g. persist the session
+        # the flow will look up by id).
+        self._prepare = prepare
         self._skill_name = skill_name
         self._skill_version = skill_version
 
@@ -91,18 +116,35 @@ class BenchmarkRunner:
             context={"skill_name": self._skill_name, "skill_version": self._skill_version},
         )
 
+        tool_events: list[Any] = []
+        flow_error: str | None = None
+        last_thought = ""
         try:
+            if self._prepare is not None:
+                await self._prepare(session)
             flow = self._flow_factory(session)
-            async for _ in flow.run(sample.prompt):
-                pass
+            async for event in flow.run(sample.prompt):
+                kind = getattr(event, "type", "")
+                if kind == "tool":
+                    tool_events.append(event)
+                elif kind == "thought":
+                    last_thought = getattr(event, "thought", "") or last_thought
+                elif kind == "error":
+                    flow_error = getattr(event, "error", None) or "flow error"
         except Exception as exc:
             logger.warning("Flow failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
             return BenchmarkResult(
-                task_id=task.task_id, sample_idx=sample_idx, score=0.0, passed=False, error=str(exc)
+                task_id=task.task_id,
+                sample_idx=sample_idx,
+                score=0.0,
+                passed=False,
+                error=str(exc),
+                metrics=self._metrics(session_id, tool_events),
             )
 
         # PlanActFlow updates its own _session immutably — use that for scoring.
         completed_session = getattr(flow, "_session", session)
+        completed_session = _restore_short_answer(completed_session, last_thought)
 
         try:
             if self._answer_scorer is not None and sample.expected_answer:
@@ -125,7 +167,14 @@ class BenchmarkRunner:
             score=score,
             passed=score >= task.pass_threshold,
             answer=answer,
+            error=flow_error,
+            metrics=self._metrics(session_id, tool_events),
         )
+
+    def _metrics(self, session_id: str, tool_events: list[Any]) -> RunMetrics:
+        calls, prompt, completion, cost = self._usage.of(session_id) if self._usage else (0,) * 4
+        tool_calls, tool_errors, loops = count_tool_events(tool_events)
+        return RunMetrics(calls, prompt, completion, cost, tool_calls, tool_errors, loops)
 
     async def run_batch(
         self, tasks: list[WeebotTask], concurrency: int = 4

@@ -49,7 +49,7 @@ A skill is prose the model reads, so a file per skill keeps it editable without 
 | web-3d-motion | `builtin/web-3d-motion` | SKILL.md | - |
 | web-development | `builtin/web-development` | SKILL.md | - |
 | web_research | `builtin/web_research` | manifest.json | `web_search`, `advanced_browser` |
-| youtube-download | `builtin/youtube-download` | SKILL.md | `youtube_download` (lines 9, 15-21), `video_ingest`, `web_search`, `advanced_browser`, `python_execute` |
+| youtube-download | `builtin/youtube-download` | SKILL.md | `youtube_download` (lines 9, 15-23), `video_ingest`, `web_search` |
 | apify-scraper | `.weebot/skills/apify-scraper` | SKILL.md | the ten `apify_*` presets (lines 19-28) |
 | code-review | `.weebot/skills/code-review` | SKILL.md | - |
 | find-bugs | `.weebot/skills/find-bugs` | SKILL.md | - |

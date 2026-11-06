@@ -338,7 +338,7 @@ settings_construction = 0
 # (web lifespan, run_mcp.py, the shared root itself) or is ADR-009 legacy.
 # 9 -> 8: the web lifespan uses shared_container() (F55).
 # 8 -> 7 with plan 3.5: core/agent.py's hand-built Container() went with the file.
-container_construction = 7
+container_construction = 5
 
 # Import cycles between modules of weebot/ (Tarjan SCC, AST, TYPE_CHECKING
 # excluded, lazy imports and literal import_module targets included). Three
@@ -406,7 +406,7 @@ functions_over_nesting_6 = 2
 # 614 -> 607 with D4 slice 7.
 # 607 -> 589 with D4 slice 10 deletions.
 # 587 -> 586 with the AUTO execution-mode branch: one violation removed.
-ruff_violations = 583
+ruff_violations = 578
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in
