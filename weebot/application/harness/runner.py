@@ -23,6 +23,10 @@ from weebot.application.harness.scorer import TaskScorer
 
 logger = logging.getLogger(__name__)
 
+# The executor swaps any step reply under 20 characters for this text (classify_reply), so a
+# short final answer such as "42" survives only as the preceding ThoughtEvent.
+_FILLER_REPLY = "Step completed. Continuing to the next plan step."
+
 
 @dataclass
 class BenchmarkResult:
@@ -48,6 +52,17 @@ class BenchmarkResult:
         }
 
 
+def _restore_short_answer(session: Session, thought: str) -> Session:
+    """Put the model's real reply back when the executor replaced it with filler."""
+    if not thought or TaskScorer._extract_answer(session) != _FILLER_REPLY:
+        return session
+    from weebot.domain.models.event import MessageEvent
+
+    return session.model_copy(
+        update={"events": [*session.events, MessageEvent(role="assistant", message=thought)]}
+    )
+
+
 class BenchmarkRunner:
     """Runs benchmark tasks through weebot's PlanActFlow and scores results.
 
@@ -67,6 +82,7 @@ class BenchmarkRunner:
         skill_version: int = 0,
         answer_scorer: Any | None = None,
         usage: UsageTally | None = None,
+        prepare: Callable | None = None,
     ) -> None:
         self._flow_factory = flow_factory
         self._scorer = scorer or TaskScorer()
@@ -74,6 +90,9 @@ class BenchmarkRunner:
         self._answer_scorer = answer_scorer
         # Optional: LLM calls, tokens and USD per run. Subscribe it to the bus before running.
         self._usage = usage
+        # Optional async Session -> None, awaited before each run (e.g. persist the session
+        # the flow will look up by id).
+        self._prepare = prepare
         self._skill_name = skill_name
         self._skill_version = skill_version
 
@@ -98,11 +117,20 @@ class BenchmarkRunner:
         )
 
         tool_events: list[Any] = []
+        flow_error: str | None = None
+        last_thought = ""
         try:
+            if self._prepare is not None:
+                await self._prepare(session)
             flow = self._flow_factory(session)
             async for event in flow.run(sample.prompt):
-                if getattr(event, "type", "") == "tool":
+                kind = getattr(event, "type", "")
+                if kind == "tool":
                     tool_events.append(event)
+                elif kind == "thought":
+                    last_thought = getattr(event, "thought", "") or last_thought
+                elif kind == "error":
+                    flow_error = getattr(event, "error", None) or "flow error"
         except Exception as exc:
             logger.warning("Flow failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
             return BenchmarkResult(
@@ -116,6 +144,7 @@ class BenchmarkRunner:
 
         # PlanActFlow updates its own _session immutably — use that for scoring.
         completed_session = getattr(flow, "_session", session)
+        completed_session = _restore_short_answer(completed_session, last_thought)
 
         try:
             if self._answer_scorer is not None and sample.expected_answer:
@@ -138,6 +167,7 @@ class BenchmarkRunner:
             score=score,
             passed=score >= task.pass_threshold,
             answer=answer,
+            error=flow_error,
             metrics=self._metrics(session_id, tool_events),
         )
 

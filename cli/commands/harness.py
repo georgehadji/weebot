@@ -19,14 +19,53 @@ def _answer_scorer(container):
     return container.get(ScoringPort)
 
 
-def _usage_tally(container):
-    """A UsageTally already listening on the container's event bus (tokens and USD per run)."""
-    from weebot.application.harness.metrics import UsageTally
-    from weebot.application.ports.event_bus_port import EventBusPort
+async def _tool_runner(model: str | None, skill_name: str):
+    """A BenchmarkRunner over the flow ``flow run`` builds: tools, AUTO mode, shared container.
 
+    Returns ``(runner, tools)``; the caller tears the tools down. The earlier target flow
+    factory passed ``tools=None`` (no tool-using task could run) and a StructuredLogger that
+    crashed the flow on a ``%s`` log call.
+    """
+    from weebot.application.cqrs.mediator import Mediator
+    from weebot.application.harness.metrics import UsageTally
+    from weebot.application.harness.runner import BenchmarkRunner
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.application.ports.event_bus_port import EventBusPort
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
+    from weebot.domain.models.execution_mode import ExecutionMode
+    from weebot.interfaces.factories import build_tools, create_flow, shared_container
+
+    container = shared_container()
+    llm = container.create_llm_for_model(model) if model else container.get(LLMPort)
+    tools = await build_tools(role="admin", llm_port=llm)
+    state_repo = container.get(StateRepositoryPort)
+    bus = container.get(EventBusPort)
     tally = UsageTally()
-    container.get(EventBusPort).subscribe_domain(tally.on_domain_event)
-    return tally
+    bus.subscribe_domain(tally.on_domain_event)
+
+    def factory(session):
+        return create_flow(
+            flow_type="plan_act",
+            session=session,
+            llm=llm,
+            tools=tools,
+            event_bus=bus,
+            model=model,
+            mediator=container.get(Mediator),
+            state_repo=state_repo,
+            execution_mode=ExecutionMode.AUTO,
+        )
+
+    runner = BenchmarkRunner(
+        flow_factory=factory,
+        scorer=TaskScorer(),
+        skill_name=skill_name,
+        answer_scorer=_answer_scorer(container),
+        usage=tally,
+        prepare=state_repo.save_session,
+    )
+    return runner, tools
 
 
 def _cost_line(records: list[dict]) -> str:
@@ -110,7 +149,7 @@ def benchmark_list(tasks_dir: str) -> None:
 @click.option("--skill-name", default="general", show_default=True)
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--sample", "sample_idx", default=0, type=int, show_default=True)
-@click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
+@click.option("--db", default=DB_SESSIONS_PATH, help="Ignored; kept for old scripts.")
 def benchmark_run(
     task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str
 ) -> None:
@@ -119,22 +158,14 @@ def benchmark_run(
     import json
     from pathlib import Path
     from weebot.application.harness.loader import TaskLoader
-    from weebot.application.harness.runner import BenchmarkRunner
-    from weebot.application.harness.scorer import TaskScorer
-    from weebot.application.di import Container
 
     async def _run() -> None:
         task = TaskLoader.load_from_dir(Path(task_path))
-        container = Container()
-        container.configure_defaults(db_path=db, default_model=model)
-        runner = BenchmarkRunner(
-            flow_factory=container._create_target_flow_factory(),
-            scorer=TaskScorer(),
-            skill_name=skill_name,
-            answer_scorer=_answer_scorer(container),
-            usage=_usage_tally(container),
-        )
-        result = await runner.run_task(task, sample_idx)
+        runner, tools = await _tool_runner(model, skill_name)
+        try:
+            result = await runner.run_task(task, sample_idx)
+        finally:
+            await tools.teardown()
         console.print(json.dumps(result.to_dict(), indent=2))
         status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
         console.print(f"Score: {result.score:.3f}  {status}")
@@ -148,7 +179,7 @@ def benchmark_run(
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--concurrency", default=4, type=int, show_default=True)
 @click.option("--output", "-o", default="benchmark_results.json", show_default=True)
-@click.option("--db", default=DB_SESSIONS_PATH, show_default=True)
+@click.option("--db", default=DB_SESSIONS_PATH, help="Ignored; kept for old scripts.")
 def benchmark_batch(
     tasks_dir: str, skill_name: str, model: str | None, concurrency: int, output: str, db: str
 ) -> None:
@@ -157,9 +188,6 @@ def benchmark_batch(
     import json
     from pathlib import Path
     from weebot.application.harness.loader import TaskLoader
-    from weebot.application.harness.runner import BenchmarkRunner
-    from weebot.application.harness.scorer import TaskScorer
-    from weebot.application.di import Container
 
     async def _run() -> None:
         tasks = TaskLoader.load_all_from_dir(Path(tasks_dir))
@@ -167,16 +195,11 @@ def benchmark_batch(
             console.print("[yellow]No tasks found.[/yellow]")
             return
 
-        container = Container()
-        container.configure_defaults(db_path=db, default_model=model)
-        runner = BenchmarkRunner(
-            flow_factory=container._create_target_flow_factory(),
-            scorer=TaskScorer(),
-            skill_name=skill_name,
-            answer_scorer=_answer_scorer(container),
-            usage=_usage_tally(container),
-        )
-        results = await runner.run_batch(tasks, concurrency=concurrency)
+        runner, tools = await _tool_runner(model, skill_name)
+        try:
+            results = await runner.run_batch(tasks, concurrency=concurrency)
+        finally:
+            await tools.teardown()
         records = [r.to_dict() for r in results]
         await asyncio.to_thread(
             Path(output).write_text, json.dumps(records, indent=2), encoding="utf-8"
