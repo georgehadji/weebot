@@ -1,0 +1,338 @@
+{
+  "schema": 1,
+  "purpose": "Before-numbers for the eval-gated items of tasks/specs/hermes_v022_parity_implementation_plan.md (section 13): H9 (tokens/task), H6 (edit-failure loops), and the pass-rate and cost-per-solved-task checks.",
+  "recorded_on": "2026-11-06",
+  "commit": "843c84c2",
+  "command": "python -m cli.main benchmark batch <dir holding sample_math, sample_reasoning, edit_heavy, long_context> --concurrency 3 -o baseline.json",
+  "model": "default role models, routed by ACR (deepseek/* through OpenRouter; direct DeepSeek returned 402 and fell back)",
+  "runs_per_sample": 1,
+  "noise_warning": "One run of 14 samples. One sample is 7 points of pass rate, so a 1-point gate cannot be read from a single run; the suites are also not deterministic (sample_math scored 3 of 4 on a question every model gets right, long_context[2] cost 0.74 USD while long_context[0] cost 0.07). Repeat each branch several times and compare means before treating a difference as real.",
+  "overall": {
+    "samples": 14,
+    "solved": 8,
+    "pass_rate": 0.5714,
+    "totals": {
+      "llm_calls": 1043,
+      "prompt_tokens": 14479478,
+      "completion_tokens": 308614,
+      "cost_usd": 1.2508,
+      "tool_calls": 827,
+      "tool_errors": 68,
+      "edit_failure_loops": 2
+    },
+    "per_solved_task": {
+      "tokens": 1848512,
+      "cost_usd": 0.1564,
+      "llm_calls": 130.4
+    },
+    "edit_failure_loops_per_sample": 0.143
+  },
+  "suites": {
+    "edit_heavy": {
+      "samples": 3,
+      "solved": 2,
+      "pass_rate": 0.6667,
+      "totals": {
+        "llm_calls": 404,
+        "prompt_tokens": 3526610,
+        "completion_tokens": 86675,
+        "cost_usd": 0.4264,
+        "tool_calls": 264,
+        "tool_errors": 23,
+        "edit_failure_loops": 2
+      },
+      "per_solved_task": {
+        "tokens": 1806642,
+        "cost_usd": 0.2132,
+        "llm_calls": 202.0
+      },
+      "edit_failure_loops_per_sample": 0.667
+    },
+    "long_context": {
+      "samples": 3,
+      "solved": 2,
+      "pass_rate": 0.6667,
+      "totals": {
+        "llm_calls": 611,
+        "prompt_tokens": 10832295,
+        "completion_tokens": 216952,
+        "cost_usd": 0.8116,
+        "tool_calls": 557,
+        "tool_errors": 45,
+        "edit_failure_loops": 0
+      },
+      "per_solved_task": {
+        "tokens": 5524624,
+        "cost_usd": 0.4058,
+        "llm_calls": 305.5
+      },
+      "edit_failure_loops_per_sample": 0.0
+    },
+    "sample_math": {
+      "samples": 4,
+      "solved": 3,
+      "pass_rate": 0.75,
+      "totals": {
+        "llm_calls": 12,
+        "prompt_tokens": 44754,
+        "completion_tokens": 1813,
+        "cost_usd": 0.0043,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      },
+      "per_solved_task": {
+        "tokens": 15522,
+        "cost_usd": 0.0014,
+        "llm_calls": 4.0
+      },
+      "edit_failure_loops_per_sample": 0.0
+    },
+    "sample_reasoning": {
+      "samples": 4,
+      "solved": 1,
+      "pass_rate": 0.25,
+      "totals": {
+        "llm_calls": 16,
+        "prompt_tokens": 75819,
+        "completion_tokens": 3174,
+        "cost_usd": 0.0084,
+        "tool_calls": 6,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      },
+      "per_solved_task": {
+        "tokens": 78993,
+        "cost_usd": 0.0084,
+        "llm_calls": 16.0
+      },
+      "edit_failure_loops_per_sample": 0.0
+    }
+  },
+  "samples": [
+    {
+      "task_id": "edit_heavy",
+      "sample_idx": 0,
+      "score": 1.0,
+      "passed": true,
+      "error": "Plan update failed: Expecting value: line 1 column 1 (char 0)",
+      "metrics": {
+        "llm_calls": 147,
+        "prompt_tokens": 1213311,
+        "completion_tokens": 31971,
+        "cost_usd": 0.13839324,
+        "tool_calls": 98,
+        "tool_errors": 6,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "edit_heavy",
+      "sample_idx": 1,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 141,
+        "prompt_tokens": 1330770,
+        "completion_tokens": 34033,
+        "cost_usd": 0.19796535,
+        "tool_calls": 89,
+        "tool_errors": 10,
+        "edit_failure_loops": 1
+      }
+    },
+    {
+      "task_id": "edit_heavy",
+      "sample_idx": 2,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 116,
+        "prompt_tokens": 982529,
+        "completion_tokens": 20671,
+        "cost_usd": 0.09008953999999998,
+        "tool_calls": 77,
+        "tool_errors": 7,
+        "edit_failure_loops": 1
+      }
+    },
+    {
+      "task_id": "long_context",
+      "sample_idx": 0,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 96,
+        "prompt_tokens": 663449,
+        "completion_tokens": 23241,
+        "cost_usd": 0.07270200000000003,
+        "tool_calls": 45,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "long_context",
+      "sample_idx": 1,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 1,
+        "prompt_tokens": 217,
+        "completion_tokens": 279,
+        "cost_usd": 0.00039989999999999996,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "long_context",
+      "sample_idx": 2,
+      "score": 1.0,
+      "passed": true,
+      "error": "Plan parsing failed; using fallback plan: Expecting ',' delimiter: line 200 column 6 (char 9819)",
+      "metrics": {
+        "llm_calls": 514,
+        "prompt_tokens": 10168629,
+        "completion_tokens": 193432,
+        "cost_usd": 0.7385133,
+        "tool_calls": 512,
+        "tool_errors": 45,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_math",
+      "sample_idx": 0,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 3,
+        "prompt_tokens": 11173,
+        "completion_tokens": 416,
+        "cost_usd": 0.0010517399999999998,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_math",
+      "sample_idx": 1,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 3,
+        "prompt_tokens": 11196,
+        "completion_tokens": 468,
+        "cost_usd": 0.00108648,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_math",
+      "sample_idx": 2,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 3,
+        "prompt_tokens": 11208,
+        "completion_tokens": 479,
+        "cost_usd": 0.00113784,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_math",
+      "sample_idx": 3,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 3,
+        "prompt_tokens": 11177,
+        "completion_tokens": 450,
+        "cost_usd": 0.00105918,
+        "tool_calls": 0,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_reasoning",
+      "sample_idx": 0,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 4,
+        "prompt_tokens": 18098,
+        "completion_tokens": 625,
+        "cost_usd": 0.0015137999999999998,
+        "tool_calls": 1,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_reasoning",
+      "sample_idx": 1,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 4,
+        "prompt_tokens": 18074,
+        "completion_tokens": 520,
+        "cost_usd": 0.0013805999999999998,
+        "tool_calls": 2,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_reasoning",
+      "sample_idx": 2,
+      "score": 1.0,
+      "passed": true,
+      "error": null,
+      "metrics": {
+        "llm_calls": 4,
+        "prompt_tokens": 21232,
+        "completion_tokens": 551,
+        "cost_usd": 0.00291816,
+        "tool_calls": 1,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    },
+    {
+      "task_id": "sample_reasoning",
+      "sample_idx": 3,
+      "score": 0.0,
+      "passed": false,
+      "error": null,
+      "metrics": {
+        "llm_calls": 4,
+        "prompt_tokens": 18415,
+        "completion_tokens": 1478,
+        "cost_usd": 0.00259794,
+        "tool_calls": 2,
+        "tool_errors": 0,
+        "edit_failure_loops": 0
+      }
+    }
+  ]
+}
