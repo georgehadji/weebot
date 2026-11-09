@@ -5,9 +5,9 @@ uvicorn[standard]==0.54.0
 sse-starlette==3.6.0
 # langchain_core is imported directly (infrastructure/llm/langchain_adapter.py);
 # the langchain meta-package itself is not.
-langchain-core==1.7.3
-langchain-openai==1.7.3
-pydantic==2.14.2
+langchain-core==1.7.6
+langchain-openai==1.7.4
+pydantic==2.14.3
 # Imported directly by weebot.config.settings; also required transitively by
 # mcp/fastapi — pin explicitly so a transitive change can't drop it.
 pydantic-settings>=2.16.1
@@ -36,7 +36,7 @@ winotify==1.1.0; platform_system=="Windows"
 
 # Research & Scientific
 numpy==2.5.4
-pandas==3.1.0
+pandas==3.1.1
 matplotlib==3.11.2
 # Imported directly by image tools (ocr, screen_tool, computer_use, som_renderer);
 # also pulled by matplotlib — pin explicitly so it can't be dropped transitively.
@@ -73,7 +73,7 @@ aiofiles==25.1.0
 opentelemetry-api==1.45.2
 opentelemetry-sdk==1.45.2
 opentelemetry-exporter-otlp-proto-http==1.45.2
-anyio==4.15.1
+anyio==4.16.0
 
 # Web search & image search
 ddgs>=9.16.1
@@ -91,7 +91,7 @@ pyyaml>=6.0.3
 watchdog==6.0.0
 
 # MCP Server
-mcp==1.28.1
+mcp==1.30.0
 
 # Video ingestion
 youtube-transcript-api>=1.2.4
@@ -122,4 +122,4 @@ hypothesis>=6.170.14
 # Pinned, not ranged: `ruff_violations` in tasks/quality/ceilings.toml is an exact
 # count, and a ruff upgrade can move it with no code change (0.17.1 vs 0.17.2 differ).
 # A floating pin made that ratchet depend on whatever pip resolved that day.
-ruff==0.17.3
+ruff==0.17.4
