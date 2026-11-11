@@ -38,7 +38,7 @@ export function ToolApprovalRow({
   onReply,
 }: {
   event: ToolApprovalEvent;
-  onReply?: (text: string) => void;
+  onReply?: (text: string) => void | Promise<void>;
 }) {
   // The backend prompt also serves the CLI, where typing yes/no is necessary. In the web UI
   // the controls below replace that final instruction, so avoid telling the operator to type.

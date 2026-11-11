@@ -73,7 +73,10 @@ class HyperAgentFlow(BaseFlow):
             yield event
         except Exception as exc:
             logger.exception("HyperAgentFlow failed: %s", exc)
+            # FAILED and not done: a failed swarm used to be saved as COMPLETED.
+            self._session = self._session.set_status(SessionStatus.FAILED)
             yield ErrorEvent(error=str(exc))
+            return
 
         self._session = self._session.set_status(SessionStatus.COMPLETED)
         self._done = True

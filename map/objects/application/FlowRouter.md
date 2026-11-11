@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-11-11
-commit: 843c84c2
+commit: 3976b7b7
 ---
 
 # FlowRouter
@@ -33,7 +33,7 @@ Extracted from `PlanActFlow.run()` so routing is testable alone (`weebot/applica
 
 Two details that look like bugs and are deliberate:
 - An empty answer approves a plan (`flow_router.py:94`) but does **not** approve a gate (`flow_router.py:136-139`): gates guard untrusted input, silence is not consent.
-- Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`flow_router.py:97-99, 109-114, 189-194`; loop break at `weebot/application/flows/plan_act_flow.py:473-476`).
+- Every non-approve branch sets the session RUNNING because the run loop breaks on WAITING (`flow_router.py:97-99, 109-114, 189-194`; loop break at `weebot/application/flows/plan_act_flow.py:477-480`).
 
 Which plan an approve runs: the resumed flow takes the plan from the last `PlanEvent` in the session (`Session.get_last_plan`, `weebot/application/flows/_run_prologue.py:109`), not from what `PlanReviewState` showed. A state that replaces `context._plan` must emit a `PlanEvent`, or the reviewed plan and the run diverge. `PlanningState` emits one for the DPPM plan (`weebot/application/flows/states/planning.py:313-315`, F36), `PremortemState` for its risk notes (`states/premortem.py:74`), and `PlanReviewState` emits its `PlanReviewEvent` (`states/plan_review.py:99`, F37).
 

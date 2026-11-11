@@ -17,11 +17,15 @@ import { useEventStreamContext } from "@/providers/EventStreamProvider";
 import { Session, SessionPresenceEvent } from "@/types/events";
 import { Remote, remoteData } from "@/types/remote";
 
+const STATUSES = new Set<string>(["pending", "running", "waiting", "completed", "failed"]);
+
 export function applyPresence(session: Session, update?: SessionPresenceEvent): Session {
   if (!update) return session;
+  // "deleted" (or a status this UI does not know) is not a session status: keep the loaded one.
+  const status = STATUSES.has(update.status) ? (update.status as Session["status"]) : session.status;
   const title = update.title || session.title;
-  if (session.status === update.status && session.title === title) return session;
-  return { ...session, status: update.status as Session["status"], title };
+  if (session.status === status && session.title === title) return session;
+  return { ...session, status, title };
 }
 
 const SETTLED = new Set(["waiting", "completed", "failed"]);

@@ -131,13 +131,31 @@ def test_fix_marks_the_card_stale_when_the_cited_text_is_gone(tmp_path, monkeypa
     assert "status: stale" in card.read_text()
 
 
+def _stamp(card, sha):
+    card.write_text(card.read_text().replace(
+        card.read_text().split("commit: ")[1].split("\n")[0], sha))
+
+
 def test_a_card_whose_commit_is_not_in_the_clone_is_reported_not_skipped(tmp_path, monkeypatch):
     """A shallow CI checkout lacks the card's commit; every citation was then skipped silently."""
     cm, card = _card_repo(tmp_path, monkeypatch)
-    card.write_text(card.read_text().replace(
-        card.read_text().split("commit: ")[1].split("\n")[0], "deadbeef1"))
+    monkeypatch.setattr(cm, "_is_shallow", lambda: True)
+    _stamp(card, "deadbeef1")
     problems = cm.drifted_citations()
     assert any("deadbeef1" in p and "not in this clone" in p for p in problems)
+
+
+def test_a_commit_a_squash_merge_dropped_falls_back_to_the_commit_that_wrote_the_card(
+    tmp_path, monkeypatch
+):
+    """`--fix` on a branch stamps the branch HEAD; squashed, that commit is gone from main."""
+    cm, card = _card_repo(tmp_path, monkeypatch)
+    _stamp(card, "deadbeef1")  # the branch commit, gone after the squash
+    _git(tmp_path, "commit", "-q", "-am", "squash")
+    assert cm.drifted_citations() == []
+    (tmp_path / "weebot" / "mod.py").write_text("import os\nimport sys\n\ndef f():\n    return 1\n")
+    _git(tmp_path, "commit", "-q", "-am", "shift")
+    assert any("moved to" in p for p in cm.drifted_citations())  # drift is still caught
 
 
 def test_the_citation_check_covers_process_cards():

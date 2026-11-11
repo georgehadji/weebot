@@ -6,7 +6,7 @@ cluster: infrastructure
 universe: live
 status: verified
 verified: 2026-11-11
-commit: 77d4160d
+commit: be7e51c2
 ---
 
 # Event bus

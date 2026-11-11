@@ -52,7 +52,7 @@ interface ComposerProps {
   /** Receives the function that replaces the draft (used by the example prompts). */
   registerSetDraft?: (setDraft: (text: string) => void) => void;
   /** Receives the function used by approval and plan-review buttons. */
-  registerQuickReply?: (reply: (text: string) => void) => void;
+  registerQuickReply?: (reply: (text: string) => Promise<boolean>) => void;
   /** Receives the function that moves focus into the box (plan review's "Request changes"). */
   registerFocus?: (focus: () => void) => void;
   className?: string;

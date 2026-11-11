@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session, SessionAction, SessionStatus
 from weebot.domain.services.session_title import derive_session_title
 from weebot.interfaces.web.auth import (
     current_principal,
@@ -72,6 +72,7 @@ def _session_to_response(
         updated_at=session.updated_at,
         event_count=event_count,
         models=models or [],
+        allowed_actions=session.status.allowed_actions,
     )
 
 
@@ -279,6 +280,11 @@ async def cancel_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
+    # A finished session has nothing to stop. Cancelling it used to overwrite COMPLETED with
+    # FAILED; now it is a no-op that returns the session as it is (idempotent for retries).
+    if not session.status.allows(SessionAction.CANCEL):
+        return await _respond(http_request, session)
+
     # Cancel via TaskRunner if available, otherwise just mark status.
     # The TaskRunner owns the running asyncio.Task — we must stop it
     # or it will overwrite the FAILED status when it finishes.
@@ -292,8 +298,10 @@ async def cancel_session(
             # TaskRunner didn't have an active task — mark manually
             session = session.set_status(SessionStatus.FAILED)
             await state_repo.save_session(session)
-    except (KeyError, Exception):
+    except Exception:
         # TaskRunner not registered in container — fall back to status-only
+        logger.warning("Cancel of session %s fell back to a status-only update", session_id,
+                       exc_info=True)
         session = session.set_status(SessionStatus.FAILED)
         await state_repo.save_session(session)
     else:
@@ -322,7 +330,7 @@ async def resume_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    if session.status != SessionStatus.WAITING:
+    if not session.status.allows(SessionAction.RESUME):
         raise HTTPException(
             status_code=400,
             detail=f"Session {session_id} is not waiting for input (status: {session.status.value})",
@@ -354,7 +362,7 @@ async def run_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    if session.status not in (SessionStatus.PENDING, SessionStatus.FAILED):
+    if not session.status.allows(SessionAction.RUN):
         raise HTTPException(
             status_code=409, detail=f"Session {session_id} is already {session.status.value}"
         )
@@ -518,7 +526,7 @@ async def steer_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    if session.status != SessionStatus.RUNNING:
+    if not session.status.allows(SessionAction.STEER):
         raise HTTPException(
             status_code=409,
             detail=f"Session {session_id} is not running (status: {session.status.value}); "

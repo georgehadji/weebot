@@ -122,7 +122,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           headers,
           signal: controller.signal,
         });
-        if (!response.body) return;
+        if (!response.ok || !response.body) return; // `finally` marks the connection closed
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -196,6 +196,9 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
         ws.onclose = () => {
           if (conn.listeners.size === 0) return; // intentionally torn down
+          // Not "websocket" while the socket is down: the AppBar read that as "Live".
+          conn.mode = "connecting";
+          forceRender((n) => n + 1);
           if (conn.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             conn.reconnectAttempts += 1;
             const delay = BASE_RECONNECT_DELAY_MS * 2 ** (conn.reconnectAttempts - 1);
@@ -277,13 +280,12 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
         }
       };
       ws.onclose = () => {
-        if (presenceListeners.current.size === 0) return;
-        if (presenceReconnectRef.current < MAX_RECONNECT_ATTEMPTS) {
-          const attempt = presenceReconnectRef.current;
-          presenceReconnectRef.current += 1;
-          const delay = BASE_RECONNECT_DELAY_MS * 2 ** attempt;
-          presenceTimerRef.current = setTimeout(open, delay);
-        }
+        // A replaced socket's late close must not reconnect: that opened a second socket.
+        if (presenceWsRef.current !== ws || presenceListeners.current.size === 0) return;
+        // Keep retrying at the capped delay: giving up after 5 left the rail stale for good.
+        const attempt = Math.min(presenceReconnectRef.current, MAX_RECONNECT_ATTEMPTS - 1);
+        presenceReconnectRef.current += 1;
+        presenceTimerRef.current = setTimeout(open, BASE_RECONNECT_DELAY_MS * 2 ** attempt);
       };
     }
 
@@ -319,7 +321,9 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
         closeSessionConnection(id, conn);
       });
       presence.clear();
+      if (presenceTimerRef.current) clearTimeout(presenceTimerRef.current);
       closeSocketAfterOpen(presenceWsRef.current);
+      presenceWsRef.current = null;
     };
   }, [closeSessionConnection]);
 

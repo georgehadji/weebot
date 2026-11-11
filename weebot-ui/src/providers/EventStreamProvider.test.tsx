@@ -258,6 +258,66 @@ describe("EventStreamProvider — reconnect epoch", () => {
     });
     expect(screen.getByTestId("epoch").textContent).toBe("1");
   });
+
+  it("presence keeps reconnecting after five failed attempts instead of going stale", async () => {
+    render(
+      <EventStreamProvider>
+        <Probe />
+      </EventStreamProvider>
+    );
+    for (let i = 0; i < 7; i += 1) {
+      await act(async () => {
+        sockets.last.serverClose();
+        await vi.advanceTimersByTimeAsync(16_000);
+      });
+    }
+    expect(sockets.sockets).toHaveLength(8);
+  });
+
+  it("unmounting during a presence reconnect wait opens no socket", async () => {
+    const app = render(
+      <EventStreamProvider>
+        <Probe />
+      </EventStreamProvider>
+    );
+    await act(async () => {
+      sockets.last.accept();
+      sockets.last.serverClose(); // schedules a reconnect in 1s
+    });
+    const opened = sockets.sockets.length;
+    app.unmount();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sockets.sockets.length).toBe(opened);
+  });
+
+  it("a dropped session socket is not reported as live while it reconnects", async () => {
+    const { result } = renderHook(
+      () => useEventStreamContext(),
+      {
+        wrapper: ({ children }) => {
+          function Sub() {
+            useSessionEvents(SESSION);
+            return null;
+          }
+          return (
+            <EventStreamProvider>
+              <Sub />
+              {children}
+            </EventStreamProvider>
+          );
+        },
+      }
+    );
+    const session = () => sockets.sockets.find((ws) => ws.url.includes(SESSION))!;
+    await act(async () => {
+      session().accept();
+    });
+    expect(result.current.getSessionMode(SESSION)).toBe("websocket");
+    await act(async () => {
+      session().serverClose();
+    });
+    expect(result.current.getSessionMode(SESSION)).toBe("connecting");
+  });
 });
 
 describe("EventStreamProvider — connection settings", () => {
