@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, UTC
-from enum import Enum
+from enum import Enum, StrEnum
 import re
 from typing import Any
 
@@ -14,12 +14,41 @@ from .event import AgentEvent
 from weebot.domain.services.session_memory import SessionMemory
 
 
+class SessionAction(StrEnum):
+    """What a caller may do to a session through the API, by its status (see ``_ALLOWED``)."""
+
+    RUN = "run"  # start it, or start it again after a failure
+    STEER = "steer"  # add guidance to a running flow
+    RESUME = "resume"  # answer the question or approval a waiting session asked for
+    CANCEL = "cancel"  # stop it
+
+
 class SessionStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     WAITING = "waiting"
     COMPLETED = "completed"
     FAILED = "failed"
+
+    def allows(self, action: SessionAction) -> bool:
+        return action in _ALLOWED[self]
+
+    @property
+    def allowed_actions(self) -> list[str]:
+        """The actions this status allows, in a fixed order, for API responses."""
+        return [a.value for a in SessionAction if a in _ALLOWED[self]]
+
+
+# The session lifecycle in one place: which action each status allows. The API guards read
+# it and responses list it, so the UI and agents need not guess. A message (POST /input) is
+# accepted in every status; the flow router decides what it means.
+_ALLOWED: dict[SessionStatus, frozenset[SessionAction]] = {
+    SessionStatus.PENDING: frozenset({SessionAction.RUN, SessionAction.CANCEL}),
+    SessionStatus.RUNNING: frozenset({SessionAction.STEER, SessionAction.CANCEL}),
+    SessionStatus.WAITING: frozenset({SessionAction.RESUME, SessionAction.CANCEL}),
+    SessionStatus.COMPLETED: frozenset(),
+    SessionStatus.FAILED: frozenset({SessionAction.RUN}),
+}
 
 
 class FactSource(str, Enum):

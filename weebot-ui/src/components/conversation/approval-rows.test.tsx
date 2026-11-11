@@ -30,6 +30,15 @@ describe("approval controls", () => {
     expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
   });
 
+  it("a reply that was not delivered keeps the buttons instead of saying Approved", async () => {
+    const onReply = vi.fn().mockRejectedValue(new Error("Reply not sent"));
+    render(<ToolApprovalRow event={approval()} onReply={onReply} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve once" }));
+    await waitFor(() => expect(onReply).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve once" })).toBeTruthy());
+    expect(screen.queryByText("Approved")).toBeNull();
+  });
+
   it("a double click in the same tick sends one reply", async () => {
     const onReply = vi.fn();
     render(<ToolApprovalRow event={approval()} onReply={onReply} />);

@@ -25,7 +25,7 @@ from sse_starlette.sse import EventSourceResponse
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.idempotency_port import IdempotencyPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session, SessionAction, SessionStatus
 from weebot.domain.services.session_title import derive_session_title
 from weebot.interfaces.web import openai_adapter as adapter
 from weebot.interfaces.web.auth import (
@@ -254,6 +254,7 @@ def _run_body(session: Session) -> dict[str, Any]:
         "object": "run",
         "status": session.status.value,
         "created_at": int(session.created_at.timestamp()),
+        "allowed_actions": session.status.allowed_actions,
     }
 
 
@@ -320,7 +321,7 @@ async def run_approval(
 ) -> dict[str, Any]:
     """Answer the approval a waiting run asked for, with the reply the web UI would send."""
     session = await _load_owned(request, repo, run_id)
-    if session.status != SessionStatus.WAITING:
+    if not session.status.allows(SessionAction.RESUME):
         raise HTTPException(status_code=409, detail=f"run is {session.status.value}, not waiting")
     reply = "no" if body.decision == "deny" else {"once": "yes"}.get(body.scope, body.scope)
     result = await sessions_routes._dispatch_input(request, session, reply, repo)
@@ -336,4 +337,7 @@ async def run_stop(
 ) -> dict[str, Any]:
     await _load_owned(request, repo, run_id)
     stopped = await sessions_routes.cancel_session(run_id, request, repo, None)
-    return {"id": stopped.id, "object": "run", "status": stopped.status}
+    return {
+        "id": stopped.id, "object": "run", "status": stopped.status,
+        "allowed_actions": stopped.allowed_actions,
+    }
