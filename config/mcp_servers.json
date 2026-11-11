@@ -37,5 +37,12 @@
     "url": "https://mcp.apify.com",
     "auth": { "type": "bearer", "token": "${APIFY_API_KEY}" },
     "timeout_seconds": 60
+  },
+  "agent_desktop": {
+    "_comment": "vercel-labs/agent-desktop (npm i -g agent-desktop, or cargo): see and operate desktop apps through the OS accessibility tree. No trust key, so the server is untrusted: every desktop_* tool asks before it runs, and its snapshots are fenced as untrusted content (they can carry private screen text). Tools arrive as mcp__agent_desktop__desktop_<command>.",
+    "transport": "stdio",
+    "command": "agent-desktop",
+    "args": ["mcp"],
+    "timeout_seconds": 60
   }
 }

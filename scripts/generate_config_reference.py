@@ -152,6 +152,8 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Outbound tools ask through the approval channel even in observe mode"},
     {"var": "AGENT_REACH_PATH", "type": "str", "default": "",
      "desc": "Path to agent-reach.exe for the agent_reach tool (else PATH, else ~/.agent-reach-venv)"},
+    {"var": "YOINKS_DIR", "type": "str", "default": "",
+     "desc": "Yoinks folder (built, dist/cli.js) for youtube_download (else the Yoinks folder beside this project)"},
     {"var": "MOLI_PATH", "type": "str", "default": "",
      "desc": "Path to moli.exe for the moli_fetch tool (else PATH, else %LOCALAPPDATA%\\Moli\\bin)"},
     {"var": "CAMOFOX_PATH", "type": "str", "default": "",

@@ -98,6 +98,7 @@ _MCP_SERVICE_WORDS: dict[str, tuple[str, ...]] = {
     "hubspot": ("hubspot", "crm", "contact", "contacts", "deal", "deals", "lead", "leads"),
     "apify": ("apify", "actor", "actors", "scrape", "scraper", "scraping"),
     "postiz": ("postiz", "social", "instagram", "facebook", "linkedin", "post", "posts"),
+    "agent_desktop": ("agent_desktop", "desktop", "taskbar", "gui"),
 }
 
 _WORD = re.compile(r"[a-z0-9_]+")
