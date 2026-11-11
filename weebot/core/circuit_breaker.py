@@ -122,6 +122,7 @@ class _BreakerEntry:
     success_count: int = 0
     last_failure_time: float = 0.0
     last_state_change: float = field(default_factory=time.monotonic)
+    probe_started: float = 0.0  # monotonic start of the HALF_OPEN probe in flight; 0 = none
 
 
 # ------------------------------------------------------------------
@@ -270,6 +271,7 @@ class CircuitBreaker:
                     entry.state = BreakerState.HALF_OPEN
                     entry.success_count = 0
                     entry.last_state_change = time.monotonic()
+                    entry.probe_started = entry.last_state_change
                     self._state_changes += 1
                     self._recovery_attempts += 1
 
@@ -291,7 +293,18 @@ class CircuitBreaker:
                     last_failure_time=entry.last_failure_time,
                 )
 
-            # HALF_OPEN — allow probe request
+            # HALF_OPEN: one probe at a time (every caller used to get through). A probe that
+            # never reports stops blocking after a cooldown, so a lost one cannot wedge it.
+            if entry.probe_started and now - entry.probe_started < jittered_cooldown:
+                return BreakerResult(
+                    entity_id=entity_id,
+                    allowed=False,
+                    state=BreakerState.HALF_OPEN,
+                    reason="Probe in flight",
+                    failure_count=entry.failure_count,
+                    last_failure_time=entry.last_failure_time,
+                )
+            entry.probe_started = now
             return BreakerResult(
                 entity_id=entity_id,
                 allowed=True,
@@ -306,6 +319,7 @@ class CircuitBreaker:
             entry = self._get_or_create(entity_id)
 
             if entry.state == BreakerState.HALF_OPEN:
+                entry.probe_started = 0.0
                 entry.success_count += 1
                 if entry.success_count >= self._success_threshold:
                     old = entry.state
@@ -330,6 +344,7 @@ class CircuitBreaker:
 
             if entry.state == BreakerState.HALF_OPEN:
                 # Probe failed — revert to OPEN
+                entry.probe_started = 0.0
                 old = entry.state
                 entry.state = BreakerState.OPEN
                 entry.last_state_change = now

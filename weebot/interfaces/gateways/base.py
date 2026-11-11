@@ -16,6 +16,8 @@ never fired: audit A33).
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import random
 import re
 import uuid
@@ -161,6 +163,26 @@ class GatewayAdapter(ABC):
         # Every adapter still receives `llm` from the entry point's container; nothing here
         # uses it since the inert safety gate went (A33), and the call sites stay as they are.
         self._auth = GatewayAuth()
+        self._poll_task: asyncio.Task[None] | None = None
+
+    def _start_polling(self, loop: Callable[[], Awaitable[None]]) -> bool:
+        """Start *loop* as the poll task; False (and nothing started) while one still runs.
+
+        A second ``start()`` used to start a second loop and orphan the first.
+        """
+        if self._poll_task is not None and not self._poll_task.done():
+            return False
+        self._poll_task = asyncio.create_task(loop())
+        return True
+
+    async def _stop_polling(self) -> None:
+        """Cancel the poll task and wait for it; fine before ``start()`` and when called twice."""
+        task, self._poll_task = self._poll_task, None
+        if task is None:
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
     def is_authorized(self, platform: str, chat_id: str, user_id: str = "") -> bool:
         """Check an inbound chat/user against the gateway allowlist.

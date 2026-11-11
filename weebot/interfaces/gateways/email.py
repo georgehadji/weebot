@@ -28,6 +28,7 @@ from weebot.interfaces.gateways.base import (
     GatewayAdapter,
     GatewayMessage,
     GatewayResponse,
+    PollBackoff,
     flow_session_id,
 )
 
@@ -157,35 +158,37 @@ class EmailAdapter(GatewayAdapter):
 
     async def start(self) -> None:
         self._running = True
-        self._poll_task = asyncio.create_task(self._poll_loop())
-        logger.info("EmailAdapter started (account: %s)", self._imap_user)
+        if self._start_polling(self._poll_loop):
+            logger.info("EmailAdapter started (account: %s)", self._imap_user)
 
     async def stop(self) -> None:
         self._running = False
-        self._poll_task.cancel()
-        try:
-            await self._poll_task
-        except asyncio.CancelledError:
-            pass
+        await self._stop_polling()
         logger.info("EmailAdapter stopped")
 
     async def _poll_loop(self) -> None:
+        backoff = PollBackoff()
         while self._running:
             try:
                 messages = await self.receive_messages()
-                for msg in messages:
-                    try:
-                        text = await self._process_message(msg)
-                        if text:
-                            await self.send_response(
-                                GatewayResponse(
-                                    text=text, platform="email", external_id=msg.external_id
-                                )
-                            )
-                    except Exception as exc:
-                        logger.warning("Error processing email message: %s", exc)
             except Exception as exc:
+                # Back off on a failing mailbox (as Telegram and Signal do), never below the
+                # normal interval: a fixed interval kept hammering a server that was down.
                 logger.error("Email poll error: %s", exc)
+                await asyncio.sleep(max(self._poll_interval_seconds, backoff.next_delay()))
+                continue
+            backoff.reset()
+            for msg in messages:
+                try:
+                    text = await self._process_message(msg)
+                    if text:
+                        await self.send_response(
+                            GatewayResponse(
+                                text=text, platform="email", external_id=msg.external_id
+                            )
+                        )
+                except Exception as exc:
+                    logger.warning("Error processing email message: %s", exc)
             await asyncio.sleep(self._poll_interval_seconds)
 
     async def _process_message(self, message: GatewayMessage) -> str:

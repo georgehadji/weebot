@@ -7,18 +7,12 @@ from typing import Any, ClassVar
 from weebot.domain.models.output_trust import OutputTrust
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.scheduling.scheduler import SchedulingManager
-
-# Module-level scheduling manager (singleton)
-_scheduler: SchedulingManager | None = None
+from weebot.scheduling.scheduler import SchedulingManager, process_scheduler
 
 
 def get_scheduler() -> SchedulingManager:
-    """Get or create the global scheduler instance."""
-    global _scheduler
-    if _scheduler is None:
-        _scheduler = SchedulingManager()
-    return _scheduler
+    """The process's scheduler: the same one the web app starts, not a second instance."""
+    return process_scheduler()
 
 
 class ScheduleTool(BaseTool):
