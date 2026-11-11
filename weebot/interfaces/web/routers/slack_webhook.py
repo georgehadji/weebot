@@ -41,7 +41,12 @@ async def slack_events(request: Request):
         raise HTTPException(status_code=503, detail="DI container not initialized")
 
     body = await request.body()
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Body is not valid JSON") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
 
     # The URL verification handshake is unsigned at setup time in some
     # Slack app configs — answer it before requiring an adapter/signature.

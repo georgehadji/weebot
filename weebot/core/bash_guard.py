@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from weebot.core.approval_floors import _deletes_home, _deletes_root
 from weebot.core.encoded_command import LONG_FORM as ENCODED_LONG_FORM
 from weebot.core.encoded_command import SHORT_FORM as ENCODED_SHORT_FORM
 from weebot.core.shell_segments import strip_escapes
@@ -561,25 +562,30 @@ class BashGuard:
         # the plain spelling: read every pattern against both (audit F29).
         texts = (command, strip_escapes(command))
 
-        for compiled_pattern, risk, desc, suggestion in self._compiled_patterns:
-            if any(compiled_pattern.search(t) for t in texts):
-                check = SafetyCheck(
-                    pattern=compiled_pattern.pattern,
-                    risk_level=risk,
-                    description=desc,
-                    suggestion=suggestion,
-                )
-                checks.append(check)
+        hits = [
+            (p.pattern, risk, desc, suggestion)
+            for p, risk, desc, suggestion in self._compiled_patterns
+            if any(p.search(t) for t in texts)
+        ]
+        # The rm regexes above miss `rm -rfv /` and `rm -rf ~`; the approval floors read the
+        # same commands by token. Added only when no regex already gave that verdict.
+        token_hits = (
+            (_deletes_root, RiskLevel.BLOCKED, "Recursive deletion of a root directory"),
+            (_deletes_home, RiskLevel.DANGEROUS, "Recursive deletion of the home directory"),
+        )
+        for reads, risk, desc in token_hits:
+            if any(reads(t) for t in texts) and not any(h[1] == risk for h in hits):
+                hits.append((f"<{reads.__name__}>", risk, desc, "Use specific file paths instead."))
 
-                # Update max risk
-                risk_order = [
-                    RiskLevel.SAFE,
-                    RiskLevel.SUSPICIOUS,
-                    RiskLevel.DANGEROUS,
-                    RiskLevel.BLOCKED,
-                ]
-                if risk_order.index(risk) > risk_order.index(max_risk):
-                    max_risk = risk
+        risk_order = [RiskLevel.SAFE, RiskLevel.SUSPICIOUS, RiskLevel.DANGEROUS, RiskLevel.BLOCKED]
+        for pattern, risk, desc, suggestion in hits:
+            checks.append(
+                SafetyCheck(
+                    pattern=pattern, risk_level=risk, description=desc, suggestion=suggestion
+                )
+            )
+            if risk_order.index(risk) > risk_order.index(max_risk):
+                max_risk = risk
 
         # Emit security event callback (e.g. Prometheus counter, audit log).
         if max_risk != RiskLevel.SAFE and self._on_security_event is not None:
