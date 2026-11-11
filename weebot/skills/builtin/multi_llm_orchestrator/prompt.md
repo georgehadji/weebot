@@ -82,6 +82,8 @@ The orchestrator prints the `project_id` when it starts. If interrupted, find it
    - Tests pass if applicable
    - No console errors
 
+   - For any website or web UI: put the design brief from the Awwwards research (see the `web-development` skill) in `--project`, and add to `--criteria` that the build follows the `senior-frontend` skill (every state handled, keyboard and 375 px usable) and that `check_ui.mjs` reports no overflow, console errors or unlabeled controls.
+
 3. **Set budget**: Start modest. If the user didn't specify, use `--budget 3.0`.
 
 4. **Choose output directory**:

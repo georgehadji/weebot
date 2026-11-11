@@ -21,6 +21,11 @@ You can control real desktop applications using screenshots, mouse/keyboard acti
 3. CHECK WINDOW FOCUS — use `get_active_window` before typing; use `focus_window` to switch apps
 4. EXHAUST FALLBACKS — if one approach fails, try the next: a11y → OCR → fixed coordinates → CLI
 
+## Prefer agent-desktop when its tools are listed
+
+If `mcp__agent_desktop__desktop_*` tools are available, use them before pixel coordinates: `desktop_snapshot` (with `-i` for interactive elements) returns the accessibility tree with a ref for every element, and `desktop_click`, `desktop_type`, `desktop_set_value` act on a ref without moving the pointer. Refs belong to their snapshot: after any UI change (`STALE_REF`, `AMBIGUOUS_TARGET`) take a new snapshot. Snapshots can hold private screen text, so do not paste them into logs, files or messages. The server is untrusted, so each action asks first. If the tools are not listed, use the table below.
+
+
 ## Tool Reference
 
 | Goal | Tool | Action |

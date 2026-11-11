@@ -153,6 +153,8 @@ export interface Session {
   event_count: number;
   /** Models the session's LLM calls used, first use first (EventStorePort.models_used). */
   models?: string[];
+  /** Actions the status allows now (SessionStatus.allowed_actions): run, steer, resume, cancel. */
+  allowed_actions?: Array<'run' | 'steer' | 'resume' | 'cancel'>;
 }
 
 /** One agent role: its built-in model cascade, the user's pick, and the model tried first. */

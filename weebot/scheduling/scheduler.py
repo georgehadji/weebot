@@ -511,6 +511,20 @@ class SchedulingManager:
 
         await asyncio.to_thread(_write)
 
+    async def _write_status(self, job_id: str, status: str, only_from: str | None = None) -> None:
+        """Set the status column alone: a whole-row save of a snapshot read earlier would
+        undo the run columns (run_count, last_error, last_run) written by a run meanwhile."""
+        sql = "UPDATE jobs SET status = ? WHERE job_id = ?"
+        args: tuple[str, ...] = (status, job_id)
+        if only_from is not None:
+            sql, args = sql + " AND status = ?", (*args, only_from)
+
+        def _write() -> None:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
+                conn.execute(sql, args)
+
+        await asyncio.to_thread(_write)
+
     async def _save_job(self, job: ScheduledJob) -> None:
         """Save job to database (offloaded to thread pool).
 
@@ -853,8 +867,7 @@ class SchedulingManager:
         if not job:
             return False
 
-        job.status = JobStatus.PAUSED.value
-        await self._save_job(job)
+        await self._write_status(job_id, JobStatus.PAUSED.value)
         logger.info(f"Paused job: {job_id}")
         return True
 
@@ -871,8 +884,9 @@ class SchedulingManager:
         if not job:
             return False
 
-        job.status = JobStatus.PENDING.value
-        await self._save_job(job)
+        # A job resumed mid-run is running, not pending; _record_run_end settles it.
+        status = JobStatus.RUNNING if job_id in self._running_jobs else JobStatus.PENDING
+        await self._write_status(job_id, status.value, only_from=JobStatus.PAUSED.value)
 
         # Reschedule if needed
         if job.enabled and not self.scheduler.get_job(job_id):
@@ -894,3 +908,19 @@ class SchedulingManager:
         if scheduled_job:
             return scheduled_job.next_run_time
         return None
+
+
+_process_scheduler: SchedulingManager | None = None
+
+
+def process_scheduler() -> SchedulingManager:
+    """The one SchedulingManager of this process, shared by the app (DI) and the schedule tool.
+
+    They each made their own over the same jobs.db: a job the agent created went into a
+    scheduler nobody had started, and starting it ran every job twice (`_running_jobs` only
+    guards one instance).
+    """
+    global _process_scheduler
+    if _process_scheduler is None:
+        _process_scheduler = SchedulingManager()
+    return _process_scheduler

@@ -67,16 +67,12 @@ class SignalAdapter(GatewayAdapter):
 
     async def start(self) -> None:
         self._running = True
-        self._poll_task = asyncio.create_task(self._poll_loop())
-        logger.info("SignalAdapter started (account: %s)", self._account_number)
+        if self._start_polling(self._poll_loop):
+            logger.info("SignalAdapter started (account: %s)", self._account_number)
 
     async def stop(self) -> None:
         self._running = False
-        self._poll_task.cancel()
-        try:
-            await self._poll_task
-        except asyncio.CancelledError:
-            pass
+        await self._stop_polling()
         logger.info("SignalAdapter stopped")
 
     async def _poll_loop(self) -> None:

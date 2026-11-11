@@ -43,17 +43,17 @@ A skill is prose the model reads, so a file per skill keeps it editable without 
 | reify_skill | `builtin/reify_skill` | SKILL.md | `video_ingest`, `voice_input`, `persistent_memory` |
 | remotion-video | `builtin/remotion-video` | SKILL.md | `remotion_video`, `video_gen`, `file_editor`, `youtube_download` (line 24) |
 | scientific-book | `builtin/scientific-book` | SKILL.md | - |
+| senior-frontend | `builtin/senior-frontend` | SKILL.md (+ `references/`, `scripts/check_ui.mjs`) | - (imported, MIT; `web-development` sends site work through it) |
 | seo_optimizer | `builtin/seo_optimizer` | SKILL.md | `web_search`, `advanced_browser`, `bash`, `file_editor`, `image_gen`, `knowledge` |
 | skill-author | `builtin/skill-author` | manifest.json | - |
 | tdd_app_dev | `builtin/tdd_app_dev` | SKILL.md | - |
 | web-3d-motion | `builtin/web-3d-motion` | SKILL.md | - |
 | web-development | `builtin/web-development` | SKILL.md | - |
 | web_research | `builtin/web_research` | manifest.json | `web_search`, `advanced_browser` |
-| youtube-download | `builtin/youtube-download` | SKILL.md | `youtube_download` (lines 9, 15-21), `video_ingest`, `web_search`, `advanced_browser`, `python_execute` |
+| youtube-download | `builtin/youtube-download` | SKILL.md | `youtube_download` (lines 9, 15-23), `video_ingest`, `web_search` |
 | apify-scraper | `.weebot/skills/apify-scraper` | SKILL.md | the ten `apify_*` presets (lines 19-28) |
 | code-review | `.weebot/skills/code-review` | SKILL.md | - |
 | find-bugs | `.weebot/skills/find-bugs` | SKILL.md | - |
-| integration-test-skill | `.weebot/skills/test-skill` | SKILL.md | - ("Temporary skill to verify install + BM25 rebuild") |
 
 "Tools it names" lists backticked names that match a `BaseTool.name` or an Apify preset; every one exists.
 

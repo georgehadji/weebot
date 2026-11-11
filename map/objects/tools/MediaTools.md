@@ -26,7 +26,7 @@ Each tool owns its backend and writes files under the workspace. Paid generation
 | `remotion_video` | `RemotionVideoTool` `weebot/tools/remotion_video.py:118` | `node remotion_render.cjs` in `REMOTION_HOST` or `~/.weebot-remotion` (`weebot/tools/remotion_video.py:44, 109-111, 209-238`) | `ToolConfig` | automation, admin, webhook, coder, designer |
 | `voice_input` | `VoiceInputTool` `weebot/tools/voice_input_tool.py:15` | `SpeechPort.transcribe` (`weebot/tools/voice_input_tool.py:63`) | `speech: SpeechPort` | admin, webhook |
 | `voice_output` | `VoiceOutputTool` `weebot/tools/voice_output_tool.py:19` | `SpeechPort.synthesize` (`weebot/tools/voice_output_tool.py:97`) | `speech: SpeechPort` | admin, webhook |
-| `youtube_download` | `YouTubeDownloadTool` `weebot/tools/youtube_download_tool.py:64` | `yt-dlp` subprocess, 10-minute YouTube cap, 300 s timeout (`weebot/tools/youtube_download_tool.py:37-39, 402-404`) | none | researcher, admin |
+| `youtube_download` | `YouTubeDownloadTool` `weebot/tools/youtube_download_tool.py:54` | `node <Yoinks>/dist/cli.js --best|--mp3 -o <dir> <url>` subprocess (Yoinks brings its own yt-dlp and ffmpeg); 300 s timeout, 500 MiB cap checked after download, no duration cap (`weebot/tools/youtube_download_tool.py:34-35, 150-155, 178-202`) | `YOINKS_DIR`, else the `Yoinks` folder beside the project (`weebot/tools/youtube_download_tool.py:171-175`) | researcher, admin |
 
 Roles: `weebot/application/services/tool_registry.py:[stale 26-185]`.
 
@@ -34,9 +34,9 @@ Path guards: every model-chosen output path goes through `write_target` (`weebot
 
 Consequences (read from source, not run):
 - `image_gen`, `video_gen` are paid per call and match `WEEBOT_OUTBOUND_TOOL_PATTERNS` (`weebot/config/settings.py:527-540`), so the guard chain wraps them and they always ask (see the BaseTool card). `remotion_video`, `video_ingest` and the voice tools match no pattern.
-- `youtube_download` passes a model-chosen `js_runtime` executable path to yt-dlp (`weebot/tools/youtube_download_tool.py:386-392`). The built-in skill `youtube-download` names it (`weebot/skills/builtin/youtube-download/SKILL.md:9, 15-21`), but only `researcher` and `admin` have it.
+- `youtube_download` runs a fixed program (`node` and the Yoinks script) with fixed flags; the model chooses only the URL, which must start with `http(s)://` (`weebot/tools/youtube_download_tool.py:111-114, 185`), and an output path that `write_target` checks. The built-in skill `youtube-download` names the tool (`weebot/skills/builtin/youtube-download/SKILL.md:9, 15-23`), but only `researcher` and `admin` have it.
 - `image_gen`'s raster branch opens an `aiohttp.ClientSession` it never uses (`weebot/tools/image_gen_tool.py:955-965`).
-- `video_ingest` and `youtube_download` declare `OutputTrust.EXTERNAL`, so their output is fenced and taints the session (`weebot/tools/video_ingest_tool.py:187`, `weebot/tools/youtube_download_tool.py:92`); the other five tools are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
+- `video_ingest` and `youtube_download` declare `OutputTrust.EXTERNAL`, so their output is fenced and taints the session (`weebot/tools/video_ingest_tool.py:187`, `weebot/tools/youtube_download_tool.py:67`); the other five tools are `LOCAL`. The rules are in `weebot/core/trust_boundary.py:58-90`.
 
 Spend: every paid 200 from the image and video generators, OpenRouter or direct, is reported to the session cost meter through `weebot/core/media_spend.py` as an estimate (`MEDIA_CALL_USD` in `weebot/config/model_refs.py`). A paid answer with nothing usable stops the model cascade, so the image or clip is never bought twice.
 
@@ -50,7 +50,7 @@ Spend: every paid 200 from the image and video generators, OpenRouter or direct,
 **Does not hit:** the shell guards (BashGuard, ExecApprovalPolicy); `KnowledgeTool` itself.
 
 ## Surfaces
-Files under `Output/` (`image_gen_tool.py:947`, `youtube_download_tool.py:203`, `remotion_video.py:106`) and `WORKSPACE_ROOT` (`voice_output_tool.py:82`); the knowledge base.
+Files under `Output/` (`image_gen_tool.py:947`, `youtube_download_tool.py:134`, `remotion_video.py:106`) and `WORKSPACE_ROOT` (`voice_output_tool.py:82`); the knowledge base.
 
 ## See
 `weebot/tools/image_gen_tool.py`

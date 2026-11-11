@@ -4,9 +4,9 @@ name: FlowState (the Plan-Act states)
 code: FlowState
 cluster: application
 universe: live
-status: verified
+status: stale
 verified: 2026-11-02
-commit: db304f26
+commit: 843c84c2
 ---
 
 # FlowState
@@ -36,7 +36,7 @@ Transitions, from every `set_state` call in `states/` (grep, 2026-10-24):
 | Updating | Executing (`updating.py:139, 253`) |
 | Summarizing | MetaAnalysis (`summarizing.py:55`) |
 | MetaAnalysis | Verifying (`meta_analysis.py:96`) |
-| Verifying | Completed (`verifying.py:71-228`) |
+| Verifying | Completed (`verifying.py:[stale 71-228]`) |
 
 `IdleState` → `ChatMessageState` (`idle.py:36`) are used by `ChatFlow` (`chat_flow.py:89,113,118`), not by `PlanActFlow`.
 

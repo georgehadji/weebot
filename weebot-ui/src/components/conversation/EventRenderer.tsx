@@ -21,7 +21,7 @@ import { ErrorRow, WaitForUserRow, ToolApprovalRow, DoneRow, NotificationRow } f
 type RowComponent = (props: {
   event: never;
   onRetry?: (event: MessageEvent) => void;
-  onReply?: (text: string) => void;
+  onReply?: (text: string) => void | Promise<void>;
   onRequestChanges?: () => void;
 }) => React.ReactElement | null;
 
@@ -50,7 +50,7 @@ function EventRendererImpl({
   /** Re-send a user message whose delivery failed (used by message rows only). */
   onRetry?: (event: MessageEvent) => void;
   /** Send a button-selected response through the same session input path as the composer. */
-  onReply?: (text: string) => void;
+  onReply?: (text: string) => void | Promise<void>;
   /** Focus the composer so the reader can describe plan changes (plan review rows only). */
   onRequestChanges?: () => void;
 }) {

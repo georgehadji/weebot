@@ -373,6 +373,7 @@ class PlanActFlow(BaseFlow):
         # *task*, not the turn input, and they now say so: see `task_text` in
         # states/base.py.
         prompt_consumed = False
+        exhausted = False  # the loop ran out of iterations rather than ending on a status
 
         while iteration_count <= max_iterations:
             iteration_count += 1
@@ -463,6 +464,9 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
+                # FAILED, not left RUNNING: the runner reported that as WAITING, a question
+                # nobody asked. FAILED shows the error and lets the next message resume.
+                self._session = self._session.set_status(SessionStatus.FAILED)
                 self._end_run_span()
                 return  # terminate the flow gracefully
             finally:
@@ -478,6 +482,8 @@ class PlanActFlow(BaseFlow):
             # If we are IDLE after state execution, we might be finished
             if self.status == AgentStatus.IDLE:
                 break
+        else:
+            exhausted = True
 
         if self._hooks is not None:
             import time as _post_timer
@@ -498,7 +504,9 @@ class PlanActFlow(BaseFlow):
         # Enhancement 4: record decomposition quality proxy signals
         await self._record_decomposition_signals()
 
-        if iteration_count > max_iterations:
+        if exhausted:
+            # Same as a stuck plan: a run cut off mid-loop failed, it is not waiting for input.
+            self._session = self._session.set_status(SessionStatus.FAILED)
             yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")
         self._end_run_span()
 

@@ -80,7 +80,7 @@ unit_coverage_floor = 64
 # 101 -> 96 with wave 6 G4: the unwired observability modules were deleted.
 # 96 -> 95 with D4 slice 7.
 # 95 -> 94 with D4 slice 10 deletions.
-silent_except_handlers = 93
+silent_except_handlers = 90
 
 # Blocking calls inside `async def`.
 # 29 -> 25 with plan Phase 4: the linter skips awaited calls (four async
@@ -406,7 +406,7 @@ functions_over_nesting_6 = 2
 # 614 -> 607 with D4 slice 7.
 # 607 -> 589 with D4 slice 10 deletions.
 # 587 -> 586 with the AUTO execution-mode branch: one violation removed.
-ruff_violations = 585
+ruff_violations = 577
 
 # Container bindings registered under a string literal (untyped at every use).
 # 45 when added; llm_pool and session_cost_meter moved to Key[T] constants in

@@ -116,6 +116,22 @@ def _commit_exists(rev: str) -> bool:
     return done.returncode == 0
 
 
+def _is_shallow() -> bool:
+    done = subprocess.run(["git", "rev-parse", "--is-shallow-repository"], cwd=ROOT,
+                          capture_output=True, text=True)
+    return done.stdout.strip() == "true"
+
+
+def _last_commit_of(path: str) -> str | None:
+    """The newest commit that changed *path*; None if it was never committed or the clone
+    is shallow (there the boundary commit would pose as one and compare HEAD with itself)."""
+    if _is_shallow():
+        return None
+    done = subprocess.run(["git", "log", "-1", "--format=%h", "--", path], cwd=ROOT,
+                          capture_output=True, text=True)
+    return done.stdout.strip() or None
+
+
 def _stale_mark(m: re.Match) -> str:
     """`path:[stale N]`: the citation as written, set aside until a person re-reads it."""
     return f"{m.group(1)}:[stale {m.group(0)[len(m.group(1)) + 2:]}]"
@@ -161,7 +177,13 @@ def drifted_citations(fix: bool = False) -> list[str]:
         if "status: verified" not in text or not commit:
             continue
         rel = card.relative_to(ROOT).as_posix()
-        if not _commit_exists(commit.group(1)):
+        base = commit.group(1)
+        if not _commit_exists(base):
+            # `--fix` on a branch stamps the branch's HEAD, which a squash merge drops. The
+            # commit that last wrote the card (the squash itself) has the tree the citations
+            # were checked against, so it is the baseline instead.
+            base = _last_commit_of(rel)
+        if base is None:
             # Without it every citation of the card would be skipped and the gate would pass.
             problems.append(f"{rel}: commit {commit.group(1)} is not in this clone "
                             "(shallow checkout?); its citations were not checked")
@@ -172,12 +194,12 @@ def drifted_citations(fix: bool = False) -> list[str]:
             if not m.group(2):
                 continue
             resolved = _resolve(m.group(1), tracked, tracked_set)
-            old = _lines_at(commit.group(1), resolved, cache) if resolved else None
+            old = _lines_at(base, resolved, cache) if resolved else None
             new = _lines_at("HEAD", resolved, cache) if resolved else None
             if new is None:
                 continue  # not committed yet: nothing to compare against
             if old is None:
-                gone.append(f"{rel}: {m.group(1)} did not exist at {commit.group(1)}")
+                gone.append(f"{rel}: {m.group(1)} did not exist at {base}")
                 edits.append((m.start(1), m.end(), _stale_mark(m)))
                 continue
             first = int(m.group(2))
@@ -200,7 +222,7 @@ def drifted_citations(fix: bool = False) -> list[str]:
                 if at is None:
                     lost = True
                     gone.append(f"{rel}: {m.group(1)}:{a} no longer says what it said at "
-                                f"{commit.group(1)}")
+                                f"{base}")
                 moved.append(at or a)
             if lost:
                 edits.append((m.start(1), m.end(), _stale_mark(m)))
