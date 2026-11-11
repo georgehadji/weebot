@@ -11,7 +11,7 @@ import { PlanReviewEvent } from "@/types/events";
 
 interface PlanReviewCardProps {
   event: PlanReviewEvent;
-  onReply?: (text: string) => void;
+  onReply?: (text: string) => void | Promise<void>;
   /** Move focus to the composer so the reader can describe what to change. */
   onRequestChanges?: () => void;
 }

@@ -44,5 +44,13 @@
     "command": "agent-desktop",
     "args": ["mcp"],
     "timeout_seconds": 60
+  },
+  "awwwards": {
+    "_comment": "INSANE0777/Awwwards-mcp (MIT, no API key): search award-winning sites, extract motion and stack, design briefs, build checks. Pinned; `core` profile = 13 tools. Browser tools (capture_live_site, verify_build) need Playwright and Chromium installed. No trust key, so the server is untrusted: every tool asks before it runs and its output is fenced as untrusted content. Personal, non-commercial inspiration use per its README. Tools arrive as mcp__awwwards__<tool>.",
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "awwwards-mcp@1.19.0"],
+    "env": { "AWWWARDS_MCP_PROFILE": "core" },
+    "timeout_seconds": 120
   }
 }

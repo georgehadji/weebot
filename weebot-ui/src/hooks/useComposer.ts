@@ -82,26 +82,33 @@ export function useComposer({
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
           onSessionCreated(session.id);
+          return true;
         } else {
           await api.sessions.input(sessionId, text, { clientMsgId, model, executionMode });
           onDelivery(clientMsgId, "sent");
           dispatch({ type: "sent" });
+          return true;
         }
       } catch (e) {
         // An echoed row is delivered (the timeline shows it so): do not claim "Not sent".
-        if (onDelivery(clientMsgId, "failed") === "sent") return dispatch({ type: "sent" });
+        if (onDelivery(clientMsgId, "failed") === "sent") {
+          dispatch({ type: "sent" });
+          return true;
+        }
         dispatch({ type: "failed", error: e instanceof Error ? e.message : "Unknown error", text });
         // The failed row is not a live region (see lib/announce.ts), so say it here.
         announce("Message not sent. Retry Sending is available.");
+        return false;
       }
     },
     [sessionId, model, executionMode, onDelivery, onSessionCreated, toast, announce]
   );
 
+  /** Resolves true once the message is delivered; false if it was refused or failed. */
   const submitText = useCallback(
-    (rawText: string) => {
+    async (rawText: string): Promise<boolean> => {
       const text = rawText.trim();
-      if (!text || state.phase === "sending") return;
+      if (!text || state.phase === "sending") return false;
       const clientMsgId = makeClientMsgId();
       dispatch({ type: "submit" });
       onOptimisticMessage({
@@ -113,13 +120,13 @@ export function useComposer({
         message: text,
         delivery: "sending",
       });
-      void deliver(text, clientMsgId);
+      return deliver(text, clientMsgId);
     },
     [state.phase, sessionId, onOptimisticMessage, deliver]
   );
 
   const submit = useCallback(() => {
-    submitText(state.draft);
+    void submitText(state.draft);
   }, [state.draft, submitText]);
 
   /** Re-send a message whose delivery failed; it keeps its row (same id) in the timeline. */

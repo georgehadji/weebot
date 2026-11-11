@@ -135,11 +135,15 @@ export function ConversationPane({
     setDraftRef.current = fn;
   }, []);
   const onRetry = useCallback((event: MessageEvent) => retryRef.current?.(event), []);
-  const quickReplyRef = useRef<(text: string) => void>(undefined);
-  const registerQuickReply = useCallback((fn: (text: string) => void) => {
+  const quickReplyRef = useRef<(text: string) => Promise<boolean>>(undefined);
+  const registerQuickReply = useCallback((fn: (text: string) => Promise<boolean>) => {
     quickReplyRef.current = fn;
   }, []);
-  const onReply = useCallback((text: string) => quickReplyRef.current?.(text), []);
+  // Throws when the reply was not delivered, so an approval card does not say "approved"
+  // for a reply that never left (useAsyncAction turns the throw into a failed run).
+  const onReply = useCallback(async (text: string) => {
+    if (!(await quickReplyRef.current?.(text))) throw new Error("Reply not sent");
+  }, []);
   const focusRef = useRef<() => void>(undefined);
   const registerFocus = useCallback((fn: () => void) => {
     focusRef.current = fn;

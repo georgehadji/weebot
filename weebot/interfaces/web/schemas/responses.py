@@ -30,6 +30,10 @@ class SessionResponse(BaseModel):
     models: list[str] = Field(
         default_factory=list, description="Models the session's LLM calls used, first use first"
     )
+    allowed_actions: list[str] = Field(
+        default_factory=list,
+        description="Actions the session's status allows now: run, steer, resume, cancel",
+    )
 
 
 class SessionListResponse(BaseModel):

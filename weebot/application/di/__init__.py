@@ -236,9 +236,9 @@ class Container(
 
         self.register(PrometheusMetricsAdapter, self._create_metrics_port)
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
-        from weebot.scheduling.scheduler import SchedulingManager
+        from weebot.scheduling.scheduler import process_scheduler
 
-        self.register("scheduler", lambda: SchedulingManager())
+        self.register("scheduler", process_scheduler)
 
         # Flow registry — breaks services/flows circular dependency
         from weebot.application.abstractions import FlowRegistry

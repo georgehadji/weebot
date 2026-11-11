@@ -9,7 +9,7 @@ Format: name — source — status — card
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — stale 2026-11-02 — [card](domain/Event.md)
 - Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-11-02 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — stale 2026-10-31 — [card](domain/Ports.md)
-- Session (Session, SessionStatus, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-11-01 — [card](domain/Session.md)
+- Session (Session, SessionStatus, SessionAction, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-11-01 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — stale 2026-10-31 — [card](domain/Step.md)
 
 ## application
@@ -18,8 +18,8 @@ Format: name — source — status — card
 - DelegationGuard (DelegationGuard, DelegatedFlow, current_depth, DELEGATION_GUARD) — `docs/adr/018-delegation-policy.md` — stub — [card](application/DelegationGuard.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-11-02 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
-- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-04 — [card](application/FlowRouter.md)
-- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — verified 2026-11-02 — [card](application/FlowState.md)
+- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-11 — [card](application/FlowRouter.md)
+- FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — stale 2026-11-02 — [card](application/FlowState.md)
 - LoopDetectors (GuardConfig, CycleDetector, DuplicateResultStub, EmptyResponseBudget, RepetitionGuard, WallClockWrapUp, IterationGuard) — `docs/adr/021-loop-guardrails-v2.md` — stub — [card](application/LoopDetectors.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
@@ -32,7 +32,7 @@ Format: name — source — status — card
 
 ## infrastructure
 - Browser adapter and session pool (PlaywrightAdapter, BrowserSessionPool, BrowserSessionManager, ContentExtractor, SomRenderer) — `weebot/infrastructure/browser/` — stale 2026-10-31 — [card](infrastructure/Browser.md)
-- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-11-04 — [card](infrastructure/EventBus.md)
+- Event bus (AsyncEventBus, DurableEventBus, ValkeyEventBus) (AsyncEventBus, DurableEventBus, ValkeyEventBus) — `weebot/infrastructure/event_bus.py` — verified 2026-11-11 — [card](infrastructure/EventBus.md)
 - Event store (audit journal) (AsyncEventStore (alias EventStore)) — `weebot/infrastructure/event_store.py` — stale 2026-10-31 — [card](infrastructure/EventStore.md)
 - LLM adapters (factory + resilience layer) (AdapterFactory, ResilientLLMAdapter) — `weebot/infrastructure/adapters/llm/adapter_factory.py` — stale 2026-11-03 — [card](infrastructure/LLMAdapters.md)
 - Sandbox (SandboxPort and backends) (SandboxPort, SandboxConfig, SandboxFactory, NativeWindowsSandbox, WSL2Sandbox, DockerLinuxSandbox, ModalSandboxBackend) — `weebot/infrastructure/sandbox/factory.py` — stale 2026-11-02 — [card](infrastructure/Sandbox.md)
@@ -40,16 +40,16 @@ Format: name — source — status — card
 - SQLiteStateRepository — `weebot/infrastructure/persistence/sqlite_state_repo.py` — stale 2026-11-03 — [card](infrastructure/SQLiteStateRepository.md)
 
 ## interfaces
-- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — verified 2026-11-04 — [card](interfaces/ChatGateways.md)
+- Chat gateways (GatewayAdapter and six subclasses) — `weebot/interfaces/gateways/base.py` — stale 2026-11-04 — [card](interfaces/ChatGateways.md)
 - CLI (cli (click group), AgentRunner, interfaces.factories) — `cli/main.py` — stale 2026-11-01 — [card](interfaces/CLI.md)
-- MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — verified 2026-11-04 — [card](interfaces/MCPServer.md)
+- MCP server (WeebotMCPServer, run_mcp.py) — `weebot/mcp/server.py` — stale 2026-11-04 — [card](interfaces/MCPServer.md)
 - Web API (FastAPI) (create_app, lifespan) — `weebot/interfaces/web/main.py` — stale 2026-10-31 — [card](interfaces/WebAPI.md)
 - Web UI (weebot-ui (Next.js app router)) — `weebot-ui/src/lib/api.ts` — stale 2026-10-31 — [card](interfaces/WebUI.md)
 
 ## core
 - ApprovalFloors (Floor, BUILTIN_FLOORS, FloorGuard, command_variants) — `docs/adr/022-approval-floors.md` — stub — [card](core/ApprovalFloors.md)
 - ApprovalManager (single-use approval grants) (ApprovalManager, ApprovalRequest, ApprovalDecision, console_approval_callback) — `weebot/core/approval.py` — stale 2026-11-04 — [card](core/ApprovalManager.md)
-- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — verified 2026-11-04 — [card](core/BashGuard.md)
+- BashGuard (and the shell-tool gate chain) (BashGuard, RiskLevel) — `weebot/core/bash_guard.py` — stale 2026-11-11 — [card](core/BashGuard.md)
 - ChildEnv (build_child_env, BASE_POSIX, BASE_WINDOWS) — `weebot/core/child_env.py` — stub — [card](core/ChildEnv.md)
 - CommandSecurityAnalyzer (4-layer shell analyzer) (CommandSecurityAnalyzer, CommandRiskLevel, SecurityAssessment) — `weebot/tools/bash_security.py` — stale 2026-11-01 — [card](core/CommandSecurityAnalyzer.md)
 - EgressGuard (EgressGuard, RecipientAllowlist, EgressDecision) — `weebot/core/egress_guard.py` — stale 2026-11-01 — [card](core/EgressGuard.md)

@@ -1,7 +1,7 @@
 ---
 type: object
 name: Session
-code: Session, SessionStatus, SessionContext, Fact, FactSource
+code: Session, SessionStatus, SessionAction, SessionContext, Fact, FactSource
 cluster: domain
 universe: live
 status: stale
@@ -17,7 +17,8 @@ The persisted record of one conversation or task: status, title, the full `Agent
 Event-sourced: the plan is not a field, it is the last `PlanEvent` in `events` with later `StepEvent`s applied (`weebot/domain/models/session.py:276-311`). Immutable like `Plan`: every mutator returns a new session through `model_copy` (`session.py:245-378`). `SessionContext` replaced a free `dict`; it keeps dict access (`get`, `[]`, `in`) and an `extra` bucket so old code and old rows still work (`session.py:52-62, 119-194`). A fact carries provenance (`Fact`, `session.py:37-49`) so an audited value can be told from an executor claim.
 
 ## Shape
-- `SessionStatus` (`session.py:17-22`): `pending`, `running`, `waiting`, `completed`, `failed`.
+- `SessionStatus` (`session.py:26-39`): `pending`, `running`, `waiting`, `completed`, `failed`.
+- Lifecycle table `_ALLOWED` (`session.py:45-51`): the `SessionAction`s (`run`, `steer`, `resume`, `cancel`) each status allows; `status.allows(action)` guards the session/run endpoints and `status.allowed_actions` is listed in every `SessionResponse` and `/v1/runs` body. Add a status or action here, not as a new `if status ==` in a router.
 - `Session` fields (`session.py:204-214`): `id` (validated `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`, `session.py:216-228`), `user_id`, `agent_id`, `status`, `title`, `events: list[AgentEvent]`, `context`, `created_at`, `updated_at`, private `_memory_index: SessionMemory`.
 - `_fix_broken_context` (`session.py:230-243`): a context saved as a repr string loads as empty.
 - Events: `add_event` copies the index forward and indexes the new event (`session.py:245-255`); `replace_events` rebuilds the index (`session.py:257-271`, used by compaction). `add_user_message` appends the user's turn, keeping the UI's message id unless the session already holds it (`session.py:321-331`); `set_title` carries the index forward (`session.py:316-319`).

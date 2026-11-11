@@ -28,7 +28,8 @@ from collections.abc import AsyncGenerator
 if "PYTEST_VERSION" not in os.environ:
     from dotenv import load_dotenv
 
-    load_dotenv(override=True)
+    # In a container the orchestrator's variables win over a stray .env.
+    load_dotenv(override=not os.path.exists("/.dockerenv"))
 
     from weebot.application.di import install_secret_sources
 
