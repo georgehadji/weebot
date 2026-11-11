@@ -26,9 +26,7 @@ class MaxIterationTermination(TerminationCondition):
 class TokenBudgetTermination(TerminationCondition):
     """Terminate when cumulative token usage exceeds a budget.
 
-    Uses an absolute token count threshold (hard stop). Distinct from
-    ``TokenBudgetMonitor.should_terminate()`` which uses a ratio (advisory /
-    observability). Both can be used independently or composed via
+    Uses an absolute token count threshold (hard stop). Can be used on its own or composed via
     ``TerminationCondition.__or__()``.
 
     Args:
