@@ -167,7 +167,8 @@ class WhatsAppAdapter(GatewayAdapter):
         Called by the web framework during webhook registration.
         Returns (verified, challenge_or_reason).
         """
-        if mode == "subscribe" and token == self._webhook_verify_token:
+        expected = self._webhook_verify_token
+        if mode == "subscribe" and expected and safe_equals(token, expected):
             return True, challenge
         return False, "Verification failed"
 
