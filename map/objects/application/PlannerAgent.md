@@ -6,7 +6,7 @@ cluster: application
 universe: live
 status: verified
 verified: 2026-11-02
-commit: db304f26
+commit: be7e51c2
 ---
 
 # PlannerAgent
