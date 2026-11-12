@@ -3,6 +3,11 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
+from pydantic import PrivateAttr
+
+from weebot.application.ports.syntax_check_port import SyntaxCheckPort
+from weebot.application.services.file_state import FileStateRegistry
+from weebot.application.services.patch_matching import STRATEGIES, Exact, apply_patch
 from weebot.domain.models.output_trust import OutputTrust
 
 
@@ -21,7 +26,9 @@ class StrReplaceEditorTool(BaseTool):
     description: str = (
         "View, create, or edit files on the local filesystem. "
         "Commands: view (read file or list directory), create (write new file), "
-        "str_replace (find-and-replace in file), insert (add lines at position). "
+        "str_replace (find-and-replace in file; small copying slips in old_str are tolerated "
+        "and the result names the match), patch (several old_str/new_str hunks, all or none), "
+        "insert (add lines at position). View a file before you edit it. "
         "All paths must be within the workspace."
     )
     parameters: dict = {
@@ -29,10 +36,11 @@ class StrReplaceEditorTool(BaseTool):
         "properties": {
             "command": {
                 "type": "string",
-                "enum": ["view", "create", "str_replace", "insert", "write_large"],
+                "enum": ["view", "create", "str_replace", "patch", "insert", "write_large"],
                 "description": (
                     "Operation: 'view'=read, 'create'=write small file, "
-                    "'str_replace'=find+replace, 'insert'=add lines, "
+                    "'str_replace'=find+replace, 'patch'=several find+replace hunks, "
+                    "'insert'=add lines, "
                     "'write_large'=write large file via Python (preferred for >50 lines)"
                 ),
             },
@@ -48,6 +56,22 @@ class StrReplaceEditorTool(BaseTool):
             "new_str": {
                 "type": "string",
                 "description": "Replacement text (for 'str_replace' and 'insert')",
+            },
+            "exact": {
+                "type": "boolean",
+                "description": "For 'str_replace' and 'patch': match old_str exactly.",
+            },
+            "hunks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "old_str": {"type": "string"},
+                        "new_str": {"type": "string"},
+                    },
+                    "required": ["old_str", "new_str"],
+                },
+                "description": "Edits for 'patch'; applied in order, all or none.",
             },
             "insert_line": {
                 "type": "integer",
@@ -65,8 +89,19 @@ class StrReplaceEditorTool(BaseTool):
         "required": ["command", "path"],
     }
 
-    def __init__(self, **data):
+    _file_state: FileStateRegistry | None = PrivateAttr(default=None)
+    _syntax: SyntaxCheckPort | None = PrivateAttr(default=None)
+
+    def __init__(
+        self,
+        file_state: FileStateRegistry | None = None,
+        syntax: SyntaxCheckPort | None = None,
+        **data,
+    ):
         super().__init__(**data)
+        # Unwired (no registry), the tool neither tracks views nor lints, as before H6.
+        self._file_state = file_state
+        self._syntax = syntax
         self._path_validator = PathValidator()
         self._workspace = Path(WORKSPACE_ROOT).resolve()
 
@@ -172,8 +207,13 @@ class StrReplaceEditorTool(BaseTool):
             return self._create(safe_path, kwargs.get("file_text", ""))
         elif command == "str_replace":
             return self._str_replace(
-                safe_path, kwargs.get("old_str", ""), kwargs.get("new_str", "")
+                safe_path,
+                kwargs.get("old_str", ""),
+                kwargs.get("new_str", ""),
+                exact=bool(kwargs.get("exact")),
             )
+        elif command == "patch":
+            return self._patch(safe_path, kwargs.get("hunks"), exact=bool(kwargs.get("exact")))
         elif command == "insert":
             return self._insert(safe_path, kwargs.get("insert_line", 0), kwargs.get("new_str", ""))
         elif command == "write_large":
@@ -183,6 +223,8 @@ class StrReplaceEditorTool(BaseTool):
     def _write_large(self, path: Path, content: str) -> ToolResult:
         """Write a large file via Python to avoid context-overflow in file_editor."""
 
+        if path.exists() and (stale := self._stale(path)):
+            return stale
         # Write content to a temp file, then move it atomically
         tmp = path.with_suffix(path.suffix + ".tmp")
         try:
@@ -190,12 +232,31 @@ class StrReplaceEditorTool(BaseTool):
             tmp.replace(path)
             size = path.stat().st_size
             lines = content.count("\n") + 1
-            return ToolResult(
-                output=f"Wrote {path} ({lines} lines, {size} bytes)",
-                data={"path": str(path.resolve()), "lines": lines, "size_bytes": size},
+            return self._written(
+                path,
+                content,
+                ToolResult(
+                    output=f"Wrote {path} ({lines} lines, {size} bytes)",
+                    data={"path": str(path.resolve()), "lines": lines, "size_bytes": size},
+                ),
             )
         except Exception as exc:
             return ToolResult(error=f"write_large failed: {exc}")
+
+    def _stale(self, path: Path) -> ToolResult | None:
+        """A refusal when the model has not seen the file as it now is (H6)."""
+        reason = self._file_state.check(path) if self._file_state is not None else None
+        return ToolResult(output="", error=f"Refused: {reason}.") if reason else None
+
+    def _written(self, path: Path, text: str, result: ToolResult) -> ToolResult:
+        """Note the file as written, and append any syntax problems; the write stands."""
+        if self._file_state is not None:
+            self._file_state.record(path)
+        if self._syntax is not None:
+            problems = self._syntax.check(str(path), text)
+            if problems:
+                result.output += "\nSyntax warning: " + "; ".join(problems)
+        return result
 
     def _view(self, path: Path, view_range: list[int] | None) -> ToolResult:
         if path.is_dir():
@@ -215,6 +276,8 @@ class StrReplaceEditorTool(BaseTool):
             return ToolResult(
                 output="", error=f"Cannot read file (binary or unsupported encoding): {path}"
             )
+        if self._file_state is not None:
+            self._file_state.record(path)
         numbered = [f"{i + 1:4}: {line}" for i, line in enumerate(content.splitlines())]
         if view_range and len(view_range) == 2:
             start, end = view_range
@@ -251,53 +314,88 @@ class StrReplaceEditorTool(BaseTool):
             path.write_text(text, encoding="utf-8")
         except PermissionError:
             return ToolResult(output="", error=f"Permission denied creating file: {path}")
-        return ToolResult(output=f"Created {path} ({len(text)} chars)")
+        return self._written(path, text, ToolResult(output=f"Created {path} ({len(text)} chars)"))
 
-    def _str_replace(self, path: Path, old_str: str, new_str: str) -> ToolResult:
+    def _load_for_edit(self, path: Path) -> tuple[str, ToolResult | None]:
+        """The file's text, or the refusal to report: missing, binary, unreadable or stale."""
+        if not path.exists():
+            return "", ToolResult(output="", error=f"File not found: {path}")
+        if not path.is_file():
+            return "", ToolResult(output="", error=f"Not a file: {path}")
+        if stale := self._stale(path):
+            return "", stale
+        try:
+            return path.read_text(encoding="utf-8"), None
+        except PermissionError:
+            return "", ToolResult(output="", error=f"Permission denied reading file: {path}")
+        except UnicodeDecodeError:
+            return "", ToolResult(output="", error=f"Cannot modify binary file: {path}")
+
+    def _save_edit(self, path: Path, text: str, output: str) -> ToolResult:
+        try:
+            temp_path = path.with_suffix(path.suffix + ".tmp")
+            temp_path.write_text(text, encoding="utf-8")
+            temp_path.replace(path)  # Atomic on same filesystem
+        except PermissionError:
+            return ToolResult(output="", error=f"Permission denied writing file: {path}")
+        return self._written(path, text, ToolResult(output=output))
+
+    def _str_replace(
+        self, path: Path, old_str: str, new_str: str, exact: bool = False
+    ) -> ToolResult:
         if not old_str:
             # "" is in every string, so the new text was prepended and reported "Replaced".
             return ToolResult(output="", error="str_replace needs a non-empty old_str.")
-        if not path.exists():
-            return ToolResult(output="", error=f"File not found: {path}")
-        if not path.is_file():
-            return ToolResult(output="", error=f"Not a file: {path}")
-        try:
-            content = path.read_text(encoding="utf-8")
-        except PermissionError:
-            return ToolResult(output="", error=f"Permission denied reading file: {path}")
-        except UnicodeDecodeError:
-            return ToolResult(output="", error=f"Cannot modify binary file: {path}")
-        if old_str not in content:
-            return ToolResult(output="", error=f"String not found in {path}: {old_str!r}")
-        new_content = content.replace(old_str, new_str, 1)
-        try:
-            temp_path = path.with_suffix(path.suffix + ".tmp")
-            temp_path.write_text(new_content, encoding="utf-8")
-            temp_path.replace(path)  # Atomic on same filesystem
-        except PermissionError:
-            return ToolResult(output="", error=f"Permission denied writing file: {path}")
-        return ToolResult(output=f"Replaced in {path}")
+        content, refusal = self._load_for_edit(path)
+        if refusal:
+            return refusal
+        if exact:
+            if old_str not in content:
+                return ToolResult(output="", error=f"String not found in {path}: {old_str!r}")
+            replaced = content.replace(old_str, new_str, 1)
+            return self._save_edit(path, replaced, f"Replaced in {path}")
+        outcome = apply_patch(content, old_str, new_str)
+        if not outcome.ok:
+            return ToolResult(output="", error=f"{path}: {outcome.error}")
+        return self._save_edit(
+            path, outcome.text, f"Replaced in {path} (line {outcome.line}, {outcome.strategy})"
+        )
+
+    def _patch(self, path: Path, hunks: object, exact: bool = False) -> ToolResult:
+        """Apply every hunk in order to the text in memory, then write once: all or none."""
+        if not isinstance(hunks, list) or not hunks:
+            return ToolResult(output="", error="patch needs a non-empty list of hunks.")
+        content, refusal = self._load_for_edit(path)
+        if refusal:
+            return refusal
+        strategies = (Exact(),) if exact else STRATEGIES
+        used = []
+        for number, hunk in enumerate(hunks, 1):
+            old = hunk.get("old_str") if isinstance(hunk, dict) else None
+            new = hunk.get("new_str") if isinstance(hunk, dict) else None
+            if not isinstance(old, str) or not isinstance(new, str):
+                return ToolResult(output="", error=f"Hunk {number} needs old_str and new_str.")
+            outcome = apply_patch(content, old, new, strategies=strategies)
+            if not outcome.ok:
+                return ToolResult(
+                    output="", error=f"Hunk {number} failed, nothing was written: {outcome.error}"
+                )
+            content = outcome.text
+            used.append(f"{number}: line {outcome.line}, {outcome.strategy}")
+        return self._save_edit(
+            path, content, f"Patched {path}: {len(hunks)} hunk(s) ({'; '.join(used)})"
+        )
 
     def _insert(self, path: Path, insert_line: int, new_str: str) -> ToolResult:
-        if not path.exists():
-            return ToolResult(output="", error=f"File not found: {path}")
-        if not path.is_file():
-            return ToolResult(output="", error=f"Not a file: {path}")
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        except PermissionError:
-            return ToolResult(output="", error=f"Permission denied reading file: {path}")
-        except UnicodeDecodeError:
-            return ToolResult(output="", error=f"Cannot modify binary file: {path}")
+        content, refusal = self._load_for_edit(path)
+        if refusal:
+            return refusal
+        lines = content.splitlines(keepends=True)
         new_lines = new_str.splitlines(keepends=True)
         new_lines = [ln if ln.endswith("\n") else ln + "\n" for ln in new_lines]
         lines[insert_line:insert_line] = new_lines
-        try:
-            temp_path = path.with_suffix(path.suffix + ".tmp")
-            temp_path.write_text("".join(lines), encoding="utf-8")
-            temp_path.replace(path)  # Atomic on same filesystem
-        except PermissionError:
-            return ToolResult(output="", error=f"Permission denied writing file: {path}")
-        return ToolResult(
-            output=f"Inserted {len(new_lines)} line(s) at position {insert_line} in {path}"
+        return self._save_edit(
+            path,
+            "".join(lines),
+            f"Inserted {len(new_lines)} line(s) at position {insert_line} in {path}",
         )

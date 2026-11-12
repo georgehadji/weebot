@@ -73,6 +73,13 @@ class CapabilitiesMixin:
         from weebot.infrastructure.spillover.file_store import FileSpilloverStore
 
         self.register(SpilloverStorePort, lambda: FileSpilloverStore())
+        # What file_editor last showed the model of each file, and its syntax check (H6).
+        from weebot.application.ports.syntax_check_port import SyntaxCheckPort
+        from weebot.application.services.file_state import FileStateRegistry
+        from weebot.infrastructure.adapters.syntax_check import InProcessSyntaxCheck
+
+        self.register(FileStateRegistry, FileStateRegistry)
+        self.register(SyntaxCheckPort, InProcessSyntaxCheck)
         # One Python interpreter per session that keeps its variables between calls (H17).
         from weebot.application.services.kernel_manager import KernelManager
 

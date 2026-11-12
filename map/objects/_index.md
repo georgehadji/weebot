@@ -16,6 +16,7 @@ Format: name — source — status — card
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — stale 2026-11-01 — [card](application/CascadeExecutor.md)
 - DelegationGuard (DelegationGuard, DelegatedFlow, current_depth, DELEGATION_GUARD) — `docs/adr/018-delegation-policy.md` — stub — [card](application/DelegationGuard.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-11-02 — [card](application/DIContainer.md)
+- EditPipeline (apply_patch, FileStateRegistry, SyntaxCheckPort, InProcessSyntaxCheck) — `docs/adr/025-edit-pipeline.md` — stub — [card](application/EditPipeline.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
 - FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-11 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — stale 2026-11-02 — [card](application/FlowState.md)
