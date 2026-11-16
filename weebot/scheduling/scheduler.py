@@ -8,7 +8,7 @@ from contextlib import closing
 import json
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime, UTC
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,25 @@ class JobStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     PAUSED = "paused"
+
+
+# What a run records as `last_error` when it never finished (shutdown, crash) rather than failed.
+_CANCELLED = "cancelled"
+_INTERRUPTED = "interrupted"
+_RUN_LEASE = timedelta(minutes=30)  # how long a RUNNING row is believed before it is taken over
+
+
+def _one_shot_is_over(job: ScheduledJob) -> bool:
+    """A one-shot that completed, or that failed with an error of its own, is not run again on
+    restart: re-running a failed command on every boot repeats its side effects. One that was
+    cut off (shutdown, crash) never finished, so it still runs. Retry a failed one with
+    update_job."""
+    if job.status == JobStatus.COMPLETED.value:
+        return True
+    return job.status == JobStatus.FAILED.value and job.last_error not in (
+        _CANCELLED,
+        _INTERRUPTED,
+    )
 
 
 class TriggerType(Enum):
@@ -440,10 +459,13 @@ class SchedulingManager:
         self._running_jobs.add(job_id)
         # Bound before the try: a BaseException other than the ones caught below still
         # reaches the finally, which must record an end rather than read an unbound name.
-        outcome: tuple[bool, str | None] = (False, "interrupted")
+        outcome: tuple[bool, str | None] = (False, _INTERRUPTED)
+        claimed = False
         try:
-            # Update status
-            await self._record_run_start(job_id, datetime.now(UTC))
+            claimed = await self._record_run_start(job_id, datetime.now(UTC))
+            if not claimed:
+                logger.info("Job %s is running in another process or paused — skipping", job_id)
+                return
 
             # Execute payload
             if job.callable_name:
@@ -469,7 +491,7 @@ class SchedulingManager:
             outcome = (True, None)
 
         except asyncio.CancelledError:
-            outcome = (False, "cancelled")
+            outcome = (False, _CANCELLED)
             raise
 
         except Exception as exc:
@@ -479,20 +501,38 @@ class SchedulingManager:
         finally:
             self._running_jobs.discard(job_id)
             # Shielded so the cancel that brought us here does not also cancel the write.
-            await asyncio.shield(self._record_run_end(job_id, *outcome))
+            if claimed:  # a run another process owns is not ours to end
+                await asyncio.shield(self._record_run_end(job_id, *outcome))
 
-    async def _record_run_start(self, job_id: str, started: datetime) -> None:
-        """Mark the row running. Touches only its run columns: a whole-row save of the
-        snapshot read before the run would undo a pause, edit or delete made during it."""
+    async def _record_run_start(self, job_id: str, started: datetime) -> bool:
+        """Claim the run: mark the row running, atomically. False when another process
+        already runs it (the table is shared) or the job was paused after it was read.
 
-        def _write() -> None:
+        Touches only its run columns: a whole-row save of the snapshot read before the run
+        would undo a pause, edit or delete made during it.
+
+        shortcut: a RUNNING row older than _RUN_LEASE counts as abandoned by a crashed
+        process and is taken over; a job that really runs longer is run twice. Upgrade to a
+        heartbeat if jobs ever run for hours."""
+        stale = (started - _RUN_LEASE).isoformat()
+
+        def _write() -> bool:
             with closing(sqlite3.connect(self.db_path)) as conn, conn:
-                conn.execute(
-                    "UPDATE jobs SET status = ?, last_run = ? WHERE job_id = ?",
-                    (JobStatus.RUNNING.value, started.isoformat(), job_id),
+                cur = conn.execute(
+                    "UPDATE jobs SET status = ?, last_run = ? WHERE job_id = ?"
+                    " AND status != ? AND (status != ? OR last_run IS NULL OR last_run < ?)",
+                    (
+                        JobStatus.RUNNING.value,
+                        started.isoformat(),
+                        job_id,
+                        JobStatus.PAUSED.value,
+                        JobStatus.RUNNING.value,
+                        stale,
+                    ),
                 )
+                return cur.rowcount == 1
 
-        await asyncio.to_thread(_write)
+        return await asyncio.to_thread(_write)
 
     async def _record_run_end(self, job_id: str, ok: bool, error: str | None) -> None:
         """Record the outcome on the current row. A job paused while it ran stays paused;
@@ -825,7 +865,7 @@ class SchedulingManager:
             if job.status == JobStatus.PAUSED.value:
                 continue
             if job.trigger_type in (TriggerType.DATE.value, TriggerType.ONCE.value) and (
-                job.status == JobStatus.COMPLETED.value
+                _one_shot_is_over(job)
             ):
                 continue  # a finished one-shot would fire again if re-added
             try:

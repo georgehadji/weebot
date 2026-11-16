@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -143,3 +143,47 @@ async def test_a_probe_that_never_reports_does_not_wedge_the_breaker():
     assert (await breaker.evaluate("m")).allowed  # the probe, which never reports back
     time.sleep(0.06)
     assert (await breaker.evaluate("m")).allowed
+
+
+# --- scheduler: restart and a second process ----------------------------------------------
+
+
+async def _one_shot(mgr, job_id="once"):
+    await mgr.create_job(job_id, "O", "once", {"run_date": "2999-01-01T00:00:00+00:00"},
+                         callable_name="noop")
+
+
+async def test_a_failed_one_shot_is_not_rerun_on_restart(manager):
+    await _one_shot(manager)
+    await manager._record_run_end("once", ok=False, error="boom")
+    await manager.reconcile()
+    assert manager.scheduler.get_job("once") is None
+    assert manager.get_job("once").status == JobStatus.FAILED.value
+
+
+async def test_a_one_shot_cut_off_by_shutdown_is_rerun_on_restart(manager):
+    await _one_shot(manager)
+    await manager._record_run_end("once", ok=False, error="cancelled")
+    await manager.reconcile()
+    assert manager.scheduler.get_job("once") is not None
+
+
+async def test_a_second_process_cannot_claim_a_job_that_is_running(manager):
+    now = datetime.now(UTC)
+    assert await manager._record_run_start("j", now) is True
+    other = SchedulingManager(db_path=manager.db_path)  # another process, same jobs.db
+    assert await other._record_run_start("j", now) is False
+    await manager._record_run_end("j", ok=True, error=None)
+    assert await other._record_run_start("j", now) is True
+
+
+async def test_a_run_abandoned_by_a_crashed_process_is_taken_over(manager):
+    long_ago = datetime.now(UTC) - timedelta(hours=2)
+    await manager._record_run_start("j", long_ago)
+    assert await manager._record_run_start("j", datetime.now(UTC)) is True
+
+
+async def test_a_job_paused_after_it_was_read_is_not_started(manager):
+    await manager.pause_job("j")
+    assert await manager._record_run_start("j", datetime.now(UTC)) is False
+    assert manager.get_job("j").status == JobStatus.PAUSED.value

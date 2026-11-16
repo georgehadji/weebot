@@ -49,7 +49,14 @@ describe("StateView", () => {
 
 describe("StatusBadge", () => {
   it("never relies on colour: each status has its own glyph and a label", () => {
-    const statuses = ["pending", "running", "waiting", "completed", "failed"];
+    const statuses = [
+      "pending",
+      "running",
+      "waiting",
+      "completed",
+      "failed",
+      "cancelled",
+    ];
     const icons = new Set(statuses.map((s) => statusInfo(s).icon));
     expect(icons.size).toBe(statuses.length);
     const { container } = render(<StatusBadge status="failed" variant="icon" />);

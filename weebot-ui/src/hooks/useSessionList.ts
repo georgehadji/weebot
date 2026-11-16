@@ -17,7 +17,14 @@ import { useEventStreamContext } from "@/providers/EventStreamProvider";
 import { Session, SessionPresenceEvent } from "@/types/events";
 import { Remote, remoteData } from "@/types/remote";
 
-const STATUSES = new Set<string>(["pending", "running", "waiting", "completed", "failed"]);
+const STATUSES = new Set<string>([
+  "pending",
+  "running",
+  "waiting",
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 export function applyPresence(session: Session, update?: SessionPresenceEvent): Session {
   if (!update) return session;
@@ -28,7 +35,7 @@ export function applyPresence(session: Session, update?: SessionPresenceEvent): 
   return { ...session, status, title };
 }
 
-const SETTLED = new Set(["waiting", "completed", "failed"]);
+const SETTLED = new Set(["waiting", "completed", "failed", "cancelled"]);
 
 const loadSessions = () => api.sessions.list({ limit: "100" }).then((data) => data.sessions);
 

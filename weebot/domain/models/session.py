@@ -29,6 +29,7 @@ class SessionStatus(str, Enum):
     WAITING = "waiting"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"  # stopped on request; not an error
 
     def allows(self, action: SessionAction) -> bool:
         return action in _ALLOWED[self]
@@ -48,6 +49,7 @@ _ALLOWED: dict[SessionStatus, frozenset[SessionAction]] = {
     SessionStatus.WAITING: frozenset({SessionAction.RESUME, SessionAction.CANCEL}),
     SessionStatus.COMPLETED: frozenset(),
     SessionStatus.FAILED: frozenset({SessionAction.RUN}),
+    SessionStatus.CANCELLED: frozenset({SessionAction.RUN}),
 }
 
 

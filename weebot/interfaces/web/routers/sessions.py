@@ -296,13 +296,13 @@ async def cancel_session(
         cancelled = await task_runner.cancel_session(session_id)
         if not cancelled:
             # TaskRunner didn't have an active task — mark manually
-            session = session.set_status(SessionStatus.FAILED)
+            session = session.set_status(SessionStatus.CANCELLED)
             await state_repo.save_session(session)
     except Exception:
         # TaskRunner not registered in container — fall back to status-only
         logger.warning("Cancel of session %s fell back to a status-only update", session_id,
                        exc_info=True)
-        session = session.set_status(SessionStatus.FAILED)
+        session = session.set_status(SessionStatus.CANCELLED)
         await state_repo.save_session(session)
     else:
         # Reload session to get TaskRunner's updated status

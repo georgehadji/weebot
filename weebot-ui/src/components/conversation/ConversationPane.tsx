@@ -258,14 +258,18 @@ export function ConversationPane({
 
       {isRunning && sessionId && <RunControls sessionId={sessionId} />}
 
-      {status === "failed" && (
+      {(status === "failed" || status === "cancelled") && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-2 border-t bg-status-error/10 px-3 py-2 text-xs"
+          className={`flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs ${
+            status === "failed" ? "bg-status-error/10" : "bg-surface-2"
+          }`}
         >
-          <StatusBadge status="failed" variant="icon" />
+          <StatusBadge status={status} variant="icon" />
           <p className="min-w-0 flex-1 break-words text-muted-foreground">
-            {failureReason || "This run stopped before finishing."}
+            {status === "cancelled"
+              ? "You cancelled this run."
+              : failureReason || "This run stopped before finishing."}
           </p>
           <Button size="sm" variant="outline" loading={continuing} onClick={() => void runContinue()}>
             Continue
