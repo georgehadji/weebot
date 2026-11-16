@@ -382,7 +382,9 @@ class PlanActFlow(BaseFlow):
                 await self._emit(
                     ErrorEvent(error="Cancelled on request (flow cancel).", error_code="CANCELLED")
                 )
-                yield ErrorEvent(error="Cancelled on request (flow cancel).", error_code="CANCELLED")
+                yield ErrorEvent(
+                    error="Cancelled on request (flow cancel).", error_code="CANCELLED"
+                )
                 break  # through the normal exit: hooks run, the run span ends
 
             current_state_type = type(self._state)
