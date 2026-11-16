@@ -341,7 +341,7 @@ def flow_cancel(session_id: str) -> None:
             # request for every open status; mark it failed too in case nothing runs it.
             cancel_requests.request(session_id)
             if session.status != SessionStatus.RUNNING:
-                await state_repo.update_session_status(session_id, SessionStatus.FAILED)
+                await state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
             console.print(
                 f"[green]Cancel requested for {session_id}; a process running it stops "
                 f"at its next step.[/green]"

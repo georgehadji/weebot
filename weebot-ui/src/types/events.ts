@@ -27,6 +27,8 @@ export interface BaseEvent {
 export interface ErrorEvent extends BaseEvent {
   type: 'error';
   error: string;
+  /** Machine-readable cause (PLAN_STUCK, MAX_ITERATIONS, CANCELLED); absent on older events. */
+  error_code?: string;
 }
 
 export interface PlanEvent extends BaseEvent {
@@ -102,7 +104,7 @@ export interface NotificationEvent extends BaseEvent {
 export interface SessionPresenceEvent extends BaseEvent {
   type: 'session_presence';
   about_session_id: string;
-  status: 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | string;
+  status: 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | string;
   title: string;
   step_count: number;
   steps_completed: number;
@@ -137,7 +139,13 @@ export type AgentEvent =
   | PlanReviewEvent
   | SessionPresenceEvent;
 
-export type SessionStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed';
+export type SessionStatus =
+  | 'pending'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface Session {
   id: string;

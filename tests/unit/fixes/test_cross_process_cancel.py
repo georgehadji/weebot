@@ -38,4 +38,4 @@ async def test_a_running_flow_stops_on_request(tmp_path, monkeypatch):
     cancel_requests.request("run-1")
     events = [e async for e in flow.run("do it")]
     assert any(isinstance(e, ErrorEvent) and "ancel" in e.error for e in events)
-    assert flow._session.status == SessionStatus.FAILED
+    assert flow._session.status == SessionStatus.CANCELLED

@@ -140,6 +140,13 @@ describe("a failed session says why it stopped and how to continue", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
   });
 
+  it("a cancelled run is not called a failure, and can be continued", () => {
+    render(<ConversationPane sessionId="s1" status="cancelled" onSessionCreated={() => {}} />);
+    expect(screen.getByText("You cancelled this run.")).toBeTruthy();
+    expect(screen.queryByText(/stopped before finishing/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
+  });
+
   it("is hidden while the session is not failed", () => {
     render(<ConversationPane sessionId="s1" status="running" onSessionCreated={() => {}} />);
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();

@@ -38,7 +38,8 @@ export type SessionLifecycleStatus =
   | "running"
   | "waiting"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 interface ComposerProps {
   sessionId: string | null;
@@ -62,6 +63,7 @@ const MODE_LABEL: Record<SessionLifecycleStatus, string> = {
   none: "Start task",
   pending: "Start task",
   failed: "Retry task",
+  cancelled: "Start again",
   waiting: "Reply",
   running: "Steer",
   completed: "Chat",
@@ -71,6 +73,7 @@ const MODE_PLACEHOLDER: Record<SessionLifecycleStatus, string> = {
   none: "Message weebot… (e.g. “refactor the cascade module”)",
   pending: "Message weebot…",
   failed: "Message weebot…",
+  cancelled: "Message weebot…",
   waiting: "Type your response…",
   running: "Steer the agent while it works…",
   completed: "Ask a follow-up…",

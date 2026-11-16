@@ -35,6 +35,7 @@ from weebot.interfaces.web.routers.sessions import router as sessions_router
         (SessionStatus.WAITING, ["resume", "cancel"]),
         (SessionStatus.COMPLETED, []),
         (SessionStatus.FAILED, ["run"]),
+        (SessionStatus.CANCELLED, ["run"]),
     ],
 )
 def test_each_status_lists_the_actions_it_allows(status, actions):
@@ -70,7 +71,9 @@ def _app(status: SessionStatus):
     return app, repo, runner
 
 
-@pytest.mark.parametrize("status", [SessionStatus.COMPLETED, SessionStatus.FAILED])
+@pytest.mark.parametrize(
+    "status", [SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED]
+)
 def test_cancelling_a_finished_session_changes_nothing(status):
     app, repo, runner = _app(status)
     response = TestClient(app).post("/sessions/sess-1/cancel")
@@ -85,7 +88,7 @@ def test_cancelling_a_waiting_session_stops_it():
     response = TestClient(app).post("/sessions/sess-1/cancel")
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "failed"
+    assert body["status"] == "cancelled"
     assert body["allowed_actions"] == ["run"]
     runner.cancel_session.assert_awaited_once()
 
@@ -129,12 +132,24 @@ async def test_a_run_out_of_iterations_fails_instead_of_waiting():
     flow, events = await _run_with(_Spin())
     assert flow._session.status == SessionStatus.FAILED
     assert any("Max iterations" in (e.error or "") for e in events if isinstance(e, ErrorEvent))
+    assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["MAX_ITERATIONS"]
 
 
 async def test_a_stuck_plan_fails_instead_of_waiting():
     flow, events = await _run_with(_Stuck())
     assert flow._session.status == SessionStatus.FAILED
     assert any("stuck" in (e.error or "") for e in events if isinstance(e, ErrorEvent))
+    assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["PLAN_STUCK"]
+
+
+async def test_a_cancel_request_settles_as_cancelled_not_failed(tmp_path, monkeypatch):
+    from weebot.core import cancel_requests
+
+    monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
+    cancel_requests.request("s1")
+    flow, events = await _run_with(_Spin())
+    assert flow._session.status == SessionStatus.CANCELLED
+    assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["CANCELLED"]
 
 
 async def test_a_failed_swarm_is_not_saved_as_completed():

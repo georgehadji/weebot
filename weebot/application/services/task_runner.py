@@ -423,6 +423,8 @@ class TaskRunner:
                 session = session.model_copy(update={"context": flow_session.context})
             if flow.is_done():
                 session = session.set_status(SessionStatus.COMPLETED)
+            elif flow_session is not None and flow_session.status == SessionStatus.CANCELLED:
+                session = session.set_status(SessionStatus.CANCELLED)
             elif flow_session is not None and flow_session.status == SessionStatus.FAILED:
                 # A flow that ended FAILED (plan rejected, cancelled) was reset to WAITING here,
                 # so the UI showed "waiting for input" for a run that could never continue.
@@ -508,7 +510,7 @@ class TaskRunner:
                 await task
             except asyncio.CancelledError:
                 pass
-            await self._state_repo.update_session_status(session_id, SessionStatus.FAILED)
+            await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
             return True
         return False
 
