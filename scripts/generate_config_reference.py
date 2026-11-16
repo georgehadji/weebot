@@ -68,6 +68,10 @@ CONFIG_SCHEMA: list[dict] = [
      "desc": "Groq API key, for `groq/...` entries in WEEBOT_FREE_ROLES"},
     {"var": "GEMINI_API_KEY", "type": "str", "default": "", "sensitive": True,
      "desc": "Google AI Studio API key, for `gemini/...` entries in WEEBOT_FREE_ROLES"},
+    {"var": "WEEBOT_CONTEXT_AWARE_MODEL_SELECTION", "type": "bool", "default": "true",
+     "desc": "A flow swaps its model for the coding task cascade's pick by context size, "
+             "whatever model or role override the run was given. false: the run keeps the "
+             "model it was given (needed to run a flow on Ollama or a free tier)"},
 
     # ── Authentication ────────────────────────────────────────────
     {"var": "WEEBOT_API_KEY", "type": "str", "default": "", "sensitive": True,
