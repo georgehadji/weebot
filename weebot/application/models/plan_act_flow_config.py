@@ -18,7 +18,7 @@ Usage::
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from weebot.application.models.tool_collection import ToolCollection
@@ -70,6 +70,13 @@ if TYPE_CHECKING:
     from weebot.config.harness.schema import HarnessConfig
     from weebot.core.personality_manager import PersonalityManager
     from weebot.application.services.tool_registry import RoleBasedToolRegistry
+
+
+def _context_aware_default() -> bool:
+    """WEEBOT_CONTEXT_AWARE_MODEL_SELECTION, read when a config is built, not at import."""
+    from weebot.config.settings import get_settings
+
+    return get_settings().context_aware_model_selection
 
 
 @dataclass
@@ -133,7 +140,7 @@ class PlanActFlowConfig:
     profile_name: str | None = None  # SOUL.md profile (e.g. "coder", "researcher")
     agent_role: str | None = None  # Agent role for per-role model selection
     personality: PersonalityManager | None = None  # PersonalityManager
-    context_aware_model_selection: bool = True
+    context_aware_model_selection: bool = field(default_factory=_context_aware_default)
 
     # ── LongHorizon-Harness E1: per-step evidence audit ──────────────
     step_audit_service: StepAuditPort | None = None  # StepAuditPort

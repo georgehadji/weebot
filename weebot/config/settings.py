@@ -100,6 +100,12 @@ class WeebotSettings(BaseSettings):
     # Comma separated `role=provider/model`, e.g. "executor=groq/openai/gpt-oss-120b".
     free_roles: str = Field(default="", alias="WEEBOT_FREE_ROLES")
 
+    # On: a flow swaps its model for the "coding" task cascade's pick by context size, whatever
+    # model or role override the run was given. Off: the run keeps the model it was given.
+    context_aware_model_selection: bool = Field(
+        default=True, alias="WEEBOT_CONTEXT_AWARE_MODEL_SELECTION"
+    )
+
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
     reasoner_api_key: str | None = None  # env: REASONER_API_KEY
