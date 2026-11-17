@@ -35,7 +35,12 @@ def settled_status(session: Session) -> Session:
     """The status to save when the flow returns. COMPLETED, WAITING (a HITL
     pause) and FAILED (failed steps, `flow cancel`) stand; a session the flow
     left mid-loop waits for the next task description."""
-    if session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.FAILED):
+    if session.status in (
+        SessionStatus.COMPLETED,
+        SessionStatus.WAITING,
+        SessionStatus.FAILED,
+        SessionStatus.CANCELLED,
+    ):
         return session
     return session.set_status(SessionStatus.WAITING)
 

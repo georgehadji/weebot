@@ -48,6 +48,9 @@ class BaseEvent(BaseModel):
 class ErrorEvent(BaseEvent):
     type: Literal["error"] = "error"
     error: str = Field(default="")
+    error_code: str = Field(
+        default="", description="Machine-readable cause, e.g. PLAN_STUCK, CANCELLED."
+    )
     failure_severity: FailureSeverity = Field(default=FailureSeverity.SUBPLAN_FAIL)
 
 

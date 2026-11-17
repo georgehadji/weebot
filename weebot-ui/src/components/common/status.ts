@@ -6,6 +6,7 @@
  */
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   Circle,
   CircleDashed,
@@ -32,6 +33,7 @@ const STATUS: Record<string, StatusInfo> = {
   waiting: { label: "Waiting for you", icon: Clock, tone: "waiting" },
   completed: { label: "Completed", icon: CheckCircle2, tone: "idle" },
   failed: { label: "Failed", icon: XCircle, tone: "error" },
+  cancelled: { label: "Cancelled", icon: Ban, tone: "idle" },
   // Plan steps add these
   started: { label: "Running", icon: Loader2, tone: "live", spin: true },
   error: { label: "Failed", icon: XCircle, tone: "error" },

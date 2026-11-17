@@ -204,6 +204,7 @@ async def _chat(ctx: SessionInputContext) -> SessionInputResult:
 _STRATEGIES: dict[SessionStatus, Callable[[SessionInputContext], Awaitable[SessionInputResult]]] = {
     SessionStatus.PENDING: _start_task,
     SessionStatus.FAILED: _start_task,
+    SessionStatus.CANCELLED: _start_task,
     SessionStatus.WAITING: _resume,
     SessionStatus.RUNNING: _steer,
     SessionStatus.COMPLETED: _chat,

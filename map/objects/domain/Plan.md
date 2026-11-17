@@ -5,8 +5,8 @@ code: Plan, PlanStatus, PlanCritique
 cluster: domain
 universe: live
 status: verified
-verified: 2026-11-02
-commit: be7e51c2
+verified: 2026-11-16
+commit: 9afc7f09
 ---
 
 # Plan
@@ -43,7 +43,7 @@ Consequences (read from source, not run):
 **Does not hit:** `Step` status semantics (Step card); the legacy `Task` model.
 
 ## Surfaces
-`PlanEvent` to the web UI and CLI; plan review pause (`PlanReviewEvent.plan_data`, `domain/models/event.py:103-112`).
+`PlanEvent` to the web UI and CLI; plan review pause (`PlanReviewEvent.plan_data`, `domain/models/event.py:106-115`).
 
 ## See
 `weebot/domain/models/plan.py`

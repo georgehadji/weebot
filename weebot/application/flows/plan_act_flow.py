@@ -378,9 +378,13 @@ class PlanActFlow(BaseFlow):
         while iteration_count <= max_iterations:
             iteration_count += 1
             if cancel_requests.take(self._session.id):  # `flow cancel` from any process
-                self._session = self._session.set_status(SessionStatus.FAILED)
-                await self._emit(ErrorEvent(error="Cancelled on request (flow cancel)."))
-                yield ErrorEvent(error="Cancelled on request (flow cancel).")
+                self._session = self._session.set_status(SessionStatus.CANCELLED)
+                await self._emit(
+                    ErrorEvent(error="Cancelled on request (flow cancel).", error_code="CANCELLED")
+                )
+                yield ErrorEvent(
+                    error="Cancelled on request (flow cancel).", error_code="CANCELLED"
+                )
                 break  # through the normal exit: hooks run, the run span ends
 
             current_state_type = type(self._state)
@@ -475,7 +479,10 @@ class PlanActFlow(BaseFlow):
             # If we reached COMPLETED state logic or it paused for HITL, we break
             # FAILED too: CompletedState ends a run with failed steps that way.
             if self._session.status in (
-                SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.FAILED
+                SessionStatus.COMPLETED,
+                SessionStatus.WAITING,
+                SessionStatus.FAILED,
+                SessionStatus.CANCELLED,
             ):
                 break
 
@@ -507,7 +514,9 @@ class PlanActFlow(BaseFlow):
         if exhausted:
             # Same as a stuck plan: a run cut off mid-loop failed, it is not waiting for input.
             self._session = self._session.set_status(SessionStatus.FAILED)
-            yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")
+            yield ErrorEvent(
+                error=f"Max iterations ({max_iterations}) reached.", error_code="MAX_ITERATIONS"
+            )
         self._end_run_span()
 
     def _has_unresolved_wait_event(self) -> bool:
