@@ -56,9 +56,6 @@ DB_PROJECTS_PATH: str = "./projects.db"
 MAX_HISTORY_SIZE: int = 1000
 """Max pub/sub event history entries in EventBroker variants."""
 
-MAX_HISTORY_PER_SESSION: int = 200
-"""Max token history entries per session in TokenBudgetMonitor."""
-
 # ========================================================================
 # Session caps (memory leak prevention)
 # ========================================================================
@@ -67,9 +64,6 @@ MAX_WORKING_MEMORY_SESSIONS: int = 1000
 
 MAX_APPROVAL_SESSIONS: int = 50
 """Max session approval decisions cached before oldest is evicted."""
-
-MAX_TOKEN_BUDGET_SESSIONS: int = 500
-"""Max session entries in TokenBudgetMonitor before oldest is evicted."""
 
 # ========================================================================
 # Retries / timeouts
