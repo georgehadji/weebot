@@ -40,7 +40,7 @@ pandas==3.1.0
 matplotlib==3.11.2
 # Imported directly by image tools (ocr, screen_tool, computer_use, som_renderer);
 # also pulled by matplotlib — pin explicitly so it can't be dropped transitively.
-Pillow>=10.0.0
+Pillow>=13.0.0
 
 # Document Processing
 openpyxl==3.1.5
