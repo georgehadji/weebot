@@ -336,8 +336,12 @@ class PlanActFlow(BaseFlow):
         """Run the flow with this session's ids bound to every log record (OBS-1)."""
         from weebot.core.log_context import log_context
 
-        # Taken before any startup work: a cancel filed during it is for this run.
+        # A cancel filed since this run was scheduled is for this run. The runner saved RUNNING
+        # then, possibly well before the flow got a slot, so that time is the start; a flow
+        # run directly has no earlier save and starts now.
         run_started = time.time()
+        if self._session.status == SessionStatus.RUNNING:
+            run_started = min(run_started, self._session.updated_at.timestamp())
         with log_context(session_id=self._session.id):
             if self._cost_meter is not None:
                 # A resumed session starts from what it already spent.

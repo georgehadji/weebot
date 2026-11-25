@@ -122,7 +122,10 @@ async def test_a_flow_that_ended_failed_is_not_reset_to_waiting():
     await runner.start_session(session, lambda s: flow)
     await runner._tasks["s6"]
 
-    assert state_repo.save_session.await_args_list[-1].args[0].status == SessionStatus.FAILED
+    # The closing save is a compare-and-set on the row it just read.
+    assert state_repo.save_session_if_unchanged.await_args_list[-1].args[0].status == (
+        SessionStatus.FAILED
+    )
 
 
 @pytest.mark.asyncio

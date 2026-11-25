@@ -88,7 +88,7 @@ class TestTheBindingSites:
             return None
 
         flow = SimpleNamespace(
-            _session=SimpleNamespace(id="sess-flow"),
+            _session=SimpleNamespace(id="sess-flow", status=None),
             _run_states=states,
             _cost_meter=None,
             _report_undelivered_steering=no_steering,

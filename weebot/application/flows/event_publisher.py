@@ -17,7 +17,7 @@ import logging
 from typing import Any
 
 from weebot.domain.models.event import AgentEvent, MessageEvent
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
@@ -82,7 +82,9 @@ class EventPublisher:
         # the moment it sees the question must find a session that is waiting, or the
         # answer is taken for mid-run steering (audit X4). Other events keep the cheaper
         # publish-then-save order.
-        pause = event.type in PAUSE_EVENT_TYPES
+        # Only when the flow really paused: AUTO mode ignores a question, and a failed
+        # write there must not abort a run that needs no answer.
+        pause = event.type in PAUSE_EVENT_TYPES and self._session.status == SessionStatus.WAITING
         if pause:
             # Strict: a failed write must stop the event, not let it out over a stale row.
             await self._save_through(seq, strict=True)
@@ -104,8 +106,9 @@ class EventPublisher:
             async with self._emit_lock:
                 if self._saved_seq < seq:
                     covered = self._event_seq  # read with no await before the snapshot is taken
-                    await self._persist_session(strict=strict)
-                    self._saved_seq = covered
+                    # A failed write leaves the count behind, so the next emit saves again.
+                    if await self._persist_session(strict=strict):
+                        self._saved_seq = covered
 
     # ── Step 1: Truth binding ─────────────────────────────────────────────
 
@@ -184,8 +187,13 @@ class EventPublisher:
 
     # ── Step 5: Persistence ────────────────────────────────────────────────
 
-    async def _persist_session(self, strict: bool = False) -> None:
-        """Save the session. *strict* raises on failure instead of logging and moving on."""
+    async def _persist_session(self, strict: bool = False) -> bool:
+        """Save the session; True when the write is done with.
+
+        *strict* raises on failure instead of logging and moving on. Without it a failed
+        direct write returns False, so the caller retries it with the next event. An adapter
+        that exhausted its retries has dead-lettered the session: that counts as done.
+        """
         if self._persistence_adapter is not None:
             ok = await self._persistence_adapter.save_session(self._session)
             if not ok:
@@ -194,10 +202,12 @@ class EventPublisher:
                 )
                 if strict:
                     raise RuntimeError(f"Session {self._session.id} could not be saved")
-        else:
-            try:
-                await self._state_repo.save_session(self._session)
-            except Exception as exc:
-                logger.warning("Session persistence failed (retryable): %s", exc)
-                if strict:
-                    raise
+            return True
+        try:
+            await self._state_repo.save_session(self._session)
+        except Exception as exc:
+            logger.warning("Session persistence failed (retryable): %s", exc)
+            if strict:
+                raise
+            return False
+        return True

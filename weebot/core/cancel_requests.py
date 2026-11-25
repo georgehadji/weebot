@@ -33,7 +33,12 @@ def request(session_id: str) -> None:
     """Ask the process running *session_id* to stop."""
     _DIR.mkdir(parents=True, exist_ok=True)
     _sweep_claims()
-    _marker(session_id).write_text(repr(time.time()), encoding="utf-8")
+    marker = _marker(session_id)
+    # Written whole, then renamed in: a `take()` must never read a marker half-written.
+    # The temp name has a dot, so a crash here leaves a file the claim sweep removes.
+    pending = marker.with_name(f"{marker.name}.{uuid.uuid4().hex}")
+    pending.write_text(repr(time.time()), encoding="utf-8")
+    pending.replace(marker)
 
 
 def _sweep_claims() -> None:

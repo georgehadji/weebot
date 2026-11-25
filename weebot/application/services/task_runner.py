@@ -42,6 +42,7 @@ class PrioritizedSession:
 # How long a resume waits for the paused flow's task to finish draining (post-pause hooks)
 # before it refuses. WAITING is saved before the task ends, so a quick answer lands here.
 _RESUME_DRAIN_WAIT_S = 5.0
+_CLOSING_SAVE_TRIES = 3  # compare-and-set attempts for a run's closing save
 _RETRIES_KEY = "retries_remaining"
 _FAILURE_KEY = FAILURE_REASON_KEY
 _CANCELLABLE = SessionStatus.allowing(SessionAction.CANCEL)
@@ -77,6 +78,25 @@ def _flow_view(session: Session, flow: object, yielded: list, title: str) -> Ses
     if title and title != base.title:
         base = base.set_title(title)
     return base
+
+
+def _closing_view(
+    session: Session, stored: Session | None, flow: BaseFlow, flow_session: Session | None
+) -> Session:
+    """The session as the run's end leaves it, given the row currently stored."""
+    if stored is not None and stored.status == SessionStatus.CANCELLED:
+        # A cancel (a status-only write while the store held WAITING) landed during this run:
+        # the closing whole-row save must not turn it back into COMPLETED.
+        return session.set_status(SessionStatus.CANCELLED)
+    if flow.is_done():
+        return session.set_status(SessionStatus.COMPLETED)
+    if flow_session is not None and flow_session.status == SessionStatus.CANCELLED:
+        return session.set_status(SessionStatus.CANCELLED)
+    if flow_session is not None and flow_session.status == SessionStatus.FAILED:
+        # A flow that ended FAILED (plan rejected, cancelled) was reset to WAITING here,
+        # so the UI showed "waiting for input" for a run that could never continue.
+        return session.set_status(SessionStatus.FAILED)
+    return session.set_status(SessionStatus.WAITING)
 
 
 @dataclass
@@ -193,7 +213,12 @@ class TaskRunner:
         try:
             await self.start_session(session, flow_factory)
         except ValueError:
-            logger.warning("Queued session %s skipped: it is already running", session.id)
+            if self._live_task(session.id) is not None:
+                logger.warning("Queued session %s skipped: it is already running", session.id)
+                return
+            # Not the already-running refusal: the factory failed after RUNNING was saved.
+            logger.exception("Queued session %s could not start", session.id)
+            await self._state_repo.update_session_status(session.id, SessionStatus.FAILED)
 
     async def _publish_presence(self, session: Session) -> None:
         """Emit a SessionPresenceEvent on the global channel for the session rail.
@@ -456,21 +481,7 @@ class TaskRunner:
                 session = _flow_view(session, flow, yielded, title)
             elif flow_session is not None:
                 session = session.model_copy(update={"context": flow_session.context})
-            if await self._cancelled_while_running(session_id):
-                # A cancel (a status-only write while the store held WAITING) landed during
-                # this run: the closing whole-row save must not turn it back into COMPLETED.
-                session = session.set_status(SessionStatus.CANCELLED)
-            elif flow.is_done():
-                session = session.set_status(SessionStatus.COMPLETED)
-            elif flow_session is not None and flow_session.status == SessionStatus.CANCELLED:
-                session = session.set_status(SessionStatus.CANCELLED)
-            elif flow_session is not None and flow_session.status == SessionStatus.FAILED:
-                # A flow that ended FAILED (plan rejected, cancelled) was reset to WAITING here,
-                # so the UI showed "waiting for input" for a run that could never continue.
-                session = session.set_status(SessionStatus.FAILED)
-            else:
-                session = session.set_status(SessionStatus.WAITING)
-            await self._state_repo.save_session(session)
+            session = await self._save_closing(session, session_id, flow, flow_session)
             await self._publish_presence(session)
         finally:
             try:
@@ -482,20 +493,30 @@ class TaskRunner:
             except Exception:
                 logger.debug("Failed to decrement session active metric", exc_info=True)
 
-    async def _cancelled_while_running(self, session_id: str) -> bool:
-        """True when the stored row says CANCELLED at the end of a run.
+    async def _save_closing(
+        self, session: Session, session_id: str, flow: BaseFlow, flow_session: Session | None
+    ) -> Session:
+        """Save the run's end state, unless a cancel lands first.
 
-        A run starts by saving RUNNING, so CANCELLED here was written during it. This is a
-        read before the closing save, not one atomic write: a cancel filed between the two
-        still loses, as it does for a run in another process (`save_if_unchanged` is the
-        atomic form if that ever matters).
+        A run starts by saving RUNNING, so a stored CANCELLED was written during it and must
+        not be turned back into COMPLETED. The save is a compare-and-set on the row it read:
+        a cancel filed between the read and the write fails the save, and the next try reads
+        CANCELLED. After a few lost races the last write wins.
         """
-        try:
-            stored = await self._state_repo.load_session(session_id)
-        except Exception:
-            logger.warning("could not re-read %s before its save", session_id, exc_info=True)
-            return False
-        return stored is not None and stored.status == SessionStatus.CANCELLED
+        final = session
+        for _ in range(_CLOSING_SAVE_TRIES):
+            try:
+                stored = await self._state_repo.load_session(session_id)
+            except Exception:
+                logger.warning("could not re-read %s before its save", session_id, exc_info=True)
+                stored = None
+            final = _closing_view(session, stored, flow, flow_session)
+            if stored is None:
+                break
+            if await self._state_repo.save_session_if_unchanged(final, stored.updated_at):
+                return final
+        await self._state_repo.save_session(final)
+        return final
 
     async def resume_session(
         self,
@@ -530,6 +551,10 @@ class TaskRunner:
                 await asyncio.wait({draining}, timeout=_RESUME_DRAIN_WAIT_S)
                 if self._live_task(session_id) is not None:
                     raise ValueError(f"Session {session_id} is still running")
+                # The old run's closing save landed during the wait: build on that row.
+                session = await self._state_repo.load_session(session_id)
+                if session is None or session.status == SessionStatus.CANCELLED:
+                    raise ValueError(f"Session {session_id} was cancelled or deleted meanwhile")
 
             session = session.add_user_message(answer, message_id=message_id)
             session = session.set_status(SessionStatus.RUNNING)
