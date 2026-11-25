@@ -77,13 +77,49 @@ export function ConversationPane({
   const refreshState: Remote<null> =
     refresh.error === null ? { status: "idle" } : { status: "error", message: refresh.error };
 
-  useSessionEvents(sessionId ?? undefined, (event) => {
-    setState((prev) => sessionReducer(prev, event));
-    if (seen.has(event.id)) return;
-    seen.add(event.id);
-    const text = announcementFor(event);
-    if (text) announce(text);
-  });
+  // Fetch the stored history and add whatever the live stream missed. `isCancelled` lets a
+  // caller drop a late answer (the session changed or the pane unmounted).
+  const mergeMissed = useCallback(
+    (id: string, isCancelled: () => boolean) =>
+      api.sessions
+        .events(id)
+        .then((events) => {
+          if (isCancelled()) return;
+          setRefresh((prev) => (prev.error === null ? prev : { ...prev, error: null }));
+          const missed = events.filter((e) => !seen.has(e.id));
+          if (missed.length === 0) return;
+          missed.forEach((e) => seen.add(e.id));
+          setState((prev) => mergeHistory(prev, events));
+        })
+        .catch((e) => {
+          console.warn("[Conversation] could not refresh events", e);
+          if (!isCancelled()) {
+            setRefresh((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Something went wrong" }));
+          }
+        }),
+    [seen]
+  );
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  useSessionEvents(
+    sessionId ?? undefined,
+    (event) => {
+      setState((prev) => sessionReducer(prev, event));
+      if (seen.has(event.id)) return;
+      seen.add(event.id);
+      const text = announcementFor(event);
+      if (text) announce(text);
+    },
+    // The socket replays nothing, so whatever was published while it was down is gone from
+    // the live feed. Refetch whatever the status is: a run in progress is exactly when this
+    // happens, and a missed step would otherwise stay missing until a reload.
+    () => {
+      if (sessionId) void mergeMissed(sessionId, () => sessionIdRef.current !== sessionId);
+    }
+  );
 
   // The socket replays nothing, so an event published between the page's REST load and the
   // socket subscribing never arrived (a plan rejected at once left "Waiting for events…" until
@@ -91,26 +127,11 @@ export function ConversationPane({
   useEffect(() => {
     if (!sessionId || status === "none" || status === "pending" || status === "running") return;
     let cancelled = false;
-    api.sessions
-      .events(sessionId)
-      .then((events) => {
-        if (cancelled) return;
-        setRefresh((prev) => (prev.error === null ? prev : { ...prev, error: null }));
-        const missed = events.filter((e) => !seen.has(e.id));
-        if (missed.length === 0) return;
-        missed.forEach((e) => seen.add(e.id));
-        setState((prev) => mergeHistory(prev, events));
-      })
-      .catch((e) => {
-        console.warn("[Conversation] could not refresh events", e);
-        if (!cancelled) {
-          setRefresh((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Something went wrong" }));
-        }
-      });
+    void mergeMissed(sessionId, () => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [sessionId, status, seen, refresh.attempt]);
+  }, [sessionId, status, mergeMissed, refresh.attempt]);
 
   const addOptimisticMessage = useCallback(
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),

@@ -24,7 +24,9 @@ interface SessionEventsHook {
 
 export function useSessionEvents(
   sessionId?: string,
-  onEvent?: (event: AgentEvent) => void
+  onEvent?: (event: AgentEvent) => void,
+  /** The stream resumed after a drop; the socket replays nothing, so refetch history. */
+  onReconnect?: () => void
 ): SessionEventsHook {
   const { subscribeSession, getSessionMode } = useEventStreamContext();
   const [isConnected, setIsConnected] = useState(false);
@@ -32,13 +34,20 @@ export function useSessionEvents(
   const handleEvent = useEffectEvent((event: AgentEvent) => {
     onEvent?.(event);
   });
+  const handleReconnect = useEffectEvent(() => {
+    onReconnect?.();
+  });
 
   useEffect(() => {
     if (!sessionId) return;
-    const unsubscribe = subscribeSession(sessionId, (event) => {
-      handleEvent(event);
-      setIsConnected(true);
-    });
+    const unsubscribe = subscribeSession(
+      sessionId,
+      (event) => {
+        handleEvent(event);
+        setIsConnected(true);
+      },
+      () => handleReconnect()
+    );
 
     // Poll the provider's connection mode so isConnected reflects
     // reconnect/fallback transitions the listener callback alone can't see.

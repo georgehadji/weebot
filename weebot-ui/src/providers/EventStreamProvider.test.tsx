@@ -347,3 +347,77 @@ describe("EventStreamProvider — connection settings", () => {
     expect(sockets.last.url).toBe("ws://10.0.0.5:9000/ws");
   });
 });
+
+describe("EventStreamProvider — session reconnect notification (X6)", () => {
+  let sockets: FakeWebSocketControl;
+  let sse: ReturnType<typeof installFakeSse>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    sockets = installFakeWebSocket();
+    sse = installFakeSse();
+  });
+
+  afterEach(() => {
+    sse.restore();
+    sockets.restore();
+    vi.useRealTimers();
+  });
+
+  const session = () => sockets.sockets.filter((ws) => ws.url.includes(SESSION)).at(-1)!;
+
+  it("fires when the session socket reopens after a drop, not on the first open", async () => {
+    const onReconnect = vi.fn();
+    renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), { wrapper });
+
+    await act(async () => {
+      session().accept();
+    });
+    expect(onReconnect).not.toHaveBeenCalled();
+
+    await act(async () => {
+      session().serverClose();
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(onReconnect).not.toHaveBeenCalled(); // reconnecting, not yet resumed
+
+    await act(async () => {
+      session().accept();
+    });
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires when the first connect failed and a later retry opened", async () => {
+    const onReconnect = vi.fn();
+    renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), { wrapper });
+
+    await act(async () => {
+      session().serverClose(); // never opened
+      await vi.advanceTimersByTimeAsync(1_000);
+      session().accept();
+    });
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires when the SSE fallback takes over", async () => {
+    const onReconnect = vi.fn();
+    renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), { wrapper });
+
+    await forceSseFallback(sockets);
+
+    expect(sse.streams).toHaveLength(1);
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops notifying a subscriber that unsubscribed", async () => {
+    const onReconnect = vi.fn();
+    const { unmount } = renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), {
+      wrapper,
+    });
+    await act(async () => {
+      session().accept();
+    });
+    unmount();
+    expect(onReconnect).not.toHaveBeenCalled();
+  });
+});

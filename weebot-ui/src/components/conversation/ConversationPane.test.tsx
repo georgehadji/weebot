@@ -9,6 +9,7 @@ import { AgentEvent } from "@/types/events";
 
 const h = vi.hoisted(() => ({
   emit: null as null | ((e: unknown) => void),
+  reconnect: undefined as undefined | (() => void),
   history: [] as unknown[],
   failEvents: false,
   eventsCalls: 0,
@@ -16,8 +17,9 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useSessionEvents", () => ({
-  useSessionEvents: (_id: unknown, onEvent: (e: unknown) => void) => {
+  useSessionEvents: (_id: unknown, onEvent: (e: unknown) => void, onReconnect?: () => void) => {
     h.emit = onEvent;
+    h.reconnect = onReconnect;
     return { isConnected: true };
   },
 }));
@@ -185,5 +187,39 @@ describe("waiting states are announced, since the log is not a live region", () 
     h.announce.mockReset();
     mount("running", [msg("m2", "hi")]);
     expect(h.announce).not.toHaveBeenCalledWith("Agent is working…");
+  });
+});
+
+describe("X6: a stream that dropped and resumed recovers what it missed", () => {
+  it("refetches history on reconnect while the run is still going, and shows the missed step", async () => {
+    mount("running", [msg("m1", "first")]);
+    expect(h.eventsCalls).toBe(0); // a running session does not fetch on its own
+
+    h.history = [msg("m1", "first"), msg("m2", "published while the socket was down")];
+    await act(async () => h.reconnect!());
+
+    await waitFor(() => expect(text()).toContain("published while the socket was down"));
+    expect(h.eventsCalls).toBe(1);
+  });
+
+  it("does not announce or duplicate an event the live stream already delivered", async () => {
+    mount("running", []);
+    await push(msg("m1", "live"));
+    h.announce.mockReset();
+
+    h.history = [msg("m1", "live")];
+    await act(async () => h.reconnect!());
+
+    await waitFor(() => expect(h.eventsCalls).toBe(1));
+    expect(text().match(/live/g)).toHaveLength(1);
+    expect(h.announce).not.toHaveBeenCalled();
+  });
+
+  it("shows a Retry-able error when the refetch after a reconnect fails", async () => {
+    mount("running", []);
+    h.failEvents = true;
+    await act(async () => h.reconnect!());
+    await waitFor(() => expect(h.eventsCalls).toBe(1));
+    expect(document.body.textContent).toMatch(/offline/);
   });
 });
