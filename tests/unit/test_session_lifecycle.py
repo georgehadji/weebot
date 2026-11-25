@@ -8,6 +8,7 @@ RUNNING, which the task runner reported as WAITING: a question nobody had asked.
 
 from __future__ import annotations
 
+import time
 import types
 from unittest.mock import AsyncMock, MagicMock
 
@@ -174,8 +175,12 @@ async def test_a_stuck_plan_fails_instead_of_waiting():
 async def test_a_cancel_request_settles_as_cancelled_not_failed(tmp_path, monkeypatch):
     from weebot.core import cancel_requests
 
+    real_time = time.time
     monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
-    cancel_requests.request("s1")
+    # Filed a moment after the run starts: one filed before it is for an earlier run.
+    with monkeypatch.context() as m:
+        m.setattr(time, "time", lambda: real_time() + 60)
+        cancel_requests.request("s1")
     flow, events = await _run_with(_Spin())
     assert flow._session.status == SessionStatus.CANCELLED
     assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["CANCELLED"]

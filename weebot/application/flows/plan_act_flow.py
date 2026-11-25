@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
@@ -373,11 +374,12 @@ class PlanActFlow(BaseFlow):
         # *task*, not the turn input, and they now say so: see `task_text` in
         # states/base.py.
         prompt_consumed = False
+        run_started = time.time()  # a cancel filed before this is for an earlier run
         exhausted = False  # the loop ran out of iterations rather than ending on a status
 
         while iteration_count <= max_iterations:
             iteration_count += 1
-            if cancel_requests.take(self._session.id):  # `flow cancel` from any process
+            if cancel_requests.take(self._session.id, run_started):  # `flow cancel`, any process
                 self._session = self._session.set_status(SessionStatus.CANCELLED)
                 await self._emit(
                     ErrorEvent(error="Cancelled on request (flow cancel).", error_code="CANCELLED")
