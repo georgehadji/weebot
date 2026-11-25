@@ -1,19 +1,14 @@
-"""ConversationCompressor — summarizes middle turns to shrink context window usage.
+"""ConversationCompressor — one cheap-model call that summarizes a slice of the conversation.
 
-Inspired by hermes-agent's context engine pattern:
-  - Protect first KEEP_HEAD turns (head of conversation)
-  - Protect last KEEP_TAIL turns (recent context most relevant to current step)
-  - Summarize the middle via a single cheap-model LLM call
-  - Replace compressed region with one summary system message
-
-This preserves the conversational head (which anchors the task) and the
-recent tail (most relevant to the current execution step) while dramatically
-reducing token count for long-running sessions.
+It is the model call behind the `SummarizeMiddle` pass (`context_passes.py`). It receives
+the exact middle to summarize; choosing the head and tail is the pipeline's job, so there
+is no second slicing here.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
@@ -21,13 +16,7 @@ from weebot.config.constants import TEMPERATURE_DETERMINISTIC, MAX_TOKENS_SHORT
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ConversationCompressor", "KEEP_HEAD", "KEEP_TAIL"]
-
-KEEP_HEAD: int = 3
-"""Number of turns to always preserve at the start of the buffer."""
-
-KEEP_TAIL: int = 6
-"""Number of turns to always preserve at the end of the buffer."""
+__all__ = ["ConversationCompressor"]
 
 _COMPRESS_SYSTEM = (
     "You are a concise summarizer. Given a conversation excerpt between an AI agent "
@@ -42,83 +31,27 @@ _COMPRESS_SYSTEM = (
 
 
 class ConversationCompressor:
-    """Summarize the middle portion of a conversation buffer in-place.
+    """Summarize a slice of messages with the cheap model.
 
     Args:
         llm: LLMPort instance to use for the summarization call.
         cheap_model: Model ID for the summary call (defaults to MODEL_BUDGET).
-        keep_head: Turns to protect at the start.
-        keep_tail: Turns to protect at the end.
     """
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        cheap_model: str | None = None,
-        keep_head: int = KEEP_HEAD,
-        keep_tail: int = KEEP_TAIL,
-    ) -> None:
+    def __init__(self, llm: LLMPort, cheap_model: str | None = None) -> None:
         self._llm = llm
-        self._keep_head = keep_head
-        self._keep_tail = keep_tail
         if cheap_model is None:
             from weebot.config.model_refs import MODEL_BUDGET
 
             cheap_model = MODEL_BUDGET
         self._cheap_model = cheap_model
 
-    async def compress(self, buffer: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Return a new buffer with middle turns replaced by a summary message.
+    async def summarize(self, messages: Sequence[dict[str, Any]]) -> str:
+        """Return a factual summary of *messages*, or "" when the call fails.
 
-        If the buffer is too short to compress (head + tail >= len),
-        returns the original buffer unchanged.
-
-        Args:
-            buffer: List of chat message dicts with 'role' and 'content'.
-
-        Returns:
-            Compressed buffer. Middle turns replaced by a single system message.
+        An empty string is the failure signal: the caller falls back deterministically
+        instead of committing an error string as if it were a summary.
         """
-        total = len(buffer)
-        min_compressible = self._keep_head + self._keep_tail + 1
-        if total < min_compressible:
-            logger.debug(
-                "Buffer too short to compress (%d < %d turns), skipping", total, min_compressible
-            )
-            return buffer
-
-        head = buffer[: self._keep_head]
-        middle = buffer[self._keep_head : total - self._keep_tail]
-        tail = buffer[total - self._keep_tail :]
-
-        summary = await self._summarize(middle)
-        if not summary:
-            # Compression is lossy by design, so a failed summary must be a
-            # no-op rather than a loss: this previously substituted the string
-            # "(compression failed: ...)" for the middle turns and returned a
-            # normally-shaped buffer, which the caller could not distinguish
-            # from success -- so it committed the replacement and those turns
-            # were gone. Returning the buffer unchanged matches the documented
-            # behaviour for a buffer too short to compress.
-            logger.warning("Summarization produced nothing; leaving the buffer uncompressed")
-            return buffer
-
-        summary_msg: dict[str, Any] = {
-            "role": "system",
-            "content": (f"[Context summary — {len(middle)} turns compressed]\n{summary}"),
-        }
-
-        compressed = head + [summary_msg] + tail
-        logger.info(
-            "Compressed conversation buffer: %d -> %d messages (%d summarized)",
-            total,
-            len(compressed),
-            len(middle),
-        )
-        return compressed
-
-    async def _summarize(self, messages: list[dict[str, Any]]) -> str:
-        """Call cheap model to produce a factual summary of *messages*."""
         transcript_parts: list[str] = []
         for msg in messages:
             role = msg.get("role", "unknown")

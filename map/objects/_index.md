@@ -14,6 +14,7 @@ Format: name — source — status — card
 
 ## application
 - CascadeExecutor — `weebot/application/agents/executor/_cascade.py` — stale 2026-11-01 — [card](application/CascadeExecutor.md)
+- ContextCompression (ContextCompressor, ConversationCompressor, CompressionPass, compress_messages, select_tail, TokenBudget) — `docs/adr/022-compression-pipeline.md` — stub — [card](application/ContextCompression.md)
 - DelegationGuard (DelegationGuard, DelegatedFlow, current_depth, DELEGATION_GUARD) — `docs/adr/018-delegation-policy.md` — stub — [card](application/DelegationGuard.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-11-02 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
