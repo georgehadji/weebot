@@ -336,14 +336,20 @@ class PlanActFlow(BaseFlow):
         """Run the flow with this session's ids bound to every log record (OBS-1)."""
         from weebot.core.log_context import log_context
 
+        # Taken before any startup work: a cancel filed during it is for this run.
+        run_started = time.time()
         with log_context(session_id=self._session.id):
             if self._cost_meter is not None:
                 # A resumed session starts from what it already spent.
                 await self._cost_meter.seed(self._session.id)
-            async for event in self._run_states(prompt):
+            async for event in self._run_states(prompt, run_started):
                 yield event
 
-    async def _run_states(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
+    async def _run_states(
+        self, prompt: str, run_started: float | None = None
+    ) -> AsyncGenerator[AgentEvent, None]:
+        if run_started is None:
+            run_started = time.time()  # a cancel filed before this is for an earlier run
         effective_prompt = await begin_run(self, prompt)
 
         max_iterations = self._max_iterations
@@ -374,7 +380,6 @@ class PlanActFlow(BaseFlow):
         # *task*, not the turn input, and they now say so: see `task_text` in
         # states/base.py.
         prompt_consumed = False
-        run_started = time.time()  # a cancel filed before this is for an earlier run
         exhausted = False  # the loop ran out of iterations rather than ending on a status
 
         while iteration_count <= max_iterations:

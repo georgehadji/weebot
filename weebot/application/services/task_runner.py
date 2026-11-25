@@ -168,7 +168,15 @@ class TaskRunner:
                 self._priority_queue.task_done()
 
     async def _start_queued(self, session: Session, flow_factory: FlowFactory) -> None:
-        """Start a dequeued session, unless a flow for it is already running."""
+        """Start a dequeued session, unless it changed while queued or is already running."""
+        stored = await self._state_repo.load_session(session.id)
+        if stored is not None and stored.status != session.status:
+            # Cancelled (or started elsewhere) while it waited in the queue.
+            logger.warning(
+                "Queued session %s skipped: it is %s, was %s when queued",
+                session.id, stored.status.value, session.status.value,
+            )
+            return
         try:
             await self.start_session(session, flow_factory)
         except ValueError:

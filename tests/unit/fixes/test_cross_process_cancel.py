@@ -66,6 +66,22 @@ def test_a_marker_in_the_old_format_is_ignored_by_a_run(tmp_path, monkeypatch):
     assert not cancel_requests.take("s1", since=time.time())
 
 
+def test_a_request_filed_while_one_is_taken_is_not_lost(tmp_path, monkeypatch):
+    """take() claims the marker by renaming it, so a request filed mid-take survives."""
+    monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
+    cancel_requests.request("s1")
+    real_read = type(cancel_requests._marker("s1")).read_text
+
+    def read_then_refile(self, *a, **k):
+        text = real_read(self, *a, **k)
+        cancel_requests.request("s1")  # a fresh cancel lands while the old one is read
+        return text
+
+    monkeypatch.setattr(type(cancel_requests._marker("s1")), "read_text", read_then_refile)
+    assert cancel_requests.take("s1")
+    assert cancel_requests._marker("s1").exists()  # the second request was kept
+
+
 async def test_a_flow_ignores_a_cancel_filed_before_it_started(tmp_path, monkeypatch):
     from weebot.application.flows.plan_act_flow import PlanActFlow
     from weebot.application.models.tool_collection import ToolCollection

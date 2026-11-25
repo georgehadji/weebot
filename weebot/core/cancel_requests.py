@@ -13,8 +13,12 @@ next run, after the user had asked for it again.
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
+import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _DIR = Path.home() / ".weebot" / "cancel"
 
@@ -37,13 +41,20 @@ def take(session_id: str, since: float = 0.0) -> bool:
     A marker without a readable time (the old format) counts as older than any *since*.
     """
     marker = _marker(session_id)
+    # Rename first: a request filed after this point makes a new marker instead of being
+    # deleted with the one being read, and only one of two concurrent takers wins the rename.
+    claimed = marker.with_name(f"{marker.name}.{uuid.uuid4().hex}")
     try:
-        text = marker.read_text(encoding="utf-8")
-        marker.unlink()
+        marker.replace(claimed)
     except FileNotFoundError:
         return False
     try:
+        text = claimed.read_text(encoding="utf-8")
+    finally:
+        claimed.unlink(missing_ok=True)
+    try:
         requested = float(text)
     except ValueError:
+        logger.warning("Cancel marker for %s has no readable time; ignoring it", session_id)
         requested = 0.0
     return requested >= since

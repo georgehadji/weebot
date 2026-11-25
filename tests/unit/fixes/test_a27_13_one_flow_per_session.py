@@ -190,6 +190,16 @@ async def test_a_queued_session_already_running_is_skipped():
     assert len(built) == 1
 
 
+async def test_a_session_cancelled_while_queued_is_not_started():
+    runner, repo = await _runner(SessionStatus.PENDING)
+    built = []
+    queued = await repo.load_session("s1")
+    await runner.cancel_session("s1")  # status-only write: CANCELLED
+    await runner._start_queued(queued, lambda _s: built.append(1))
+    assert built == []
+    assert (await repo.load_session("s1")).status == SessionStatus.CANCELLED
+
+
 async def test_two_concurrent_starts_of_one_pending_session_start_one_flow():
     runner, repo = await _runner(SessionStatus.PENDING)
     session = await repo.load_session("s1")
