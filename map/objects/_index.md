@@ -7,7 +7,7 @@ Format: name — source — status — card
 ## domain
 - Delegation (DelegationPolicy, child_tool_names, DelegationDenied, SPAWN_TOOLS) — `docs/adr/018-delegation-policy.md` — stub — [card](domain/Delegation.md)
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — stale 2026-11-02 — [card](domain/Event.md)
-- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-11-25 — [card](domain/Plan.md)
+- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — stale 2026-11-25 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — stale 2026-10-31 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionAction, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-11-01 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — stale 2026-10-31 — [card](domain/Step.md)

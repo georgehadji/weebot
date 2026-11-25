@@ -4,9 +4,9 @@ name: Plan
 code: Plan, PlanStatus, PlanCritique
 cluster: domain
 universe: live
-status: verified
+status: stale
 verified: 2026-11-25
-commit: a5ec2c4d
+commit: fc92b09e
 ---
 
 # Plan
@@ -14,7 +14,7 @@ commit: a5ec2c4d
 The ordered list of `Step`s a flow runs against, plus a title, a summary and a `PlanStatus`. `PlanCritique` (same file) is the critic's verdict on a plan before execution; it lives here because it has no behaviour of its own.
 
 ## Why this shape
-Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:197-237`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:240`; `weebot/application/flows/states/_step_outcome.py:138, 152, 186, 237, 291`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`weebot/domain/models/plan.py:239-248`), `is_successful()` needs every step COMPLETED by its own work (`Step.did_work`, `weebot/domain/models/plan.py:93-95, 250-260`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`weebot/domain/models/plan.py:253-258`).
+Immutable: every mutator returns a new `Plan` through `model_copy` (`weebot/domain/models/plan.py:197-237`), so a flow state can only change the plan by reassigning `context._plan` (`application/flows/states/executing.py:240`; `weebot/application/flows/states/_step_outcome.py:[stale 138, 152], 186, 237, 291`). "Stop running" and "it worked" are two predicates on purpose: `is_complete()` counts FAILED steps as done (`weebot/domain/models/plan.py:239-248`), `is_successful()` needs every step COMPLETED by its own work (`Step.did_work`, `weebot/domain/models/plan.py:93-95, 250-260`). The docstring records why: three readers took `is_complete()` as success, including the template cache, which stored an all-failed plan with score 1.0 (`weebot/domain/models/plan.py:253-258`).
 
 ## Shape
 - `PlanStatus` (`weebot/domain/models/plan.py:24-40`): `created`, `updated`, `running`, `completed`, `failed`. The comment at `weebot/domain/models/plan.py:34-39` says `FAILED` is backend only and the UI type omits `running`; that is out of date: `weebot-ui/src/types/events.ts:6` lists all five values.
@@ -32,7 +32,7 @@ Consequences (read from source, not run):
 - `step_scores` is written by the critic (`application/services/plan_critic.py:93`) and read by nothing; the critic's own comment says so (`weebot/application/services/plan_critic.py:109`).
 
 ## Connected to
-- **Owns** `Step` (see the Step card). **Built by** `PlannerAgent._parse_plan` (`application/agents/planner.py:333`) and merged by `PlannerAgent.update_plan` (`weebot/application/agents/planner.py:285`, merge at `weebot/application/agents/planner.py:312`). **Held by** the flow as `context._plan`; set in `PlanningState` (`planning.py:270, 288, 319`) and changed in `ExecutingState`, `ReviewingState` (`reviewing.py:145, 161`), `UpdatingState` (`updating.py:134, 215`). `CompletedState` stamps `FAILED` or `COMPLETED` from `Plan.outcome()` (`domain/models/plan.py:270-276`), and INCOMPLETE ends FAILED too, per owner decision D-R1 (`completed.py:177-189`, audit R06).
+- **Owns** `Step` (see the Step card). **Built by** `PlannerAgent._parse_plan` (`application/agents/planner.py:333`) and merged by `PlannerAgent.update_plan` (`weebot/application/agents/planner.py:285`, merge at `weebot/application/agents/planner.py:312`). **Held by** the flow as `context._plan`; set in `PlanningState` (`planning.py:270, 288, 319`) and changed in `ExecutingState`, `ReviewingState` (`reviewing.py:[stale 145, 161]`), `UpdatingState` (`updating.py:134, 215`). `CompletedState` stamps `FAILED` or `COMPLETED` from `Plan.outcome()` (`domain/models/plan.py:270-276`), and INCOMPLETE ends FAILED too, per owner decision D-R1 (`completed.py:177-189`, audit R06).
 - **Persisted only as events:** a `PlanEvent.plan` dict inside `Session.events`; rebuilt by `Session.get_last_plan` (Session card).
 - **Scored by** `PlanOutcomeScorer` via `is_successful()` (`infrastructure/scoring/plan_outcome_scorer.py:64`).
 - `PlanCritique` **produced by** `PlanCriticService` (`application/services/plan_critic.py:39`) behind `PlanCriticPort` (`application/ports/plan_critic_port.py:11`), **read by** `CritiquingState` (`critiquing.py:77-152`), `UpdatingState` (`updating.py:240`), `PlanActFlow` misalignment signals (`plan_act_flow.py:153-157`).

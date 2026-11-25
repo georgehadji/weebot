@@ -16,6 +16,7 @@ from weebot.application.flows.states.base import (
     register_state,
     task_text,
 )
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanEvent
 from weebot.domain.models.plan import REPLACED_BY_PLAN_UPDATE, Plan, PlanStatus, StepStatus
 
@@ -47,7 +48,7 @@ class UpdatingState(FlowState):
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 
         if context._plan is None:
-            yield ErrorEvent(error="No plan available during update")
+            yield fail_run(context, "No plan available during update", "NO_PLAN")
             return
 
         # Find the most recently completed or failed step
@@ -66,7 +67,7 @@ class UpdatingState(FlowState):
             if context._plan.steps:
                 last_step = context._plan.steps[0]
             else:
-                yield ErrorEvent(error="No steps found in plan for update")
+                yield fail_run(context, "No steps found in plan for update", "NO_STEPS")
                 return
 
         update_success = False

@@ -22,6 +22,7 @@ from weebot.application.flows.states.base import (
     register_state,
     task_text,
 )
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -84,8 +85,6 @@ class PlanningState(FlowState):
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.agents.planner import PlannerAgent
-        from weebot.domain.models.event import ErrorEvent as EE
-
         # Apply context-aware model switching before any execution
         new_model = context._maybe_switch_model_for_context()
         if new_model:
@@ -93,12 +92,12 @@ class PlanningState(FlowState):
 
         # --- CQRS: execute plan creation through mediator (REQUIRED) ---
         if context._mediator is None:
-            yield EE(
-                error=(
-                    "PlanningState requires a Mediator to be configured on PlanActFlow. "
-                    "Construct PlanActFlow with mediator=container.get(Mediator) or "
-                    "build it through container.get(\"create_flow\")."
-                )
+            yield fail_run(
+                context,
+                "PlanningState requires a Mediator to be configured on PlanActFlow. "
+                "Construct PlanActFlow with mediator=container.get(Mediator) or "
+                "build it through container.get(\"create_flow\").",
+                "NO_MEDIATOR",
             )
             return
 
@@ -160,7 +159,13 @@ class PlanningState(FlowState):
                     return
 
                 if _review.verdict == IntentVerdict.BLOCKED:
-                    yield EE(error=f"Request blocked by intent review: {_review.reasoning}")
+                    # FAILED, not a question: a reply such as "ok" is read as a continuation
+                    # and would plan the blocked request. A new request starts a new review.
+                    yield fail_run(
+                        context,
+                        f"Request blocked by intent review: {_review.reasoning}",
+                        "INTENT_BLOCKED",
+                    )
                     return
 
             except Exception as _ie_exc:
@@ -252,12 +257,9 @@ class PlanningState(FlowState):
         )
         _plan_elapsed = _time.monotonic() - _plan_t0
         if not cmd_result.success:
-            yield EE(error=f"Plan creation rejected: {cmd_result.error}")
             # Left RUNNING, the flow loop re-entered this state at once, up to max_iterations
             # times: 47+ identical 402 "insufficient credits" errors and a session stuck forever.
-            from weebot.domain.models.session import SessionStatus
-
-            context._session = context._session.set_status(SessionStatus.FAILED)
+            yield fail_run(context, f"Plan creation rejected: {cmd_result.error}", "PLAN_REJECTED")
             return
 
         # Consume events from the mediator result using shared reconstructor.

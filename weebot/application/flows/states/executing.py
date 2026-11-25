@@ -36,6 +36,7 @@ from weebot.application.flows.states._step_outcome import (
     quality_gate,
     route_failure,
 )
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states._step_run import record_skill_uses, run_step_command
 
 logger = logging.getLogger(__name__)
@@ -201,7 +202,7 @@ class ExecutingState(FlowState):
         change indistinguishable from a routing change in review.
         """
         if context._plan is None:
-            yield ErrorEvent(error="No plan available during execution")
+            yield fail_run(context, "No plan available during execution", "NO_PLAN")
             return
 
         step = context._plan.get_next_step()
