@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.domain.services.session_lessons import project_key
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -36,7 +37,6 @@ from weebot.application.flows.states._step_outcome import (
     quality_gate,
     route_failure,
 )
-from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states._step_run import record_skill_uses, run_step_command
 
 logger = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ class ExecutingState(FlowState):
         change indistinguishable from a routing change in review.
         """
         if context._plan is None:
-            yield fail_run(context, "No plan available during execution", "NO_PLAN")
+            yield await fail_run(context, "No plan available during execution", "NO_PLAN")
             return
 
         step = context._plan.get_next_step()
@@ -279,12 +279,14 @@ class ExecutingState(FlowState):
         if run.execution_failed:
             await record_skill_uses(context, step, run, passed=False)
             await error_hooks(context, step)
-            stopped = await route_failure(context, step, run)
-            if stopped is not None:
-                yield stopped
+            routed = await route_failure(context, step, run)
+            if routed is not None:
+                yield routed
             return
 
-        if await quality_gate(context, step, run):
+        retry_event = await quality_gate(context, step, run)
+        if retry_event is not None:
+            yield retry_event
             return
         if await progress_gate(context, step, run):
             return

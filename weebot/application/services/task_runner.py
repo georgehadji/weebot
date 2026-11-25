@@ -14,7 +14,12 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_queue_port import TaskQueuePort
-from weebot.domain.models.session import Session, SessionAction, SessionStatus
+from weebot.domain.models.session import (
+    FAILURE_REASON_KEY,
+    Session,
+    SessionAction,
+    SessionStatus,
+)
 
 if TYPE_CHECKING:
     from weebot.application.ports.steering_port import SteeringPort
@@ -38,7 +43,7 @@ class PrioritizedSession:
 # before it refuses. WAITING is saved before the task ends, so a quick answer lands here.
 _RESUME_DRAIN_WAIT_S = 5.0
 _RETRIES_KEY = "retries_remaining"
-_FAILURE_KEY = "failure_reason"
+_FAILURE_KEY = FAILURE_REASON_KEY
 _INTERRUPTED_REASON = (
     "interrupted: the server stopped while this session was running. "
     "Send a message to resume it at the first unfinished step."

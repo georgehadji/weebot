@@ -14,7 +14,8 @@ from weebot.application.flows.states.planning import PlanningState
 from weebot.application.flows.states.updating import UpdatingState
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.event import ErrorEvent
-from weebot.domain.models.plan import Plan
+from weebot.domain.models.intent_review import IntentReview, IntentVerdict
+from weebot.domain.models.plan import Plan, Step, StepStatus
 from weebot.domain.models.session import Session, SessionStatus
 
 
@@ -61,6 +62,10 @@ def _failed_once(flow, errors, state_cls, code, reason_part):
     assert [e.error_code for e in errors] == [code]
     assert flow._session.status == SessionStatus.FAILED
     assert reason_part in flow._session.context.extra["failure_reason"]
+    # Emitted, not only yielded: the transcript (bus, store) carries the error too.
+    assert any(
+        e.type == "error" and e.error_code == code for e in flow._session.events
+    ), "the failure's ErrorEvent must be in the session transcript"
 
 
 async def test_executing_without_a_plan_fails_the_run():
@@ -88,8 +93,6 @@ async def test_planning_without_a_mediator_fails_the_run():
 
 
 async def test_a_blocked_intent_fails_the_run_with_the_review_reason(monkeypatch):
-    from weebot.domain.models.intent_review import IntentReview, IntentVerdict
-
     async def review(self, _contract):
         return IntentReview(verdict=IntentVerdict.BLOCKED, reasoning="asks for harm")
 
@@ -99,3 +102,57 @@ async def test_a_blocked_intent_fails_the_run_with_the_review_reason(monkeypatch
     state = _counting(PlanningState)
     flow, errors = await _run(state(), mediator=types.SimpleNamespace(send=None))
     _failed_once(flow, errors, state, "INTENT_BLOCKED", "asks for harm")
+
+
+def _review_returns(monkeypatch, review):
+    async def run(self, _contract):
+        return review
+
+    monkeypatch.setattr(
+        "weebot.application.services.intent_review_service.IntentReviewService.review", run
+    )
+
+
+class _RejectingMediator:
+    def __init__(self):
+        self.calls = 0
+
+    async def send(self, _command):
+        self.calls += 1
+        return types.SimpleNamespace(success=False, error="402 insufficient credits", data={})
+
+
+async def test_a_rejected_plan_creation_fails_the_run_after_one_call(monkeypatch):
+    _review_returns(monkeypatch, IntentReview(verdict=IntentVerdict.READY))
+    mediator = _RejectingMediator()
+    state = _counting(PlanningState)
+    flow, errors = await _run(state(), mediator=mediator)
+    _failed_once(flow, errors, state, "PLAN_REJECTED", "402 insufficient credits")
+    assert mediator.calls == 1
+
+
+async def test_an_unclear_request_pauses_for_the_user_once(monkeypatch):
+    _review_returns(
+        monkeypatch,
+        IntentReview(verdict=IntentVerdict.NOT_READY, clarification_needed=["Which repo?"]),
+    )
+    state = _counting(PlanningState)
+    flow, _ = await _run(state(), mediator=_RejectingMediator())
+    assert state.entered == 1
+    assert flow._session.status == SessionStatus.WAITING
+
+
+async def test_a_rejected_plan_update_is_coded_and_fails_the_step():
+    flow = PlanActFlow(
+        PlanActFlowConfig(
+            llm=_LLM(),
+            tools=ToolCollection(),
+            session=Session(id="s1", task="a task", status=SessionStatus.RUNNING),
+            mediator=_RejectingMediator(),
+        )
+    )
+    flow._plan = Plan(
+        title="t", steps=[Step(id="s1", description="x", status=StepStatus.FAILED, result="boom")]
+    )
+    events = [e async for e in UpdatingState().execute(flow, "")]
+    assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["PLAN_UPDATE_REJECTED"]

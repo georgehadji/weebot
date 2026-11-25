@@ -39,7 +39,8 @@ async def test_a_minor_failure_retry_is_in_the_saved_plan():
     flow, repo = await _flow()
     run = StepRun(events=[ErrorEvent(error="request timed out")])
 
-    assert await route_failure(flow, flow._plan.steps[0], run) is None
+    event = await route_failure(flow, flow._plan.steps[0], run)
+    assert isinstance(event, PlanEvent), "the retry's plan update is handed to the caller"
 
     saved = await _saved_step(repo)
     assert saved.status == StepStatus.PENDING and saved.retry_count == 1
@@ -55,7 +56,8 @@ async def test_a_quality_retry_is_in_the_saved_plan(monkeypatch):
     )
     flow, repo = await _flow()
 
-    assert await quality_gate(flow, flow._plan.steps[0], StepRun(result_text="x")) is True
+    event = await quality_gate(flow, flow._plan.steps[0], StepRun(result_text="x"))
+    assert isinstance(event, PlanEvent)
 
     saved = await _saved_step(repo)
     assert saved.status == StepStatus.PENDING and saved.retry_count == 1

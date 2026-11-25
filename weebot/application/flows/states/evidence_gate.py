@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from weebot.application.flows.states._step_retry import retry_step
 from weebot.application.flows.states.base import StateId, new_state
 from weebot.domain.models.audit import AuditVerdict
 from weebot.domain.models.event import PlanEvent, ToolEvent
@@ -40,21 +41,13 @@ async def evidence_gate(
         _audit_report.summary,
     )
     if step.retry_count < 1:
-        updated_step = step.model_copy(
-            update={
-                "description": f"{step.description}\n[Evidence gap: {_audit_report.summary}]",
-                "retry_count": 1,
-                "status": StepStatus.PENDING,
-            }
-        )
-        context._plan = context._plan.replace_step(step.id, updated_step)
-        context.set_state(new_state(StateId.EXECUTING))
-    else:
-        context._plan = context._plan.update_step_status(
-            step.id, StepStatus.UNVERIFIED, result=_audit_report.summary
-        )
-        logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, step_elapsed)
-        context.set_state(new_state(StateId.UPDATING))
+        gap = f"{step.description}\n[Evidence gap: {_audit_report.summary}]"
+        return await retry_step(context, step, description=gap)
+    context._plan = context._plan.update_step_status(
+        step.id, StepStatus.UNVERIFIED, result=_audit_report.summary
+    )
+    logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, step_elapsed)
+    context.set_state(new_state(StateId.UPDATING))
     plan_event = PlanEvent(
         status=PlanStatus.UPDATED, plan=context._plan.model_dump(mode="json")
     )

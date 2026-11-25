@@ -11,20 +11,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from weebot.domain.models.event import ErrorEvent
-from weebot.domain.models.session import SessionStatus
+from weebot.domain.models.session import FAILURE_REASON_KEY, SessionStatus
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 
-_FAILURE_KEY = "failure_reason"  # the key TaskRunner reads for a FAILED session
+async def fail_run(context: PlanActFlow, error: str, error_code: str = "") -> ErrorEvent:
+    """Mark the session FAILED with *error* as its reason, emit the error and return it.
 
-
-def fail_run(context: PlanActFlow, error: str, error_code: str = "") -> ErrorEvent:
-    """Mark the session FAILED with *error* as its reason; the caller yields the event."""
+    Emitted, not only yielded, so the bus and the stored transcript carry it; the caller
+    still yields it to the stream.
+    """
     session = context._session
-    extra = {**session.context.extra, _FAILURE_KEY: error[:500]}
+    extra = {**session.context.extra, FAILURE_REASON_KEY: error[:500]}
     session = session.model_copy(
         update={"context": session.context.model_copy(update={"extra": extra})}
     )
     context._session = session.set_status(SessionStatus.FAILED)
-    return ErrorEvent(error=error, error_code=error_code)
+    event = ErrorEvent(error=error, error_code=error_code)
+    await context._emit(event)
+    return event

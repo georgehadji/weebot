@@ -13,6 +13,7 @@ from weebot.domain.services.session_lessons import (
     project_key,
     session_lessons,
 )
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -22,7 +23,6 @@ from weebot.application.flows.states.base import (
     register_state,
     task_text,
 )
-from weebot.application.flows.states._dead_end import fail_run
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -92,7 +92,7 @@ class PlanningState(FlowState):
 
         # --- CQRS: execute plan creation through mediator (REQUIRED) ---
         if context._mediator is None:
-            yield fail_run(
+            yield await fail_run(
                 context,
                 "PlanningState requires a Mediator to be configured on PlanActFlow. "
                 "Construct PlanActFlow with mediator=container.get(Mediator) or "
@@ -161,7 +161,7 @@ class PlanningState(FlowState):
                 if _review.verdict == IntentVerdict.BLOCKED:
                     # FAILED, not a question: a reply such as "ok" is read as a continuation
                     # and would plan the blocked request. A new request starts a new review.
-                    yield fail_run(
+                    yield await fail_run(
                         context,
                         f"Request blocked by intent review: {_review.reasoning}",
                         "INTENT_BLOCKED",
@@ -259,7 +259,8 @@ class PlanningState(FlowState):
         if not cmd_result.success:
             # Left RUNNING, the flow loop re-entered this state at once, up to max_iterations
             # times: 47+ identical 402 "insufficient credits" errors and a session stuck forever.
-            yield fail_run(context, f"Plan creation rejected: {cmd_result.error}", "PLAN_REJECTED")
+            reason = f"Plan creation rejected: {cmd_result.error}"
+            yield await fail_run(context, reason, "PLAN_REJECTED")
             return
 
         # Consume events from the mediator result using shared reconstructor.

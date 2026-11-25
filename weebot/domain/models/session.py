@@ -23,6 +23,11 @@ class SessionAction(StrEnum):
     CANCEL = "cancel"  # stop it
 
 
+# The `context.extra` key that holds why a FAILED session failed (written by the flow and the
+# task runner, read by the task runner and the API).
+FAILURE_REASON_KEY = "failure_reason"
+
+
 class SessionStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

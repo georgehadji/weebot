@@ -7,6 +7,7 @@ still RUNNING, so the flow loop re-entered it at once -- 47+ identical errors, a
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from weebot.application.flows.states.planning import PlanningState
 from weebot.domain.models.session import Session, SessionStatus
@@ -27,6 +28,7 @@ async def test_rejection_marks_the_session_failed_so_the_loop_stops():
     context = SimpleNamespace(
         _session=session,
         _mediator=mediator,
+        _emit=AsyncMock(),
         _llm=None,
         _model=None,
         _misalignment_journal=None,

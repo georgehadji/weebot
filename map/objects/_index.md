@@ -22,7 +22,7 @@ Format: name — source — status — card
 - LoopDetectors (GuardConfig, CycleDetector, DuplicateResultStub, EmptyResponseBudget, RepetitionGuard, WallClockWrapUp, IterationGuard) — `docs/adr/021-loop-guardrails-v2.md` — stub — [card](application/LoopDetectors.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)
 - PlanActFlow — `weebot/application/flows/plan_act_flow.py` — stale 2026-11-02 — [card](application/PlanActFlow.md)
-- PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-02 — [card](application/PlannerAgent.md)
+- PlannerAgent — `weebot/application/agents/planner.py` — verified 2026-11-25 — [card](application/PlannerAgent.md)
 - PythonKernel (KernelPort, KernelManager, NativeKernel, kernel_server, ToolRpcServer) — `docs/adr/026-persistent-python-kernel.md` — stub — [card](application/PythonKernel.md)
 - SkillRegistry — `weebot/application/skills/skill_registry.py` — stale 2026-10-31 — [card](application/SkillRegistry.md)
 - SpilloverStore (SpilloverStorePort, FileSpilloverStore, SpilloverMiddleware, spill_over_budget) — `docs/adr/020-tool-output-spillover.md` — stub — [card](application/SpilloverStore.md)
