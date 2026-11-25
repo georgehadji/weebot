@@ -438,7 +438,8 @@ class VerifyingState(FlowState):
                 for e in flow._session.events
                 if isinstance(e, ToolEvent)
                 and getattr(e, "tool_name", "") == "file_editor"
-                and "str_replace" in str(getattr(e, "function_args", {}))
+                and (getattr(e, "function_args", None) or {}).get("command")
+                in ("str_replace", "patch")
             )
             verify_count = sum(
                 1
