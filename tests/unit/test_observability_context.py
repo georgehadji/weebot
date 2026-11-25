@@ -80,12 +80,18 @@ class TestTheBindingSites:
     async def test_the_flow_binds_its_session_and_keeps_the_runners_correlation(self, caplog):
         from weebot.application.flows.plan_act_flow import PlanActFlow
 
-        async def states(prompt):
+        async def states(prompt, run_started=None):
             log.info("inside the flow")
             yield "event"
 
+        async def no_steering():
+            return None
+
         flow = SimpleNamespace(
-            _session=SimpleNamespace(id="sess-flow"), _run_states=states, _cost_meter=None
+            _session=SimpleNamespace(id="sess-flow"),
+            _run_states=states,
+            _cost_meter=None,
+            _report_undelivered_steering=no_steering,
         )
         with caplog.at_level(logging.INFO), lc.log_context(correlation_id="from-runner"):
             events = [e async for e in PlanActFlow.run(flow, "go")]
