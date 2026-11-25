@@ -467,6 +467,13 @@ class TaskRunner:
                     f"(current status: {session.status.value})"
                 )
 
+            # WAITING is saved before the paused flow's task ends (it drains hooks first), so
+            # a quick answer finds WAITING with the old task still alive. Starting a second
+            # flow then lets the old one's final save overwrite the new run and the answer.
+            running = self._tasks.get(session_id)
+            if running is not None and not running.done():
+                raise ValueError(f"Session {session_id} is still running")
+
             session = session.add_user_message(answer, message_id=message_id)
             session = session.set_status(SessionStatus.RUNNING)
             await self._state_repo.save_session(session)
@@ -502,17 +509,22 @@ class TaskRunner:
             return session
 
     async def cancel_session(self, session_id: str) -> bool:
-        """Cancel a running session."""
-        task = self._tasks.get(session_id)
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
-            return True
-        return False
+        """Cancel a running session.
+
+        Under the session's lock, so it cannot interleave with a resume or start that is
+        replacing the task.
+        """
+        async with self._lock_for(session_id):
+            task = self._tasks.get(session_id)
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+                return True
+            return False
 
     async def rerun_failed_session(self, session_id: str, flow_factory: FlowFactory) -> bool:
         """Re-enter a permanently-failed session at the last saved state.

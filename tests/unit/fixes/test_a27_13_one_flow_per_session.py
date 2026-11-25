@@ -76,6 +76,35 @@ async def test_two_concurrent_answers_start_one_flow():
     assert sum(isinstance(r, ValueError) for r in results) == 1
 
 
+async def test_resume_while_the_paused_task_still_drains_is_refused():
+    """WAITING is saved before the paused flow's task ends; an answer in that window must not
+    start a second flow (audit X1)."""
+    runner, repo = await _runner(SessionStatus.PENDING)
+    release, built = asyncio.Event(), []
+
+    def factory(_s):
+        built.append(1)
+        return _Flow(release)
+
+    await runner.start_session(await repo.load_session("s1"), factory)
+    waiting = (await repo.load_session("s1")).set_status(SessionStatus.WAITING)
+    await repo.save_session(waiting)  # the flow paused; its task is still alive
+
+    with pytest.raises(ValueError, match="still running"):
+        await runner.resume_session("s1", "yes", factory)
+    await _finish(runner, release)
+    assert len(built) == 1
+
+
+async def test_cancel_waits_for_the_session_lock():
+    runner, _ = await _runner(SessionStatus.WAITING)
+    async with runner._lock_for("s1"):
+        cancel = asyncio.ensure_future(runner.cancel_session("s1"))
+        await asyncio.sleep(0.01)
+        assert not cancel.done()
+    assert await cancel is False
+
+
 async def test_two_concurrent_starts_of_one_pending_session_start_one_flow():
     runner, repo = await _runner(SessionStatus.PENDING)
     session = await repo.load_session("s1")

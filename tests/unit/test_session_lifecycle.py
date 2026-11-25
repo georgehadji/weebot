@@ -56,6 +56,9 @@ def _app(status: SessionStatus):
     repo = AsyncMock()
     repo.load_session = AsyncMock(side_effect=lambda _id: saved["s"])
     repo.save_session = AsyncMock(side_effect=lambda s: saved.update(s=s))
+    repo.update_session_status = AsyncMock(
+        side_effect=lambda _id, status: saved.update(s=saved["s"].set_status(status))
+    )
     runner = MagicMock()
     runner.cancel_session = AsyncMock(return_value=False)
 
@@ -91,6 +94,21 @@ def test_cancelling_a_waiting_session_stops_it():
     assert body["status"] == "cancelled"
     assert body["allowed_actions"] == ["run"]
     runner.cancel_session.assert_awaited_once()
+
+
+def test_cancel_with_no_live_task_never_saves_the_stale_snapshot():
+    """The run COMPLETED between the route's first load and its fallback write (audit X2)."""
+    app, repo, runner = _app(SessionStatus.WAITING)
+    def _session(status):
+        return Session(id="sess-1", user_id="anonymous", agent_id="weebot-web", status=status)
+
+    finished = _session(SessionStatus.COMPLETED)
+    repo.load_session = AsyncMock(side_effect=[_session(SessionStatus.WAITING), finished, finished])
+    response = TestClient(app).post("/sessions/sess-1/cancel")
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    repo.save_session.assert_not_awaited()
+    repo.update_session_status.assert_not_awaited()
 
 
 # --- runs settle on an honest status -------------------------------------------------------

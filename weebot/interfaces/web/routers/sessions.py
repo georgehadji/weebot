@@ -265,6 +265,18 @@ async def _publish_deleted(http_request: Request, session_id: str, owner: str) -
         logger.warning("Could not publish the deletion of session %s", session_id, exc_info=True)
 
 
+async def _mark_cancelled(state_repo: StateRepositoryPort, session_id: str) -> None:
+    """CANCELLED by a status-only write, and only if the stored status still allows it.
+
+    The session loaded at the start of the request can be stale by now (a run may have
+    COMPLETED, or a resume started); saving that whole snapshot would overwrite the
+    newer row.
+    """
+    current = await state_repo.load_session(session_id)
+    if current is not None and current.status.allows(SessionAction.CANCEL):
+        await state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+
+
 @router.post("/{session_id}/cancel")
 async def cancel_session(
     session_id: str,
@@ -295,20 +307,16 @@ async def cancel_session(
         task_runner = container.get(TaskRunnerPort)
         cancelled = await task_runner.cancel_session(session_id)
         if not cancelled:
-            # TaskRunner didn't have an active task — mark manually
-            session = session.set_status(SessionStatus.CANCELLED)
-            await state_repo.save_session(session)
+            # TaskRunner had no active task: mark it ourselves.
+            await _mark_cancelled(state_repo, session_id)
     except Exception:
         # TaskRunner not registered in container — fall back to status-only
         logger.warning("Cancel of session %s fell back to a status-only update", session_id,
                        exc_info=True)
-        session = session.set_status(SessionStatus.CANCELLED)
-        await state_repo.save_session(session)
-    else:
-        # Reload session to get TaskRunner's updated status
-        session = await state_repo.load_session(session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        await _mark_cancelled(state_repo, session_id)
+    session = await state_repo.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     logger.info("Cancelled session %s", session_id)
     return await _respond(http_request, session)
