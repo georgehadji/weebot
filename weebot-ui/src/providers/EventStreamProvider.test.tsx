@@ -409,15 +409,49 @@ describe("EventStreamProvider — session reconnect notification (X6)", () => {
     expect(onReconnect).toHaveBeenCalledTimes(1);
   });
 
-  it("stops notifying a subscriber that unsubscribed", async () => {
+  it("does not announce a reconnect when the SSE endpoint refuses the stream", async () => {
+    sse = installFakeSse({ status: 500 }); // restore() unstubs every global, so just re-stub fetch
     const onReconnect = vi.fn();
-    const { unmount } = renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), {
-      wrapper,
-    });
+    renderHook(() => useSessionEvents(SESSION, undefined, onReconnect), { wrapper });
+
+    await forceSseFallback(sockets);
+
+    expect(sse.streams).toHaveLength(1);
+    expect(onReconnect).not.toHaveBeenCalled(); // no live stream, nothing to catch up to
+  });
+
+  it("an unsubscribed callback is not called on a later reconnect, a remaining one is", async () => {
+    const stays = vi.fn();
+    const leaves = vi.fn();
+    function Both({ showSecond }: { showSecond: boolean }) {
+      useSessionEvents(SESSION, undefined, stays);
+      return showSecond ? <Second /> : null;
+    }
+    function Second() {
+      useSessionEvents(SESSION, undefined, leaves);
+      return null;
+    }
+    const app = render(
+      <EventStreamProvider>
+        <Both showSecond />
+      </EventStreamProvider>
+    );
     await act(async () => {
       session().accept();
     });
-    unmount();
-    expect(onReconnect).not.toHaveBeenCalled();
+    app.rerender(
+      <EventStreamProvider>
+        <Both showSecond={false} />
+      </EventStreamProvider>
+    );
+
+    await act(async () => {
+      session().serverClose();
+      await vi.advanceTimersByTimeAsync(1_000);
+      session().accept();
+    });
+
+    expect(stays).toHaveBeenCalledTimes(1);
+    expect(leaves).not.toHaveBeenCalled();
   });
 });

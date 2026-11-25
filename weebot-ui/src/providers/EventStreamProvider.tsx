@@ -123,8 +123,6 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
     conn.sseController = controller;
     conn.mode = "sse";
     forceRender((n) => n + 1);
-    // The socket was down for the retries before this: refetch what it missed.
-    conn.reconnectListeners.forEach((l) => l());
 
     (async () => {
       try {
@@ -136,6 +134,9 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           signal: controller.signal,
         });
         if (!response.ok || !response.body) return; // `finally` marks the connection closed
+        // The stream is live. The socket was down for the retries before this, so refetch
+        // what it missed now: earlier, an event could fall between the snapshot and the connect.
+        conn.reconnectListeners.forEach((l) => l());
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
