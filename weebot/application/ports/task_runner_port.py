@@ -34,7 +34,9 @@ class TaskRunnerPort(Protocol):
     """The subset of ``TaskRunner`` the interfaces layer is allowed to call."""
 
     async def cancel_session(self, session_id: str) -> bool:
-        """Cancel a running session. Returns False if none was active."""
+        """Cancel a running session, or mark an idle one CANCELLED if its status allows.
+
+        Returns True only if a live task was stopped."""
         ...
 
     async def start_session(self, session: Session, flow_factory: FlowFactory) -> Session:

@@ -60,7 +60,13 @@ def _app(status: SessionStatus):
         side_effect=lambda _id, status: saved.update(s=saved["s"].set_status(status))
     )
     runner = MagicMock()
-    runner.cancel_session = AsyncMock(return_value=False)
+
+    async def _cancel(_id):
+        # What TaskRunner.cancel_session does for an idle session.
+        await repo.update_session_status(_id, SessionStatus.CANCELLED)
+        return False
+
+    runner.cancel_session = AsyncMock(side_effect=_cancel)
 
     def _get(port):
         name = getattr(port, "__name__", "")
@@ -96,14 +102,19 @@ def test_cancelling_a_waiting_session_stops_it():
     runner.cancel_session.assert_awaited_once()
 
 
-def test_cancel_with_no_live_task_never_saves_the_stale_snapshot():
-    """The run COMPLETED between the route's first load and its fallback write (audit X2)."""
+def test_cancel_fallback_never_saves_the_stale_snapshot():
+    """No TaskRunner, and the run COMPLETED after the route's first load (audit X2)."""
     app, repo, runner = _app(SessionStatus.WAITING)
-    def _session(status):
-        return Session(id="sess-1", user_id="anonymous", agent_id="weebot-web", status=status)
+    runner.cancel_session = AsyncMock(side_effect=RuntimeError("no runner"))
+    waiting = Session(
+        id="sess-1", user_id="anonymous", agent_id="weebot-web", status=SessionStatus.WAITING
+    )
+    finished = waiting.set_status(SessionStatus.COMPLETED)
 
-    finished = _session(SessionStatus.COMPLETED)
-    repo.load_session = AsyncMock(side_effect=[_session(SessionStatus.WAITING), finished, finished])
+    async def _load(_id, _calls=iter([waiting])):
+        return next(_calls, finished)
+
+    repo.load_session = AsyncMock(side_effect=_load)
     response = TestClient(app).post("/sessions/sess-1/cancel")
     assert response.status_code == 200
     assert response.json()["status"] == "completed"

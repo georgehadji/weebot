@@ -14,7 +14,7 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_queue_port import TaskQueuePort
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session, SessionAction, SessionStatus
 
 if TYPE_CHECKING:
     from weebot.application.ports.steering_port import SteeringPort
@@ -34,6 +34,9 @@ class PrioritizedSession:
     flow_factory: FlowFactory = field(compare=False)
 
 
+# How long a resume waits for the paused flow's task to finish draining (post-pause hooks)
+# before it refuses. WAITING is saved before the task ends, so a quick answer lands here.
+_RESUME_DRAIN_WAIT_S = 5.0
 _RETRIES_KEY = "retries_remaining"
 _FAILURE_KEY = "failure_reason"
 _INTERRUPTED_REASON = (
@@ -152,7 +155,7 @@ class TaskRunner:
                     break
                 if item is None:
                     break  # Queue was closed
-                await self._start_direct(item.session, item.flow_factory)
+                await self._start_queued(item.session, item.flow_factory)
                 await self._task_queue.ack(item)
         else:
             # Legacy in-memory queue
@@ -161,8 +164,15 @@ class TaskRunner:
                     prioritized = await self._priority_queue.get()
                 except asyncio.CancelledError:
                     break
-                await self._start_direct(prioritized.session, prioritized.flow_factory)
+                await self._start_queued(prioritized.session, prioritized.flow_factory)
                 self._priority_queue.task_done()
+
+    async def _start_queued(self, session: Session, flow_factory: FlowFactory) -> None:
+        """Start a dequeued session, unless a flow for it is already running."""
+        try:
+            await self.start_session(session, flow_factory)
+        except ValueError:
+            logger.warning("Queued session %s skipped: it is already running", session.id)
 
     async def _publish_presence(self, session: Session) -> None:
         """Emit a SessionPresenceEvent on the global channel for the session rail.
@@ -251,6 +261,11 @@ class TaskRunner:
             lock = self._session_locks[session_id] = asyncio.Lock()
         return lock
 
+    def _live_task(self, session_id: str) -> asyncio.Task | None:
+        """The session's flow task, if it has not ended."""
+        task = self._tasks.get(session_id)
+        return task if task is not None and not task.done() else None
+
     async def start_session(self, session: Session, flow_factory: FlowFactory) -> Session:
         """Start a session immediately as a background task.
 
@@ -258,8 +273,7 @@ class TaskRunner:
         PENDING session would otherwise start two flows writing the same session.
         """
         async with self._lock_for(session.id):
-            running = self._tasks.get(session.id)
-            if running is not None and not running.done():
+            if self._live_task(session.id) is not None:
                 raise ValueError(f"Session {session.id} is already running")
             return await self._start_direct(session, flow_factory)
 
@@ -470,9 +484,12 @@ class TaskRunner:
             # WAITING is saved before the paused flow's task ends (it drains hooks first), so
             # a quick answer finds WAITING with the old task still alive. Starting a second
             # flow then lets the old one's final save overwrite the new run and the answer.
-            running = self._tasks.get(session_id)
-            if running is not None and not running.done():
-                raise ValueError(f"Session {session_id} is still running")
+            # Give the drain a moment to end; refuse if it does not.
+            draining = self._live_task(session_id)
+            if draining is not None:
+                await asyncio.wait({draining}, timeout=_RESUME_DRAIN_WAIT_S)
+                if self._live_task(session_id) is not None:
+                    raise ValueError(f"Session {session_id} is still running")
 
             session = session.add_user_message(answer, message_id=message_id)
             session = session.set_status(SessionStatus.RUNNING)
@@ -498,7 +515,7 @@ class TaskRunner:
             session = await self._state_repo.load_session(session_id)
             if session is None:
                 raise ValueError(f"Session {session_id} not found")
-            if session.status == SessionStatus.RUNNING and session_id in self._tasks:
+            if self._live_task(session_id) is not None:
                 raise ValueError(f"Session {session_id} is still running")
             checkpoint = await checkpoints.load(session_id)
             if checkpoint is None:
@@ -512,7 +529,9 @@ class TaskRunner:
         """Cancel a running session.
 
         Under the session's lock, so it cannot interleave with a resume or start that is
-        replacing the task.
+        replacing the task. With no live task it still marks the session CANCELLED, by a
+        status-only write and only if the stored status allows it, so a run that finished
+        meanwhile is not overwritten. Returns True only when it stopped a live task.
         """
         async with self._lock_for(session_id):
             task = self._tasks.get(session_id)
@@ -524,6 +543,9 @@ class TaskRunner:
                     pass
                 await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
                 return True
+            stored = await self._state_repo.load_session(session_id)
+            if stored is not None and stored.status.allows(SessionAction.CANCEL):
+                await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
             return False
 
     async def rerun_failed_session(self, session_id: str, flow_factory: FlowFactory) -> bool:
@@ -537,6 +559,13 @@ class TaskRunner:
         Returns:
             True if the session was found and re-started, False otherwise.
         """
+        async with self._lock_for(session_id):
+            return await self._rerun_failed_locked(session_id, flow_factory)
+
+    async def _rerun_failed_locked(self, session_id: str, flow_factory: FlowFactory) -> bool:
+        if self._live_task(session_id) is not None:
+            logger.warning("rerun_failed_session: session %s is still running", session_id)
+            return False
         session = await self._state_repo.load_session(session_id)
         if session is None:
             logger.warning("rerun_failed_session: session %s not found", session_id)

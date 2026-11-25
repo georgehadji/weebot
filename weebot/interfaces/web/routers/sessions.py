@@ -266,11 +266,11 @@ async def _publish_deleted(http_request: Request, session_id: str, owner: str) -
 
 
 async def _mark_cancelled(state_repo: StateRepositoryPort, session_id: str) -> None:
-    """CANCELLED by a status-only write, and only if the stored status still allows it.
+    """The no-TaskRunner fallback: CANCELLED by a status-only write, if the stored status allows.
 
     The session loaded at the start of the request can be stale by now (a run may have
-    COMPLETED, or a resume started); saving that whole snapshot would overwrite the
-    newer row.
+    COMPLETED); saving that whole snapshot would overwrite the newer row. Not atomic: with a
+    TaskRunner, ``cancel_session`` does this under the session lock instead.
     """
     current = await state_repo.load_session(session_id)
     if current is not None and current.status.allows(SessionAction.CANCEL):
@@ -305,10 +305,8 @@ async def cancel_session(
         from weebot.application.ports.task_runner_port import TaskRunnerPort
 
         task_runner = container.get(TaskRunnerPort)
-        cancelled = await task_runner.cancel_session(session_id)
-        if not cancelled:
-            # TaskRunner had no active task: mark it ourselves.
-            await _mark_cancelled(state_repo, session_id)
+        # Stops the live task, or marks an idle session CANCELLED, under the session lock.
+        await task_runner.cancel_session(session_id)
     except Exception:
         # TaskRunner not registered in container — fall back to status-only
         logger.warning("Cancel of session %s fell back to a status-only update", session_id,
@@ -318,7 +316,11 @@ async def cancel_session(
     if session is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    logger.info("Cancelled session %s", session_id)
+    if session.status == SessionStatus.CANCELLED:
+        logger.info("Cancelled session %s", session_id)
+    else:
+        logger.info("Cancel of session %s changed nothing: it is %s", session_id,
+                    session.status.value)
     return await _respond(http_request, session)
 
 
