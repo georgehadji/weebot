@@ -11,7 +11,7 @@ import { useShellSlots } from "@/hooks/useShellSlots";
 import { useSessionPresence } from "@/hooks/useSessionPresence";
 import { applyPresence } from "@/hooks/useSessionList";
 import { useEventStreamContext } from "@/providers/EventStreamProvider";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { AgentEvent, Session } from "@/types/events";
 
 // SessionStatus and SessionLifecycleStatus share the same vocabulary
@@ -89,9 +89,22 @@ export default function SessionPage() {
     api.sessions
       .get(sessionId)
       .then((data) => {
-        if (!cancelled) setLoadedSession(data);
+        if (cancelled) return;
+        // An answer older than the row already shown (a slow refresh behind a Retry) is dropped.
+        setLoadedSession((prev) =>
+          prev && Date.parse(prev.updated_at) > Date.parse(data.updated_at) ? prev : data
+        );
       })
-      .catch((e) => console.warn("[Session] could not refresh the status after a reconnect", e));
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) {
+          // Deleted while the backend was away: the same error view a fresh load shows.
+          setLoadedSession(null);
+          setLoadError(e.message);
+          return;
+        }
+        console.warn("[Session] could not refresh the status after a reconnect", e);
+      });
     return () => {
       cancelled = true;
     };

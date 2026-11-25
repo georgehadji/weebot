@@ -130,4 +130,45 @@ describe("X7: a presence reconnect refreshes the status without unmounting the c
     await act(async () => {});
     expect(h.status).toBe("failed");
   });
+
+  it("a session deleted while the backend was away shows the not-found view, not a live pane", async () => {
+    let gone = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).endsWith("/events")) return json([]);
+      return gone ? json({ detail: "Session s1 not found" }, 404) : json(session);
+    }));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    gone = true;
+    h.epoch = 1;
+    rerender(<SessionPage />);
+    await act(async () => {});
+    expect(screen.getByRole("alert").textContent).toContain("Session s1 not found");
+    expect(screen.queryByTestId("pane")).toBeNull();
+  });
+
+  it("a slow older refresh cannot overwrite a newer row", async () => {
+    const row = (status: string, updated_at: string) => ({ ...session, status, updated_at });
+    let releaseOld!: (r: Response) => void;
+    const replies: Array<() => Response | Promise<Response>> = [
+      () => json(row("running", "2026-10-31T00:00:00Z")), // the first load
+      () => new Promise<Response>((res) => (releaseOld = res)), // the refresh, held back
+      () => json(row("failed", "2026-10-31T02:00:00Z")), // Retry's load, answered first
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).endsWith("/events") ? json({ detail: "store offline" }, 503) : replies.shift()!()
+    ));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    h.epoch = 1;
+    rerender(<SessionPage />); // starts the held-back refresh
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    });
+    expect(h.status).toBe("failed");
+
+    await act(async () => releaseOld(json(row("running", "2026-10-31T00:00:00Z"))));
+    expect(h.status).toBe("failed");
+  });
 });
