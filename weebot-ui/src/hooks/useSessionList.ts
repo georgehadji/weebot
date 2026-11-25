@@ -28,6 +28,12 @@ const STATUSES = new Set<string>([
 
 export function applyPresence(session: Session, update?: SessionPresenceEvent): Session {
   if (!update) return session;
+  // A frame older than the loaded row describes a status the row has already moved past
+  // (a refetched FAILED after a restart must not sit behind a stale "running"). Frames are
+  // sent right after the save, so the frame for the row's own status is never older.
+  const sent = Date.parse(update.timestamp);
+  const saved = Date.parse(session.updated_at);
+  if (sent < saved) return session;
   // "deleted" (or a status this UI does not know) is not a session status: keep the loaded one.
   const status = STATUSES.has(update.status) ? (update.status as Session["status"]) : session.status;
   const title = update.title || session.title;

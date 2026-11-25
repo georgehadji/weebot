@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { StateView } from "@/components/common/StateView";
@@ -75,9 +75,27 @@ export default function SessionPage() {
     return () => {
       cancelled = true;
     };
-    // streamEpoch changes when the presence socket reconnects: the status loaded before
-    // the backend restarted is stale, so refetch it (and the events) then.
-  }, [sessionId, reloadKey, streamEpoch]);
+  }, [sessionId, reloadKey]);
+
+  // streamEpoch changes when the presence socket reconnects: the status loaded before the
+  // backend restarted is stale, so refetch it then. In place: the spinner would unmount the
+  // conversation and lose its optimistic rows, failed sends and scroll. The pane recovers
+  // missed events by itself when its own stream reconnects.
+  const lastEpoch = useRef(streamEpoch);
+  useEffect(() => {
+    if (streamEpoch === lastEpoch.current) return;
+    lastEpoch.current = streamEpoch;
+    let cancelled = false;
+    api.sessions
+      .get(sessionId)
+      .then((data) => {
+        if (!cancelled) setLoadedSession(data);
+      })
+      .catch((e) => console.warn("[Session] could not refresh the status after a reconnect", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [streamEpoch, sessionId]);
 
   useShellSlots({
     title: loading ? "Loading session…" : session ? session.title || "New session" : "Session not found",

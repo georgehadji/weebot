@@ -14,4 +14,22 @@ describe("applyPresence", () => {
   it("keeps the loaded status for 'deleted', which is not a session status", () => {
     expect(applyPresence(session, presence("deleted"))).toBe(session);
   });
+
+  const at = (timestamp: string) => ({ ...presence("running"), timestamp }) as SessionPresenceEvent;
+  const saved = (updated_at: string) => ({ ...session, status: "failed", updated_at }) as Session;
+
+  it("ignores a frame older than the loaded row", () => {
+    const row = saved("2026-10-31T01:00:00Z");
+    expect(applyPresence(row, at("2026-10-31T00:30:00Z"))).toBe(row);
+  });
+
+  it("applies a frame newer than the loaded row", () => {
+    const row = saved("2026-10-31T01:00:00Z");
+    expect(applyPresence(row, at("2026-10-31T01:00:01Z")).status).toBe("running");
+  });
+
+  it("applies a frame whose time cannot be compared", () => {
+    const row = saved("2026-10-31T01:00:00Z");
+    expect(applyPresence(row, at("not a time")).status).toBe("running");
+  });
 });
