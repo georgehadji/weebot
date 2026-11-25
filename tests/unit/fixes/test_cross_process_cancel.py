@@ -30,20 +30,25 @@ def test_odd_session_ids_cannot_escape_the_folder(tmp_path, monkeypatch):
     assert cancel_requests.take("../../evil")
 
 
-def _request_during_the_run(monkeypatch, session_id):
-    """File a cancel as if a moment after the run started (the flow starts its clock later)."""
+def _request_at(monkeypatch, session_id, offset):
+    """File a cancel *offset* seconds from now. The clock ticks about every 15 ms on Windows,
+    so a request and a run start in the same moment cannot be told apart without this."""
     real = time.time
     with monkeypatch.context() as m:
-        m.setattr(time, "time", lambda: real() + 60)
+        m.setattr(time, "time", lambda: real() + offset)
         cancel_requests.request(session_id)
+
+
+def _request_during_the_run(monkeypatch, session_id):
+    _request_at(monkeypatch, session_id, +60)
 
 
 def test_a_request_older_than_the_run_is_consumed_but_ignored(tmp_path, monkeypatch):
     """`flow cancel` on a WAITING session files a marker nobody reads; the next run must not
     stop on it (audit X3)."""
     monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
-    cancel_requests.request("s1")
-    assert not cancel_requests.take("s1", since=time.time() + 1)
+    _request_at(monkeypatch, "s1", -60)
+    assert not cancel_requests.take("s1", since=time.time())
     assert not cancel_requests.take("s1")  # consumed all the same
 
 
@@ -68,7 +73,7 @@ async def test_a_flow_ignores_a_cancel_filed_before_it_started(tmp_path, monkeyp
     monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
     session = Session(id="run-2", task="t")
     flow = PlanActFlow(llm=MagicMock(), tools=ToolCollection(), session=session)
-    cancel_requests.request("run-2")
+    _request_at(monkeypatch, "run-2", -60)
     events = []
     try:
         async for event in flow.run("do it"):
