@@ -47,10 +47,21 @@ interface SessionConnection {
   mode: ConnectionMode;
   reconnectAttempts: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
+  /** Called when the stream resumes after a gap (events may have been missed). */
+  reconnectListeners: Set<() => void>;
 }
 
 interface EventStreamContextValue {
-  subscribeSession: (sessionId: string, listener: Listener) => () => void;
+  /**
+   * `onReconnect` fires when the stream resumes after it dropped (a WebSocket reopened after
+   * a failure, or the SSE fallback took over): the socket replays nothing, so the caller
+   * should refetch history to recover what it missed.
+   */
+  subscribeSession: (
+    sessionId: string,
+    listener: Listener,
+    onReconnect?: () => void
+  ) => () => void;
   subscribePresence: (listener: (event: SessionPresenceEvent) => void) => () => void;
   getSessionMode: (sessionId: string) => ConnectionMode;
   /** Increments on each reconnect of the always-on presence socket (not the first open). */
@@ -123,6 +134,9 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           signal: controller.signal,
         });
         if (!response.ok || !response.body) return; // `finally` marks the connection closed
+        // The stream is live. The socket was down for the retries before this, so refetch
+        // what it missed now: earlier, an event could fall between the snapshot and the connect.
+        conn.reconnectListeners.forEach((l) => l());
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -180,9 +194,12 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
         conn.ws = ws;
 
         ws.onopen = () => {
+          // Attempts are only non-zero after a close, so this open follows a gap.
+          const resumed = conn.reconnectAttempts > 0;
           conn.reconnectAttempts = 0;
           conn.mode = "websocket";
           forceRender((n) => n + 1);
+          if (resumed) conn.reconnectListeners.forEach((l) => l());
         };
 
         ws.onmessage = (evt) => {
@@ -219,7 +236,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
   );
 
   const subscribeSession = useCallback(
-    (sessionId: string, listener: Listener) => {
+    (sessionId: string, listener: Listener, onReconnect?: () => void) => {
       let conn = sessionConnections.current.get(sessionId);
       if (!conn) {
         conn = {
@@ -229,16 +246,19 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
           mode: "connecting",
           reconnectAttempts: 0,
           reconnectTimer: null,
+          reconnectListeners: new Set(),
         };
         sessionConnections.current.set(sessionId, conn);
         connectSessionWs(sessionId, conn);
       }
       conn.listeners.add(listener);
+      if (onReconnect) conn.reconnectListeners.add(onReconnect);
 
       return () => {
         const current = sessionConnections.current.get(sessionId);
         if (!current) return;
         current.listeners.delete(listener);
+        if (onReconnect) current.reconnectListeners.delete(onReconnect);
         if (current.listeners.size === 0) {
           closeSessionConnection(sessionId, current);
         }

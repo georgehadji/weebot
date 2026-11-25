@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 
+from weebot.application.flows.states._step_retry import retry_step
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -131,30 +132,14 @@ class ReviewingState(FlowState):
             _fact_key = f"correction_original:{self._step.id}"
             if context._correction_tracker is not None and not context._session.get_fact(_fact_key):
                 context._session = context._session.set_fact(_fact_key, self._step.result or "")
-            revised_step = self._step.model_copy(
-                update={
-                    "status": StepStatus.PENDING,
-                    "retry_count": self._step.retry_count + 1,
-                    "description": (
-                        f"{self._step.description}\n" f"[Code review hint: {hint}]"
-                        if hint
-                        else self._step.description
-                    ),
-                }
+            # retry_step persists the plan: ExecuteStepHandler reads it from the saved
+            # session and refuses the re-run of a step it still sees as completed.
+            description = (
+                f"{self._step.description}\n[Code review hint: {hint}]"
+                if hint
+                else self._step.description
             )
-            context._plan = context._plan.replace_step(self._step.id, revised_step)
-            # Persist it: ExecuteStepHandler reads the plan from the saved
-            # session, and refused the re-run of a step it still saw as
-            # completed, so every REVISE verdict was dropped.
-            from weebot.domain.models.event import PlanEvent
-            from weebot.domain.models.plan import PlanStatus
-
-            plan_event = PlanEvent(
-                status=PlanStatus.UPDATED, plan=context._plan.model_dump(mode="json")
-            )
-            await context._emit(plan_event)
-            yield plan_event
-            context.set_state(new_state(StateId.EXECUTING))
+            yield await retry_step(context, self._step, description=description)
 
         else:  # "reject"
             logger.warning("Review REJECTED step %s — %s", self._step.id, result.summary)

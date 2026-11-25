@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.domain.services.session_lessons import project_key
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -201,7 +202,7 @@ class ExecutingState(FlowState):
         change indistinguishable from a routing change in review.
         """
         if context._plan is None:
-            yield ErrorEvent(error="No plan available during execution")
+            yield await fail_run(context, "No plan available during execution", "NO_PLAN")
             return
 
         step = context._plan.get_next_step()
@@ -256,10 +257,11 @@ class ExecutingState(FlowState):
         if run.hitl_paused:
             logger.info("Step %s paused for human input after %.1fs", step.id, run.elapsed_s)
             await post_task_hooks(context, step, run)
-            if _is_auto_mode(context):
-                # AUTO promises no human pauses, so the step must not be left WAITING
-                # for an answer nobody will type. Complete it so the plan progresses;
-                # the unanswered question stays in the transcript for the operator.
+            if _is_auto_mode(context) and not run.human_floor:
+                # AUTO promises no human pauses (an approval floor is the exception), so
+                # the step must not be left WAITING for an answer nobody will type.
+                # Complete it so the plan progresses; the unanswered question stays in the
+                # transcript for the operator.
                 logger.warning(
                     "AUTO mode: step %s asked for human input — completing without asking",
                     step.id,
@@ -277,12 +279,14 @@ class ExecutingState(FlowState):
         if run.execution_failed:
             await record_skill_uses(context, step, run, passed=False)
             await error_hooks(context, step)
-            stopped = await route_failure(context, step, run)
-            if stopped is not None:
-                yield stopped
+            routed = await route_failure(context, step, run)
+            if routed is not None:
+                yield routed
             return
 
-        if quality_gate(context, step, run):
+        retry_event = await quality_gate(context, step, run)
+        if retry_event is not None:
+            yield retry_event
             return
         if await progress_gate(context, step, run):
             return

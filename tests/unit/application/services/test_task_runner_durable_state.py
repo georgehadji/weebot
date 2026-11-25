@@ -33,8 +33,12 @@ class MemoryRepo(StateRepositoryPort):
     async def count_sessions(self, user_id=None):  # pragma: no cover
         return len(self.sessions)
 
-    async def update_session_status(self, session_id, status):  # pragma: no cover
-        pass
+    async def update_session_status(self, session_id, status, expected=None):
+        session = self.sessions.get(session_id)
+        if session is None or (expected is not None and session.status not in expected):
+            return False
+        self.sessions[session_id] = session.set_status(status)
+        return True
 
     async def delete_session(self, session_id):  # pragma: no cover
         pass

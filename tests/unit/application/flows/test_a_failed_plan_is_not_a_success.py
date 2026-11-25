@@ -126,7 +126,7 @@ async def test_the_session_ends_failed_when_a_step_failed(monkeypatch):
             PlanActFlowConfig(
                 llm=_DummyLLM(),
                 tools=ToolCollection(),
-                session=Session(id="sess-1", task="t"),
+                session=Session(status=SessionStatus.RUNNING, id="sess-1", task="t"),
                 max_iterations=1,
             )
         )
@@ -164,7 +164,7 @@ async def test_the_plan_itself_records_that_it_failed(monkeypatch):
     from weebot.application.models.tool_collection import ToolCollection
     from weebot.application.services import background_tasks as _bg
     from weebot.domain.models.plan import PlanStatus
-    from weebot.domain.models.session import Session
+    from weebot.domain.models.session import Session, SessionStatus
 
     monkeypatch.setattr(
         _bg.BackgroundTasks, "spawn", lambda self, coro, *, name="": coro.close()
@@ -175,7 +175,7 @@ async def test_the_plan_itself_records_that_it_failed(monkeypatch):
             PlanActFlowConfig(
                 llm=_DummyLLM(),
                 tools=ToolCollection(),
-                session=Session(id="sess-stamp", task="t"),
+                session=Session(status=SessionStatus.RUNNING, id="sess-stamp", task="t"),
                 max_iterations=1,
             )
         )
@@ -244,13 +244,13 @@ async def test_mid_execution_steering_reaches_the_step():
 
     from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfig
     from weebot.application.models.tool_collection import ToolCollection
-    from weebot.domain.models.session import Session
+    from weebot.domain.models.session import Session, SessionStatus
 
     flow = PlanActFlow(
         PlanActFlowConfig(
             llm=_DummyLLM(),
             tools=ToolCollection(),
-            session=Session(id="sess-steer", task="write the parser"),
+            session=Session(status=SessionStatus.RUNNING, id="sess-steer", task="write the parser"),
             max_iterations=1,
         )
     )

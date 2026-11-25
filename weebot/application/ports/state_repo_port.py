@@ -137,8 +137,21 @@ class StateRepositoryPort(ABC):
         return out
 
     @abstractmethod
-    async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
-        """Update just the status of a session."""
+    async def update_session_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
+        """Update just the status of a session.
+
+        One conditional write, so nothing can change the row between the check and the write:
+        it applies only while the stored status may move to *status* (the lifecycle table,
+        ``legal_sources``), and, with *expected*, is one of those too. A terminal write
+        (CANCELLED) passes the statuses it may end, so a session that finished meanwhile is
+        not overwritten (audit M1-D2). Returns True when a row was written; False when the
+        session does not exist or its status did not allow the change.
+        """
         ...
 
     @abstractmethod

@@ -73,44 +73,71 @@ export function ConversationPane({
   const announce = useAnnounce();
   const ctx = useIntlContext();
   // Whether the history refresh below failed; a failure is shown with a Retry, not swallowed.
-  const [refresh, setRefresh] = useState<{ error: string | null; attempt: number }>({ error: null, attempt: 0 });
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const refreshState: Remote<null> =
-    refresh.error === null ? { status: "idle" } : { status: "error", message: refresh.error };
+    refreshError === null ? { status: "idle" } : { status: "error", message: refreshError };
 
-  useSessionEvents(sessionId ?? undefined, (event) => {
-    setState((prev) => sessionReducer(prev, event));
-    if (seen.has(event.id)) return;
-    seen.add(event.id);
-    const text = announcementFor(event);
-    if (text) announce(text);
-  });
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+  // Only the newest history request may apply: overlapping ones (a flapping socket, a settle
+  // during a reconnect) must not land out of order. Bumped on unmount so a late answer is dropped.
+  const latestRequest = useRef(0);
+  useEffect(() => {
+    const request = latestRequest;
+    return () => {
+      request.current += 1;
+    };
+  }, []);
+
+  // Fetch the stored history and add whatever the live stream missed.
+  const mergeMissed = useCallback(
+    (id: string) => {
+      const ticket = ++latestRequest.current;
+      const stale = () => ticket !== latestRequest.current || sessionIdRef.current !== id;
+      return api.sessions
+        .events(id)
+        .then((events) => {
+          if (stale()) return;
+          setRefreshError(null);
+          const missed = events.filter((e) => !seen.has(e.id));
+          if (missed.length === 0) return;
+          missed.forEach((e) => seen.add(e.id));
+          setState((prev) => mergeHistory(prev, events));
+        })
+        .catch((e) => {
+          console.warn("[Conversation] could not refresh events", e);
+          if (!stale()) setRefreshError(e instanceof Error ? e.message : "Something went wrong");
+        });
+    },
+    [seen]
+  );
+
+  useSessionEvents(
+    sessionId ?? undefined,
+    (event) => {
+      setState((prev) => sessionReducer(prev, event));
+      if (seen.has(event.id)) return;
+      seen.add(event.id);
+      const text = announcementFor(event);
+      if (text) announce(text);
+    },
+    // The socket replays nothing, so whatever was published while it was down is gone from
+    // the live feed. Refetch whatever the status is: a run in progress is exactly when this
+    // happens, and a missed step would otherwise stay missing until a reload.
+    () => {
+      if (sessionId) void mergeMissed(sessionId);
+    }
+  );
 
   // The socket replays nothing, so an event published between the page's REST load and the
   // socket subscribing never arrived (a plan rejected at once left "Waiting for events…" until
   // a reload). When the session settles, fetch the history and add whatever was missed.
   useEffect(() => {
     if (!sessionId || status === "none" || status === "pending" || status === "running") return;
-    let cancelled = false;
-    api.sessions
-      .events(sessionId)
-      .then((events) => {
-        if (cancelled) return;
-        setRefresh((prev) => (prev.error === null ? prev : { ...prev, error: null }));
-        const missed = events.filter((e) => !seen.has(e.id));
-        if (missed.length === 0) return;
-        missed.forEach((e) => seen.add(e.id));
-        setState((prev) => mergeHistory(prev, events));
-      })
-      .catch((e) => {
-        console.warn("[Conversation] could not refresh events", e);
-        if (!cancelled) {
-          setRefresh((prev) => ({ ...prev, error: e instanceof Error ? e.message : "Something went wrong" }));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, status, seen, refresh.attempt]);
+    void mergeMissed(sessionId);
+  }, [sessionId, status, mergeMissed]);
 
   const addOptimisticMessage = useCallback(
     (event: MessageEvent) => setState((prev) => sessionReducer(prev, event)),
@@ -186,7 +213,11 @@ export function ConversationPane({
         <StateView
           state={refreshState}
           errorTitle="Couldn’t refresh the conversation"
-          onRetry={() => setRefresh((prev) => ({ error: null, attempt: prev.attempt + 1 }))}
+          // Straight to the fetch: the settle effect is idle while a run is still going.
+          onRetry={() => {
+            setRefreshError(null);
+            if (sessionId) void mergeMissed(sessionId);
+          }}
         >
           {() => null}
         </StateView>

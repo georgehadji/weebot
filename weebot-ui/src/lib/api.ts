@@ -30,6 +30,17 @@ export function openSocket(url: string, apiKey: string | null = storedApiKey()):
   }
 }
 
+/** A non-2xx answer from the backend, with its HTTP status for callers that branch on it. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const apiKey = storedApiKey();
 
@@ -69,7 +80,7 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {
       errorMessage = response.statusText || errorMessage;
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
 
   return response.json();

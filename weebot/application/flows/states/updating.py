@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states.base import (
     AgentStatus,
     FlowState,
@@ -47,7 +48,7 @@ class UpdatingState(FlowState):
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 
         if context._plan is None:
-            yield ErrorEvent(error="No plan available during update")
+            yield await fail_run(context, "No plan available during update", "NO_PLAN")
             return
 
         # Find the most recently completed or failed step
@@ -66,7 +67,7 @@ class UpdatingState(FlowState):
             if context._plan.steps:
                 last_step = context._plan.steps[0]
             else:
-                yield ErrorEvent(error="No steps found in plan for update")
+                yield await fail_run(context, "No steps found in plan for update", "NO_STEPS")
                 return
 
         update_success = False
@@ -130,7 +131,10 @@ class UpdatingState(FlowState):
             )
             _update_elapsed = _time.monotonic() - _update_t0
             if not cmd_result.success:
-                yield ErrorEvent(error=f"Plan update rejected: {cmd_result.error}")
+                yield ErrorEvent(
+                    error=f"Plan update rejected: {cmd_result.error}",
+                    error_code="PLAN_UPDATE_REJECTED",
+                )
                 context._plan = _leave_unhandled(
                     context._plan,
                     last_step,

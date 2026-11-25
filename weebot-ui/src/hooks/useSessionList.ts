@@ -26,8 +26,18 @@ const STATUSES = new Set<string>([
   "cancelled",
 ]);
 
+/**
+ * A frame older than the loaded row describes a status the row has already moved past (a
+ * refetched FAILED after a restart must not sit behind a stale "running"). Frames are sent
+ * right after the save, so the frame for the row's own status is never older. A time that
+ * cannot be compared is not stale.
+ */
+function isStale(update: SessionPresenceEvent, session: Session): boolean {
+  return Date.parse(update.timestamp) < Date.parse(session.updated_at);
+}
+
 export function applyPresence(session: Session, update?: SessionPresenceEvent): Session {
-  if (!update) return session;
+  if (!update || isStale(update, session)) return session;
   // "deleted" (or a status this UI does not know) is not a session status: keep the loaded one.
   const status = STATUSES.has(update.status) ? (update.status as Session["status"]) : session.status;
   const title = update.title || session.title;
@@ -90,8 +100,12 @@ export function useSessionList() {
   useEffect(() => {
     if (!sessions) return;
     for (const s of sessions) {
-      const status = presence.get(s.id)?.status;
-      if (!status || !SETTLED.has(status) || status === s.status) continue;
+      const frame = presence.get(s.id);
+      const status = frame?.status;
+      // A frame the row has outrun is ignored by applyPresence; it is no reason to reload.
+      if (!frame || !status || isStale(frame, s) || !SETTLED.has(status) || status === s.status) {
+        continue;
+      }
       const key = `${s.id}:${status}`;
       if (settled.current.has(key)) continue;
       settled.current.add(key);

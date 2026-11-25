@@ -33,7 +33,7 @@ from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfi
 from weebot.application.flows.states.completed import CompletedState
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.plan import Plan, Step, StepStatus
-from weebot.domain.models.session import Session, SessionContext
+from weebot.domain.models.session import Session, SessionContext, SessionStatus
 from weebot.domain.services.plan_template_cache import compute_task_hash
 from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
 
@@ -85,7 +85,7 @@ def no_background_work(monkeypatch):
 
 
 def _flow(repo, last=StepStatus.FAILED) -> PlanActFlow:
-    session = Session(id="s1", task=TASK, context=SessionContext(original_task=TASK))
+    session = Session(status=SessionStatus.RUNNING, id="s1", task=TASK, context=SessionContext(original_task=TASK))
     flow = PlanActFlow(
         PlanActFlowConfig(
             llm=_DummyLLM(), tools=ToolCollection(), session=session, max_iterations=1
@@ -209,7 +209,7 @@ async def _meta_notes_the_planner_receives(repo, monkeypatch) -> list[str] | Non
 
     monkeypatch.setattr(planner_mod, "PlannerAgent", _StubPlanner)
 
-    await repo.save_session(Session(id="s-plan", task=TASK))
+    await repo.save_session(Session(status=SessionStatus.RUNNING, id="s-plan", task=TASK))
     result = await CreatePlanHandler(state_repo=repo, llm=_DummyLLM()).handle(
         CreatePlanCommand(session_id="s-plan", prompt=TASK)
     )

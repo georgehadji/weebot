@@ -17,11 +17,14 @@ import logging
 from typing import Any
 
 from weebot.domain.models.event import AgentEvent, MessageEvent
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 logger = logging.getLogger(__name__)
+
+# Events that ask the user something and wait: saved before they are published.
+PAUSE_EVENT_TYPES = frozenset({"wait_for_user", "tool_approval", "plan_review"})
 
 
 class EventPublisher:
@@ -75,22 +78,37 @@ class EventPublisher:
         seq = self._event_seq
         if event.type == "step":
             await self._maybe_save_checkpoint()
+        # A pause event is published only once the row says WAITING: a client that answers
+        # the moment it sees the question must find a session that is waiting, or the
+        # answer is taken for mid-run steering (audit X4). Other events keep the cheaper
+        # publish-then-save order.
+        # Only when the flow really paused: AUTO mode ignores a question, and a failed
+        # write there must not abort a run that needs no answer.
+        pause = event.type in PAUSE_EVENT_TYPES and self._session.status == SessionStatus.WAITING
+        if pause:
+            # Strict: a failed write must stop the event, not let it out over a stale row.
+            await self._save_through(seq, strict=True)
         # 4. Event bus publishing
         if self._event_bus:
             await self._event_bus.publish(event)
             await self._emit_domain_event(event)
-        # 5. DB persistence. Serialised: a retried write for an older snapshot must not
-        # finish after, and overwrite, a newer one. `save_session` never calls `emit`,
-        # so holding the lock here cannot deadlock. An emit that waited for the lock skips
-        # its own save when the save it waited behind already held its event, so a slow
-        # or failing write is retried once for the whole queue, not once per emit.
+        if not pause:
+            await self._save_through(seq)
+        return self._session
+
+    async def _save_through(self, seq: int, strict: bool = False) -> None:
+        """5. DB persistence. Serialised: a retried write for an older snapshot must not
+        finish after, and overwrite, a newer one. `save_session` never calls `emit`,
+        so holding the lock here cannot deadlock. An emit that waited for the lock skips
+        its own save when the save it waited behind already held its event, so a slow
+        or failing write is retried once for the whole queue, not once per emit."""
         if self._state_repo:
             async with self._emit_lock:
                 if self._saved_seq < seq:
                     covered = self._event_seq  # read with no await before the snapshot is taken
-                    await self._persist_session()
-                    self._saved_seq = covered
-        return self._session
+                    # A failed write leaves the count behind, so the next emit saves again.
+                    if await self._persist_session(strict=strict):
+                        self._saved_seq = covered
 
     # ── Step 1: Truth binding ─────────────────────────────────────────────
 
@@ -169,15 +187,27 @@ class EventPublisher:
 
     # ── Step 5: Persistence ────────────────────────────────────────────────
 
-    async def _persist_session(self) -> None:
+    async def _persist_session(self, strict: bool = False) -> bool:
+        """Save the session; True when the write is done with.
+
+        *strict* raises on failure instead of logging and moving on. Without it a failed
+        direct write returns False, so the caller retries it with the next event. An adapter
+        that exhausted its retries has dead-lettered the session: that counts as done.
+        """
         if self._persistence_adapter is not None:
             ok = await self._persistence_adapter.save_session(self._session)
             if not ok:
                 logger.error(
                     "Session %s dead-lettered — persistence exhausted retries", self._session.id
                 )
-        else:
-            try:
-                await self._state_repo.save_session(self._session)
-            except Exception as exc:
-                logger.warning("Session persistence failed (retryable): %s", exc)
+                if strict:
+                    raise RuntimeError(f"Session {self._session.id} could not be saved")
+            return True
+        try:
+            await self._state_repo.save_session(self._session)
+        except Exception as exc:
+            logger.warning("Session persistence failed (retryable): %s", exc)
+            if strict:
+                raise
+            return False
+        return True

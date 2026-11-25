@@ -510,9 +510,16 @@ class SQLiteStateRepository(
             return [self._row_to_session(r, load_events=True) for r in rows]
         return [self._row_to_session(r, load_events=False) for r in rows]
 
-    async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
+    async def update_session_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
         await self._init_helpers()
-        await self._session_queries.update_status(session_id, status)  # type: ignore[union-attr]
+        return await self._session_queries.update_status(  # type: ignore[union-attr]
+            session_id, status, expected
+        )
 
     async def delete_session(self, session_id: str) -> None:
         await self._init_helpers()

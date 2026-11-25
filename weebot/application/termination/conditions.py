@@ -109,5 +109,7 @@ class TextMentionTermination(TerminationCondition):
             for msg in ctx.last_messages[-self._scan_last_n :]:
                 content = str(msg.get("content", "")).lower()
                 if self._text in content:
-                    return TerminationResult(True, f"text '{self._text}' mentioned in output")
+                    return TerminationResult(
+                        True, f"text '{self._text}' mentioned in output", goal_met=True
+                    )
         return TerminationResult(False)

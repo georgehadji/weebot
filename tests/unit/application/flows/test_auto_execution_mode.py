@@ -137,7 +137,8 @@ async def _noop_async(*_args, **_kwargs) -> None:
     return None
 
 
-def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
+@pytest.mark.asyncio
+async def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
     from weebot.application.services.step_result_validator import ValidationResult
 
     monkeypatch.setattr(
@@ -147,9 +148,9 @@ def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
     flow = _flow()
     step = _step(flow)
 
-    forced_retry = quality_gate(flow, step, StepRun(result_text="x"))
+    forced_retry = await quality_gate(flow, step, StepRun(result_text="x"))
 
-    assert forced_retry is False, "AUTO does not retry on a quality failure"
+    assert forced_retry is None, "AUTO does not retry on a quality failure"
     assert _step(flow).retry_count == 0
     assert _step(flow).status == StepStatus.PENDING, "the step was not replaced for a retry"
 
@@ -180,6 +181,24 @@ async def test_a_tool_approval_does_not_pause_in_auto():
     assert _step(flow).status == StepStatus.COMPLETED
     assert flow._session.status != SessionStatus.WAITING
     assert flow._session.context.get("_tool_approval_pending") is None
+
+
+@pytest.mark.asyncio
+async def test_an_approval_floor_still_pauses_in_auto():
+    """A human_only approval (H18) cannot be answered by AUTO, so the run waits for a human."""
+    mediator = ScriptedMediator(
+        events=[
+            ToolApprovalEvent(tool_name="bash", reason="floor", human_only=True).model_dump(),
+            WaitForUserEvent(question="Approve bash?").model_dump(),
+        ]
+    )
+    flow = _flow(mediator=mediator)
+
+    await _run(flow)
+
+    assert _step(flow).status != StepStatus.COMPLETED, "the step is not completed unasked"
+    assert flow._session.status == SessionStatus.WAITING
+    assert flow._session.context.get("_tool_approval_pending") is not None
 
 
 @pytest.mark.asyncio

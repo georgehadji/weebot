@@ -41,10 +41,20 @@ class InMemoryStateRepository(StateRepositoryPort):
         sessions = sessions[offset : offset + limit]
         return [s.model_copy() for s in sessions]
 
-    async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
+    async def update_session_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
+        from weebot.domain.models.session import legal_sources
+
         session = self._sessions.get(session_id)
-        if session:
-            self._sessions[session_id] = session.set_status(status)
+        allowed = legal_sources(status) if expected is None else expected & legal_sources(status)
+        if session is None or session.status not in allowed:
+            return False
+        self._sessions[session_id] = session.set_status(status)
+        return True
 
     async def delete_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)

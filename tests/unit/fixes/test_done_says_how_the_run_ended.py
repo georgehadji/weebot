@@ -13,7 +13,7 @@ from weebot.application.flows.states.completed import CompletedState
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.event import DoneEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus, Step, StepStatus
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 
 
 class _LLM:
@@ -25,7 +25,7 @@ async def _done(status: StepStatus) -> DoneEvent:
     # A second, pending step keeps the plan unfinished, so the flow loads it and runs.
     steps = [Step(id="s1", description="a", status=status), Step(id="s2", description="b")]
     plan = Plan(title="T", steps=steps)
-    s = Session(id="s1", task="t").add_event(
+    s = Session(status=SessionStatus.RUNNING, id="s1", task="t").add_event(
         PlanEvent(status=PlanStatus.CREATED, plan=plan.model_dump(mode="json"))
     )
     flow = PlanActFlow(

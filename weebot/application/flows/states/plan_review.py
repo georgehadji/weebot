@@ -94,6 +94,18 @@ class PlanReviewState(FlowState):
 
         _log.info("Plan review: presenting %d-step plan '%s' to user", len(plan.steps), plan.title)
 
+        # Mark plan as pending approval in session context (extra dict), and the session
+        # WAITING, BEFORE the review event goes out: a client that approves the moment it
+        # sees the plan must find a waiting session, not a running one that takes the
+        # "approve" for steering (audit X4). The publisher saves this event first.
+        _new_extra = {**context._session.context.extra, "plan_pending_approval": True}
+        _new_ctx = context._session.context.model_copy(update={"extra": _new_extra})
+        context._session = context._session.model_copy(update={"context": _new_ctx})
+
+        from weebot.domain.models.session import SessionStatus
+
+        context._session = context._session.set_status(SessionStatus.WAITING)
+
         # Emitted, not only yielded, so it is stamped with the session id, saved
         # and published like the other plan events (F37).
         review_event = PlanReviewEvent(
@@ -102,20 +114,9 @@ class PlanReviewState(FlowState):
         await context._emit(review_event)
         yield review_event
 
-        # Mark plan as pending approval in session context (extra dict)
-        _new_extra = {**context._session.context.extra, "plan_pending_approval": True}
-        _new_ctx = context._session.context.model_copy(update={"extra": _new_extra})
-        context._session = context._session.model_copy(update={"context": _new_ctx})
-
-        # Mark session as WAITING and persist DIRECTLY before yielding.
-        # The caller (CLI flow_run) breaks the async-for loop on WaitForUserEvent
-        # and calls resume_session() which loads from DB — the status MUST be
-        # WAITING in the DB at that point.  Using _emit() goes through the
-        # event publisher pipeline which caches a stale session reference,
-        # so we bypass it and save to the state repo directly.
-        from weebot.domain.models.session import SessionStatus
-
-        context._session = context._session.set_status(SessionStatus.WAITING)
+        # WAITING is already set above. The caller (CLI flow_run) breaks the async-for
+        # loop on WaitForUserEvent and calls resume_session() which loads from DB, so the
+        # status MUST be WAITING in the DB at that point; the save below makes sure of it.
 
         # The plan as a file the user can edit before approving (ICM B2);
         # FlowRouter reads it back on approve.

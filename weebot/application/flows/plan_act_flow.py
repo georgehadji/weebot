@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from typing import Any, TYPE_CHECKING
 from collections.abc import AsyncGenerator
 
@@ -335,14 +336,47 @@ class PlanActFlow(BaseFlow):
         """Run the flow with this session's ids bound to every log record (OBS-1)."""
         from weebot.core.log_context import log_context
 
+        # A cancel filed since this run was scheduled is for this run. The runner saved RUNNING
+        # then, possibly well before the flow got a slot, so that time is the start; a flow
+        # run directly has no earlier save and starts now.
+        run_started = time.time()
+        if self._session.status == SessionStatus.RUNNING:
+            run_started = min(run_started, self._session.updated_at.timestamp())
         with log_context(session_id=self._session.id):
             if self._cost_meter is not None:
                 # A resumed session starts from what it already spent.
                 await self._cost_meter.seed(self._session.id)
-            async for event in self._run_states(prompt):
+            async for event in self._run_states(prompt, run_started):
                 yield event
+            await self._report_undelivered_steering()
 
-    async def _run_states(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
+    async def _report_undelivered_steering(self) -> None:
+        """Say so when a message sent mid-run arrived after the last step boundary.
+
+        Steering is read between steps. A message that lands after the final read would
+        otherwise sit in the queue and be applied to the NEXT run as though it were said
+        then (audit X4). Each one is reported with its text, so the user can send it again.
+        """
+        if self._steering is None:
+            return
+        # An ErrorEvent, not an assistant message: the publisher would truth-bind a message
+        # (rewriting this text) and store any long one as a discovered fact.
+        while (text := await self._steering.poll(self._session.id)) is not None:
+            await self._emit(
+                ErrorEvent(
+                    error=(
+                        "Your message arrived after the run stopped reading input and was "
+                        f"not delivered: {text!r}. Send it again if it still applies."
+                    ),
+                    error_code="STEERING_NOT_DELIVERED",
+                )
+            )
+
+    async def _run_states(
+        self, prompt: str, run_started: float | None = None
+    ) -> AsyncGenerator[AgentEvent, None]:
+        if run_started is None:
+            run_started = time.time()  # a cancel filed before this is for an earlier run
         effective_prompt = await begin_run(self, prompt)
 
         max_iterations = self._max_iterations
@@ -377,7 +411,7 @@ class PlanActFlow(BaseFlow):
 
         while iteration_count <= max_iterations:
             iteration_count += 1
-            if cancel_requests.take(self._session.id):  # `flow cancel` from any process
+            if cancel_requests.take(self._session.id, run_started):  # `flow cancel`, any process
                 self._session = self._session.set_status(SessionStatus.CANCELLED)
                 await self._emit(
                     ErrorEvent(error="Cancelled on request (flow cancel).", error_code="CANCELLED")

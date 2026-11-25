@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.agents.executor._session_scope import get_session_scope
+from weebot.application.flows.states._dead_end import fail_run
 from weebot.application.flows.states._step_outcome import set_replans
 from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, DoneEvent, ErrorEvent, PlanEvent
@@ -161,8 +162,10 @@ class CompletedState(FlowState):
 
     status = AgentStatus.COMPLETED
 
-    def __init__(self, termination_reason: str = "") -> None:
+    def __init__(self, termination_reason: str = "", goal_met: bool = False) -> None:
         self._termination_reason = termination_reason
+        # The stop meant the goal was reached (a text match), not that a limit was hit.
+        self._goal_met = goal_met
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 
@@ -175,6 +178,12 @@ class CompletedState(FlowState):
         failed_steps = context._plan.failed_steps() if context._plan else []
         # An unverified or never-run step is not success either (R06, owner decision D-R1).
         outcome = context._plan.outcome() if context._plan else PlanOutcome.SUCCEEDED
+        # A stop (budget, termination condition) before any plan existed is not a success
+        # either: nothing ran. Without a stop reason, no plan is a run that needed none.
+        stopped = bool(self._termination_reason) and not self._goal_met
+        stopped_early = context._plan is None and stopped
+        if stopped_early:
+            outcome = PlanOutcome.FAILED
         match outcome:
             case PlanOutcome.SUCCEEDED:
                 terminal_plan_status, terminal, done_status = (
@@ -314,7 +323,18 @@ class CompletedState(FlowState):
                 for s in context._plan.unfinished_steps()[:5]
             )
             logger.warning("Session %s: %s", context._session.id, reason)
-            yield ErrorEvent(error=reason)
+            if stopped:
+                # The cap is the cause: name it, and keep it as the session's failure reason.
+                yield await fail_run(
+                    context, f"Stopped ({self._termination_reason}). {reason}", "TERMINATED"
+                )
+            else:
+                yield ErrorEvent(error=reason)
+        elif stopped_early:
+            # Marks the session FAILED with the reason and emits the error.
+            yield await fail_run(
+                context, f"Stopped before a plan existed: {self._termination_reason}", "TERMINATED"
+            )
         context._session = context._session.set_status(terminal)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
@@ -328,6 +348,8 @@ class CompletedState(FlowState):
 
         denial_breaker().forget_session(context._session.id)
         yield DoneEvent(status=done_status)
+        if stopped_early:
+            return  # nothing ran: no trajectory to score, no stamp, nothing to learn from
 
         # --- CQRS: score the trajectory if mediator is available ---
         if context._mediator:

@@ -8,6 +8,7 @@ RUNNING, which the task runner reported as WAITING: a question nobody had asked.
 
 from __future__ import annotations
 
+import time
 import types
 from unittest.mock import AsyncMock, MagicMock
 
@@ -56,8 +57,21 @@ def _app(status: SessionStatus):
     repo = AsyncMock()
     repo.load_session = AsyncMock(side_effect=lambda _id: saved["s"])
     repo.save_session = AsyncMock(side_effect=lambda s: saved.update(s=s))
+    def _set_status(_id, status, expected=None):
+        if expected is not None and saved["s"].status not in expected:
+            return False
+        saved.update(s=saved["s"].set_status(status))
+        return True
+
+    repo.update_session_status = AsyncMock(side_effect=_set_status)
     runner = MagicMock()
-    runner.cancel_session = AsyncMock(return_value=False)
+
+    async def _cancel(_id):
+        # What TaskRunner.cancel_session does for an idle session.
+        await repo.update_session_status(_id, SessionStatus.CANCELLED, expected=None)
+        return False
+
+    runner.cancel_session = AsyncMock(side_effect=_cancel)
 
     def _get(port):
         name = getattr(port, "__name__", "")
@@ -91,6 +105,29 @@ def test_cancelling_a_waiting_session_stops_it():
     assert body["status"] == "cancelled"
     assert body["allowed_actions"] == ["run"]
     runner.cancel_session.assert_awaited_once()
+
+
+def test_cancel_fallback_never_saves_the_stale_snapshot():
+    """No TaskRunner, and the run COMPLETED after the route's first load (audit X2)."""
+    app, repo, runner = _app(SessionStatus.WAITING)
+    runner.cancel_session = AsyncMock(side_effect=RuntimeError("no runner"))
+    waiting = Session(
+        id="sess-1", user_id="anonymous", agent_id="weebot-web", status=SessionStatus.WAITING
+    )
+    finished = waiting.set_status(SessionStatus.COMPLETED)
+
+    async def _load(_id, _calls=iter([waiting])):
+        return next(_calls, finished)
+
+    repo.load_session = AsyncMock(side_effect=_load)
+    response = TestClient(app).post("/sessions/sess-1/cancel")
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    repo.save_session.assert_not_awaited()
+    # The fallback writes only the status, and only while it still allows a cancel.
+    expected = repo.update_session_status.await_args.kwargs["expected"]
+    assert SessionStatus.COMPLETED not in expected
+    assert SessionStatus.WAITING in expected
 
 
 # --- runs settle on an honest status -------------------------------------------------------
@@ -145,8 +182,12 @@ async def test_a_stuck_plan_fails_instead_of_waiting():
 async def test_a_cancel_request_settles_as_cancelled_not_failed(tmp_path, monkeypatch):
     from weebot.core import cancel_requests
 
+    real_time = time.time
     monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
-    cancel_requests.request("s1")
+    # Filed a moment after the run starts: one filed before it is for an earlier run.
+    with monkeypatch.context() as m:
+        m.setattr(time, "time", lambda: real_time() + 60)
+        cancel_requests.request("s1")
     flow, events = await _run_with(_Spin())
     assert flow._session.status == SessionStatus.CANCELLED
     assert [e.error_code for e in events if isinstance(e, ErrorEvent)] == ["CANCELLED"]

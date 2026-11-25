@@ -114,5 +114,7 @@ def enforce_termination(flow: Any, iteration: int) -> None:
             flow._end_run_span()
             # Run CompletedState this pass; it sets the terminal status, so the loop
             # ends after it.
-            flow.set_state(CompletedState(termination_reason=result.reason))
+            flow.set_state(
+                CompletedState(termination_reason=result.reason, goal_met=result.goal_met)
+            )
             break

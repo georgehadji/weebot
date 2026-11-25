@@ -9,23 +9,31 @@ import { AgentEvent } from "@/types/events";
 
 const h = vi.hoisted(() => ({
   emit: null as null | ((e: unknown) => void),
+  reconnect: undefined as undefined | (() => void),
   history: [] as unknown[],
+  // Promises handed out, in order, before falling back to `history`; lets a test settle them late.
+  queue: [] as Promise<unknown[]>[],
+  eventsFor: [] as string[],
   failEvents: false,
   eventsCalls: 0,
   announce: vi.fn(),
 }));
 
 vi.mock("@/hooks/useSessionEvents", () => ({
-  useSessionEvents: (_id: unknown, onEvent: (e: unknown) => void) => {
+  useSessionEvents: (_id: unknown, onEvent: (e: unknown) => void, onReconnect?: () => void) => {
     h.emit = onEvent;
+    h.reconnect = onReconnect;
     return { isConnected: true };
   },
 }));
 vi.mock("@/lib/api", () => ({
   api: {
     sessions: {
-      events: () => {
+      events: (id: string) => {
         h.eventsCalls += 1;
+        h.eventsFor.push(id);
+        const queued = h.queue.shift();
+        if (queued) return queued;
         return h.failEvents ? Promise.reject(new Error("offline")) : Promise.resolve(h.history);
       },
     },
@@ -56,6 +64,8 @@ beforeEach(() => {
   h.emit = null;
   h.failEvents = false;
   h.eventsCalls = 0;
+  h.queue = [];
+  h.eventsFor = [];
   h.announce.mockReset();
 });
 
@@ -185,5 +195,92 @@ describe("waiting states are announced, since the log is not a live region", () 
     h.announce.mockReset();
     mount("running", [msg("m2", "hi")]);
     expect(h.announce).not.toHaveBeenCalledWith("Agent is working…");
+  });
+});
+
+describe("X6: a stream that dropped and resumed recovers what it missed", () => {
+  it("refetches history on reconnect while the run is still going, and shows the missed step", async () => {
+    mount("running", [msg("m1", "first")]);
+    expect(h.eventsCalls).toBe(0); // a running session does not fetch on its own
+
+    h.history = [msg("m1", "first"), msg("m2", "published while the socket was down")];
+    await act(async () => h.reconnect!());
+
+    await waitFor(() => expect(text()).toContain("published while the socket was down"));
+    expect(h.eventsCalls).toBe(1);
+  });
+
+  it("does not announce or duplicate an event the live stream already delivered", async () => {
+    mount("running", []);
+    await push(msg("m1", "live"));
+    h.announce.mockReset();
+
+    h.history = [msg("m1", "live")];
+    await act(async () => h.reconnect!());
+
+    await waitFor(() => expect(h.eventsCalls).toBe(1));
+    expect(text().match(/live/g)).toHaveLength(1);
+    expect(h.announce).not.toHaveBeenCalled();
+  });
+
+  it("shows a Retry-able error when the refetch after a reconnect fails", async () => {
+    mount("running", []);
+    h.failEvents = true;
+    await act(async () => h.reconnect!());
+    await waitFor(() => expect(h.eventsCalls).toBe(1));
+    expect(document.body.textContent).toMatch(/offline/);
+  });
+
+  it("Retry refetches while the run is still going, and clears the error", async () => {
+    mount("running", []);
+    h.failEvents = true;
+    await act(async () => h.reconnect!());
+    await screen.findByText(/offline/);
+
+    h.failEvents = false;
+    h.history = [msg("m2", "recovered after retry")];
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    await waitFor(() => expect(text()).toContain("recovered after retry"));
+    expect(h.eventsCalls).toBe(2);
+    expect(document.body.textContent).not.toMatch(/offline/);
+  });
+
+  it("a slow older refetch cannot overwrite a newer one", async () => {
+    mount("running", []);
+    let failOld!: (e: Error) => void;
+    h.queue = [new Promise<unknown[]>((_, rej) => (failOld = rej)), Promise.resolve([msg("m2", "newer answer")])];
+
+    await act(async () => h.reconnect!()); // slow request
+    await act(async () => h.reconnect!()); // newer request, answered at once
+    await waitFor(() => expect(text()).toContain("newer answer"));
+
+    await act(async () => failOld(new Error("late failure")));
+    expect(document.body.textContent).not.toMatch(/late failure/);
+  });
+
+  it("drops an answer that arrives after the session changed", async () => {
+    const { rerender } = mount("running", []);
+    let resolveOld!: (e: unknown[]) => void;
+    h.queue = [new Promise<unknown[]>((res) => (resolveOld = res))];
+    await act(async () => h.reconnect!());
+
+    rerender(<ConversationPane sessionId="s2" status="running" onSessionCreated={() => {}} />);
+    await act(async () => resolveOld([msg("old", "from the previous session")]));
+
+    expect(h.eventsFor).toEqual(["s1"]);
+    expect(text()).not.toContain("from the previous session");
+  });
+
+  it("drops an answer that arrives after the pane unmounted", async () => {
+    const { unmount } = mount("running", []);
+    let resolveOld!: (e: unknown[]) => void;
+    h.queue = [new Promise<unknown[]>((res) => (resolveOld = res))];
+    await act(async () => h.reconnect!());
+    unmount();
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => resolveOld([msg("late", "too late")]));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

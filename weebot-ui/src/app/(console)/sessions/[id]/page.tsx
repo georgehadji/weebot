@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { StateView } from "@/components/common/StateView";
@@ -11,7 +11,7 @@ import { useShellSlots } from "@/hooks/useShellSlots";
 import { useSessionPresence } from "@/hooks/useSessionPresence";
 import { applyPresence } from "@/hooks/useSessionList";
 import { useEventStreamContext } from "@/providers/EventStreamProvider";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { AgentEvent, Session } from "@/types/events";
 
 // SessionStatus and SessionLifecycleStatus share the same vocabulary
@@ -75,9 +75,40 @@ export default function SessionPage() {
     return () => {
       cancelled = true;
     };
-    // streamEpoch changes when the presence socket reconnects: the status loaded before
-    // the backend restarted is stale, so refetch it (and the events) then.
-  }, [sessionId, reloadKey, streamEpoch]);
+  }, [sessionId, reloadKey]);
+
+  // streamEpoch changes when the presence socket reconnects: the status loaded before the
+  // backend restarted is stale, so refetch it then. In place: the spinner would unmount the
+  // conversation and lose its optimistic rows, failed sends and scroll. The pane recovers
+  // missed events by itself when its own stream reconnects.
+  const lastEpoch = useRef(streamEpoch);
+  useEffect(() => {
+    if (streamEpoch === lastEpoch.current) return;
+    lastEpoch.current = streamEpoch;
+    let cancelled = false;
+    api.sessions
+      .get(sessionId)
+      .then((data) => {
+        if (cancelled) return;
+        // An answer older than the row already shown (a slow refresh behind a Retry) is dropped.
+        setLoadedSession((prev) =>
+          prev && Date.parse(prev.updated_at) > Date.parse(data.updated_at) ? prev : data
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) {
+          // Deleted while the backend was away: the same error view a fresh load shows.
+          setLoadedSession(null);
+          setLoadError(e.message);
+          return;
+        }
+        console.warn("[Session] could not refresh the status after a reconnect", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamEpoch, sessionId]);
 
   useShellSlots({
     title: loading ? "Loading session…" : session ? session.title || "New session" : "Session not found",

@@ -329,7 +329,7 @@ def flow_cancel(session_id: str) -> None:
         # Another process may be running it (F77): file a request it checks
         # every iteration; a session nobody is running is marked failed here.
         from weebot.core import cancel_requests
-        from weebot.domain.models.session import SessionStatus
+        from weebot.domain.models.session import SessionAction, SessionStatus
 
         session = await state_repo.load_session(session_id)
         if session is None:
@@ -341,7 +341,11 @@ def flow_cancel(session_id: str) -> None:
             # request for every open status; mark it failed too in case nothing runs it.
             cancel_requests.request(session_id)
             if session.status != SessionStatus.RUNNING:
-                await state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+                await state_repo.update_session_status(
+                    session_id,
+                    SessionStatus.CANCELLED,
+                    expected=SessionStatus.allowing(SessionAction.CANCEL),
+                )
             console.print(
                 f"[green]Cancel requested for {session_id}; a process running it stops "
                 f"at its next step.[/green]"

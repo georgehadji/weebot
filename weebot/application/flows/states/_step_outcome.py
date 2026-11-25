@@ -17,8 +17,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from weebot.application.flows.states._step_retry import retry_step
 from weebot.application.flows.states.base import StateId, new_state
-from weebot.domain.models.event import ErrorEvent
+from weebot.domain.models.event import ErrorEvent, PlanEvent
 from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
@@ -116,10 +117,13 @@ def is_code_step(step: Step, events: list[Any] | None = None) -> bool:
     return False
 
 
-async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> ErrorEvent | None:
+async def route_failure(
+    context: PlanActFlow, step: Step, run: StepRun
+) -> ErrorEvent | PlanEvent | None:
     """Three-tier failure routing. Always sets a state; never completes the step.
 
-    Returns an error for the user when the run stops instead of replanning.
+    Returns an error for the user when the run stops instead of replanning, or the PlanEvent
+    of a retry, for the caller to yield.
     """
     if await _all_models_tripped(context, step, run):
         return None
@@ -131,13 +135,7 @@ async def route_failure(context: PlanActFlow, step: Step, run: StepRun) -> Error
     severity = classify_failure_severity(error_msg)
     if severity == "minor_fix" and step.retry_count < 1:
         logger.warning("Step %s MINOR failure (%s) — retrying once", step.id, severity)
-        # Reset step to PENDING so get_next_step() picks it up again
-        retried = step.model_copy(
-            update={"status": StepStatus.PENDING, "retry_count": step.retry_count + 1}
-        )
-        context._plan = context._plan.replace_step(step.id, retried)
-        context.set_state(new_state(StateId.EXECUTING))
-        return None
+        return await retry_step(context, step)
 
     replans = int(context._session.context.get(_REPLANS_KEY) or 0) + 1
     set_replans(context, replans)
@@ -213,15 +211,15 @@ def _error_message(run: StepRun) -> str:
     return "step execution failed"
 
 
-def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
-    """Phase 3 step-result quality check. Returns True when it forced a retry.
+async def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> PlanEvent | None:
+    """Phase 3 step-result quality check. Returns the retry's PlanEvent when it forced one.
 
     In AUTO execution mode the check still runs but failure is logged, not
     retried — the step proceeds as-is.
     """
     enabled = getattr(getattr(context, "_task_preset", None), "enable_step_validation", True)
     if not enabled or step.retry_count >= 1:
-        return False
+        return None
 
     from weebot.application.services.step_result_validator import StepResultValidator
 
@@ -232,7 +230,7 @@ def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
         step_events=run.events,
     )
     if validation.passed:
-        return False
+        return None
 
     if _is_auto_mode(context):
         logger.warning(
@@ -240,7 +238,7 @@ def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
             step.id,
             validation.reason,
         )
-        return False
+        return None
 
     logger.info(
         "Step '%s' failed quality check (%s) — retrying with hint",
@@ -248,16 +246,11 @@ def quality_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:
         validation.reason,
     )
     # Inject the quality hint into the step description and retry it once.
-    hint_step = step.model_copy(
-        update={
-            "description": f"{step.description}\n[Quality hint: {validation.quality_hint}]",
-            "retry_count": 1,
-            "status": StepStatus.PENDING,
-        }
+    return await retry_step(
+        context,
+        step,
+        description=f"{step.description}\n[Quality hint: {validation.quality_hint}]",
     )
-    context._plan = context._plan.replace_step(step.id, hint_step)
-    context.set_state(new_state(StateId.EXECUTING))
-    return True
 
 
 async def progress_gate(context: PlanActFlow, step: Step, run: StepRun) -> bool:

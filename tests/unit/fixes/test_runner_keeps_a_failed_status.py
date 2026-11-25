@@ -11,7 +11,7 @@ from weebot.interfaces.cli.agent_runner import settled_status
 
 
 def _s(status):
-    return Session(id="s", task="t").set_status(status)
+    return Session(id="s", task="t").model_copy(update={"status": status})
 
 
 def test_failed_stays_failed():

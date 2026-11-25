@@ -169,15 +169,30 @@ class SessionQueries:
         )
         return [dict(r) for r in rows]
 
-    async def update_status(self, session_id: str, status: SessionStatus) -> None:
-        """Update just the status of a session."""
+    async def update_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
+        """Update just the status of a session, only from a status that may move to *status*.
+
+        *expected* narrows that further (the legal sources are always applied).
+        """
         from datetime import datetime
 
+        from weebot.domain.models.session import legal_sources
+
+        allowed = legal_sources(status) if expected is None else expected & legal_sources(status)
+        sql = (
+            "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?"
+            f" AND status IN ({', '.join('?' * len(allowed))})"
+        )
+        params: list[Any] = [status.value, datetime.now(UTC).isoformat(), session_id]
+        params += sorted(s.value for s in allowed)
         async with self._pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, datetime.now(UTC).isoformat(), session_id),
-            )
+            cursor = await conn.execute(sql, tuple(params))
+            return cursor.rowcount == 1
 
     async def delete(self, session_id: str) -> None:
         """Delete a session row."""

@@ -5,8 +5,8 @@ code: PlannerAgent
 cluster: application
 universe: live
 status: verified
-verified: 2026-11-02
-commit: be7e51c2
+verified: 2026-11-25
+commit: 3c1375c7
 ---
 
 # PlannerAgent
@@ -24,8 +24,8 @@ The model returns JSON; everything after that is defensive, because a malformed 
 - JSON extraction is the shared `extract_json_text` (`planner.py:169-194`), no longer private.
 
 ## Connected to
-- **Invoked through the Mediator:** `CreatePlanHandler` builds a `PlannerAgent` and iterates `create_plan` (`cqrs/handlers/create_plan_handler.py:110-114`); `PlanningState` sends `CreatePlanCommand` (`states/planning.py:237`). `UpdatePlanHandler` (`update_plan_handler.py:52, 74`) and `UpdatingState` (`states/updating.py:191`, via `context._planner`) call `update_plan`.
-- **Other constructors:** `PlanActFlow` (`weebot/application/flows/_plan_act_wiring.py:238`), `PlanningState` (`states/planning.py:331`), `model_selector.py:42`, `services/context_switcher.py:89`.
+- **Invoked through the Mediator:** `CreatePlanHandler` builds a `PlannerAgent` and iterates `create_plan` (`cqrs/handlers/create_plan_handler.py:110-114`); `PlanningState` sends `CreatePlanCommand` (`states/planning.py:242`). `UpdatePlanHandler` (`update_plan_handler.py:52, 74`) and `UpdatingState` (`states/updating.py:195`, via `context._planner`) call `update_plan`.
+- **Other constructors:** `PlanActFlow` (`weebot/application/flows/_plan_act_wiring.py:238`), `PlanningState` (`states/planning.py:334`), `model_selector.py:42`, `services/context_switcher.py:89`.
 - **Produces:** `Plan` / `Step` (domain models), which `ExecutorAgent` consumes; `Step.context_scope` set here controls the executor's prompt.
 - **Looks like but is not:** `ExecutorAgent` (runs steps); `PlanCriticService` (scores plans, in `CritiquingState`); `ParallelPlanner` (`application/agents/parallel_planner.py`, not covered).
 

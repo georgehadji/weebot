@@ -48,7 +48,7 @@ class _LLM:
 
 
 async def _finish(plan: Plan):
-    session = Session(id="sess", task="t").add_event(
+    session = Session(status=SessionStatus.RUNNING, id="sess", task="t").add_event(
         PlanEvent(status=PlanStatus.CREATED, plan=plan.model_dump(mode="json"))
     )
     flow = PlanActFlow(PlanActFlowConfig(llm=_LLM(), tools=ToolCollection(), session=session))

@@ -1,18 +1,36 @@
+import { useEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SessionPage from "./page";
+
+const h = vi.hoisted(() => ({
+  epoch: 0,
+  presence: new Map<string, unknown>(),
+  mounts: 0,
+  unmounts: 0,
+  status: "" as string,
+}));
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("@/components/conversation/ConversationPane", () => ({
-  ConversationPane: () => <div data-testid="pane" />,
+  ConversationPane: ({ status }: { status: string }) => {
+    h.status = status;
+    useEffect(() => {
+      h.mounts += 1;
+      return () => {
+        h.unmounts += 1;
+      };
+    }, []);
+    return <div data-testid="pane" />;
+  },
 }));
 vi.mock("@/hooks/useSessionEvents", () => ({ useSessionEvents: () => ({ isConnected: true }) }));
-vi.mock("@/hooks/useSessionPresence", () => ({ useSessionPresence: () => new Map() }));
+vi.mock("@/hooks/useSessionPresence", () => ({ useSessionPresence: () => h.presence }));
 vi.mock("@/hooks/useShellSlots", () => ({ useShellSlots: () => {} }));
-vi.mock("@/providers/EventStreamProvider", () => ({ useEventStreamContext: () => ({ streamEpoch: 0 }) }));
+vi.mock("@/providers/EventStreamProvider", () => ({ useEventStreamContext: () => ({ streamEpoch: h.epoch }) }));
 
 const session = {
   id: "s1", user_id: "u", agent_id: "a", status: "completed", title: "T", context: {},
@@ -20,6 +38,11 @@ const session = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
+// Reset before each test: the previous test's pane unmounts in RTL's own cleanup, after ours.
+beforeEach(() => {
+  Object.assign(h, { epoch: 0, mounts: 0, unmounts: 0, status: "" });
+  h.presence.clear();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("/sessions/[id] loading", () => {
@@ -55,5 +78,97 @@ describe("/sessions/[id] loading", () => {
     await act(async () => {});
     expect(screen.getByRole("alert").textContent).toContain("gone");
     expect(screen.queryByTestId("pane")).toBeNull();
+  });
+});
+
+describe("X7: a presence reconnect refreshes the status without unmounting the conversation", () => {
+  it("an epoch bump keeps the pane mounted and shows the refetched status", async () => {
+    let served: unknown = { ...session, status: "running" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).endsWith("/events") ? json([]) : json(served))));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    expect(h.mounts).toBe(1);
+    expect(h.status).toBe("running");
+
+    served = { ...session, status: "failed", updated_at: "2026-10-31T01:00:00Z" };
+    h.epoch = 1; // the presence socket reconnected
+    rerender(<SessionPage />);
+    expect(screen.queryByText("Loading session…")).toBeNull(); // no spinner
+    await act(async () => {});
+
+    expect(h.status).toBe("failed");
+    expect(h.mounts).toBe(1);
+    expect(h.unmounts).toBe(0);
+  });
+
+  it("a failed refresh keeps the loaded session and the pane", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    let down = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).endsWith("/events")) return json([]);
+      return down ? json({ detail: "offline" }, 503) : json(session);
+    }));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    down = true;
+    h.epoch = 1;
+    rerender(<SessionPage />);
+    await act(async () => {});
+    expect(screen.getByTestId("pane")).toBeTruthy();
+    expect(h.unmounts).toBe(0);
+  });
+
+  it("a refetched FAILED is not hidden behind an older 'running' presence frame", async () => {
+    h.presence.set("s1", {
+      type: "session_presence", about_session_id: "s1", status: "running", title: "",
+      timestamp: "2026-10-31T00:30:00Z",
+    });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).endsWith("/events") ? json([]) : json({ ...session, status: "failed", updated_at: "2026-10-31T01:00:00Z" })
+    ));
+    render(<SessionPage />);
+    await act(async () => {});
+    expect(h.status).toBe("failed");
+  });
+
+  it("a session deleted while the backend was away shows the not-found view, not a live pane", async () => {
+    let gone = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).endsWith("/events")) return json([]);
+      return gone ? json({ detail: "Session s1 not found" }, 404) : json(session);
+    }));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    gone = true;
+    h.epoch = 1;
+    rerender(<SessionPage />);
+    await act(async () => {});
+    expect(screen.getByRole("alert").textContent).toContain("Session s1 not found");
+    expect(screen.queryByTestId("pane")).toBeNull();
+  });
+
+  it("a slow older refresh cannot overwrite a newer row", async () => {
+    const row = (status: string, updated_at: string) => ({ ...session, status, updated_at });
+    let releaseOld!: (r: Response) => void;
+    const replies: Array<() => Response | Promise<Response>> = [
+      () => json(row("running", "2026-10-31T00:00:00Z")), // the first load
+      () => new Promise<Response>((res) => (releaseOld = res)), // the refresh, held back
+      () => json(row("failed", "2026-10-31T02:00:00Z")), // Retry's load, answered first
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).endsWith("/events") ? json({ detail: "store offline" }, 503) : replies.shift()!()
+    ));
+    const { rerender } = render(<SessionPage />);
+    await act(async () => {});
+    h.epoch = 1;
+    rerender(<SessionPage />); // starts the held-back refresh
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    });
+    expect(h.status).toBe("failed");
+
+    await act(async () => releaseOld(json(row("running", "2026-10-31T00:00:00Z"))));
+    expect(h.status).toBe("failed");
   });
 });
