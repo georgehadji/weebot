@@ -169,15 +169,23 @@ class SessionQueries:
         )
         return [dict(r) for r in rows]
 
-    async def update_status(self, session_id: str, status: SessionStatus) -> None:
-        """Update just the status of a session."""
+    async def update_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
+        """Update just the status of a session; with *expected*, only from one of them."""
         from datetime import datetime
 
+        sql = "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?"
+        params: list[Any] = [status.value, datetime.now(UTC).isoformat(), session_id]
+        if expected is not None:
+            sql += f" AND status IN ({', '.join('?' * len(expected))})"
+            params += sorted(s.value for s in expected)
         async with self._pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, datetime.now(UTC).isoformat(), session_id),
-            )
+            cursor = await conn.execute(sql, tuple(params))
+            return cursor.rowcount == 1
 
     async def delete(self, session_id: str) -> None:
         """Delete a session row."""

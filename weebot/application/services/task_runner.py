@@ -44,6 +44,7 @@ class PrioritizedSession:
 _RESUME_DRAIN_WAIT_S = 5.0
 _RETRIES_KEY = "retries_remaining"
 _FAILURE_KEY = FAILURE_REASON_KEY
+_CANCELLABLE = SessionStatus.allowing(SessionAction.CANCEL)
 _INTERRUPTED_REASON = (
     "interrupted: the server stopped while this session was running. "
     "Send a message to resume it at the first unfinished step."
@@ -561,11 +562,14 @@ class TaskRunner:
                     await task
                 except asyncio.CancelledError:
                     pass
-                await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+                await self._state_repo.update_session_status(
+                    session_id, SessionStatus.CANCELLED, expected=_CANCELLABLE
+                )
                 return True
-            stored = await self._state_repo.load_session(session_id)
-            if stored is not None and stored.status.allows(SessionAction.CANCEL):
-                await self._state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+            # One conditional write: a session that finished meanwhile is not overwritten.
+            await self._state_repo.update_session_status(
+                session_id, SessionStatus.CANCELLED, expected=_CANCELLABLE
+            )
             return False
 
     async def rerun_failed_session(self, session_id: str, flow_factory: FlowFactory) -> bool:

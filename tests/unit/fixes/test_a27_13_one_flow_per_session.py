@@ -209,7 +209,9 @@ async def test_a_failed_session_queued_on_purpose_for_a_rerun_is_started():
         built.append(1)
         return _Flow(release)
 
-    snapshot = (await repo.load_session("s1")).set_status(SessionStatus.PENDING)
+    snapshot = (await repo.load_session("s1")).model_copy(
+        update={"status": SessionStatus.PENDING}
+    )
     await runner._start_queued(snapshot, factory)  # stored FAILED, queued as PENDING
     await _finish(runner, release)
     assert built == [1]

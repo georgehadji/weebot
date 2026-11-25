@@ -16,7 +16,7 @@ import pytest
 
 from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.models.event import DoneEvent, SessionPresenceEvent
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 
 
 class _StubFlow:
@@ -69,7 +69,9 @@ async def test_start_direct_publishes_running_presence():
 
 @pytest.mark.asyncio
 async def test_successful_flow_publishes_completed_presence():
-    session = Session(id="s2", user_id="u", agent_id="a")
+    session = Session(
+        id="s2", user_id="u", agent_id="a", status=SessionStatus.RUNNING
+    )
     event_bus = AsyncMock()
     runner, _ = _make_runner(session, event_bus)
 
@@ -140,7 +142,9 @@ async def test_the_planners_title_is_persisted_and_announced_to_the_rail():
     """UI/UX plan 2.1: TitleEvent used to be dropped; now it replaces the derived title."""
     from weebot.domain.models.event import TitleEvent
 
-    session = Session(id="s5", user_id="u", agent_id="a")
+    session = Session(
+        id="s5", user_id="u", agent_id="a", status=SessionStatus.RUNNING
+    )
     event_bus = AsyncMock()
     runner, state_repo = _make_runner(session, event_bus)
 

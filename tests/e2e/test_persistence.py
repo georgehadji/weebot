@@ -81,7 +81,7 @@ async def test_session_status_persisted(tmp_db: StateRepositoryPort):
     assert loaded.status == SessionStatus.PENDING
 
     # Update to COMPLETED and save
-    session = session.set_status(SessionStatus.COMPLETED)
+    session = session.set_status(SessionStatus.RUNNING).set_status(SessionStatus.COMPLETED)
     await tmp_db.save_session(session)
 
     # Reload and verify
@@ -93,7 +93,9 @@ async def test_session_status_persisted(tmp_db: StateRepositoryPort):
 @pytest.mark.asyncio
 async def test_session_list_filtering(tmp_db: StateRepositoryPort):
     """list_sessions must return correct subset based on status."""
-    s1 = Session(id="s1", user_id="u", agent_id="a").set_status(SessionStatus.COMPLETED)
+    s1 = Session(status=SessionStatus.RUNNING, id="s1", user_id="u", agent_id="a").set_status(
+        SessionStatus.COMPLETED
+    )
     s2 = Session(id="s2", user_id="u", agent_id="a")  # CREATED
     s3 = Session(id="s3", user_id="v", agent_id="a")  # CREATED
 

@@ -294,7 +294,7 @@ class TestBug004SessionMemoryIndexPreserved:
     """BUG-004: _memory_index wiped on every add_event(); O(1) path unusable."""
 
     def _make_session(self):
-        from weebot.domain.models.session import Session, SessionContext
+        from weebot.domain.models.session import Session, SessionContext, SessionStatus
 
         return Session(id="s1", user_id="u", agent_id="a", context=SessionContext())
 
@@ -362,14 +362,18 @@ class TestBug005NoDoublePublish:
         Post-patch: event published once (flow only).
         """
         from weebot.domain.models.event import MessageEvent
-        from weebot.domain.models.session import Session, SessionContext
+        from weebot.domain.models.session import Session, SessionContext, SessionStatus
         from weebot.application.services.task_runner import TaskRunner
 
         event_bus = AsyncMock()
         state_repo = AsyncMock()
         state_repo.load_session = AsyncMock(
             return_value=Session(
-                id="sess", user_id="u", agent_id="a", context=SessionContext(last_prompt="hello")
+                id="sess",
+                user_id="u",
+                agent_id="a",
+                status=SessionStatus.RUNNING,
+                context=SessionContext(last_prompt="hello"),
             )
         )
         state_repo.save_session = AsyncMock()
@@ -403,14 +407,18 @@ class TestBug005NoDoublePublish:
     async def test_event_published_by_runner_when_flow_has_no_bus(self):
         """ID: BUG005-R02 — fallback: TaskRunner publishes when flow has no bus."""
         from weebot.domain.models.event import MessageEvent
-        from weebot.domain.models.session import Session, SessionContext
+        from weebot.domain.models.session import Session, SessionContext, SessionStatus
         from weebot.application.services.task_runner import TaskRunner
 
         event_bus = AsyncMock()
         state_repo = AsyncMock()
         state_repo.load_session = AsyncMock(
             return_value=Session(
-                id="sess", user_id="u", agent_id="a", context=SessionContext(last_prompt="go")
+                id="sess",
+                user_id="u",
+                agent_id="a",
+                status=SessionStatus.RUNNING,
+                context=SessionContext(last_prompt="go"),
             )
         )
         state_repo.save_session = AsyncMock()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, UTC
 from enum import Enum, StrEnum
+import logging
 import re
 from typing import Any
 
@@ -12,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator,
 from .plan import Plan
 from .event import AgentEvent
 from weebot.domain.services.session_memory import SessionMemory
+
+logger = logging.getLogger(__name__)
 
 
 class SessionAction(StrEnum):
@@ -28,6 +31,10 @@ class SessionAction(StrEnum):
 FAILURE_REASON_KEY = "failure_reason"
 
 
+class IllegalTransition(ValueError):
+    """A status change the lifecycle table does not allow (see ``_TRANSITIONS``)."""
+
+
 class SessionStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -38,6 +45,11 @@ class SessionStatus(str, Enum):
 
     def allows(self, action: SessionAction) -> bool:
         return action in _ALLOWED[self]
+
+    @classmethod
+    def allowing(cls, action: SessionAction) -> frozenset[SessionStatus]:
+        """The statuses that allow *action*, for a conditional write."""
+        return frozenset(s for s in cls if action in _ALLOWED[s])
 
     @property
     def allowed_actions(self) -> list[str]:
@@ -234,6 +246,62 @@ class SessionContext(BaseModel):
         return self.model_copy(deep=True)
 
 
+# Which status may follow which, as the writers really behave: the flow, the task runner, the
+# router and the repositories. `_ALLOWED` says what a CALLER may ask for; this says what a
+# WRITER may do to the row. Staying in the same status is always fine. COMPLETED -> RUNNING is
+# a new task or chat turn in the same session; FAILED and CANCELLED -> RUNNING is a re-run.
+_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
+    SessionStatus.PENDING: frozenset(
+        {
+            SessionStatus.RUNNING,
+            SessionStatus.WAITING,
+            SessionStatus.FAILED,
+            SessionStatus.CANCELLED,
+        }
+    ),
+    SessionStatus.RUNNING: frozenset(
+        {
+            SessionStatus.WAITING,
+            SessionStatus.COMPLETED,
+            SessionStatus.FAILED,
+            SessionStatus.CANCELLED,
+        }
+    ),
+    # WAITING -> COMPLETED: a resumed run keeps WAITING in the store while it works, so the
+    # runner's closing write comes from WAITING (TaskRunner).
+    SessionStatus.WAITING: frozenset(
+        {
+            SessionStatus.RUNNING,
+            SessionStatus.COMPLETED,
+            SessionStatus.FAILED,
+            SessionStatus.CANCELLED,
+        }
+    ),
+    SessionStatus.COMPLETED: frozenset({SessionStatus.RUNNING}),
+    # FAILED -> WAITING: a checkpoint restore puts a crashed session back to wait for resume.
+    SessionStatus.FAILED: frozenset({SessionStatus.RUNNING, SessionStatus.WAITING}),
+    SessionStatus.CANCELLED: frozenset({SessionStatus.RUNNING}),
+}
+
+# Phase A logs an illegal transition; phase B (tests) raises; phase C (production) raises too.
+# Flip the default to True once a production log shows no illegal transitions (audit T8).
+_strict_transitions = False
+
+
+def set_strict_transitions(strict: bool) -> bool:
+    """Make an illegal status change raise (True) or only log (False); returns the old mode."""
+    global _strict_transitions
+    previous, _strict_transitions = _strict_transitions, strict
+    return previous
+
+
+def _illegal_transition(session_id: str, current: SessionStatus, target: SessionStatus) -> None:
+    message = f"illegal session status change {current.value} -> {target.value} ({session_id})"
+    if _strict_transitions:
+        raise IllegalTransition(message)
+    logger.warning(message)
+
+
 class Session(BaseModel):
     """A user session containing events, plan history, and metadata."""
 
@@ -307,6 +375,8 @@ class Session(BaseModel):
         return new_session
 
     def set_status(self, status: SessionStatus) -> Session:
+        if status is not self.status and status not in _TRANSITIONS[self.status]:
+            _illegal_transition(self.id, self.status, status)
         return self.model_copy(update={"status": status, "updated_at": datetime.now(UTC)})
 
     def get_last_plan(self) -> Plan | None:

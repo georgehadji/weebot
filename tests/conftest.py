@@ -60,6 +60,20 @@ def _reset_weebot_logger_level():
     logging.getLogger("weebot").setLevel(logging.NOTSET)
 
 
+@pytest.fixture(autouse=True)
+def _strict_session_transitions():
+    """An illegal session status change raises in tests (audit T8, phase B).
+
+    Production only logs it until a log shows none. A test that needs to build an odd
+    session on purpose sets the status through `model_copy(update=...)`, not `set_status`.
+    """
+    from weebot.domain.models.session import set_strict_transitions
+
+    previous = set_strict_transitions(True)
+    yield
+    set_strict_transitions(previous)
+
+
 # ---------------------------------------------------------------------------
 # Marker registration
 # ---------------------------------------------------------------------------

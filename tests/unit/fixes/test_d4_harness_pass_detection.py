@@ -33,7 +33,7 @@ def _factory(status: SessionStatus, answer: str = "the answer"):
 
             async def run(self, _prompt):
                 done = self._session.add_event(MessageEvent(role="assistant", message=answer))
-                self._session = done.set_status(status)
+                self._session = done.model_copy(update={"status": status})
                 if False:
                     yield None
 

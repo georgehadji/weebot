@@ -281,12 +281,18 @@ class PostgreSQLStateRepository(
                 plans[r["session_id"]].append(r["event_data"])
         return {sid: SessionActivity.build(counts[sid], plans[sid]) for sid in ids}
 
-    async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
-        await self._execute(
-            "UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2",
-            status.value,
-            session_id,
-        )
+    async def update_session_status(
+        self,
+        session_id: str,
+        status: SessionStatus,
+        expected: frozenset[SessionStatus] | None = None,
+    ) -> bool:
+        sql = "UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2"
+        args: list[Any] = [status.value, session_id]
+        if expected is not None:
+            sql += " AND status = ANY($3::text[])"
+            args.append(sorted(s.value for s in expected))
+        return (await self._execute(sql, *args)) == "UPDATE 1"
 
     async def delete_session(self, session_id: str) -> None:
         """Delete the session, with the side-constraints and corrections it recorded."""

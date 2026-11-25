@@ -57,14 +57,18 @@ def _app(status: SessionStatus):
     repo = AsyncMock()
     repo.load_session = AsyncMock(side_effect=lambda _id: saved["s"])
     repo.save_session = AsyncMock(side_effect=lambda s: saved.update(s=s))
-    repo.update_session_status = AsyncMock(
-        side_effect=lambda _id, status: saved.update(s=saved["s"].set_status(status))
-    )
+    def _set_status(_id, status, expected=None):
+        if expected is not None and saved["s"].status not in expected:
+            return False
+        saved.update(s=saved["s"].set_status(status))
+        return True
+
+    repo.update_session_status = AsyncMock(side_effect=_set_status)
     runner = MagicMock()
 
     async def _cancel(_id):
         # What TaskRunner.cancel_session does for an idle session.
-        await repo.update_session_status(_id, SessionStatus.CANCELLED)
+        await repo.update_session_status(_id, SessionStatus.CANCELLED, expected=None)
         return False
 
     runner.cancel_session = AsyncMock(side_effect=_cancel)
@@ -120,7 +124,10 @@ def test_cancel_fallback_never_saves_the_stale_snapshot():
     assert response.status_code == 200
     assert response.json()["status"] == "completed"
     repo.save_session.assert_not_awaited()
-    repo.update_session_status.assert_not_awaited()
+    # The fallback writes only the status, and only while it still allows a cancel.
+    expected = repo.update_session_status.await_args.kwargs["expected"]
+    assert SessionStatus.COMPLETED not in expected
+    assert SessionStatus.WAITING in expected
 
 
 # --- runs settle on an honest status -------------------------------------------------------

@@ -269,12 +269,13 @@ async def _mark_cancelled(state_repo: StateRepositoryPort, session_id: str) -> N
     """The no-TaskRunner fallback: CANCELLED by a status-only write, if the stored status allows.
 
     The session loaded at the start of the request can be stale by now (a run may have
-    COMPLETED); saving that whole snapshot would overwrite the newer row. Not atomic: with a
-    TaskRunner, ``cancel_session`` does this under the session lock instead.
+    COMPLETED); saving that whole snapshot would overwrite the newer row. A single conditional
+    write checks the stored status itself, so nothing is read first. With a TaskRunner,
+    ``cancel_session`` does this under the session lock instead.
     """
-    current = await state_repo.load_session(session_id)
-    if current is not None and current.status.allows(SessionAction.CANCEL):
-        await state_repo.update_session_status(session_id, SessionStatus.CANCELLED)
+    await state_repo.update_session_status(
+        session_id, SessionStatus.CANCELLED, expected=SessionStatus.allowing(SessionAction.CANCEL)
+    )
 
 
 @router.post("/{session_id}/cancel")
