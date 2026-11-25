@@ -47,6 +47,8 @@ class StepRun:
     rejected: str | None = None
     events: list[AgentEvent] = field(default_factory=list)
     hitl_paused: bool = False
+    # A human_only approval (an approval floor) was raised: AUTO mode must pause for it.
+    human_floor: bool = False
     execution_failed: bool = False
     should_terminate: bool = False
     result_text: str = ""
@@ -104,10 +106,11 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
         run.events.append(event)
         # A pause is marked on the session BEFORE its event is emitted, so the row a client
         # reads on seeing the question already says WAITING (audit X4); the publisher saves
-        # pause events before it publishes them. AUTO never pauses, so it never marks.
+        # pause events before it publishes them. AUTO never pauses, except at an approval
+        # floor, so it marks only then.
         if isinstance(event, WaitForUserEvent):
             run.hitl_paused = True
-            if not auto:
+            if not auto or run.human_floor:
                 context._session = context._session.set_status(SessionStatus.WAITING)
         elif isinstance(event, ToolApprovalEvent):
             if auto and not event.human_only:
@@ -124,8 +127,8 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
                 from weebot.application.services.tool_approval import mark_tool_approval_pending
 
                 context._session = mark_tool_approval_pending(context._session, event)
-                if not auto:
-                    context._session = context._session.set_status(SessionStatus.WAITING)
+                context._session = context._session.set_status(SessionStatus.WAITING)
+                run.human_floor = auto  # only reached in AUTO for a human_only approval
         elif isinstance(event, ErrorEvent):
             run.execution_failed = True
         await context._emit(event)

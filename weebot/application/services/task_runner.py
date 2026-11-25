@@ -169,13 +169,20 @@ class TaskRunner:
 
     async def _start_queued(self, session: Session, flow_factory: FlowFactory) -> None:
         """Start a dequeued session, unless it changed while queued or is already running."""
-        stored = await self._state_repo.load_session(session.id)
-        if stored is not None and stored.status != session.status:
-            # Cancelled (or started elsewhere) while it waited in the queue.
-            logger.warning(
-                "Queued session %s skipped: it is %s, was %s when queued",
-                session.id, stored.status.value, session.status.value,
-            )
+        try:
+            stored = await self._state_repo.load_session(session.id)
+        except Exception:
+            logger.warning("Could not reload queued session %s; starting it", session.id,
+                           exc_info=True)
+            stored = None
+        if (
+            stored is not None
+            and stored.status == SessionStatus.CANCELLED
+            and session.status != SessionStatus.CANCELLED
+        ):
+            # Cancelled while it waited in the queue. A FAILED or CANCELLED snapshot queued on
+            # purpose to re-run is not skipped.
+            logger.warning("Queued session %s skipped: it was cancelled while queued", session.id)
             return
         try:
             await self.start_session(session, flow_factory)

@@ -355,16 +355,16 @@ class PlanActFlow(BaseFlow):
         """
         if self._steering is None:
             return
-        from weebot.domain.models.event import MessageEvent
-
+        # An ErrorEvent, not an assistant message: the publisher would truth-bind a message
+        # (rewriting this text) and store any long one as a discovered fact.
         while (text := await self._steering.poll(self._session.id)) is not None:
             await self._emit(
-                MessageEvent(
-                    role="assistant",
-                    message=(
+                ErrorEvent(
+                    error=(
                         "Your message arrived after the run stopped reading input and was "
                         f"not delivered: {text!r}. Send it again if it still applies."
                     ),
+                    error_code="STEERING_NOT_DELIVERED",
                 )
             )
 

@@ -256,9 +256,9 @@ class ExecutingState(FlowState):
         if run.hitl_paused:
             logger.info("Step %s paused for human input after %.1fs", step.id, run.elapsed_s)
             await post_task_hooks(context, step, run)
-            if _is_auto_mode(context):
-                # AUTO promises no human pauses, so the step must not be left WAITING
-                # for an answer nobody will type. Complete it so the plan progresses;
+            if _is_auto_mode(context) and not run.human_floor:
+                # AUTO promises no human pauses (an approval floor is the exception), so
+                # the step must not be left WAITING for an answer nobody will type. Complete it so the plan progresses;
                 # the unanswered question stays in the transcript for the operator.
                 logger.warning(
                     "AUTO mode: step %s asked for human input — completing without asking",

@@ -82,6 +82,23 @@ def test_a_request_filed_while_one_is_taken_is_not_lost(tmp_path, monkeypatch):
     assert cancel_requests._marker("s1").exists()  # the second request was kept
 
 
+def test_a_claim_left_by_a_dead_process_is_swept_on_the_next_request(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(cancel_requests, "_DIR", tmp_path)
+    old = tmp_path / ("a" * 64 + ".dead")
+    fresh = tmp_path / ("b" * 64 + ".live")
+    old.write_text("1.0")
+    fresh.write_text("1.0")
+    stale = time.time() - 2 * cancel_requests._CLAIM_TTL_S
+    os.utime(old, (stale, stale))
+
+    cancel_requests.request("s1")
+
+    assert not old.exists()
+    assert fresh.exists()  # young enough to belong to a live take()
+
+
 async def test_a_flow_ignores_a_cancel_filed_before_it_started(tmp_path, monkeypatch):
     from weebot.application.flows.plan_act_flow import PlanActFlow
     from weebot.application.models.tool_collection import ToolCollection

@@ -18,6 +18,7 @@ from weebot.application.flows.states import _step_run
 from weebot.application.flows.states.plan_review import PlanReviewState
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.event import (
+    ErrorEvent,
     MessageEvent,
     PlanReviewEvent,
     ToolApprovalEvent,
@@ -35,10 +36,12 @@ class _Bus:
     def __init__(self, repo):
         self._repo = repo
         self.seen: list[tuple[str, SessionStatus]] = []
+        self.extras: list[dict] = []  # the stored context.extra at each publish
 
     async def publish(self, event):
         stored = await self._repo.load_session("s1")
         self.seen.append((event.type, stored.status if stored else None))
+        self.extras.append(dict(stored.context.extra) if stored else {})
 
     async def publish_domain_event(self, event):
         return None
@@ -91,6 +94,34 @@ async def test_a_step_that_pauses_marks_waiting_before_its_event_goes_out(monkey
 
     assert run.hitl_paused
     assert bus.seen == [(event.type, SessionStatus.WAITING)]
+    if isinstance(event, ToolApprovalEvent):
+        # What routes the reply as an approval must already be in the row a client reads.
+        assert bus.extras[0].get("_user_gate_pending") == "tool_approval"
+        assert bus.extras[0].get("_tool_approval_pending")
+
+
+async def test_a_pause_that_cannot_be_saved_is_not_published():
+    flow, bus = await _flow()
+
+    async def broken_save(_session):
+        raise OSError("disk full")
+
+    flow._state_repo.save_session = broken_save
+    flow._session = flow._session.set_status(SessionStatus.WAITING)
+    with pytest.raises(OSError):
+        await flow._emit(WaitForUserEvent(question="ok?"))
+    assert bus.seen == []  # the client never saw a question over a stale row
+
+
+async def test_an_ordinary_event_survives_a_failed_save():
+    flow, bus = await _flow()
+
+    async def broken_save(_session):
+        raise OSError("disk full")
+
+    flow._state_repo.save_session = broken_save
+    await flow._emit(MessageEvent(message="hi"))  # logged, not raised, as before
+    assert [t for t, _ in bus.seen] == ["message"]
 
 
 async def test_a_plan_review_is_saved_waiting_before_the_plan_is_announced():
@@ -108,12 +139,15 @@ async def test_steering_left_at_the_end_of_a_run_is_reported_not_kept():
     await steering.send("s1", "use the other API")
     await flow._report_undelivered_steering()
 
-    said = [e for e in flow._session.events if isinstance(e, MessageEvent)]
-    assert len(said) == 1 and "use the other API" in said[0].message
+    said = [e for e in flow._session.events if isinstance(e, ErrorEvent)]
+    assert len(said) == 1 and "use the other API" in said[0].error
+    assert said[0].error_code == "STEERING_NOT_DELIVERED"
     assert await steering.poll("s1") is None  # gone: the next run cannot read it
+    # Not an assistant message: that would be truth-bound and stored as a fact.
+    assert not [e for e in flow._session.events if isinstance(e, MessageEvent)]
 
 
 async def test_no_steering_means_no_report():
     flow, _ = await _flow(steering=InMemorySteeringAdapter())
     await flow._report_undelivered_steering()
-    assert not [e for e in flow._session.events if isinstance(e, MessageEvent)]
+    assert not [e for e in flow._session.events if isinstance(e, ErrorEvent)]

@@ -200,6 +200,46 @@ async def test_a_session_cancelled_while_queued_is_not_started():
     assert (await repo.load_session("s1")).status == SessionStatus.CANCELLED
 
 
+async def test_a_failed_session_queued_on_purpose_for_a_rerun_is_started():
+    runner, repo = await _runner(SessionStatus.FAILED)
+    release, built = asyncio.Event(), []
+    release.set()
+
+    def factory(_s):
+        built.append(1)
+        return _Flow(release)
+
+    snapshot = (await repo.load_session("s1")).set_status(SessionStatus.PENDING)
+    await runner._start_queued(snapshot, factory)  # stored FAILED, queued as PENDING
+    await _finish(runner, release)
+    assert built == [1]
+
+
+async def test_a_queued_start_survives_a_failed_reload():
+    runner, repo = await _runner(SessionStatus.PENDING)
+    release, built = asyncio.Event(), []
+    release.set()
+    queued = await repo.load_session("s1")
+
+    real_load, failures = repo.load_session, []
+
+    async def flaky_load(session_id):
+        if not failures:  # only the worker's reload fails; the flow's own load works
+            failures.append(1)
+            raise OSError("db gone")
+        return await real_load(session_id)
+
+    repo.load_session = flaky_load
+
+    def factory(_s):
+        built.append(1)
+        return _Flow(release)
+
+    await runner._start_queued(queued, factory)
+    await _finish(runner, release)
+    assert built == [1]
+
+
 async def test_two_concurrent_starts_of_one_pending_session_start_one_flow():
     runner, repo = await _runner(SessionStatus.PENDING)
     session = await repo.load_session("s1")

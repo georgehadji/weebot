@@ -21,6 +21,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _DIR = Path.home() / ".weebot" / "cancel"
+_CLAIM_TTL_S = 300.0  # a claim older than this was left by a process that died mid-take
 
 
 def _marker(session_id: str) -> Path:
@@ -31,7 +32,24 @@ def _marker(session_id: str) -> Path:
 def request(session_id: str) -> None:
     """Ask the process running *session_id* to stop."""
     _DIR.mkdir(parents=True, exist_ok=True)
+    _sweep_claims()
     _marker(session_id).write_text(repr(time.time()), encoding="utf-8")
+
+
+def _sweep_claims() -> None:
+    """Delete claim files a crashed `take()` left behind (a marker's name has no dot).
+
+    shortcut: a run killed between the rename and the read loses that one cancel; nothing
+    can recover it, but the file need not stay. A sweep that races a live `take()` is safe:
+    `take()` treats a vanished claim as no request.
+    """
+    cutoff = time.time() - _CLAIM_TTL_S
+    for claim in _DIR.glob("*.*"):
+        try:
+            if claim.stat().st_mtime < cutoff:
+                claim.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not sweep stale cancel claim %s", claim.name, exc_info=True)
 
 
 def take(session_id: str, since: float = 0.0) -> bool:
@@ -50,6 +68,9 @@ def take(session_id: str, since: float = 0.0) -> bool:
         return False
     try:
         text = claimed.read_text(encoding="utf-8")
+    except FileNotFoundError:  # swept as stale by another process between rename and read
+        logger.warning("Cancel claim for %s vanished before it was read", session_id)
+        return False
     finally:
         claimed.unlink(missing_ok=True)
     try:

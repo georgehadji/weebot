@@ -183,6 +183,24 @@ async def test_a_tool_approval_does_not_pause_in_auto():
 
 
 @pytest.mark.asyncio
+async def test_an_approval_floor_still_pauses_in_auto():
+    """A human_only approval (H18) cannot be answered by AUTO, so the run waits for a human."""
+    mediator = ScriptedMediator(
+        events=[
+            ToolApprovalEvent(tool_name="bash", reason="floor", human_only=True).model_dump(),
+            WaitForUserEvent(question="Approve bash?").model_dump(),
+        ]
+    )
+    flow = _flow(mediator=mediator)
+
+    await _run(flow)
+
+    assert _step(flow).status != StepStatus.COMPLETED, "the step is not completed unasked"
+    assert flow._session.status == SessionStatus.WAITING
+    assert flow._session.context.get("_tool_approval_pending") is not None
+
+
+@pytest.mark.asyncio
 async def test_plan_review_is_skipped_in_auto():
     flow = _flow(
         steps=[

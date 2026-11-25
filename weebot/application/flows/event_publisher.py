@@ -84,7 +84,8 @@ class EventPublisher:
         # publish-then-save order.
         pause = event.type in PAUSE_EVENT_TYPES
         if pause:
-            await self._save_through(seq)
+            # Strict: a failed write must stop the event, not let it out over a stale row.
+            await self._save_through(seq, strict=True)
         # 4. Event bus publishing
         if self._event_bus:
             await self._event_bus.publish(event)
@@ -93,7 +94,7 @@ class EventPublisher:
             await self._save_through(seq)
         return self._session
 
-    async def _save_through(self, seq: int) -> None:
+    async def _save_through(self, seq: int, strict: bool = False) -> None:
         """5. DB persistence. Serialised: a retried write for an older snapshot must not
         finish after, and overwrite, a newer one. `save_session` never calls `emit`,
         so holding the lock here cannot deadlock. An emit that waited for the lock skips
@@ -103,7 +104,7 @@ class EventPublisher:
             async with self._emit_lock:
                 if self._saved_seq < seq:
                     covered = self._event_seq  # read with no await before the snapshot is taken
-                    await self._persist_session()
+                    await self._persist_session(strict=strict)
                     self._saved_seq = covered
 
     # ── Step 1: Truth binding ─────────────────────────────────────────────
@@ -183,15 +184,20 @@ class EventPublisher:
 
     # ── Step 5: Persistence ────────────────────────────────────────────────
 
-    async def _persist_session(self) -> None:
+    async def _persist_session(self, strict: bool = False) -> None:
+        """Save the session. *strict* raises on failure instead of logging and moving on."""
         if self._persistence_adapter is not None:
             ok = await self._persistence_adapter.save_session(self._session)
             if not ok:
                 logger.error(
                     "Session %s dead-lettered — persistence exhausted retries", self._session.id
                 )
+                if strict:
+                    raise RuntimeError(f"Session {self._session.id} could not be saved")
         else:
             try:
                 await self._state_repo.save_session(self._session)
             except Exception as exc:
                 logger.warning("Session persistence failed (retryable): %s", exc)
+                if strict:
+                    raise
