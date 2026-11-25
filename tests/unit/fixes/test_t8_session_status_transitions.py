@@ -19,6 +19,8 @@ from weebot.domain.models.session import (
     Session,
     SessionAction,
     SessionStatus,
+    illegal_transitions_seen,
+    legal_sources,
     set_strict_transitions,
 )
 from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
@@ -44,6 +46,7 @@ _LEGAL = [
     (S.FAILED, S.RUNNING),  # a re-run
     (S.FAILED, S.WAITING),  # a checkpoint restore
     (S.CANCELLED, S.RUNNING),  # a re-run
+    (S.CANCELLED, S.WAITING),  # a checkpoint restore
 ]
 _ILLEGAL = [
     (a, b)
@@ -63,10 +66,18 @@ def test_a_legal_change_goes_through(current, target):
     assert Session(id="s", status=current).set_status(target).status is target
 
 
+@pytest.fixture
+def _expected_illegal():
+    """These tests cause illegal changes on purpose; the conftest would fail them otherwise."""
+    yield
+    illegal_transitions_seen.clear()
+
+
 @pytest.mark.parametrize(("current", "target"), _ILLEGAL)
-def test_an_illegal_change_raises_in_strict_mode(current, target):
+def test_an_illegal_change_raises_in_strict_mode(current, target, _expected_illegal):
     with pytest.raises(IllegalTransition, match=f"{current.value} -> {target.value}"):
         Session(id="s", status=current).set_status(target)
+    assert illegal_transitions_seen, "it is also recorded, in case a broad except swallows it"
 
 
 @pytest.mark.parametrize("status", list(S))
@@ -131,3 +142,88 @@ async def test_a_conditional_status_write_skips_a_session_that_finished(repo):
 async def test_a_conditional_write_to_a_missing_session_writes_nothing(repo):
     wrote = await repo.update_session_status("nope", S.CANCELLED, expected=frozenset({S.RUNNING}))
     assert wrote is False
+
+
+async def test_a_status_write_the_table_forbids_is_refused_by_every_repo(repo):
+    await repo.save_session(Session(id="s", status=S.RUNNING).set_status(S.COMPLETED))
+
+    wrote = await repo.update_session_status("s", S.FAILED)  # completed -> failed is illegal
+
+    assert wrote is False
+    assert (await repo.load_session("s")).status is S.COMPLETED
+
+
+async def test_a_status_write_the_table_allows_goes_through_without_expected(repo):
+    await repo.save_session(Session(id="s", status=S.RUNNING))
+
+    assert await repo.update_session_status("s", S.FAILED) is True
+    assert (await repo.load_session("s")).status is S.FAILED
+
+
+def test_legal_sources_are_the_statuses_that_may_move_to_the_target():
+    assert legal_sources(S.CANCELLED) == {S.PENDING, S.RUNNING, S.WAITING, S.CANCELLED}
+    assert legal_sources(S.COMPLETED) == {S.RUNNING, S.WAITING, S.COMPLETED}
+
+
+async def test_the_postgres_status_write_is_one_conditional_statement():
+    from weebot.infrastructure.persistence.postgresql.state_repo import PostgreSQLStateRepository
+
+    sent = []
+
+    class _Repo(PostgreSQLStateRepository):
+        def __init__(self):  # no pool: only the statement is under test
+            pass
+
+        async def _execute(self, sql, *args):
+            sent.append((sql, args))
+            return "UPDATE 1"
+
+    wrote = await _Repo().update_session_status(
+        "s", S.CANCELLED, expected=frozenset({S.RUNNING, S.COMPLETED})
+    )
+
+    sql, args = sent[0]
+    assert wrote is True
+    assert "status = ANY($3::text[])" in sql
+    assert args == ("cancelled", "s", ["running"]), "expected is narrowed to the legal sources"
+
+
+async def test_a_cancel_written_during_a_run_survives_its_closing_save():
+    from weebot.application.services.task_runner import TaskRunner
+    from tests.unit.application.services.test_task_runner_durable_state import MemoryRepo
+
+    repo = MemoryRepo()
+
+    class _Flow:
+        _session = None
+
+        async def run(self, prompt):
+            # What `flow cancel` does for a session whose store row says WAITING.
+            await repo.update_session_status("s", S.CANCELLED)
+            return
+            yield  # an async generator
+
+        def is_done(self):
+            return True
+
+        async def teardown(self):
+            return None
+
+    runner = TaskRunner(state_repo=repo)
+    await runner.start_session(Session(id="s", status=S.WAITING), lambda _s: _Flow())
+    await runner._tasks["s"]
+
+    assert repo.sessions["s"].status is S.CANCELLED
+
+
+async def test_a_completed_session_cannot_be_restored_from_a_checkpoint():
+    from weebot.application.services.task_runner import TaskRunner
+    from tests.unit.application.services.test_task_runner_durable_state import MemoryRepo
+
+    repo = MemoryRepo()
+    await repo.save_session(Session(id="s", status=S.RUNNING).set_status(S.COMPLETED))
+
+    with pytest.raises(ValueError, match="already completed"):
+        await TaskRunner(state_repo=repo).resume_from_checkpoint(
+            "s", lambda _s: None, checkpoints=object()
+        )

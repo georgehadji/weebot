@@ -175,14 +175,21 @@ class SessionQueries:
         status: SessionStatus,
         expected: frozenset[SessionStatus] | None = None,
     ) -> bool:
-        """Update just the status of a session; with *expected*, only from one of them."""
+        """Update just the status of a session, only from a status that may move to *status*.
+
+        *expected* narrows that further (the legal sources are always applied).
+        """
         from datetime import datetime
 
-        sql = "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?"
+        from weebot.domain.models.session import legal_sources
+
+        allowed = legal_sources(status) if expected is None else expected & legal_sources(status)
+        sql = (
+            "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?"
+            f" AND status IN ({', '.join('?' * len(allowed))})"
+        )
         params: list[Any] = [status.value, datetime.now(UTC).isoformat(), session_id]
-        if expected is not None:
-            sql += f" AND status IN ({', '.join('?' * len(expected))})"
-            params += sorted(s.value for s in expected)
+        params += sorted(s.value for s in allowed)
         async with self._pool.acquire_write() as conn:
             cursor = await conn.execute(sql, tuple(params))
             return cursor.rowcount == 1

@@ -278,14 +278,19 @@ _TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
         }
     ),
     SessionStatus.COMPLETED: frozenset({SessionStatus.RUNNING}),
-    # FAILED -> WAITING: a checkpoint restore puts a crashed session back to wait for resume.
+    # FAILED or CANCELLED -> WAITING: a checkpoint restore puts an interrupted session back
+    # to wait for its resume.
     SessionStatus.FAILED: frozenset({SessionStatus.RUNNING, SessionStatus.WAITING}),
-    SessionStatus.CANCELLED: frozenset({SessionStatus.RUNNING}),
+    SessionStatus.CANCELLED: frozenset({SessionStatus.RUNNING, SessionStatus.WAITING}),
 }
 
 # Phase A logs an illegal transition; phase B (tests) raises; phase C (production) raises too.
 # Flip the default to True once a production log shows no illegal transitions (audit T8).
 _strict_transitions = False
+
+# Every illegal change seen while strict. The raise can be swallowed by a broad `except`
+# further up, so the test fixture also fails a test that ends with this list not empty.
+illegal_transitions_seen: list[str] = []
 
 
 def set_strict_transitions(strict: bool) -> bool:
@@ -298,8 +303,14 @@ def set_strict_transitions(strict: bool) -> bool:
 def _illegal_transition(session_id: str, current: SessionStatus, target: SessionStatus) -> None:
     message = f"illegal session status change {current.value} -> {target.value} ({session_id})"
     if _strict_transitions:
+        illegal_transitions_seen.append(message)
         raise IllegalTransition(message)
     logger.warning(message)
+
+def legal_sources(target: SessionStatus) -> frozenset[SessionStatus]:
+    """The statuses a session may be in when it moves to *target* (itself included)."""
+    return frozenset(s for s in SessionStatus if s is target or target in _TRANSITIONS[s])
+
 
 
 class Session(BaseModel):

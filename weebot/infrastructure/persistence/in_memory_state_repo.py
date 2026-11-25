@@ -47,8 +47,11 @@ class InMemoryStateRepository(StateRepositoryPort):
         status: SessionStatus,
         expected: frozenset[SessionStatus] | None = None,
     ) -> bool:
+        from weebot.domain.models.session import legal_sources
+
         session = self._sessions.get(session_id)
-        if session is None or (expected is not None and session.status not in expected):
+        allowed = legal_sources(status) if expected is None else expected & legal_sources(status)
+        if session is None or session.status not in allowed:
             return False
         self._sessions[session_id] = session.set_status(status)
         return True

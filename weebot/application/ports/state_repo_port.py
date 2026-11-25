@@ -145,10 +145,12 @@ class StateRepositoryPort(ABC):
     ) -> bool:
         """Update just the status of a session.
 
-        With *expected*, write only while the stored status is one of them, in one conditional
-        write, and return whether it wrote. A terminal write (CANCELLED) passes the statuses
-        it may end, so a session that finished meanwhile is not overwritten (audit M1-D2).
-        Without it the write is unconditional and the result is True.
+        One conditional write, so nothing can change the row between the check and the write:
+        it applies only while the stored status may move to *status* (the lifecycle table,
+        ``legal_sources``), and, with *expected*, is one of those too. A terminal write
+        (CANCELLED) passes the statuses it may end, so a session that finished meanwhile is
+        not overwritten (audit M1-D2). Returns True when a row was written; False when the
+        session does not exist or its status did not allow the change.
         """
         ...
 

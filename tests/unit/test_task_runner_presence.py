@@ -41,7 +41,7 @@ class _StubFlow:
 
 def _make_runner(session: Session, event_bus):
     state_repo = AsyncMock()
-    state_repo.load_session = AsyncMock(return_value=session)
+    state_repo.load_session = AsyncMock(return_value=session.set_status(SessionStatus.RUNNING))
     state_repo.save_session = AsyncMock()
     runner = TaskRunner(state_repo=state_repo, event_bus=event_bus)
     return runner, state_repo
@@ -129,7 +129,7 @@ async def test_a_flow_that_ended_failed_is_not_reset_to_waiting():
 async def test_no_event_bus_does_not_raise():
     session = Session(id="s4", user_id="u", agent_id="a")
     state_repo = AsyncMock()
-    state_repo.load_session = AsyncMock(return_value=session)
+    state_repo.load_session = AsyncMock(return_value=session.set_status(SessionStatus.RUNNING))
     state_repo.save_session = AsyncMock()
     runner = TaskRunner(state_repo=state_repo, event_bus=None)
 

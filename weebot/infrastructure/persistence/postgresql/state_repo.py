@@ -287,11 +287,14 @@ class PostgreSQLStateRepository(
         status: SessionStatus,
         expected: frozenset[SessionStatus] | None = None,
     ) -> bool:
-        sql = "UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2"
-        args: list[Any] = [status.value, session_id]
-        if expected is not None:
-            sql += " AND status = ANY($3::text[])"
-            args.append(sorted(s.value for s in expected))
+        from weebot.domain.models.session import legal_sources
+
+        allowed = legal_sources(status) if expected is None else expected & legal_sources(status)
+        sql = (
+            "UPDATE sessions SET status = $1, updated_at = NOW()"
+            " WHERE id = $2 AND status = ANY($3::text[])"
+        )
+        args: list[Any] = [status.value, session_id, sorted(s.value for s in allowed)]
         return (await self._execute(sql, *args)) == "UPDATE 1"
 
     async def delete_session(self, session_id: str) -> None:

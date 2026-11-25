@@ -456,7 +456,11 @@ class TaskRunner:
                 session = _flow_view(session, flow, yielded, title)
             elif flow_session is not None:
                 session = session.model_copy(update={"context": flow_session.context})
-            if flow.is_done():
+            if await self._cancelled_while_running(session_id):
+                # A cancel (a status-only write while the store held WAITING) landed during
+                # this run: the closing whole-row save must not turn it back into COMPLETED.
+                session = session.set_status(SessionStatus.CANCELLED)
+            elif flow.is_done():
                 session = session.set_status(SessionStatus.COMPLETED)
             elif flow_session is not None and flow_session.status == SessionStatus.CANCELLED:
                 session = session.set_status(SessionStatus.CANCELLED)
@@ -477,6 +481,21 @@ class TaskRunner:
                 _get_tr_metrics().session_active.dec()
             except Exception:
                 logger.debug("Failed to decrement session active metric", exc_info=True)
+
+    async def _cancelled_while_running(self, session_id: str) -> bool:
+        """True when the stored row says CANCELLED at the end of a run.
+
+        A run starts by saving RUNNING, so CANCELLED here was written during it. This is a
+        read before the closing save, not one atomic write: a cancel filed between the two
+        still loses, as it does for a run in another process (`save_if_unchanged` is the
+        atomic form if that ever matters).
+        """
+        try:
+            stored = await self._state_repo.load_session(session_id)
+        except Exception:
+            logger.warning("could not re-read %s before its save", session_id, exc_info=True)
+            return False
+        return stored is not None and stored.status == SessionStatus.CANCELLED
 
     async def resume_session(
         self,
@@ -538,6 +557,8 @@ class TaskRunner:
                 raise ValueError(f"Session {session_id} not found")
             if self._live_task(session_id) is not None:
                 raise ValueError(f"Session {session_id} is still running")
+            if session.status == SessionStatus.COMPLETED:
+                raise ValueError(f"Session {session_id} is already completed")
             checkpoint = await checkpoints.load(session_id)
             if checkpoint is None:
                 raise ValueError(f"Session {session_id} has no checkpoint")
@@ -562,6 +583,8 @@ class TaskRunner:
                     await task
                 except asyncio.CancelledError:
                     pass
+                # True means a live task was cancelled. The row is written only while its
+                # status still allows a cancel: a run that finished first keeps its status.
                 await self._state_repo.update_session_status(
                     session_id, SessionStatus.CANCELLED, expected=_CANCELLABLE
                 )

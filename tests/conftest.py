@@ -67,11 +67,16 @@ def _strict_session_transitions():
     Production only logs it until a log shows none. A test that needs to build an odd
     session on purpose sets the status through `model_copy(update=...)`, not `set_status`.
     """
-    from weebot.domain.models.session import set_strict_transitions
+    from weebot.domain.models.session import illegal_transitions_seen, set_strict_transitions
 
     previous = set_strict_transitions(True)
+    illegal_transitions_seen.clear()
     yield
     set_strict_transitions(previous)
+    seen, illegal_transitions_seen[:] = list(illegal_transitions_seen), []
+    # A raise inside production code is often caught by a broad `except`, so the test would
+    # pass; this list is what proves no illegal change happened at all.
+    assert not seen, f"illegal session status change(s) during the test: {seen}"
 
 
 # ---------------------------------------------------------------------------
