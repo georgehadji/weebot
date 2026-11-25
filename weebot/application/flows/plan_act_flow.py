@@ -344,6 +344,29 @@ class PlanActFlow(BaseFlow):
                 await self._cost_meter.seed(self._session.id)
             async for event in self._run_states(prompt, run_started):
                 yield event
+            await self._report_undelivered_steering()
+
+    async def _report_undelivered_steering(self) -> None:
+        """Say so when a message sent mid-run arrived after the last step boundary.
+
+        Steering is read between steps. A message that lands after the final read would
+        otherwise sit in the queue and be applied to the NEXT run as though it were said
+        then (audit X4). Each one is reported with its text, so the user can send it again.
+        """
+        if self._steering is None:
+            return
+        from weebot.domain.models.event import MessageEvent
+
+        while (text := await self._steering.poll(self._session.id)) is not None:
+            await self._emit(
+                MessageEvent(
+                    role="assistant",
+                    message=(
+                        "Your message arrived after the run stopped reading input and was "
+                        f"not delivered: {text!r}. Send it again if it still applies."
+                    ),
+                )
+            )
 
     async def _run_states(
         self, prompt: str, run_started: float | None = None

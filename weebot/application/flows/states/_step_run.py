@@ -26,6 +26,7 @@ from weebot.domain.models.event import (
     ToolEvent,
     WaitForUserEvent,
 )
+from weebot.domain.models.session import SessionStatus
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -101,9 +102,13 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
     run = StepRun(elapsed_s=elapsed, skills_used=list(data.get("skills_used") or []))
     for event in _reconstruct(data.get("events", [])):
         run.events.append(event)
-        await context._emit(event)
+        # A pause is marked on the session BEFORE its event is emitted, so the row a client
+        # reads on seeing the question already says WAITING (audit X4); the publisher saves
+        # pause events before it publishes them. AUTO never pauses, so it never marks.
         if isinstance(event, WaitForUserEvent):
             run.hitl_paused = True
+            if not auto:
+                context._session = context._session.set_status(SessionStatus.WAITING)
         elif isinstance(event, ToolApprovalEvent):
             if auto and not event.human_only:
                 # AutoApproval should have granted it before the tool ran; if one still
@@ -119,8 +124,11 @@ async def run_step_command(context: PlanActFlow, step: Step, effective_prompt: s
                 from weebot.application.services.tool_approval import mark_tool_approval_pending
 
                 context._session = mark_tool_approval_pending(context._session, event)
+                if not auto:
+                    context._session = context._session.set_status(SessionStatus.WAITING)
         elif isinstance(event, ErrorEvent):
             run.execution_failed = True
+        await context._emit(event)
         if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
             run.should_terminate = True
 

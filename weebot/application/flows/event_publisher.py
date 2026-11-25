@@ -23,6 +23,9 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 logger = logging.getLogger(__name__)
 
+# Events that ask the user something and wait: saved before they are published.
+PAUSE_EVENT_TYPES = frozenset({"wait_for_user", "tool_approval", "plan_review"})
+
 
 class EventPublisher:
     """Publishes agent events through the full pipeline.
@@ -75,22 +78,33 @@ class EventPublisher:
         seq = self._event_seq
         if event.type == "step":
             await self._maybe_save_checkpoint()
+        # A pause event is published only once the row says WAITING: a client that answers
+        # the moment it sees the question must find a session that is waiting, or the
+        # answer is taken for mid-run steering (audit X4). Other events keep the cheaper
+        # publish-then-save order.
+        pause = event.type in PAUSE_EVENT_TYPES
+        if pause:
+            await self._save_through(seq)
         # 4. Event bus publishing
         if self._event_bus:
             await self._event_bus.publish(event)
             await self._emit_domain_event(event)
-        # 5. DB persistence. Serialised: a retried write for an older snapshot must not
-        # finish after, and overwrite, a newer one. `save_session` never calls `emit`,
-        # so holding the lock here cannot deadlock. An emit that waited for the lock skips
-        # its own save when the save it waited behind already held its event, so a slow
-        # or failing write is retried once for the whole queue, not once per emit.
+        if not pause:
+            await self._save_through(seq)
+        return self._session
+
+    async def _save_through(self, seq: int) -> None:
+        """5. DB persistence. Serialised: a retried write for an older snapshot must not
+        finish after, and overwrite, a newer one. `save_session` never calls `emit`,
+        so holding the lock here cannot deadlock. An emit that waited for the lock skips
+        its own save when the save it waited behind already held its event, so a slow
+        or failing write is retried once for the whole queue, not once per emit."""
         if self._state_repo:
             async with self._emit_lock:
                 if self._saved_seq < seq:
                     covered = self._event_seq  # read with no await before the snapshot is taken
                     await self._persist_session()
                     self._saved_seq = covered
-        return self._session
 
     # ── Step 1: Truth binding ─────────────────────────────────────────────
 
