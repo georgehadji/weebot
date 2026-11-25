@@ -7,7 +7,7 @@ Format: name — source — status — card
 ## domain
 - Delegation (DelegationPolicy, child_tool_names, DelegationDenied, SPAWN_TOOLS) — `docs/adr/018-delegation-policy.md` — stub — [card](domain/Delegation.md)
 - Event (BaseEvent, AgentEvent, DomainEvent (and subclasses)) — `weebot/domain/models/event.py` — stale 2026-11-02 — [card](domain/Event.md)
-- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-11-16 — [card](domain/Plan.md)
+- Plan (Plan, PlanStatus, PlanCritique) — `weebot/domain/models/plan.py` — verified 2026-11-25 — [card](domain/Plan.md)
 - Ports (weebot/application/ports/*_port.py) — `weebot/application/ports/` — stale 2026-10-31 — [card](domain/Ports.md)
 - Session (Session, SessionStatus, SessionAction, SessionContext, Fact, FactSource) — `weebot/domain/models/session.py` — stale 2026-11-01 — [card](domain/Session.md)
 - Step (Step, StepStatus, ContextScope) — `weebot/domain/models/plan.py` — stale 2026-10-31 — [card](domain/Step.md)
@@ -17,7 +17,7 @@ Format: name — source — status — card
 - DelegationGuard (DelegationGuard, DelegatedFlow, current_depth, DELEGATION_GUARD) — `docs/adr/018-delegation-policy.md` — stub — [card](application/DelegationGuard.md)
 - DI Container (Container) — `weebot/application/di/__init__.py` — stale 2026-11-02 — [card](application/DIContainer.md)
 - ExecutorAgent — `weebot/application/agents/executor/_base.py` — stale 2026-10-31 — [card](application/ExecutorAgent.md)
-- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-16 — [card](application/FlowRouter.md)
+- FlowRouter — `weebot/application/flows/flow_router.py` — verified 2026-11-25 — [card](application/FlowRouter.md)
 - FlowState (the Plan-Act states) (FlowState) — `weebot/application/flows/states/base.py` — stale 2026-11-02 — [card](application/FlowState.md)
 - LoopDetectors (GuardConfig, CycleDetector, DuplicateResultStub, EmptyResponseBudget, RepetitionGuard, WallClockWrapUp, IterationGuard) — `docs/adr/021-loop-guardrails-v2.md` — stub — [card](application/LoopDetectors.md)
 - Mediator (CQRS) (Mediator) — `weebot/application/cqrs/mediator.py` — stale 2026-11-01 — [card](application/Mediator.md)

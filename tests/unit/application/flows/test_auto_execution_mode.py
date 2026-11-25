@@ -137,7 +137,8 @@ async def _noop_async(*_args, **_kwargs) -> None:
     return None
 
 
-def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
+@pytest.mark.asyncio
+async def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
     from weebot.application.services.step_result_validator import ValidationResult
 
     monkeypatch.setattr(
@@ -147,7 +148,7 @@ def test_quality_gate_allows_a_failure_through_in_auto(monkeypatch):
     flow = _flow()
     step = _step(flow)
 
-    forced_retry = quality_gate(flow, step, StepRun(result_text="x"))
+    forced_retry = await quality_gate(flow, step, StepRun(result_text="x"))
 
     assert forced_retry is False, "AUTO does not retry on a quality failure"
     assert _step(flow).retry_count == 0

@@ -258,8 +258,9 @@ class ExecutingState(FlowState):
             await post_task_hooks(context, step, run)
             if _is_auto_mode(context) and not run.human_floor:
                 # AUTO promises no human pauses (an approval floor is the exception), so
-                # the step must not be left WAITING for an answer nobody will type. Complete it so the plan progresses;
-                # the unanswered question stays in the transcript for the operator.
+                # the step must not be left WAITING for an answer nobody will type.
+                # Complete it so the plan progresses; the unanswered question stays in the
+                # transcript for the operator.
                 logger.warning(
                     "AUTO mode: step %s asked for human input — completing without asking",
                     step.id,
@@ -282,7 +283,7 @@ class ExecutingState(FlowState):
                 yield stopped
             return
 
-        if quality_gate(context, step, run):
+        if await quality_gate(context, step, run):
             return
         if await progress_gate(context, step, run):
             return
