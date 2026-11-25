@@ -33,6 +33,9 @@ class TerminationResult:
     should_terminate: bool
     reason: str = ""
     code: str = ""  # machine-readable cause, e.g. BUDGET_EXCEEDED
+    # True when the stop means the goal was met (a text match), not that a limit was hit.
+    # A limit stop before any plan existed ends the session FAILED; a goal stop does not.
+    goal_met: bool = False
 
     def __bool__(self) -> bool:
         return self.should_terminate
@@ -81,5 +84,6 @@ class CompositeTermination(TerminationCondition):
         else:  # "all"
             reasons = [r.reason for r in results if r.should_terminate]
             if len(reasons) == len(self._conditions):
-                return TerminationResult(True, "; ".join(reasons))
+                goal_met = all(r.goal_met for r in results)
+                return TerminationResult(True, "; ".join(reasons), goal_met=goal_met)
             return TerminationResult(False)
